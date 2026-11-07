@@ -9,8 +9,8 @@ namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
 /// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）
-/// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）。
-/// 生成文档核对与 Apifox 检查/同步不在本切片：如实显示"本切片未接入"，不提供入口。
+/// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）+ 注释回写 + 生成文档核对（后台作业、只读结果视图）。
+/// Apifox 检查/同步与报告不在本切片：如实显示"本切片未接入"，不提供入口。
 /// </summary>
 internal sealed class TasksPage : UserControl, INativePage
 {
@@ -20,6 +20,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly ProfileStore _profiles;
     private readonly DraftService _drafts;
     private readonly CommentPlanService _plans;
+    private readonly PropagationService _propagation;
 
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
     private readonly Panel _empty;
@@ -35,14 +36,18 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Label _sourceStatus = Ui.StatusText();
     private readonly Label _sourceNumbers = Ui.Mono();
     private readonly FlowLayoutPanel _scanActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+    private readonly FlowLayoutPanel _generatedActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
     private readonly Button _gapButton;
     private readonly Button _candidatesButton;
     private readonly Button _ruleButton;
     private readonly Button _applyButton;
     private readonly Button _scanButton;
+    private readonly Button _checkButton;
+    private readonly Button _viewButton;
     private readonly Label _progress = Ui.StatusText();
     private readonly Button _cancelButton;
     private readonly Label _generatedStatus = Ui.StatusText();
+    private readonly Label _generatedNumbers = Ui.Mono();
     private readonly Label _remoteStatus = Ui.StatusText();
     private readonly Label _remoteNumbers = Ui.Mono();
 
@@ -51,7 +56,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private bool _runningShown;
     private bool _splitAdjusted;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation)
     {
         _tasks = tasks;
         _scan = scan;
@@ -59,6 +64,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _profiles = profiles;
         _drafts = drafts;
         _plans = plans;
+        _propagation = propagation;
 
         var newButton = Ui.Primary("新建任务");
         newButton.Click += (_, _) => ShowNewTaskDialog();
@@ -94,6 +100,13 @@ internal sealed class TasksPage : UserControl, INativePage
         _cancelButton.Visible = false;
         _progress.Visible = false;
         _progress.Margin = new Padding(UiTokens.Md, 0, 0, 0);
+
+        _checkButton = Ui.Ghost("核对传播");
+        _checkButton.Click += (_, _) => StartPropagationCheck();
+        _viewButton = Ui.Ghost("查看核对结果");
+        _viewButton.Click += (_, _) => ShowPropagation();
+        _generatedActions.Controls.Add(_checkButton);
+        _generatedActions.Controls.Add(_viewButton);
 
         _empty = BuildEmpty();
 
@@ -160,7 +173,9 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, Ui.Caption("「查看注释缺口」「规则提取候选」「查看注释候选」与「注释回写」在扫描完成后可用；「注释回写」需要有已接受且未回写的候选。模型生成、材料导入与手工填写将在后续切片接入。"));
         AddDetailRow(grid, SectionCaption("生成文档"));
         AddDetailRow(grid, _generatedStatus);
-        AddDetailRow(grid, Ui.Caption("本切片未接入。"));
+        AddDetailRow(grid, _generatedNumbers);
+        AddDetailRow(grid, _generatedActions);
+        AddDetailRow(grid, Ui.Caption("「核对传播」需要有已接受的注释候选；核对不构建项目，XML 与 Swagger 重新生成后才会更新。定向构建将在后续切片接入。"));
         AddDetailRow(grid, SectionCaption("Apifox 差异与同步"));
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
@@ -314,6 +329,9 @@ internal sealed class TasksPage : UserControl, INativePage
         var generated = task.Stages.Generated;
         _generatedStatus.Text = "状态：" + TaskDisplay.GeneratedStatusText(generated.Status);
         _generatedStatus.ForeColor = ToneColor(TaskDisplay.GeneratedTone(generated.Status));
+        _generatedNumbers.Text = generated.CheckedAt is not { } checkedAt
+            ? "尚未核对"
+            : $"核对时间 {checkedAt.LocalDateTime:MM-dd HH:mm} · 位置 {generated.Entries} · 源码 {generated.InSource} · XML {generated.InXml} · Swagger {generated.InSwagger}";
 
         var remote = task.Stages.Remote;
         _remoteStatus.Text = "状态：" + TaskDisplay.RemoteStatusText(remote.Status) + (remote.CheckedRevision is { } rev && rev < task.Revision ? "（任务内容在检查后有变化，需要重新检查）" : "");
@@ -329,12 +347,15 @@ internal sealed class TasksPage : UserControl, INativePage
     /// <summary>扫描区按作业状态切换：按钮（空闲）或进度 + 取消（执行中）。控件位置固定，不跳位。</summary>
     private void ShowJobState(JobInfo? job)
     {
-        // 缺口清单、候选审阅、规则提取与注释回写都基于扫描落盘产物：扫描完成后可用，作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）。
+        // 缺口清单、候选审阅、规则提取、注释回写与传播核对都基于扫描落盘产物：扫描完成后可用，作业执行中与未扫描时禁用
+        // （禁用态说明见下方固定说明行）；传播核对等后台作业的进度与取消与扫描共用同一套固定占位控件。
         var scanReady = _selectedTask is { Stages.Source.ScannedAt: not null } && job is null;
         _gapButton.Enabled = scanReady;
         _candidatesButton.Enabled = scanReady;
         _ruleButton.Enabled = scanReady;
         _applyButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
+        _checkButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
+        _viewButton.Enabled = scanReady && _selectedTask is { Stages.Generated.CheckedAt: not null };
         if (job is not null)
         {
             _runningShown = true;
@@ -441,6 +462,34 @@ internal sealed class TasksPage : UserControl, INativePage
         using var dialog = new ApplyPlanDialog(_plans, _tasks, _selectedTask);
         dialog.ShowDialog(FindForm());
         LoadTasks();
+    }
+
+    /// <summary>生成文档核对（后台作业）：重新加载源码，核对已确认注释是否写入源码、进入 XML 与 Swagger，结果落盘 propagation.json。</summary>
+    private void StartPropagationCheck()
+    {
+        if (_selectedTask is null) return;
+        var taskId = _selectedTask.Id;
+        try
+        {
+            _jobs.Start(taskId, "传播核对", async job => await _propagation.CheckAsync(taskId, job));
+            RefreshDetail();
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法开始核对：" + Redactor.Redact(ex.Message));
+        }
+    }
+
+    /// <summary>打开核对结果（只读）：数据来自任务目录 propagation.json，无写入动作。</summary>
+    private void ShowPropagation()
+    {
+        if (_selectedTask is null) return;
+        using var dialog = new PropagationDialog(_tasks, _selectedTask);
+        dialog.ShowDialog(FindForm());
     }
 
     private void ShowNewTaskDialog()

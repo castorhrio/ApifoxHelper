@@ -28,6 +28,9 @@ public class TaskDisplayTests
     public static IEnumerable<object[]> GenerationRunStatuses() => Statuses("Comments/DraftModels.cs", "succeeded / partial");
     public static IEnumerable<object[]> PlanStatuses() => Statuses("Comments/CommentPlanService.cs", "ready / applying / applied");
     public static IEnumerable<object[]> FileApplyStates() => Statuses("Comments/CommentPlanService.cs", "applied / skipped / failed");
+    public static IEnumerable<object[]> PropagationSourceStates() => Statuses("Comments/PropagationService.cs", "written / notWritten");
+    public static IEnumerable<object[]> PropagationXmlStates() => Statuses("Comments/PropagationService.cs", "present / different / missing / noXml");
+    public static IEnumerable<object[]> PropagationSwaggerStates() => Statuses("Comments/PropagationService.cs", "present / different / missing / notRendered");
 
     [Theory]
     [MemberData(nameof(SourceStatuses))]
@@ -113,6 +116,30 @@ public class TaskDisplayTests
         Assert.Contains(TaskDisplay.FileApplyTone(state), Tones);
     }
 
+    [Theory]
+    [MemberData(nameof(PropagationSourceStates))]
+    public void PropagationSource_HasChineseTextAndTone(string state)
+    {
+        Assert.NotEqual(state, TaskDisplay.PropagationSourceText(state));
+        Assert.Contains(TaskDisplay.PropagationSourceTone(state), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(PropagationXmlStates))]
+    public void PropagationXml_HasChineseTextAndTone(string state)
+    {
+        Assert.NotEqual(state, TaskDisplay.PropagationXmlText(state));
+        Assert.Contains(TaskDisplay.PropagationXmlTone(state), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(PropagationSwaggerStates))]
+    public void PropagationSwagger_HasChineseTextAndTone(string state)
+    {
+        Assert.NotEqual(state, TaskDisplay.PropagationSwaggerText(state));
+        Assert.Contains(TaskDisplay.PropagationSwaggerTone(state), Tones);
+    }
+
     [Fact]
     public void UnknownStatus_FallsBackToRawValue()
     {
@@ -127,11 +154,17 @@ public class TaskDisplayTests
         Assert.Equal("mystery", TaskDisplay.RunStatusText("mystery"));
         Assert.Equal("mystery", TaskDisplay.PlanStatusText("mystery"));
         Assert.Equal("mystery", TaskDisplay.FileApplyStateText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.PropagationSourceText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.PropagationXmlText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.PropagationSwaggerText("mystery"));
         Assert.Equal("running", TaskDisplay.JobStateText("running"));
         Assert.Equal("normal", TaskDisplay.SlotTone("mystery"));
         Assert.Equal("normal", TaskDisplay.ReviewTone("mystery"));
         Assert.Equal("normal", TaskDisplay.PlanTone("mystery"));
         Assert.Equal("normal", TaskDisplay.FileApplyTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.PropagationSourceTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.PropagationXmlTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.PropagationSwaggerTone("mystery"));
     }
 
     [Fact]
@@ -161,6 +194,9 @@ public class TaskDisplayTests
             .Concat(Statuses("Comments/DraftModels.cs", "succeeded / partial").Select(o => TaskDisplay.RunStatusText((string)o[0])))
             .Concat(Statuses("Comments/CommentPlanService.cs", "ready / applying / applied").Select(o => TaskDisplay.PlanStatusText((string)o[0])))
             .Concat(Statuses("Comments/CommentPlanService.cs", "applied / skipped / failed").Select(o => TaskDisplay.FileApplyStateText((string)o[0])))
+            .Concat(Statuses("Comments/PropagationService.cs", "written / notWritten").Select(o => TaskDisplay.PropagationSourceText((string)o[0])))
+            .Concat(Statuses("Comments/PropagationService.cs", "present / different / missing / noXml").Select(o => TaskDisplay.PropagationXmlText((string)o[0])))
+            .Concat(Statuses("Comments/PropagationService.cs", "present / different / missing / notRendered").Select(o => TaskDisplay.PropagationSwaggerText((string)o[0])))
             .Concat(["成功", "失败", "已取消"]);
         foreach (var text in outputs)
         {

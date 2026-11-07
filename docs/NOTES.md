@@ -110,6 +110,19 @@
 - **验证状态**：Linux `dotnet build` 0 警告 0 错误；`ApifoxHelper.Tests` 93 用例全部通过（含令牌接线机械检查对新文件 ApplyPlanDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「生成计划 → 预览差异 → 原生确认 → 回写源码 / 导出补丁」全流程只在代码与编译层面成立；Windows 真机需按「扫描 → 规则提取候选 → 审阅接受 → 注释回写 → 确认 → 核对源码 diff」走一遍，并核对回写后 `git diff` 只含注释行。如实挂账。
 - 未改写入安全语义；未连接或写入 Apifox；`ExportPatchAsync`/`ApplyAsync` 只在用户显式操作时调用。
 
+## 原生切片「生成文档核对」（2026-11-07 第六轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（9767b36）的 Linux `dotnet build` 0 警告 0 错误、93 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。
+- **原生交互推进一小步（注释回写 → 生成文档核对，F06 接入原生）**：旅程进入「生成文档」阶段——核对本身只读源码与生成物，写入范围限于任务数据（propagation.json 与生成阶段计数），不写源码、不访问 Apifox。
+  - 任务详情「生成文档」区从「本切片未接入」换成两个动作：「核对传播」（后台作业，复用既有 `PropagationService.CheckAsync`：重新加载源码、读取各项目 XML 文档与当前 Swagger、逐条核对已确认注释的源码/XML/Swagger 三环状态；结果落盘 propagation.json 并更新生成阶段计数与状态消息；进度与取消和扫描/规则提取共用同一套固定占位控件，作业期间其余动作禁用）与「查看核对结果」（只读对话框 `Desktop/Native/PropagationDialog.cs`）。
+  - 结果对话框：概要行显示核对时间与逐环节数量（等宽数字）；条目列表逐条显示位置、标注与三环状态（颜色 + 文字双通道，色调与文案对齐冻结页面口径）；选中条目显示说明文字、Swagger 对应位置与备注；下方 XML 文件清单逐项目显示 XML 路径、存在/不存在与更新时间，早于源码修改的旧生成物如实标注（旧生成物不算注释已生效）。未核对=空态指引；读取失败=内联错误与下一步；配置无 Swagger 时核对仍核对源码与 XML，Swagger 环节如实显示「不可用」。
+  - 按钮门控：核对需扫描完成且有已接受候选、无作业运行；查看结果需已有核对落盘产物；定向构建不在本切片，固定说明行如实挂账「核对不构建项目，XML 与 Swagger 重新生成后才会更新。定向构建将在后续切片接入」。
+- **TaskDisplay 增补映射**：传播核对源码环节（written/notWritten/missingSymbol）、XML 环节（present/different/missing/noXml/disabled）、Swagger 环节（present/different/missing/notRendered/unavailable）——色调与中文文案；未知值原样回退不变。枚举清单复用 `PropagationService.cs` 数据模型既有 `<summary>` 注释，本轮未改数据模型。
+- **测试 93 → 106 用例**：新增源码（3）、XML（5）、Swagger（5）三组完备断言（含色调）；未知值回退与文案禁词检查覆盖新映射。变异验证实测可红：删除 `PropagationSwaggerText` 的 `notRendered` 映射臂 → `PropagationSwagger_HasChineseTextAndTone(state: "notRendered")` 变红（`Assert.NotEqual() Failure`），还原后全绿。
+- **两处编译错误即改即验**：`XmlFileInfo.LastWrite` 是 `DateTime?`（已是本地时间，误用 `.LocalDateTime`）、`GeneratedStage.CheckedAt` 可空需先解构再格式化——本轮修复后 0 警告 0 错误。
+- **验证状态**：Linux `dotnet build` 0 警告 0 错误；`ApifoxHelper.Tests` 106 用例全部通过（含令牌接线机械检查对新文件 PropagationDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「核对传播 → 查看核对结果」只在代码与编译层面成立；Windows 真机需按「扫描 → 规则提取候选 → 审阅接受 → 注释回写 → 重新生成 XML/Swagger → 核对传播 → 查看结果」走一遍，核对部分完成/不可用/旧生成物各态文案。如实挂账。
+- 未改写入安全语义；未连接或写入 Apifox；核对作业只在用户显式点击时开始。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

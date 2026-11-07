@@ -233,6 +233,63 @@ public static class TaskDisplay
         _ => state,
     };
 
+    /// <summary>传播核对·源码环节（PropagationEntry.SourceState）的色调：已写入=ok，未写入/符号不存在=bad。</summary>
+    public static string PropagationSourceTone(string state) => state switch
+    {
+        "written" => "ok",
+        "notWritten" or "missingSymbol" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>传播核对·源码环节：已确认注释是否写入源码。</summary>
+    public static string PropagationSourceText(string state) => state switch
+    {
+        "written" => "已写入",
+        "notWritten" => "未写入",
+        "missingSymbol" => "符号不存在",
+        _ => state,
+    };
+
+    /// <summary>传播核对·XML 环节（PropagationEntry.XmlState）的色调：已出现=ok，内容不同/未收录=warn，无文件/未启用=bad。</summary>
+    public static string PropagationXmlTone(string state) => state switch
+    {
+        "present" => "ok",
+        "different" or "missing" => "warn",
+        "noXml" or "disabled" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>传播核对·XML 环节：注释是否进入实际生成的 XML 文档。</summary>
+    public static string PropagationXmlText(string state) => state switch
+    {
+        "present" => "已出现",
+        "different" => "内容不同",
+        "missing" => "未收录",
+        "noXml" => "无 XML 文件",
+        "disabled" => "未启用生成",
+        _ => state,
+    };
+
+    /// <summary>传播核对·Swagger 环节（PropagationEntry.SwaggerState）的色调：已出现=ok，内容不同/未出现=warn，不呈现/不可用=muted。</summary>
+    public static string PropagationSwaggerTone(string state) => state switch
+    {
+        "present" => "ok",
+        "different" or "missing" => "warn",
+        "notRendered" or "unavailable" => "muted",
+        _ => "normal",
+    };
+
+    /// <summary>传播核对·Swagger 环节：注释是否被 Swagger 读取到正确位置。</summary>
+    public static string PropagationSwaggerText(string state) => state switch
+    {
+        "present" => "已出现",
+        "different" => "内容不同",
+        "missing" => "未出现",
+        "notRendered" => "生成器不呈现",
+        "unavailable" => "不可用",
+        _ => state,
+    };
+
     /// <summary>代码证据类型（CodeEvidence.Kind）：证据清单里逐条显示的分类标签。</summary>
     public static string EvidenceKindText(string kind) => kind switch
     {
