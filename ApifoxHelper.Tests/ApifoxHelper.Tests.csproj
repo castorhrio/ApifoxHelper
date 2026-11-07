@@ -40,7 +40,9 @@
     <Compile Include="..\Desktop\Native\CompatEntries.cs" Link="Shared\CompatEntries.cs" />
     <Compile Include="..\Desktop\Native\ProfileAdvanced.cs" Link="Shared\ProfileAdvanced.cs" />
     <Compile Include="..\Desktop\Native\GenerationEntries.cs" Link="Shared\GenerationEntries.cs" />
+    <Compile Include="..\Desktop\Native\ProfileAnalysis.cs" Link="Shared\ProfileAnalysis.cs" />
     <Compile Include="..\Profiles\ProjectProfile.cs" Link="Shared\ProjectProfile.cs" />
+    <Compile Include="..\Profiles\ProfileExport.cs" Link="Shared\ProfileExport.cs" />
     <Compile Include="..\Profiles\EndpointTemplateReader.cs" Link="Shared\EndpointTemplateReader.cs" />
     <Compile Include="..\Reports\ReportFormats.cs" Link="Shared\ReportFormats.cs" />
     <Compile Include="..\Sync\CheckModels.cs" Link="Shared\CheckModels.cs" />

@@ -8,10 +8,12 @@ using ApifoxHelper.Sync;
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 项目配置页：列出配置，新建/编辑核心字段（名称、仓库、API 项目、回写范围、Swagger 来源、Apifox 目标），
-/// 「模块与模板」编辑模块范围与新接口模板（含从既有接口提取），「模型服务」编辑注释草稿生成方式与
+/// 项目配置页：列出配置，新建/编辑核心字段（名称、仓库、API 项目、回写范围、Swagger 来源、Apifox 目标、版本备注），
+/// 「模块与模板」编辑模块范围与新接口模板（含从既有接口提取），「序列化与分析」编辑 JSON 命名、响应封装、
+/// 代码分析、质量规则与 Apifox CLI（响应封装是响应契约追踪的数据来源），「模型服务」编辑注释草稿生成方式与
 /// 模型服务密钥（DPAPI 加密存储在 CredentialStore），「连接与写入探测」经既有 CompatService
-/// 检查 CLI/登录/项目读取并按需运行写入兼容探测（F02，写入门禁的唯一登记入口）。
+/// 检查 CLI/登录/项目读取并按需运行写入兼容探测（F02，写入门禁的唯一登记入口）；
+/// 「导出配置（不含凭据）」经 ProfileExport 与 REST 下载同一字节口径另存为。
 /// 保存走 ProfileStore（含路径与取值校验）。
 /// </summary>
 internal sealed class ProjectsPage : UserControl, INativePage
@@ -194,6 +196,7 @@ internal sealed class ProfileDialog : Form
 
     private readonly TextBox _name = new();
     private readonly TextBox _workspace = new();
+    private readonly TextBox _sourceVersion = new();
     private readonly ComboBox _apiProject = new() { DropDownStyle = ComboBoxStyle.DropDown };
     private readonly TextBox _allowed = new();
     private readonly ComboBox _swaggerType = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -217,7 +220,7 @@ internal sealed class ProfileDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(680, 500);
+        ClientSize = new Size(680, 680);
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -227,8 +230,13 @@ internal sealed class ProfileDialog : Form
         browseButton.Click += (_, _) => BrowseWorkspace();
         var advancedButton = Ui.Ghost("模块与模板…");
         advancedButton.Click += (_, _) => ShowAdvanced();
+        var analysisButton = Ui.Ghost("序列化与分析…");
+        analysisButton.Click += (_, _) => ShowAnalysis();
         var generationButton = Ui.Ghost("模型服务…");
         generationButton.Click += (_, _) => ShowGeneration();
+        var exportButton = Ui.Ghost("导出配置（不含凭据）");
+        exportButton.Enabled = _editing is not null;
+        exportButton.Click += (_, _) => ExportProfile();
 
         _swaggerType.Items.AddRange(SwaggerChoices);
         _swaggerType.SelectedIndexChanged += (_, _) => _swaggerLocation.Enabled = _swaggerType.SelectedIndex > 0;
@@ -256,13 +264,17 @@ internal sealed class ProfileDialog : Form
         AddRow(grid, "API 项目", _apiProject);
         AddRow(grid, "允许回写范围", _allowed);
         AddRow(grid, "", Ui.Caption("相对路径前缀，用「;」分隔；留空表示只允许导出补丁。"));
+        AddRow(grid, "版本备注", _sourceVersion);
+        AddRow(grid, "", Ui.Caption("提交号、构建号或版本描述；为空时报告显示「未绑定代码版本」。"));
         AddRow(grid, "Swagger 来源", _swaggerType);
         AddRow(grid, "Swagger 位置", _swaggerLocation);
         AddRow(grid, "Apifox 项目 ID", _projectId);
         AddRow(grid, "分支", _branch);
-        AddRow(grid, "", Ui.Caption("模块范围与接口模板在「模块与模板」中编辑，模型服务在「模型服务」中配置；密钥在配置保存后设置。"));
+        AddRow(grid, "", Ui.Caption("模块范围与接口模板在「模块与模板」中编辑，序列化与分析在「序列化与分析」中编辑，模型服务在「模型服务」中配置；密钥在配置保存后设置。"));
         AddRow(grid, "", advancedButton);
+        AddRow(grid, "", analysisButton);
         AddRow(grid, "", generationButton);
+        AddRow(grid, "", exportButton);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，符合 Windows「主行动在右」惯例。
@@ -286,6 +298,7 @@ internal sealed class ProfileDialog : Form
         if (_editing is null) return;
         _name.Text = _profile.Name;
         _workspace.Text = _profile.WorkspaceRoot;
+        _sourceVersion.Text = _profile.SourceVersionNote ?? "";
         _apiProject.Text = _profile.ApiProject;
         _allowed.Text = string.Join("; ", _profile.AllowedSourcePaths);
         _swaggerType.SelectedIndex = _profile.Swagger.Type switch
@@ -317,11 +330,47 @@ internal sealed class ProfileDialog : Form
         SetStatus("模型服务设置已更新，随「保存」写入。", UiTokens.OkText);
     }
 
+    /// <summary>打开「序列化与分析」：改动应用到同一配置对象，随外层「保存」经 ProfileStore 校验落盘。</summary>
+    private void ShowAnalysis()
+    {
+        CollectCoreFields();
+        using var dialog = new ProfileAnalysisDialog(_profile);
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        SetStatus("序列化与分析设置已更新，随「保存」写入。", UiTokens.OkText);
+    }
+
+    /// <summary>导出配置（不含凭据）：导出已保存的配置，文件名与字节经 ProfileExport 与 REST 下载同一口径。</summary>
+    private void ExportProfile()
+    {
+        try
+        {
+            var saved = _profiles.Get(_profile.Id);
+            using var dialog = new SaveFileDialog
+            {
+                Title = "导出配置（不含凭据）",
+                Filter = "JSON 文件|*.json",
+                FileName = ProfileExport.FileName(saved),
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            File.WriteAllBytes(dialog.FileName, ProfileExport.Render(saved));
+            SetStatus("配置已导出，模型服务密钥不在其中。", UiTokens.OkText);
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message, UiTokens.BadText);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("导出失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+        }
+    }
+
     /// <summary>把核心输入字段的当前值收集到配置对象（保存与打开高级编辑共用）。</summary>
     private void CollectCoreFields()
     {
         _profile.Name = _name.Text;
         _profile.WorkspaceRoot = _workspace.Text;
+        _profile.SourceVersionNote = _sourceVersion.Text.Trim().Length == 0 ? null : _sourceVersion.Text.Trim();
         _profile.ApiProject = _apiProject.Text;
         _profile.AllowedSourcePaths = _allowed.Text.Split([';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
         _profile.Swagger = new SwaggerSource

@@ -50,8 +50,7 @@ public static class ApiRoutes
         app.MapGet("/api/profiles/{id}/export", (string id, ProfileStore profiles) =>
         {
             var profile = profiles.Get(id);
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(profile, JsonDefaults.Options);
-            return Results.File(bytes, "application/json", $"apifox-helper-profile-{profile.Id}.json");
+            return Results.File(ProfileExport.Render(profile), ProfileExport.ContentType, ProfileExport.FileName(profile));
         });
 
         // 任务
