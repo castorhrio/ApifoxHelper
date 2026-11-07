@@ -33,6 +33,14 @@ public class TaskDisplayTests
     public static IEnumerable<object[]> PropagationSwaggerStates() => Statuses("Comments/PropagationService.cs", "present / different / missing / notRendered");
     public static IEnumerable<object[]> ContractReviewStates() => Statuses("Source/SourceModels.cs", "pending / confirmed / rejected / blocked");
     public static IEnumerable<object[]> ContractDataKinds() => Statuses("Source/SourceModels.cs", "type / null / none / anonymous");
+    public static IEnumerable<object[]> CheckEndpointStatuses() => Statuses("Sync/CheckModels.cs", "new / structure / docs");
+    public static IEnumerable<object[]> ModelCheckStatuses() => Statuses("Sync/CheckModels.cs", "unchanged / changed / new");
+    public static IEnumerable<object[]> ModelMappingStates() => Statuses("Sync/CheckModels.cs", "mapped / candidate / new");
+    public static IEnumerable<object[]> StructureSources() => Statuses("Sync/CheckModels.cs", "swagger / remote / offline");
+    public static IEnumerable<object[]> DocDecisions() => Statuses("Sync/CheckModels.cs", "fill / keepRemote");
+    public static IEnumerable<object[]> DocOrigins() => Statuses("Sync/CheckModels.cs", "swagger / comment / sourceDoc");
+    public static IEnumerable<object[]> DiffChanges() => Statuses("Contracts/DiffEngine.cs", "added / removed / changed");
+    public static IEnumerable<object[]> DiffRisks() => Statuses("Contracts/DiffEngine.cs", "normal / incompatible");
 
     [Theory]
     [MemberData(nameof(SourceStatuses))]
@@ -158,6 +166,58 @@ public class TaskDisplayTests
         Assert.Contains(TaskDisplay.ContractDataKindTone(kind), Tones);
     }
 
+    [Theory]
+    [MemberData(nameof(CheckEndpointStatuses))]
+    public void CheckEndpointStatus_HasChineseTextAndTone(string status)
+    {
+        Assert.NotEqual(status, TaskDisplay.CheckStatusText(status));
+        Assert.Contains(TaskDisplay.CheckStatusTone(status), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(ModelCheckStatuses))]
+    public void ModelCheckStatus_HasChineseTextAndTone(string status)
+    {
+        Assert.NotEqual(status, TaskDisplay.ModelStatusText(status));
+        Assert.Contains(TaskDisplay.ModelStatusTone(status), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(ModelMappingStates))]
+    public void ModelMappingState_HasChineseTextAndTone(string state)
+    {
+        Assert.NotEqual(state, TaskDisplay.MappingStateText(state));
+        Assert.Contains(TaskDisplay.MappingStateTone(state), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(StructureSources))]
+    public void StructureSource_HasChineseText(string source) => Assert.NotEqual(source, TaskDisplay.StructureSourceText(source));
+
+    [Theory]
+    [MemberData(nameof(DocDecisions))]
+    public void DocDecision_HasChineseTextAndTone(string decision)
+    {
+        Assert.NotEqual(decision, TaskDisplay.DocDecisionText(decision));
+        Assert.Contains(TaskDisplay.DocDecisionTone(decision), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(DocOrigins))]
+    public void DocOrigin_HasChineseText(string origin) => Assert.NotEqual(origin, TaskDisplay.DocOriginText(origin));
+
+    [Theory]
+    [MemberData(nameof(DiffChanges))]
+    public void DiffChange_HasChineseText(string change) => Assert.NotEqual(change, TaskDisplay.DiffChangeText(change));
+
+    [Theory]
+    [MemberData(nameof(DiffRisks))]
+    public void DiffRisk_HasChineseTextAndTone(string risk)
+    {
+        Assert.NotEqual(risk, TaskDisplay.DiffRiskText(risk));
+        Assert.Contains(TaskDisplay.DiffRiskTone(risk), Tones);
+    }
+
     [Fact]
     public void UnknownStatus_FallsBackToRawValue()
     {
@@ -177,6 +237,14 @@ public class TaskDisplayTests
         Assert.Equal("mystery", TaskDisplay.PropagationSwaggerText("mystery"));
         Assert.Equal("mystery", TaskDisplay.ContractStateText("mystery"));
         Assert.Equal("mystery", TaskDisplay.ContractDataKindText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.CheckStatusText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.ModelStatusText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.MappingStateText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.StructureSourceText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.DiffChangeText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.DiffRiskText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.DocDecisionText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.DocOriginText("mystery"));
         Assert.Equal("running", TaskDisplay.JobStateText("running"));
         Assert.Equal("normal", TaskDisplay.SlotTone("mystery"));
         Assert.Equal("normal", TaskDisplay.ReviewTone("mystery"));
@@ -187,6 +255,11 @@ public class TaskDisplayTests
         Assert.Equal("normal", TaskDisplay.PropagationSwaggerTone("mystery"));
         Assert.Equal("normal", TaskDisplay.ContractTone("mystery"));
         Assert.Equal("normal", TaskDisplay.ContractDataKindTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.CheckStatusTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.ModelStatusTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.MappingStateTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.DiffRiskTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.DocDecisionTone("mystery"));
     }
 
     [Fact]
@@ -221,6 +294,14 @@ public class TaskDisplayTests
             .Concat(Statuses("Comments/PropagationService.cs", "present / different / missing / notRendered").Select(o => TaskDisplay.PropagationSwaggerText((string)o[0])))
             .Concat(Statuses("Source/SourceModels.cs", "pending / confirmed / rejected / blocked").Select(o => TaskDisplay.ContractStateText((string)o[0])))
             .Concat(Statuses("Source/SourceModels.cs", "type / null / none / anonymous").Select(o => TaskDisplay.ContractDataKindText((string)o[0])))
+            .Concat(Statuses("Sync/CheckModels.cs", "new / structure / docs").Select(o => TaskDisplay.CheckStatusText((string)o[0])))
+            .Concat(Statuses("Sync/CheckModels.cs", "unchanged / changed / new").Select(o => TaskDisplay.ModelStatusText((string)o[0])))
+            .Concat(Statuses("Sync/CheckModels.cs", "mapped / candidate / new").Select(o => TaskDisplay.MappingStateText((string)o[0])))
+            .Concat(Statuses("Sync/CheckModels.cs", "swagger / remote / offline").Select(o => TaskDisplay.StructureSourceText((string)o[0])))
+            .Concat(Statuses("Sync/CheckModels.cs", "fill / keepRemote").Select(o => TaskDisplay.DocDecisionText((string)o[0])))
+            .Concat(Statuses("Sync/CheckModels.cs", "swagger / comment / sourceDoc").Select(o => TaskDisplay.DocOriginText((string)o[0])))
+            .Concat(Statuses("Contracts/DiffEngine.cs", "added / removed / changed").Select(o => TaskDisplay.DiffChangeText((string)o[0])))
+            .Concat(Statuses("Contracts/DiffEngine.cs", "normal / incompatible").Select(o => TaskDisplay.DiffRiskText((string)o[0])))
             .Concat(["成功", "失败", "已取消"]);
         foreach (var text in outputs)
         {

@@ -11,6 +11,7 @@ public sealed class CheckResult
     public bool SnapshotComplete { get; set; }
     public bool Offline { get; set; }
 
+    /// <summary>swagger / remote / offline</summary>
     /// <summary>swagger：结构以 Swagger 为准；remote：未提供 Swagger，结构保持远端现状只补说明；offline：离线比较。</summary>
     public string StructureSource { get; set; } = "";
     public List<EndpointCheck> Endpoints { get; set; } = new();

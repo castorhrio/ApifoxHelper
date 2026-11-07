@@ -136,6 +136,18 @@
 - **验证状态**：Linux `dotnet build` 0 警告 0 错误；`ApifoxHelper.Tests` 116 用例全部通过（含令牌接线机械检查对新文件 ContractsDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「查看响应契约 → 确认/拒绝/重置」只在代码与编译层面成立；Windows 真机需按「扫描（配置了通用响应封装的项目） → 查看响应契约 → 逐条对照分支与证据 → 确认/拒绝/重置 → 任务页状态行刷新」走一遍，并核对阻断契约的确认被拒绝。如实挂账。
 - 未改写入安全语义（审阅校验为行为保持提取）；未连接或写入 Apifox；审阅动作只在用户显式点击时调用服务。
 
+## 原生切片「Apifox 差异检查（只读）」（2026-11-07 第八轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（e6f862e）的 Linux `dotnet build` 0 警告 0 错误、116 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。
+- **原生交互推进一小步（响应契约 → Apifox 差异检查，F08/F09 的只读部分接入原生）**：旅程第 6 步——「Apifox 差异与同步」区从「本切片未接入」换成只读检查与结果查看；检查、离线远端导入复用既有 `CheckService`（`LoadSwaggerAsync`/`ImportOfflineRemoteAsync`/`RunAsync`），不写入远端、不生成同步计划，差异确认/计划/同步/报告仍如实挂账为后续切片。
+  - 任务详情「Apifox 差异与同步」区新增三个动作（都在扫描完成且无作业运行时可用）：「开始检查 / 重新检查 / 加载 Swagger 并检查」（同一按钮按状态换文案，与冻结页面同一规则：配置了 Swagger 且未冻结时先加载冻结再检查，两个调用放进同一个后台作业「契约检查」，进度与取消共用既有固定占位控件）；「导入离线远端 JSON」（仅离线任务显示，原生 `OpenFileDialog` 选文件后经 `ImportOfflineRemoteAsync` 后台作业导入）；「查看检查结果」（任务目录已有 diff.json 时可用）。
+  - 作业失败改为显示原因：进度占位行在作业失败时显示「{作业}失败：{原因}」（`JobRunner` 已对非 `UserException` 脱敏），不再只显示"结束（失败）"——离线任务未导入远端、未绑定 Apifox 项目 ID 等情况错误直接可见，失败不装干净（D9）。此改动对扫描/规则提取/传播核对等所有作业类型同样生效。
+  - 结果对话框 `Desktop/Native/CheckResultsDialog.cs`（只读）：概要行显示检查时间、结构来源（Swagger/远端现状/离线导入）、快照时间与完整性（不完整如实标注）、逐状态计数（仅源码 >0 时才追加，等宽数字）；检查之后任务内容有变化时显示过期提示（结果仍如实展示）；检查问题与「远端有、源中没有（范围内）」清单（无问题时整区隐藏）；接口列表按状态筛选（全部/新增/结构变化/说明变化/无变化/阻断/仅源码），状态列颜色 + 文字双通道，接口与计数列等宽字体；选中接口显示远端 ID/名称/目录、重复身份、逐条结构差异（位置 · 变化 — 原因（风险））、保留项、逐条说明合并（位置［来源］远端值目标值 → 结果）、备注、质量提示、阻断；下方模型清单显示映射状态/模型状态/用于接口数/范围外影响数。差异确认、说明冲突选择、模型绑定与同步预览不在本切片，说明行如实交代。
+- **TaskDisplay 增补映射**：接口检查状态（new/structure/docs/unchanged/blocked/sourceOnly，色调对齐冻结页面：新增/说明变化=accent、结构变化=warn、阻断/仅源码=bad）、模型状态（unchanged/changed/new/blocked/unknown）、模型映射状态（mapped/candidate/new/ambiguous）、结构来源（swagger/remote/offline）、差异变化类型（added/removed/changed/info）、差异风险（normal/incompatible/manual/blocking）、说明合并结果（fill/keepRemote/useTarget/conflict/supplement/suggestion，冲突待选=bad）、说明来源（swagger/comment/sourceDoc/supplement）；`RemoteStatusText` 补 `offline`（离线检查）映射臂——离线检查完成后任务列表列此前显示原始值 `offline`，属既有缺口本轮修复；`TaskModels.RemoteStage.Status` 注释补 `offline` 取值、`CheckModels.CheckResult.StructureSource` 注释补机器可解析取值行。未知值原样回退不变。
+- **测试 116 → 153 用例**：新增接口检查状态（6）、模型状态（5）、映射状态（4）、结构来源（3）、说明合并结果（6）、说明来源（4）、差异变化（4）、差异风险（4）八组完备断言（含色调），offline 自动并入既有远端状态断言；未知值回退与文案禁词检查覆盖全部新映射。变异验证实测可红：删除 `CheckStatusText` 的 `sourceOnly` 映射臂 → `CheckEndpointStatus_HasChineseTextAndTone(status: "sourceOnly")` 变红，还原后全绿。另修正一处流程认知：仓库无 .sln，根目录 `dotnet build` 只构建主工程，测试工程需显式 `dotnet build ApifoxHelper.Tests/...` 后再 `dotnet test --no-build`。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 153 用例全部通过（含令牌接线机械检查对新文件 CheckResultsDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「导入离线远端 / 检查 / 查看结果」只在代码与编译层面成立，且在线检查依赖本机 Apifox CLI 登录态，本环境不可能端到端执行；Windows 真机需按「扫描 →（配置 Swagger 时）加载 Swagger 并检查 → 查看检查结果 → 逐接口对照结构差异与说明合并 →（离线任务）导入 JSON 后检查」走一遍，并核对失败路径（未绑定项目 ID、未导入离线远端）的错误文案。如实挂账。
+- 未改写入安全语义（检查与导入均为既有服务的只读复用）；本轮未连接或写入 Apifox（`RunAsync` 只在用户显式点击时开始，且需真实 CLI 登录态）。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

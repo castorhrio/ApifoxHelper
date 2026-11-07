@@ -12,9 +12,9 @@ using Microsoft.Extensions.Logging;
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 原生桌面壳（F16 首个纵切片）：原生菜单 + 左侧导航 + 页面区。
+/// 原生桌面壳（F16）：原生菜单 + 左侧导航 + 页面区。
 /// 复用进程内服务（HelperHost），不嵌网页；"在浏览器中打开"不在本壳的菜单中。
-/// 本切片只接入：项目配置、任务与源码扫描；后续阶段在原生界面逐切片接入，未接入处如实显示禁用态。
+/// 工作流按迭代逐切片接入原生界面；未接入处如实显示禁用态或说明行，不冒充可用。
 /// </summary>
 internal sealed class NativeShellForm : Form
 {
@@ -172,7 +172,8 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<DraftService>(),
             _host.Services.GetRequiredService<CommentPlanService>(),
             _host.Services.GetRequiredService<PropagationService>(),
-            _host.Services.GetRequiredService<ContractReviewService>());
+            _host.Services.GetRequiredService<ContractReviewService>(),
+            _host.Services.GetRequiredService<Sync.CheckService>());
 
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;

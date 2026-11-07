@@ -3,6 +3,7 @@ using System.Windows.Forms;
 using ApifoxHelper.Comments;
 using ApifoxHelper.Profiles;
 using ApifoxHelper.Source;
+using ApifoxHelper.Sync;
 using ApifoxHelper.Tasks;
 
 namespace ApifoxHelper.Desktop.Native;
@@ -10,8 +11,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// <summary>
 /// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）
 /// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）+ 注释回写 + 生成文档核对（后台作业、只读结果视图）
-/// + 响应契约（扫描时追踪落盘，逐条确认/拒绝/重置）。
-/// Apifox 检查/同步与报告不在本切片：如实显示"本切片未接入"，不提供入口。
+/// + 响应契约（扫描时追踪落盘，逐条确认/拒绝/重置）
+/// + Apifox 差异检查（只读后台作业，需要时先加载冻结 Swagger；离线任务先导入远端 JSON；只读结果视图）。
+/// 差异确认、同步与报告不在本切片：如实显示"后续切片接入"，不提供入口。
 /// </summary>
 internal sealed class TasksPage : UserControl, INativePage
 {
@@ -23,6 +25,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly CommentPlanService _plans;
     private readonly PropagationService _propagation;
     private readonly ContractReviewService _reviews;
+    private readonly CheckService _checks;
 
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
     private readonly Panel _empty;
@@ -54,13 +57,17 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Label _contractStatus = Ui.StatusText();
     private readonly Label _remoteStatus = Ui.StatusText();
     private readonly Label _remoteNumbers = Ui.Mono();
+    private readonly FlowLayoutPanel _remoteActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+    private readonly Button _importRemoteButton;
+    private readonly Button _remoteCheckButton;
+    private readonly Button _remoteViewButton;
 
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 500 };
     private CheckTask? _selectedTask;
     private bool _runningShown;
     private bool _splitAdjusted;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, ContractReviewService reviews)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, ContractReviewService reviews, CheckService checks)
     {
         _tasks = tasks;
         _scan = scan;
@@ -70,6 +77,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _plans = plans;
         _propagation = propagation;
         _reviews = reviews;
+        _checks = checks;
 
         var newButton = Ui.Primary("新建任务");
         newButton.Click += (_, _) => ShowNewTaskDialog();
@@ -115,6 +123,16 @@ internal sealed class TasksPage : UserControl, INativePage
 
         _contractButton = Ui.Ghost("查看响应契约");
         _contractButton.Click += (_, _) => ShowContracts();
+
+        _importRemoteButton = Ui.Ghost("导入离线远端 JSON");
+        _importRemoteButton.Click += (_, _) => ImportOfflineRemote();
+        _remoteCheckButton = Ui.Ghost("开始检查");
+        _remoteCheckButton.Click += (_, _) => StartRemoteCheck();
+        _remoteViewButton = Ui.Ghost("查看检查结果");
+        _remoteViewButton.Click += (_, _) => ShowCheckResults();
+        _remoteActions.Controls.Add(_importRemoteButton);
+        _remoteActions.Controls.Add(_remoteCheckButton);
+        _remoteActions.Controls.Add(_remoteViewButton);
 
         _empty = BuildEmpty();
 
@@ -191,7 +209,8 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, SectionCaption("Apifox 差异与同步"));
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
-        AddDetailRow(grid, Ui.Caption("本切片未接入；检查、同步与报告将在后续切片提供。"));
+        AddDetailRow(grid, _remoteActions);
+        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。差异确认、同步与报告将在后续切片接入。"));
         return grid;
     }
 
@@ -352,6 +371,11 @@ internal sealed class TasksPage : UserControl, INativePage
             ? "尚未检查"
             : $"新增 {remote.Added} · 结构变化 {remote.StructureChanged} · 说明变化 {remote.DocChanged} · 冲突 {remote.Conflicts} · 阻断 {remote.Blocked}";
 
+        // 远端区按钮：离线任务先导入作为「远端」的 OpenAPI JSON；配置了 Swagger 且未冻结时，下一次检查先加载并冻结 Swagger。
+        _importRemoteButton.Visible = task.OfflineMode;
+        _remoteCheckButton.Text = NeedsSwaggerLoad(task) ? "加载 Swagger 并检查"
+            : File.Exists(_tasks.FilePath(task.Id, TaskFiles.Diff)) ? "重新检查" : "开始检查";
+
         RefreshContractSection();
 
         var job = _jobs.Running(task.Id);
@@ -361,7 +385,7 @@ internal sealed class TasksPage : UserControl, INativePage
     /// <summary>扫描区按作业状态切换：按钮（空闲）或进度 + 取消（执行中）。控件位置固定，不跳位。</summary>
     private void ShowJobState(JobInfo? job)
     {
-        // 缺口清单、候选审阅、规则提取、注释回写、传播核对与响应契约都基于扫描落盘产物：扫描完成后可用，
+        // 缺口清单、候选审阅、规则提取、注释回写、传播核对、响应契约与远端检查都基于扫描落盘产物：扫描完成后可用，
         // 作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）；后台作业的进度与取消共用同一套固定占位控件。
         var scanReady = _selectedTask is { Stages.Source.ScannedAt: not null } && job is null;
         _gapButton.Enabled = scanReady;
@@ -371,6 +395,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _checkButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
         _viewButton.Enabled = scanReady && _selectedTask is { Stages.Generated.CheckedAt: not null };
         _contractButton.Enabled = scanReady;
+        _importRemoteButton.Enabled = scanReady && (_selectedTask?.OfflineMode ?? false);
+        _remoteCheckButton.Enabled = scanReady;
+        _remoteViewButton.Enabled = scanReady && _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
         if (job is not null)
         {
             _runningShown = true;
@@ -379,7 +406,9 @@ internal sealed class TasksPage : UserControl, INativePage
             _cancelButton.Visible = true;
             _progress.Text = job.State == "running"
                 ? $"正在{job.Kind}… {job.Progress:P0} {job.ProgressText}"
-                : $"{job.Kind}结束（{TaskDisplay.JobStateText(job.State)}），正在刷新。";
+                : job is { State: "failed", Error: not null }
+                    ? $"{job.Kind}失败：{job.Error} 正在刷新。"
+                    : $"{job.Kind}结束（{TaskDisplay.JobStateText(job.State)}），正在刷新。";
             _progress.ForeColor = job.State == "failed" ? UiTokens.BadText : UiTokens.Text;
             _cancelButton.Enabled = job.State == "running";
         }
@@ -540,6 +569,69 @@ internal sealed class TasksPage : UserControl, INativePage
         using var dialog = new ContractsDialog(_tasks, _selectedTask, _reviews);
         dialog.ShowDialog(FindForm());
         RefreshContractSection();
+    }
+
+    /// <summary>配置了 Swagger、还没冻结过且不是离线任务：检查前先加载并冻结 Swagger（与冻结页面同一规则，避免不知情地退化为只按远端现状比较）。</summary>
+    private static bool NeedsSwaggerLoad(CheckTask task) =>
+        !task.OfflineMode
+        && task.ProfileSnapshot.Swagger.Type is not (null or "" or "none")
+        && task.Stages.Remote.SourceHash is null;
+
+    /// <summary>Apifox 差异检查（只读后台作业）：需要时先加载并冻结 Swagger，再读取远端与目标比较，结果落盘 diff.json；不写入远端。</summary>
+    private void StartRemoteCheck()
+    {
+        if (_selectedTask is null) return;
+        var taskId = _selectedTask.Id;
+        var loadSwagger = NeedsSwaggerLoad(_selectedTask);
+        try
+        {
+            _jobs.Start(taskId, "契约检查", async job =>
+            {
+                if (loadSwagger) await _checks.LoadSwaggerAsync(taskId, job.Token);
+                return await _checks.RunAsync(taskId, job);
+            });
+            RefreshDetail();
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法开始检查：" + Redactor.Redact(ex.Message));
+        }
+    }
+
+    /// <summary>离线检查前置：选择一份 OpenAPI JSON 作为「远端」导入，写入任务目录 offline.remote.openapi.json；只读比较用，不访问 Apifox。</summary>
+    private void ImportOfflineRemote()
+    {
+        if (_selectedTask is null) return;
+        using var picker = new OpenFileDialog { Title = "导入离线远端", Filter = "OpenAPI JSON|*.json", CheckFileExists = true };
+        if (picker.ShowDialog(FindForm()) != DialogResult.OK) return;
+        var taskId = _selectedTask.Id;
+        var path = picker.FileName;
+        try
+        {
+            _jobs.Start(taskId, "导入离线远端", async job =>
+                await _checks.ImportOfflineRemoteAsync(taskId, await File.ReadAllTextAsync(path, Encoding.UTF8, job.Token), job.Token));
+            RefreshDetail();
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法导入离线远端：" + Redactor.Redact(ex.Message));
+        }
+    }
+
+    /// <summary>打开检查结果（只读）：数据来自任务目录 diff.json，无写入动作。</summary>
+    private void ShowCheckResults()
+    {
+        if (_selectedTask is null) return;
+        using var dialog = new CheckResultsDialog(_tasks, _selectedTask);
+        dialog.ShowDialog(FindForm());
     }
 
     private void ShowNewTaskDialog()

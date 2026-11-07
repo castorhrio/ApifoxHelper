@@ -70,7 +70,7 @@ public sealed class GeneratedStage
 
 public sealed class RemoteStage
 {
-    /// <summary>notChecked / snapshotReady / pending / previewable / awaitingConfirm / executing / verified / partial / failed / expired / interrupted</summary>
+    /// <summary>notChecked / snapshotReady / pending / previewable / awaitingConfirm / executing / verified / partial / failed / expired / interrupted / offline</summary>
     public string Status { get; set; } = "notChecked";
     public DateTimeOffset? SnapshotAt { get; set; }
     public bool SnapshotComplete { get; set; }

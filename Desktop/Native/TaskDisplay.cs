@@ -84,6 +84,7 @@ public static class TaskDisplay
         "failed" => "失败",
         "expired" => "计划已过期",
         "interrupted" => "已中断",
+        "offline" => "离线检查",
         _ => status,
     };
 
@@ -328,6 +329,132 @@ public static class TaskDisplay
         "anonymous" => "匿名对象",
         "unknown" => "无法确定",
         _ => kind,
+    };
+
+    /// <summary>检查结果的接口状态（EndpointCheck.Status）的色调：新增/说明变化=accent，结构变化=warn，阻断/仅源码=bad。</summary>
+    public static string CheckStatusTone(string status) => status switch
+    {
+        "new" or "docs" => "accent",
+        "structure" => "warn",
+        "blocked" or "sourceOnly" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>检查结果的接口状态：检查结果清单里逐接口显示的状态文字。</summary>
+    public static string CheckStatusText(string status) => status switch
+    {
+        "new" => "新增",
+        "structure" => "结构变化",
+        "docs" => "说明变化",
+        "unchanged" => "无变化",
+        "blocked" => "阻断",
+        "sourceOnly" => "仅源码",
+        _ => status,
+    };
+
+    /// <summary>检查结果的模型状态（ModelCheck.Status）的色调：新增=accent，有变化=warn，阻断/未知=bad。</summary>
+    public static string ModelStatusTone(string status) => status switch
+    {
+        "new" => "accent",
+        "changed" => "warn",
+        "blocked" or "unknown" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>检查结果的模型状态：模型清单里逐模型显示的状态文字。</summary>
+    public static string ModelStatusText(string status) => status switch
+    {
+        "unchanged" => "无变化",
+        "changed" => "有变化",
+        "new" => "新增",
+        "blocked" => "阻断",
+        "unknown" => "未知",
+        _ => status,
+    };
+
+    /// <summary>模型映射状态（ModelCheck.MappingState）的色调：已映射=ok，候选绑定=warn，同名多个=bad。</summary>
+    public static string MappingStateTone(string state) => state switch
+    {
+        "mapped" => "ok",
+        "candidate" => "warn",
+        "ambiguous" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>模型映射状态：模型清单里逐模型显示的映射文字。</summary>
+    public static string MappingStateText(string state) => state switch
+    {
+        "mapped" => "已映射",
+        "candidate" => "候选绑定",
+        "new" => "新增",
+        "ambiguous" => "同名多个",
+        _ => state,
+    };
+
+    /// <summary>检查的结构来源（CheckResult.StructureSource）：结构比较以什么为准。</summary>
+    public static string StructureSourceText(string source) => source switch
+    {
+        "swagger" => "Swagger",
+        "remote" => "远端现状",
+        "offline" => "离线导入",
+        _ => source,
+    };
+
+    /// <summary>结构差异的变化类型（DiffItem.Change）：差异条目里显示的变化文字。</summary>
+    public static string DiffChangeText(string change) => change switch
+    {
+        "added" => "新增",
+        "removed" => "删除",
+        "changed" => "变化",
+        "info" => "保留项",
+        _ => change,
+    };
+
+    /// <summary>差异风险（DiffItem.Risk）的色调：潜在不兼容/需人工判断=warn，阻断=bad。</summary>
+    public static string DiffRiskTone(string risk) => risk switch
+    {
+        "incompatible" or "manual" => "warn",
+        "blocking" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>差异风险：差异条目里显示的风险文字（与说明合并、同步的风险分级同一口径）。</summary>
+    public static string DiffRiskText(string risk) => risk switch
+    {
+        "normal" => "普通",
+        "incompatible" => "潜在不兼容",
+        "manual" => "需人工判断",
+        "blocking" => "阻断",
+        _ => risk,
+    };
+
+    /// <summary>说明合并结果（DocChange.Decision）的色调：冲突待选=bad，其余以文字阅读为主。</summary>
+    public static string DocDecisionTone(string decision) => decision switch
+    {
+        "conflict" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>说明合并结果：差异详情里逐条显示的处理结果文字（与冻结页面口径一致）。</summary>
+    public static string DocDecisionText(string decision) => decision switch
+    {
+        "fill" => "补充",
+        "keepRemote" => "保留远端",
+        "useTarget" => "使用目标",
+        "conflict" => "冲突待选",
+        "supplement" => "人工补充",
+        "suggestion" => "建议（不自动改名）",
+        _ => decision,
+    };
+
+    /// <summary>说明条目的来源（DocChange.Origin）：目标值来自哪里。</summary>
+    public static string DocOriginText(string origin) => origin switch
+    {
+        "swagger" => "Swagger",
+        "comment" => "已确认注释",
+        "sourceDoc" => "源码注释",
+        "supplement" => "人工补充",
+        _ => origin,
     };
 
     /// <summary>代码证据类型（CodeEvidence.Kind）：证据清单里逐条显示的分类标签。</summary>
