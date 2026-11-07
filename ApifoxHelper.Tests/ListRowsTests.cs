@@ -124,4 +124,31 @@ public class ListRowsTests
         Assert.Contains("ProcessDialogKey", dialog);
         Assert.Contains("Keys.Escape", dialog);
     }
+
+    /// <summary>
+    /// 项目配置页的列表在重建（切页、刷新、新建/编辑保存）后恢复选中与键盘焦点——与任务页同一口径：
+    /// 选中变化时记录配置 Id，重建前先取局部（Clear 会触发选中事件把字段抹掉），重建后经 Ui.SelectItem 恢复；
+    /// 配置对话框保存成功后暴露 Saved，调用方定位刚保存的行（新建后编辑/探测入口随即可用）。
+    /// </summary>
+    [Fact]
+    public void ProjectsPage_SelectionSurvivesReloads()
+    {
+        var page = Repo.Source("Desktop", "Native", "ProjectsPage.cs");
+        Assert.True(Regex.IsMatch(page, @"^    private string\? _selectedId;", RegexOptions.Multiline),
+            "ProjectsPage 缺少选中 Id 字段——列表重建后选中无处恢复。");
+        Assert.True(Regex.IsMatch(page, @"^            _selectedId = Selected\(\)\?\.Id;", RegexOptions.Multiline),
+            "选中变化未记录配置 Id——重建后无法恢复到当前行。");
+        Assert.True(Regex.IsMatch(page, @"^        var selectedId = _selectedId;", RegexOptions.Multiline),
+            "LoadProfiles 未在重建前取局部选中 Id——Items.Clear 触发的选中事件会把字段抹成 null。");
+        Assert.True(Regex.IsMatch(page, @"^            RestoreSelection\(selectedId\);", RegexOptions.Multiline),
+            "LoadProfiles 重建后未恢复选中——切页、刷新与保存后的选中都会丢失，「编辑/连接与写入探测」退回禁用。");
+        Assert.True(Regex.IsMatch(page, @"^                Ui\.SelectItem\(item\);", RegexOptions.Multiline),
+            "恢复选中绕过 Ui.SelectItem——焦点标记不会恢复，方向键从列表头部重新开始。");
+        Assert.True(Regex.IsMatch(page, @"^    public ProjectProfile\? Saved \{ get; private set; \}", RegexOptions.Multiline),
+            "ProfileDialog 缺少 Saved 属性——调用方无法得知刚保存的配置。");
+        Assert.True(Regex.IsMatch(page, @"^            Saved = _profile;", RegexOptions.Multiline),
+            "保存成功路径未记录 Saved（保存失败保持 null）。");
+        Assert.True(Regex.IsMatch(page, @"^            if \(dialog\.Saved is \{ \} saved\) _selectedId = saved\.Id;", RegexOptions.Multiline),
+            "配置对话框确认后未定位刚保存的配置——新建/编辑保存后还要手动找行。");
+    }
 }

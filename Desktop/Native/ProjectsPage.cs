@@ -29,6 +29,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private readonly Label _status = Ui.StatusLine();
     private readonly Button _editButton;
     private readonly Button _probeButton;
+    // 选中保留：列表在切页、刷新与保存后都会重建，按配置 Id 恢复选中与键盘焦点（与任务页同一口径）。
+    private string? _selectedId;
 
     public ProjectsPage(ProfileStore profiles, CompatService compat, ApifoxCli cli, FileStore store, JobRunner jobs, CredentialStore credentials)
     {
@@ -49,6 +51,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
         refreshButton.Click += (_, _) => RefreshData();
         _list.SelectedIndexChanged += (_, _) =>
         {
+            _selectedId = Selected()?.Id;
             _editButton.Enabled = _list.SelectedIndices.Count > 0;
             _probeButton.Enabled = _list.SelectedIndices.Count > 0;
         };
@@ -119,6 +122,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
     private void LoadProfiles()
     {
+        // 先取局部：重建清空列表会触发 SelectedIndexChanged 把字段抹成 null。
+        var selectedId = _selectedId;
         try
         {
             var profiles = _profiles.List();
@@ -135,10 +140,12 @@ internal sealed class ProjectsPage : UserControl, INativePage
                 _list.Items.Add(item);
             }
             _list.EndUpdate();
-            _empty.Visible = profiles.Count == 0;
-            _list.Visible = profiles.Count > 0;
+            // 重建后先禁用编辑/探测，恢复选中时由选中事件重新启用；原选中项已不存在则保持禁用。
             _editButton.Enabled = false;
             _probeButton.Enabled = false;
+            RestoreSelection(selectedId);
+            _empty.Visible = profiles.Count == 0;
+            _list.Visible = profiles.Count > 0;
             SetStatus(null);
         }
         catch (UserException ex)
@@ -148,6 +155,20 @@ internal sealed class ProjectsPage : UserControl, INativePage
         catch (Exception ex)
         {
             SetStatus("读取配置失败：" + Redactor.Redact(ex.Message));
+        }
+    }
+
+    /// <summary>重建后恢复选中与键盘焦点（经 Ui.SelectItem 唯一入口）；原选中项已不存在（如被删除）时不动作。</summary>
+    private void RestoreSelection(string? selectedId)
+    {
+        if (selectedId is null) return;
+        foreach (ListViewItem item in _list.Items)
+        {
+            if (item.Tag is ProjectProfile profile && profile.Id == selectedId)
+            {
+                Ui.SelectItem(item);
+                return;
+            }
         }
     }
 
@@ -168,6 +189,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
         using var dialog = new ProfileDialog(_profiles, _cli, _credentials, editing);
         if (dialog.ShowDialog(FindForm()) == DialogResult.OK)
         {
+            // 刚保存的配置（新建或编辑）在重建后选中，编辑/探测入口保持可用。
+            if (dialog.Saved is { } saved) _selectedId = saved.Id;
             LoadProfiles();
         }
     }
@@ -210,6 +233,9 @@ internal sealed class ProfileDialog : Form
     private readonly ComboBox _projectId = new() { DropDownStyle = ComboBoxStyle.DropDown };
     private readonly ComboBox _branch = new() { DropDownStyle = ComboBoxStyle.DropDown };
     private readonly Label _status = Ui.StatusLine();
+
+    /// <summary>保存成功后的配置（保存失败保持 null；调用方据此在列表中定位刚保存的行）。</summary>
+    public ProjectProfile? Saved { get; private set; }
     private readonly Button _findButton;
     private readonly Button _loadProjectsButton;
     private readonly Button _loadBranchesButton;
@@ -595,6 +621,7 @@ internal sealed class ProfileDialog : Form
         try
         {
             _profiles.Save(_profile, isNew: _editing is null);
+            Saved = _profile;
             DialogResult = DialogResult.OK;
         }
         catch (UserException ex)
