@@ -6,25 +6,30 @@ using ApifoxHelper.Tasks;
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 同步预览（只读）：勾选范围内接口生成冻结的同步计划，查看逐动作写入清单、CLI 校验结果、
+/// 同步预览与执行：勾选范围内接口生成冻结的同步计划，查看逐动作写入清单、CLI 校验结果、
 /// 未纳入原因、共享模型范围外影响与保留设置。计划生成经既有 SyncPlanService
 /// （写入门禁、检查版本一致、逐接口重读远端核对指纹、cli-schema 校验、模型依赖排序都不变），
-/// 走共享 JobRunner 后台作业，生成中可停止。选中动作显示写入内容（脱敏后，与执行时写入的 JSON 一致）。
-/// 本对话框不执行同步：执行与回读核对将在后续切片接入，预览全程不写入远端。
-/// 状态表：未检查/读取失败/离线=空态指引并禁用全部动作；生成中=状态行进度 + 停止；
-/// 生成失败=原因与下一步；计划就绪=概要 + 写入清单 + 排除清单 + 影响与保留设置；
-/// 计划生成后任务内容有变化=过期提示（计划仍如实展示）。
+/// 执行与回读核对经既有 SyncExecutor（计划哈希绑定、写入前重读核对指纹、写入后立即回读核对、
+/// 首个失败即停止、取消只在动作之间生效、部分完成如实记录、不自动回滚），两者都走共享 JobRunner，可停止。
+/// 「确认同步」按设计基线用原生确认对话框（默认按钮在「取消」）；「重新核对（只读）」复用 VerifyAsync，不写入。
+/// 选中动作显示写入内容（脱敏后，与执行时写入的 JSON 一致）。
+/// 状态表：未检查/读取失败/离线=空态指引并禁用全部动作；生成或执行中=状态行进度 + 停止；
+/// 生成失败/执行被拒=原因与下一步；计划就绪=概要 + 写入清单 + 排除清单 + 影响与保留设置；
+/// 执行或核对结束=逐动作结果 + 按计划状态如实报告（部分完成不显示成全部成功）；
+/// 计划生成后任务内容有变化=过期提示（计划不能再执行，仍如实展示）。
 /// </summary>
 internal sealed class SyncPreviewDialog : Form
 {
     private readonly TaskStore _tasks;
     private readonly SyncPlanService _plans;
+    private readonly SyncExecutor _executor;
     private readonly JobRunner _jobs;
     private readonly CheckTask _task;
     private readonly string _taskId;
 
     private CheckResult? _diff;
     private DecisionStore _decisions = new();
+    private SyncPlan? _plan;
     private JobInfo? _job;
     private bool _busy;
 
@@ -84,6 +89,8 @@ internal sealed class SyncPreviewDialog : Form
         BackColor = UiTokens.Panel,
         Font = UiTokens.Body.Value,
     };
+    private readonly Button _applyButton;
+    private readonly Button _verifyButton;
     private readonly Panel _page2;
 
     private readonly Button _backButton;
@@ -92,10 +99,11 @@ internal sealed class SyncPreviewDialog : Form
     private readonly Label _status = Ui.StatusLine();
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 500 };
 
-    public SyncPreviewDialog(TaskStore tasks, SyncPlanService plans, JobRunner jobs, CheckTask task)
+    public SyncPreviewDialog(TaskStore tasks, SyncPlanService plans, SyncExecutor executor, JobRunner jobs, CheckTask task)
     {
         _tasks = tasks;
         _plans = plans;
+        _executor = executor;
         _jobs = jobs;
         _task = task;
         _taskId = task.Id;
@@ -135,6 +143,12 @@ internal sealed class SyncPreviewDialog : Form
         _viewPlanButton = Ui.Ghost("查看已有计划");
         _viewPlanButton.Enabled = false;
         _viewPlanButton.Click += (_, _) => ViewExistingPlan();
+        _applyButton = Ui.Primary("确认同步");
+        _applyButton.Enabled = false;
+        _applyButton.Click += (_, _) => ApplyPlan();
+        _verifyButton = Ui.Ghost("重新核对（只读）");
+        _verifyButton.Enabled = false;
+        _verifyButton.Click += (_, _) => VerifyRemote();
         _generateButton = Ui.Primary("生成同步预览");
         _generateButton.Enabled = false;
         _generateButton.Click += (_, _) => Generate();
@@ -247,9 +261,19 @@ internal sealed class SyncPreviewDialog : Form
         head.SetColumnSpan(_stale, 2);
         head.Controls.Add(_planMessage, 0, 3);
         head.SetColumnSpan(_planMessage, 2);
-        var readOnlyCaption = Ui.Caption("同步预览只读：执行同步与回读核对将在后续切片接入，生成与查看计划不会写入远端。");
-        head.Controls.Add(readOnlyCaption, 0, 4);
-        head.SetColumnSpan(readOnlyCaption, 2);
+        var planActions = new TableLayoutPanel { AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 3, Margin = new Padding(0), Padding = new Padding(0) };
+        planActions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        planActions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        planActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _verifyButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        planActions.Controls.Add(_applyButton, 0, 0);
+        planActions.Controls.Add(_verifyButton, 1, 0);
+        planActions.Controls.Add(new Panel { Margin = new Padding(0) }, 2, 0);
+        head.Controls.Add(planActions, 0, 4);
+        head.SetColumnSpan(planActions, 2);
+        var executionCaption = Ui.Caption("确认后逐动作写入并立即回读核对；首个失败即停止，已写入部分不回滚，可在动作之间停止。");
+        head.Controls.Add(executionCaption, 0, 5);
+        head.SetColumnSpan(executionCaption, 2);
 
         var actionCaption = Ui.Caption("写入清单（按执行顺序：模型在前、接口在后；选中动作在下方显示写入内容）");
         actionCaption.Dock = DockStyle.Top;
@@ -417,8 +441,101 @@ internal sealed class SyncPreviewDialog : Form
         _selectAllButton.Enabled = !busy && _diff is not null;
         _clearButton.Enabled = !busy && _diff is not null;
         _viewPlanButton.Enabled = !busy && File.Exists(_tasks.FilePath(_taskId, TaskFiles.Plan));
+        _backButton.Enabled = !busy;
         _generateButton.Enabled = !busy && CheckedCount() > 0;
+        RefreshPlanActionButtons();
         _stopButton.Visible = busy;
+    }
+
+    /// <summary>执行与核对的按钮可用性（口径见 SyncExecution，与冻结页面同一规则）。</summary>
+    private void RefreshPlanActionButtons()
+    {
+        if (_plan is null || _busy)
+        {
+            _applyButton.Enabled = false;
+            _verifyButton.Enabled = false;
+            return;
+        }
+        var outdated = _plan.Status == "awaitingConfirm" && _plan.TaskRevision != ReadTaskSnapshot().Revision;
+        _applyButton.Enabled = SyncExecution.CanExecute(_plan.Status, outdated);
+        _verifyButton.Enabled = SyncExecution.CanVerify(_plan.Status);
+    }
+
+    /// <summary>任务当前内容：读取失败时按打开时的快照判断过期（与既有 ShowPlan 同一兜底）。</summary>
+    private CheckTask ReadTaskSnapshot()
+    {
+        try { return _tasks.Get(_taskId); }
+        catch { return _task; }
+    }
+
+    /// <summary>
+    /// 确认同步：不可逆写入，按设计基线先弹原生确认对话框（默认按钮在「取消」），
+    /// 之后经既有 SyncExecutor 执行（计划哈希绑定；写入前核对指纹、写入后回读核对、失败即停都在服务层，本层不改写）。
+    /// </summary>
+    private void ApplyPlan()
+    {
+        var plan = _plan;
+        if (_busy || plan is null) return;
+        var outdated = plan.Status == "awaitingConfirm" && plan.TaskRevision != ReadTaskSnapshot().Revision;
+        if (!SyncExecution.CanExecute(plan.Status, outdated))
+        {
+            SetStatus(outdated
+                ? "生成计划后任务内容有变化，这份计划不能再执行。请重新检查后重新生成同步预览。"
+                : "当前计划状态是「" + TaskDisplay.SyncPlanStatusText(plan.Status) + "」，不能执行。", UiTokens.WarnText);
+            return;
+        }
+        var endpoints = plan.Actions.Count(a => a.Kind.EndsWith("Endpoint", StringComparison.Ordinal));
+        var models = plan.Actions.Count - endpoints;
+        var impact = plan.OutOfScopeImpact.Count > 0
+            ? "\n共享模型更新会影响范围外 " + plan.OutOfScopeImpact.Count + " 个接口的文档表现。"
+            : "";
+        var choice = MessageBox.Show(this,
+            "将写入 Apifox 项目 " + plan.ProjectId + " / 分支 " + (plan.Branch ?? "main") + "：" + endpoints + " 个接口、" + models + " 个模型。" + impact
+            + "\n同步期间请避免在 Apifox 中修改相同资源；本地锁不能阻止其他用户的修改。\n\n确认同步？",
+            "确认同步",
+            MessageBoxButtons.OKCancel,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (choice != DialogResult.OK) return;
+        var hash = plan.Hash;
+        try
+        {
+            _job = _jobs.Start(_taskId, "执行同步", async job => await _executor.ExecuteAsync(_taskId, hash, job));
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message, UiTokens.WarnText);
+            return;
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法执行同步：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+            return;
+        }
+        SetBusy(true);
+        _timer.Start();
+    }
+
+    /// <summary>重新核对（只读）：复用既有 VerifyAsync，按 ID/身份回读远端核对已写入动作，不写入。</summary>
+    private void VerifyRemote()
+    {
+        if (_busy || _plan is null) return;
+        try
+        {
+            _job = _jobs.Start(_taskId, "回读核对", async job => await _executor.VerifyAsync(_taskId, job));
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message, UiTokens.WarnText);
+            return;
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法开始回读核对：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+            return;
+        }
+        SetBusy(true);
+        _timer.Start();
     }
 
     private void OnTick()
@@ -427,7 +544,7 @@ internal sealed class SyncPreviewDialog : Form
         if (_job is not { } job) { _timer.Stop(); return; }
         if (job.FinishedAt is null)
         {
-            _status.Text = "正在生成同步计划… " + job.Progress.ToString("P0") + " " + job.ProgressText;
+            _status.Text = "正在" + job.Kind + "… " + job.Progress.ToString("P0") + " " + job.ProgressText;
             _status.ForeColor = UiTokens.Text;
             return;
         }
@@ -436,23 +553,62 @@ internal sealed class SyncPreviewDialog : Form
         SetBusy(false);
         switch (job.State)
         {
-            case "succeeded":
-                var plan = job.Result as SyncPlan;
-                if (plan is null)
+            case "succeeded" when job.Kind == "生成同步计划":
                 {
+                    SyncPlan? plan = null;
                     try { plan = _tasks.Read<SyncPlan>(_taskId, TaskFiles.Plan); }
                     catch { /* 读取失败时按无计划处理，走下方提示。 */ }
+                    if (plan is null) SetStatus("同步计划已生成，但读取计划失败。请点「查看已有计划」重试。", UiTokens.BadText);
+                    else ShowPlan(plan);
+                    break;
                 }
-                if (plan is null) SetStatus("同步计划已生成，但读取计划失败。请点「查看已有计划」重试。", UiTokens.BadText);
-                else ShowPlan(plan);
+            case "succeeded":
+                RefreshPlanFromDisk();
                 break;
-            case "canceled":
+            case "canceled" when job.Kind == "生成同步计划":
                 SetStatus("已停止生成同步计划。可重新勾选后再次生成。", UiTokens.WarnText);
                 break;
-            default:
+            case "canceled":
+                {
+                    var plan = RefreshPlanFromDisk();
+                    SetStatus(plan is { Status: "awaitingConfirm" }
+                        ? "已停止" + job.Kind + "，还没有动作写入。可重新确认同步。"
+                        : "已停止" + job.Kind + "。已写入部分不回滚，逐动作结果见写入清单。",
+                        UiTokens.WarnText);
+                    break;
+                }
+            case "failed" when job.Kind == "生成同步计划":
                 SetStatus("生成同步计划失败：" + (job.Error ?? "原因未知") + "。处理后可重新生成。", UiTokens.BadText);
                 break;
+            case "failed":
+                // 执行被门禁拒绝（计划过期、CLI 未探测、项目/分支锁占用等）：按磁盘计划刷新（可能已被置为过期），状态行保留原因。
+                RefreshPlanFromDisk();
+                SetStatus(job.Kind + "失败：" + (job.Error ?? "原因未知") + "。", UiTokens.BadText);
+                break;
         }
+    }
+
+    /// <summary>
+    /// 按磁盘上的计划刷新界面并给出结果状态行（执行、核对、取消后共用）；
+    /// 读取失败时保留当前视图并如实报告。返回读到的计划，供调用方补充说明。
+    /// </summary>
+    private SyncPlan? RefreshPlanFromDisk()
+    {
+        SyncPlan? plan;
+        try { plan = _tasks.Read<SyncPlan>(_taskId, TaskFiles.Plan); }
+        catch { plan = null; }
+        if (plan is null)
+        {
+            SetStatus("读取同步计划失败。请点「查看已有计划」重试。", UiTokens.BadText);
+            return null;
+        }
+        ShowPlan(plan);
+        var verified = plan.Actions.Count(a => a.State == "verified");
+        var failed = plan.Actions.Count(a => a.State is "writeFailed" or "verifyFailed" or "unknown" or "conflict");
+        var notRun = plan.Actions.Count(a => a.State == "notRun");
+        var (text, tone) = SyncExecution.ResultText(plan.Status, verified, failed, notRun);
+        SetStatus(text, ToneColor(tone));
+        return plan;
     }
 
     private void ViewExistingPlan()
@@ -473,23 +629,22 @@ internal sealed class SyncPreviewDialog : Form
         }
     }
 
-    /// <summary>展示计划：概要、过期提示、写入清单、排除清单与影响/保留设置；本页无写入动作。</summary>
+    /// <summary>展示计划：概要、过期提示、确认同步与重新核对、写入清单、排除清单与影响/保留设置。</summary>
     private void ShowPlan(SyncPlan plan)
     {
         _status.Text = "";
+        _plan = plan;
         _page1.Visible = false;
         _page2.Visible = true;
         _backButton.Visible = true;
+        _generateButton.Visible = false;
 
-        CheckTask task = _task;
-        try { task = _tasks.Get(_taskId); }
-        catch { /* 任务读取失败时按打开时的快照判断过期。 */ }
-        // 与冻结页面同一规则：计划生成后任务内容有变化的计划不能再执行，状态按已过期显示。
-        var outdated = plan.Status == "awaitingConfirm" && plan.TaskRevision != task.Revision;
+        var outdated = plan.Status == "awaitingConfirm" && plan.TaskRevision != ReadTaskSnapshot().Revision;
         var display = outdated ? "expired" : plan.Status;
         _planStatus.Text = "计划状态：" + TaskDisplay.SyncPlanStatusText(display);
         _planStatus.ForeColor = ToneColor(TaskDisplay.SyncPlanTone(display));
         var endpoints = plan.Actions.Count(a => a.Kind.EndsWith("Endpoint", StringComparison.Ordinal));
+        _applyButton.Text = "确认同步 " + endpoints + " 个接口、" + (plan.Actions.Count - endpoints) + " 个模型";
         _planCounts.Text = $"接口 {endpoints} · 模型 {plan.Actions.Count - endpoints} · 排除 {plan.Excluded.Count}";
         _planMeta.Text = "目标：" + (plan.ProjectName ?? "") + " 项目 " + plan.ProjectId + " / 分支 " + (plan.Branch ?? "main")
             + " · CLI " + plan.CliVersion + " · 计划指纹 " + (plan.Hash.Length > 12 ? plan.Hash[..12] : plan.Hash)
@@ -555,6 +710,7 @@ internal sealed class SyncPreviewDialog : Form
         _notes.Lines = [.. notes];
         _notes.SelectionStart = 0;
         _notes.SelectionLength = 0;
+        RefreshPlanActionButtons();
     }
 
     private void ShowSelectPage()
@@ -562,6 +718,7 @@ internal sealed class SyncPreviewDialog : Form
         _page2.Visible = false;
         _page1.Visible = true;
         _backButton.Visible = false;
+        _generateButton.Visible = true;
         _status.Text = "";
         SetBusy(false);
     }

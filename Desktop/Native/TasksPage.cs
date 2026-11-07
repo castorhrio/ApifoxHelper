@@ -16,8 +16,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// + Apifox 差异检查（只读后台作业，需要时先加载冻结 Swagger；离线任务先导入远端 JSON；只读结果视图）
 /// + 差异确认（高风险变化逐项确认、说明冲突选择、模型绑定与共享模型更新确认，经共享 DecisionService 保存并递增任务版本）
 /// + 报告与交接（Markdown 预览 + 原生另存为导出，渲染与字节口径走共享 ReportExportService）
-/// + 同步预览（勾选接口生成冻结计划并查看写入清单、排除原因与保留设置；经既有 SyncPlanService 与共享 JobRunner，只读不写入远端）。
-/// 同步执行与回读核对不在本切片：预览对话框内如实挂账"后续切片接入"，不提供写入动作。
+/// + 同步预览与执行（勾选接口生成冻结计划并查看写入清单、排除原因与保留设置，经既有 SyncPlanService；
+/// 确认后经既有 SyncExecutor 执行同步——计划哈希绑定、逐动作写入并回读核对、失败即停、可在动作之间停止；
+/// 「重新核对（只读）」复用 VerifyAsync）。
 /// </summary>
 internal sealed class TasksPage : UserControl, INativePage
 {
@@ -33,6 +34,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly DecisionService _decisionSaves;
     private readonly ReportExportService _exports;
     private readonly SyncPlanService _syncPlans;
+    private readonly SyncExecutor _syncExecutor;
 
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
     private readonly Panel _empty;
@@ -78,7 +80,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private bool _runningShown;
     private bool _splitAdjusted;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, ReportExportService exports, SyncPlanService syncPlans)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, ReportExportService exports, SyncPlanService syncPlans, SyncExecutor syncExecutor)
     {
         _tasks = tasks;
         _scan = scan;
@@ -92,6 +94,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _decisionSaves = decisionSaves;
         _exports = exports;
         _syncPlans = syncPlans;
+        _syncExecutor = syncExecutor;
 
         var newButton = Ui.Primary("新建任务");
         newButton.Click += (_, _) => ShowNewTaskDialog();
@@ -707,11 +710,11 @@ internal sealed class TasksPage : UserControl, INativePage
         dialog.ShowDialog(FindForm());
     }
 
-    /// <summary>打开同步预览（勾选接口生成冻结计划并只读查看；计划经既有 SyncPlanService，不写入远端）：关闭后刷新任务列表。</summary>
+    /// <summary>打开同步预览与执行（勾选生成冻结计划、查看写入清单；确认后经既有 SyncExecutor 执行并回读核对）：关闭后刷新任务列表。</summary>
     private void ShowSyncPreview()
     {
         if (_selectedTask is null) return;
-        using var dialog = new SyncPreviewDialog(_tasks, _syncPlans, _jobs, _selectedTask);
+        using var dialog = new SyncPreviewDialog(_tasks, _syncPlans, _syncExecutor, _jobs, _selectedTask);
         dialog.ShowDialog(FindForm());
         LoadTasks();
     }

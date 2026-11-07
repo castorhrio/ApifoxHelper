@@ -177,7 +177,8 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<Sync.CheckService>(),
             _host.Services.GetRequiredService<Sync.DecisionService>(),
             _host.Services.GetRequiredService<Reports.ReportExportService>(),
-            _host.Services.GetRequiredService<Sync.SyncPlanService>());
+            _host.Services.GetRequiredService<Sync.SyncPlanService>(),
+            _host.Services.GetRequiredService<Sync.SyncExecutor>());
 
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;
