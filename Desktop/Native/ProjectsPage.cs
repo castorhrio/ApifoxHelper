@@ -180,7 +180,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
 }
 
 /// <summary>
-/// 配置编辑对话框：核心字段 + 内联校验（ProfileStore.Save 抛出的 UserException 显示在状态行，不弹窗）。
+/// 配置编辑对话框：核心字段 + 内联校验（ProfileStore.Save 抛出的 UserException 显示在状态行，
+/// 并按 UserException.Field 描红对应输入框，不弹窗）。
 /// 「模块与模板」入口打开高级编辑（模块范围与新接口模板），「模型服务」入口打开生成方式与密钥编辑，
 /// 改动应用到同一配置对象，随「保存」一起落盘。
 /// </summary>
@@ -193,6 +194,9 @@ internal sealed class ProfileDialog : Form
     private readonly CredentialStore _credentials;
     private readonly ProjectProfile? _editing;
     private readonly ProjectProfile _profile;
+
+    /// <summary>字段标识 → 描边面板：保存校验失败按 UserException.Field 定位描红（DESIGN.md §6 校验失败描边）。</summary>
+    private readonly Dictionary<string, Ui.FieldBox> _fields = [];
 
     private readonly TextBox _name = Ui.Input();
     private readonly TextBox _workspace = Ui.Input();
@@ -281,15 +285,15 @@ internal sealed class ProfileDialog : Form
         var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0), AutoSize = true };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        AddRow(grid, "名称", Ui.Field(_name));
-        AddRow(grid, "仓库根目录", Row(300, Ui.Field(_workspace), browseButton, _findButton));
+        AddRow(grid, "名称", Field(_name, ProfileStore.FieldName));
+        AddRow(grid, "仓库根目录", Row(300, Field(_workspace, ProfileStore.FieldWorkspaceRoot), browseButton, _findButton));
         AddRow(grid, "API 项目", _apiProject);
-        AddRow(grid, "允许回写范围", Ui.Field(_allowed));
+        AddRow(grid, "允许回写范围", Field(_allowed, ProfileStore.FieldAllowedSourcePaths));
         AddRow(grid, "", Ui.Caption("相对路径前缀，用「;」分隔；留空表示只允许导出补丁。"));
         AddRow(grid, "版本备注", Ui.Field(_sourceVersion));
         AddRow(grid, "", Ui.Caption("提交号、构建号或版本描述；为空时报告显示「未绑定代码版本」。"));
         AddRow(grid, "Swagger 来源", _swaggerType);
-        AddRow(grid, "Swagger 位置", Ui.Field(_swaggerLocation));
+        AddRow(grid, "Swagger 位置", Field(_swaggerLocation, ProfileStore.FieldSwaggerLocation));
         AddRow(grid, "Apifox 项目 ID", Row(220, _projectId, _loadProjectsButton));
         AddRow(grid, "分支", Row(220, _branch, _loadBranchesButton));
         AddRow(grid, "", Ui.Caption("与业务系统中的「项目」无关；读取列表需要先保存配置；分支留空表示主分支。"));
@@ -589,12 +593,28 @@ internal sealed class ProfileDialog : Form
         }
         catch (UserException ex)
         {
+            MarkInvalidField(ex);
             SetStatus(ex.Message, UiTokens.BadText);
         }
         catch (Exception ex)
         {
             SetStatus("保存失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
         }
+    }
+
+    /// <summary>包 1px 描边并登记字段标识；保存校验失败时按 UserException.Field 描红对应输入框。</summary>
+    private Ui.FieldBox Field(TextBox input, string fieldId)
+    {
+        var field = Ui.Field(input);
+        _fields[fieldId] = field;
+        return field;
+    }
+
+    /// <summary>保存校验失败描红对应字段（形状通道）；文字仍在状态行（双通道，DESIGN.md §2/§6）。
+    /// API 项目与 Apifox 目标是 ComboBox，不在 §6 输入框范围（设计基线 §8 挂账），失败只显示状态行文字。</summary>
+    private void MarkInvalidField(UserException ex)
+    {
+        if (ex.Field is { } field && _fields.TryGetValue(field, out var box)) box.SetInvalid(true);
     }
 
     private void SetStatus(string message, Color color)

@@ -108,7 +108,11 @@ public class FieldChromeTests
         Assert.Contains("Ui.Field(_projectId)", Repo.Source("Desktop", "Native", "CapabilitiesDialog.cs"));
         Assert.Contains("AddBoxRow(detailGrid, Ui.Field(_answers), 44)", Repo.Source("Desktop", "Native", "CandidatesDialog.cs"));
         Assert.Contains("Ui.Field(_name)", Repo.Source("Desktop", "Native", "TasksPage.cs"));
-        Assert.Contains("Ui.Field(_name)", Repo.Source("Desktop", "Native", "ProjectsPage.cs"));
+        // 配置对话框的四个可解析失败输入框经登记式 Field() 镀铬（标识 → 描边面板）；版本备注等
+        // 不会在保存校验中被拒绝的输入框仍是直接 Ui.Field。
+        var projects = Repo.Source("Desktop", "Native", "ProjectsPage.cs");
+        Assert.Contains("Field(_name, ProfileStore.FieldName)", projects);
+        Assert.Contains("Ui.Field(_sourceVersion)", projects);
     }
 
     [Fact]
@@ -135,6 +139,23 @@ public class FieldChromeTests
         Assert.Contains("Field(_budget, ProfileAnalysis.FieldMaxMethodsPerEndpoint)", analysis);
         Assert.Contains("Field(_xmlDocPaths, ProfileAnalysis.FieldXmlDocPaths)", analysis);
         Assert.Contains("Field(_concurrency, ProfileAnalysis.FieldReadConcurrency)", analysis);
+    }
+
+    [Fact]
+    public void SaveDialog_MarksFailedCoreFields()
+    {
+        // 外层「保存」的校验失败（ProfileStore.Validate）同样按 UserException.Field 描红：
+        // 可解析失败的文本输入框登记 ProfileStore 字段标识常量；API 项目与 Apifox 目标是
+        // ComboBox，不在 §6 输入框范围（设计基线 §8 挂账），失败只显示状态行文字。
+        // 描红调用用行首正则断言（非子串）并锚定在 Save 方法内：接线被注释掉也算删除，变异可红。
+        var projects = Repo.Source("Desktop", "Native", "ProjectsPage.cs");
+        Assert.Contains("Field(_name, ProfileStore.FieldName)", projects);
+        Assert.Contains("Field(_workspace, ProfileStore.FieldWorkspaceRoot)", projects);
+        Assert.Contains("Field(_allowed, ProfileStore.FieldAllowedSourcePaths)", projects);
+        Assert.Contains("Field(_swaggerLocation, ProfileStore.FieldSwaggerLocation)", projects);
+        Assert.Contains("private void MarkInvalidField(UserException ex)", projects);
+        var save = projects[(projects.IndexOf("private void Save()", StringComparison.Ordinal))..];
+        Assert.Matches(@"(?m)^\s*MarkInvalidField\(ex\);", save);
     }
 
     [Fact]

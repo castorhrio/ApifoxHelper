@@ -397,6 +397,15 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 475 用例全部通过（含令牌接线机械检查对新增代码的扫描——无就地颜色/字体/间距值）。共享解析链路（拒绝文案 + 字段标识）由测试工程直接编译生产源码断言（非副本），无需 /tmp 控制台另验；对话框描红的呈现与改值解除是 WinForms 行为，Linux 无法运行 GUI。**失败描边出现/解除、失败 > 聚焦的优先级、改值自动解除的真机观感仍未验证**（G-D5 复核）——Windows 真机需按「模型服务：超时秒数填 abc → 确定看状态行文案 + 超时秒数框描红、其余框不红 → 改成 90 后描红即消失 → 确定；模块与模板：鉴权 auth 填 {bad → 确定看该框描红 → 从接口提取回填合法 JSON 后描红消失」走一遍。未改写入安全语义（`UserException.Field` 为可选元数据，服务层校验与门禁一行未动；REST JSON 形状不变）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「校验失败描边：外层保存的核心字段定位」（2026-11-07 第二十七轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（38c699c）的 Linux `dotnet build` 0 警告 0 错误、475 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：第二十六轮挂账明确「`ProfileStore` 保存校验（核心字段与越界钳制）尚无字段标识，对话框主体与外层「保存」的失败仍为状态行文字」——用户在外层「保存」被拒时（空名称、相对路径工作区、非 .csproj、回写范围越界、Swagger 位置缺失等最常见的一批失败）不知道该修哪个框，本轮把第二十六轮建立的字段定位链路延伸到外层「保存」。
+- **字段定位链路延伸（非破坏）**：`ProfileStore.Validate` 全部拒绝路径以命名参数附加字段标识，**文案逐字不变**；标识为公共常量单一落点（`ProfileStore.FieldName/FieldWorkspaceRoot/FieldApiProject/FieldAllowedSourcePaths/FieldProjectId/FieldSwaggerType/FieldSwaggerLocation/FieldGenerationMode/FieldBaseUrl/FieldModel/FieldNamingPolicy`，取配置 JSON 的 camelCase 属性名，对话框与测试共用不复制字符串）。REST 错误响应只取 `Message`（`Api/ErrorHandling.cs`），`Field` 不进入网络形状；既有调用点零改动。防御性分支（Swagger 类型/生成方式无效——界面路径不可达，仅配置文件损坏时出现）同样带出字段标识：规则全体一致（每个拒绝都指明出错字段），对话框未登记该标识时查找自然落空、只显示状态行。
+- **对话框接入（外层「保存」）**：`ProfileDialog` 按第二十六轮同一模式登记字段标识——四个可被保存校验拒绝的镀铬文本框（名称 → `name`、仓库根目录 → `workspaceRoot`、允许回写范围 → `allowedSourcePaths`、Swagger 位置 → `location`）；`Save()` 的 `UserException` catch 中 `MarkInvalidField(ex)` 描红对应输入框，文字仍在状态行（双通道不变），改值自动解除（`FieldBox` 既有接线）。API 项目与 Apifox 目标是 ComboBox，不在 §6 输入框范围（第二十五轮起的挂账继续），失败只显示状态行文字。
+- **测试 475 → 495 用例**：新增 `ProfileStoreTests`（19）与 `SaveDialog_MarksFailedCoreFields` 接线机械检查（1）。`ProfileStoreTests` 在真实 `FileStore`/`ProfileStore` 上执行（临时目录、真实工作区与 .csproj 夹具）：字段标识即配置 JSON 属性名（十一常量逐一）、十二条拒绝路径的文案逐字 + 字段标识双重断言、被拒不落半份状态（profiles 目录无残留文件）、合法保存钳制落盘并可重读（钳制仍由 `Normalize` 单一口径，10–600/1–8/0–6 各验一值）。**保存校验文案此前只在 /tmp 一次性脚本中断言（第十六、十八轮运行时验证），本轮起成为仓内常驻用例**；`ProfileStore`/`FileStore` 以共享源码编入测试工程（两者只依赖 BCL 与已共享的 `Core.cs`，Linux 可执行——链路验证不再依赖一次性工程）。**变异验证五处实测可红**（各自独立变红、还原后全绿，还原一律手工逆编辑）：ProfileStore 丢弃 name 字段标识（1 红）、丢弃 Swagger 位置字段标识（1 红）、ProjectsPage 删除 Save 内描红调用（1 红——锚定在 Save 方法体内的行首正则捕获）、注销允许回写范围的字段登记（1 红）、字段标识常量改值不再是配置属性名（1 红）。期间修正测试自身一处 `Repo.Source` 返回值误用（编译期即暴露）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 495 用例全部通过（含令牌接线机械检查对 ProjectsPage.cs/ProfileStore.cs 改动的扫描）。保存校验拒绝路径（文案 + 字段标识 + 无半份状态）在 Linux 真实文件系统上执行；描红的呈现与改值解除是 WinForms 行为，**失败描红出现/解除、失败 > 聚焦优先级的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「新建配置：名称留空直接保存 → 状态行文案 + 名称框描红 → 填入名称后描红消失；仓库根目录填相对路径保存 → 该框描红；Swagger 来源选文件、位置留空保存 → 位置框描红」走一遍。未改写入安全语义（字段标识为可选元数据，`Validate`/`Normalize` 校验逻辑与门禁一行未动；REST JSON 形状不变）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

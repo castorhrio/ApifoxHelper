@@ -48,7 +48,9 @@
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />
     <Compile Include="..\Tasks\TaskModels.cs" Link="Shared\TaskModels.cs" />
+    <Compile Include="..\Infrastructure\FileStore.cs" Link="Shared\FileStore.cs" />
     <Compile Include="..\Profiles\ProjectProfile.cs" Link="Shared\ProjectProfile.cs" />
+    <Compile Include="..\Profiles\ProfileStore.cs" Link="Shared\ProfileStore.cs" />
     <Compile Include="..\Profiles\ProfileExport.cs" Link="Shared\ProfileExport.cs" />
     <Compile Include="..\Profiles\EndpointTemplateReader.cs" Link="Shared\EndpointTemplateReader.cs" />
     <Compile Include="..\Reports\ReportFormats.cs" Link="Shared\ReportFormats.cs" />
