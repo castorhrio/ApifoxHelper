@@ -8,9 +8,11 @@ namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
 /// 注释缺口清单：展示扫描得到的全部注释位置（DocSlot），按状态筛选，逐条显示现状、覆盖接口与证据数；
+/// 顶部注释覆盖率行与分析等级、扫描时间来自扫描落盘的 symbols.json 与 source-manifest.json；
 /// 选中条目可打开其代码证据（EvidenceDialog，只读），也可手工填写说明或删除失效 param 标签（经既有
-/// DraftService.AddManualAsync 写任务数据成为候选，不写源码、不访问 Apifox；候选在「查看注释候选」审阅）。
-/// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=计数行 + 列表（空列表即全部有效）。
+/// DraftService.AddManualAsync 写任务数据成为候选，不写源码、不访问 Apifox；候选在「查看注释候选」审阅）；
+/// 「分析警告与降级」打开只读清单（扫描警告、未解析符号与不可回写的外部类型——降级如实可见）。
+/// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）。
 /// </summary>
 internal sealed class ScanResultsDialog : Form
 {
@@ -22,6 +24,8 @@ internal sealed class ScanResultsDialog : Form
 
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+    private readonly Label _coverage = Ui.Caption();
+    private readonly Button _warningsButton;
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
     private readonly Button _evidenceButton;
     private readonly Button _manualButton;
@@ -44,6 +48,7 @@ internal sealed class ScanResultsDialog : Form
     };
 
     private List<DocSlot> _slots = [];
+    private List<string> _degradations = [];
 
     public ScanResultsDialog(TaskStore tasks, DraftService drafts, CheckTask task)
     {
@@ -75,6 +80,9 @@ internal sealed class ScanResultsDialog : Form
         _removeStaleButton = Ui.Ghost("删除失效标签");
         _removeStaleButton.Enabled = false;
         _removeStaleButton.Click += (_, _) => AddRemoveStale();
+        _warningsButton = Ui.Ghost(ScanOverview.Headline(0));
+        _warningsButton.Visible = false;
+        _warningsButton.Click += (_, _) => ShowDegradations();
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
         _list.DoubleClick += (_, _) =>
         {
@@ -103,6 +111,13 @@ internal sealed class ScanResultsDialog : Form
         filterRow.Controls.Add(filterCaption, 0, 0);
         filterRow.Controls.Add(_filter, 1, 0);
         filterRow.Controls.Add(_counts, 2, 0);
+        // 注释覆盖率行（分析等级与扫描时间在数据缺失时整段省略）；无扫描产物时整行隐藏。
+        filterRow.RowCount = 2;
+        filterRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        filterRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        _coverage.Margin = new Padding(0, UiTokens.Xs, 0, 0);
+        filterRow.Controls.Add(_coverage, 0, 1);
+        filterRow.SetColumnSpan(_coverage, 3);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
@@ -123,8 +138,10 @@ internal sealed class ScanResultsDialog : Form
         buttonRow.Controls.Add(_evidenceButton);
         buttonRow.Controls.Add(_manualButton);
         buttonRow.Controls.Add(_removeStaleButton);
+        buttonRow.Controls.Add(_warningsButton);
         _removeStaleButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _manualButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _warningsButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次状态行、详情框、筛选行，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -138,9 +155,12 @@ internal sealed class ScanResultsDialog : Form
     {
         base.OnLoad(e);
         ScanOutput? output;
+        SourceManifest? manifest;
         try
         {
             output = _tasks.Read<ScanOutput>(_task.Id, TaskFiles.Symbols);
+            // 清单与扫描结果由同一次扫描写入：任一读取失败都按扫描结果不可读处理，不显示半份总览。
+            manifest = _tasks.Read<SourceManifest>(_task.Id, TaskFiles.Manifest);
         }
         catch (Exception ex)
         {
@@ -156,6 +176,13 @@ internal sealed class ScanResultsDialog : Form
         _hint.Visible = false;
         _filter.Enabled = true;
         _list.Visible = true;
+        _coverage.Visible = true;
+        _coverage.Text = ScanOverview.CoverageText(
+            output.Coverage.Valid, output.Coverage.InheritDoc, output.Coverage.Total,
+            manifest?.AnalysisLevel, manifest?.ScannedAt);
+        _degradations = ScanOverview.DegradationItems(manifest?.Warnings, output.UnresolvedSymbols, output.ExternalTypes);
+        _warningsButton.Text = ScanOverview.Headline(_degradations.Count);
+        _warningsButton.Visible = _degradations.Count > 0;
         UpdateCounts();
         ApplyFilter();
     }
@@ -170,6 +197,10 @@ internal sealed class ScanResultsDialog : Form
         _evidenceButton.Enabled = false;
         _manualButton.Enabled = false;
         _removeStaleButton.Enabled = false;
+        _coverage.Visible = false;
+        _coverage.Text = "";
+        _warningsButton.Visible = false;
+        _degradations = [];
         _counts.Text = "";
         _detail.Text = "";
     }
@@ -259,6 +290,13 @@ internal sealed class ScanResultsDialog : Form
     {
         if (_list.SelectedItems[0]?.Tag is not DocSlot slot) return;
         using var dialog = new EvidenceDialog(_tasks, _task, slot);
+        dialog.ShowDialog(this);
+    }
+
+    /// <summary>打开分析警告与降级清单（只读）：扫描警告、未解析符号与不可回写的外部类型，无写入动作。</summary>
+    private void ShowDegradations()
+    {
+        using var dialog = new ScanWarningsDialog(_task, _degradations);
         dialog.ShowDialog(this);
     }
 
@@ -394,5 +432,60 @@ internal sealed class ManualDraftDialog : Form
         }
         Request = new ManualCandidateRequest { SlotId = _slot.Id, Text = _text.Text, Action = "set" };
         DialogResult = DialogResult.OK;
+    }
+}
+
+/// <summary>
+/// 分析警告与降级清单（只读）：扫描警告、未解析符号与不可回写的外部类型逐行列出；
+/// 条目口径在 ScanOverview（与冻结页面同一前缀），数据来自扫描落盘的任务文件，无写入动作。
+/// </summary>
+internal sealed class ScanWarningsDialog : Form
+{
+    public ScanWarningsDialog(CheckTask task, IReadOnlyList<string> items)
+    {
+        Text = ScanOverview.Headline(items.Count) + " — " + task.Name;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(720, 480);
+        BackColor = UiTokens.Panel;
+        Font = UiTokens.Body.Value;
+
+        var closeButton = Ui.Ghost("关闭");
+        closeButton.Click += (_, _) => Close();
+        AcceptButton = closeButton;
+        CancelButton = closeButton;
+
+        var guidance = Ui.Caption("扫描中对这些位置降级处理：未解析符号不按同名猜实现，外部类型上的注释位置不可回写。");
+        guidance.AutoSize = true;
+        guidance.Margin = new Padding(0, 0, 0, UiTokens.Sm);
+
+        var text = new TextBox
+        {
+            ReadOnly = true,
+            Multiline = true,
+            ScrollBars = ScrollBars.Vertical,
+            BackColor = UiTokens.Panel,
+            Dock = DockStyle.Fill,
+            Font = UiTokens.Body.Value,
+            Text = string.Join(Environment.NewLine, items),
+        };
+
+        var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
+        listHost.Controls.Add(Ui.Hairline(text));
+
+        var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, 0, UiTokens.Md) };
+        // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
+        buttonRow.Controls.Add(closeButton);
+
+        var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, UiTokens.Sm) };
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        content.Controls.Add(guidance, 0, 0);
+        content.Controls.Add(listHost, 0, 1);
+
+        Controls.Add(content);
+        Controls.Add(buttonRow);
     }
 }
