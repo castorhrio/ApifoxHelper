@@ -295,6 +295,20 @@ internal static class Ui
         item.Focused = true;
     }
 
+    /// <summary>
+    /// 双击行激活（唯一入口）：只在双击命中行时回调该行。ListView.DoubleClick 不区分命中行，
+    /// 双击空白区（首击已清空选中）同样触发——配置页此前会借这个空选中打开「新建配置」对话框；
+    /// 命中哪行就激活哪行，双击空白区不动作。
+    /// </summary>
+    public static void ActivateItem(ListView list, Action<ListViewItem> activate)
+    {
+        list.MouseDoubleClick += (_, e) =>
+        {
+            if (list.HitTest(e.Location).Item is not ListViewItem item) return;
+            activate(item);
+        };
+    }
+
     private static void DrawListRow(object? sender, DrawListViewItemEventArgs e)
     {
         // 整行底色与选中标记（标记每行画一次，画在行首）。

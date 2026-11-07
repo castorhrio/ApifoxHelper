@@ -534,6 +534,16 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 564 用例全部通过（含令牌接线与 G-D4 机械检查对 TasksPage.cs 改动的扫描——无就地颜色/字体/间距值）。SplitContainer 的默认值与缩放语义（`SplitterDistance` 默认 50、`FixedPanel` 默认 None 按比例分配、`Panel1MinSize`/`Panel2MinSize` 默认 25、越界赋值抛 InvalidOperationException）以 .NET 8 参考程序集（microsoft.windowsdesktop.app.ref 8.0.32）官方文档逐项核实；**最小窗口宽度下的首次布置、拖动分隔条与最大化时详情区保持设计宽的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「窗口缩到最小宽度后启动、落在检查任务页 → 任务列表占据详情左侧全部宽度、不是一条缝 → 最大化 → 详情区保持约 420 宽、列表与七列一起变宽 → 拖动分隔条（1px 发丝边，命中区窄属设计形态，如实挂账）→ 列表不小于约 320」走一遍。纯呈现层：任务数据、选中恢复、刷新与轮询口径一行未动（分割只改布局几何，`FitColumns` 照常经 Resize 重算）；本轮未连接或写入 Apifox，未调用任何模型服务。同期逐屏复核另发现配置列表双击空白区会触发 `ListView.DoubleClick` 打开「新建配置」对话框（事件不区分命中行），属 harden 范畴，留待后续轮次单独处理。
 
 
+## 原生切片「配置列表双击只在命中行时打开编辑」（2026-11-08 第三十九轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（9bed81b）的 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误、564 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：处理第三十八轮逐屏复核的明确挂账——配置列表双击空白区会打开「新建配置」对话框。
+- **缺陷机理（具名 pass：harden，纯呈现层）**：`ListView.DoubleClick` 事件不区分命中位置——Details 视图下首击空白区先清空选中，二击触发 `DoubleClick` 时 `Selected()` 已为 null，而 `ShowDialog(null)` 的语义是「新建配置」，于是双击空白区（用户通常只是想点掉选中）弹出新建对话框。另外旧接线取的是「当前选中行」（`SelectedItems[0]`）而不是「被双击的行」，语义上就不是行激活。
+- **修复口径**：新共享入口 `Ui.ActivateItem(ListView, Action<ListViewItem>)`（挂在 `Ui.SelectItem` 旁，同为列表行为唯一入口）：接线 `MouseDoubleClick`（事件自带命中坐标）+ `HitTest` 守卫——`Item` 为 null（空白区、列头间空白）即短路，命中哪行就把**该行自身**（`item.Tag`，不再借当前选中）交给回调；`ProjectsPage` 接线改为 `Ui.ActivateItem(_list, item => ShowDialog(item.Tag as ProjectProfile))`，双击行=编辑该行、双击空白区=不动作（Windows 资源管理器行激活惯例）。候选审阅与注释缺口两对话框的 `DoubleClick` 是「双击=查看代码证据」的快捷方式，空击时证据按钮本就因无选中而禁用、事件体内有既有守卫自然无操作，不属本缺陷面，如实记录、一行未动。
+- **测试 564 → 567 用例**：新增 `ListActivationTests`（3）：`Ui.ActivateItem` 的守卫与接线（行首正则——工厂签名、MouseDoubleClick 接线、HitTest 短路行、回调行，被注释掉也算删除）；`ProjectsPage` 只经共享入口激活（行首正则钉住 `item.Tag` 载荷）+「页面源码不再出现 `_list.DoubleClick`」旧接线禁令；DESIGN.md §6 双击条款断言。
+- **变异验证五处实测可红**（各自独立变红、还原后全绿，还原一律以切片后基准副本覆盖并核对 diff）：守卫删除（HitTest 结果直接 `!` 透传，1 红）、页面回退裸 `DoubleClick +=`（1 红）、激活载荷改回借当前选中 `_ => ShowDialog(Selected())`（1 红）、DESIGN.md 条款删除（1 红）、删除 `Ui.ActivateItem` 工厂本身（双重红：源码正则 1 红 + **主工程 `dotnet build` CS0117**——顺带核实一个工程事实：测试工程与主工程是共享源码编译关系而非项目引用，`dotnet build ApifoxHelper.Tests` 不编译 `Desktop/Native` 界面源码，界面接线的「编译可红」以主工程构建为准，此后变异验证两构建都跑）。
+- **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 567 用例全部通过（含令牌接线与 G-D4 机械检查对 Ui.cs/ProjectsPage.cs 改动的扫描——新注释无禁词、无档外值）。**双击行激活与双击空白区不动作的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「双击配置行 → 打开该行编辑对话框 → 关闭 → 双击列表空白区 → 无任何对话框弹出 → 方向键导航不受影响」走一遍。纯呈现层：配置数据、选中保留、刷新与保存口径一行未动（`Selected()` 仍服务编辑按钮与选中保留，一行未改）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

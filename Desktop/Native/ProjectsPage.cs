@@ -56,7 +56,9 @@ internal sealed class ProjectsPage : UserControl, INativePage
             _editButton.Enabled = _list.SelectedIndices.Count > 0;
             _probeButton.Enabled = _list.SelectedIndices.Count > 0;
         };
-        _list.DoubleClick += (_, _) => ShowDialog(Selected());
+        // 双击只在命中行时打开该行的编辑（Ui.ActivateItem 唯一入口）；双击空白区不动作——
+        // ListView.DoubleClick 不区分命中行，双击空白区（首击清空选中）曾借空选中打开「新建配置」对话框。
+        Ui.ActivateItem(_list, item => ShowDialog(item.Tag as ProjectProfile));
         // 标识列（首列）吸收剩余可视宽度：窗口或列表尺寸变化即重算（ListColumns 口径）。
         _list.Resize += (_, _) => FitColumns();
 
