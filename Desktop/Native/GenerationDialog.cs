@@ -28,6 +28,8 @@ internal sealed class GenerationDialog : Form
     private readonly TextBox _key = Ui.Input(password: true);
     private readonly Button _saveKeyButton;
     private readonly Label _statusLine = Ui.StatusLine();
+    /// <summary>字段标识 → 描边面板：解析失败按 UserException.Field 定位描红（DESIGN.md §6 校验失败描边）。</summary>
+    private readonly Dictionary<string, Ui.FieldBox> _fields = [];
 
     public GenerationDialog(CredentialStore credentials, ProfileStore profiles, ProjectProfile profile, bool profileExists)
     {
@@ -72,8 +74,8 @@ internal sealed class GenerationDialog : Form
         AddRow(grid, "服务地址", Ui.Field(_baseUrl));
         AddHint(grid, "例如 https://api.openai.com/v1；只发送用户确认的材料。");
         AddRow(grid, "模型", Ui.Field(_model));
-        AddRow(grid, "超时秒数", Ui.Field(_timeout));
-        AddRow(grid, "每批数量", Ui.Field(_batch));
+        AddRow(grid, "超时秒数", Field(_timeout, GenerationEntries.FieldTimeoutSeconds));
+        AddRow(grid, "每批数量", Field(_batch, GenerationEntries.FieldMaxSlotsPerRequest));
         AddHint(grid, "每次请求最多包含的注释位置数；数字留空用默认值。");
 
         AddSection(grid, "服务密钥");
@@ -131,8 +133,23 @@ internal sealed class GenerationDialog : Form
         }
         catch (UserException ex)
         {
+            MarkInvalidField(ex);
             SetStatus(ex.Message, UiTokens.BadText);
         }
+    }
+
+    /// <summary>包 1px 描边并登记字段标识；解析失败时按 UserException.Field 描红对应输入框。</summary>
+    private Ui.FieldBox Field(TextBox input, string fieldId)
+    {
+        var field = Ui.Field(input);
+        _fields[fieldId] = field;
+        return field;
+    }
+
+    /// <summary>解析失败描红对应字段（形状通道）；文字仍在状态行（双通道，DESIGN.md §2/§6）。</summary>
+    private void MarkInvalidField(UserException ex)
+    {
+        if (ex.Field is { } field && _fields.TryGetValue(field, out var box)) box.SetInvalid(true);
     }
 
     /// <summary>下拉框当前项对应的生成方式；未知原值项（追加的末项）返回原值，不静默改值。</summary>

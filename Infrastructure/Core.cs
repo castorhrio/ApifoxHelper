@@ -6,9 +6,15 @@ namespace ApifoxHelper.Infrastructure;
 /// <summary>
 /// 面向用户的业务错误；消息直接展示在页面上，因此不能包含凭据或原始命令输出。
 /// </summary>
-public sealed class UserException(string message, int statusCode = 400) : Exception(message)
+public sealed class UserException(string message, int statusCode = 400, string? field = null) : Exception(message)
 {
     public int StatusCode { get; } = statusCode;
+
+    /// <summary>
+    /// 校验失败对应的输入字段标识（配置 JSON 的 camelCase 属性名），供原生界面定位描红的输入框；
+    /// 非字段级校验为 null。REST 错误响应只取 Message，此属性不进入网络形状。
+    /// </summary>
+    public string? Field { get; } = field;
 }
 
 public static class JsonDefaults

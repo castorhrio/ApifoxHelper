@@ -29,6 +29,8 @@ internal sealed class ProfileAdvancedDialog : Form
     private readonly TextBox _templateEndpoint = Ui.Input();
     private readonly Button _extractButton;
     private readonly Label _statusLine = Ui.StatusLine();
+    /// <summary>字段标识 → 描边面板：解析失败按 UserException.Field 定位描红（DESIGN.md §6 校验失败描边）。</summary>
+    private readonly Dictionary<string, Ui.FieldBox> _fields = [];
 
     public ProfileAdvancedDialog(ApifoxCli cli, ProjectProfile profile)
     {
@@ -66,15 +68,15 @@ internal sealed class ProfileAdvancedDialog : Form
 
         AddSection(grid, "新接口模板");
         AddHint(grid, "新建接口创建时的目录与公共设置；只随创建写入这些字段，不克隆脚本、用例或 Mock。");
-        AddRow(grid, "目录 ID", Ui.Field(_folderId));
+        AddRow(grid, "目录 ID", Field(_folderId, ProfileAdvanced.FieldFolderId));
         AddHint(grid, "留空表示未指定目录；未指定目录时新接口无法创建。");
         AddRow(grid, "状态", _status);
         AddRow(grid, "服务 ID", Ui.Field(_serverId));
         AddRow(grid, "标签", Ui.Field(_tags));
         AddHint(grid, "用「,」分隔。");
-        AddRow(grid, "鉴权 auth", Ui.Field(_auth));
-        AddRow(grid, "安全方案", Ui.Field(_security));
-        AddRow(grid, "公共 Header", Ui.Field(_headers));
+        AddRow(grid, "鉴权 auth", Field(_auth, ProfileAdvanced.FieldAuth));
+        AddRow(grid, "安全方案", Field(_security, ProfileAdvanced.FieldSecurityScheme));
+        AddRow(grid, "公共 Header", Field(_headers, ProfileAdvanced.FieldHeaderParameters));
         AddHint(grid, "JSON 对象或数组；留空表示不设置。");
         AddRow(grid, "从既有接口提取", Row(Ui.Field(_templateEndpoint), 120, _extractButton));
         AddHint(grid, "填写接口 ID 后提取其目录、状态、服务、鉴权、安全方案、公共 Header 与标签填入上方字段；请检查后再保存。");
@@ -154,8 +156,23 @@ internal sealed class ProfileAdvancedDialog : Form
         }
         catch (UserException ex)
         {
+            MarkInvalidField(ex);
             SetStatus(ex.Message, UiTokens.BadText);
         }
+    }
+
+    /// <summary>包 1px 描边并登记字段标识；解析失败时按 UserException.Field 描红对应输入框。</summary>
+    private Ui.FieldBox Field(TextBox input, string fieldId)
+    {
+        var field = Ui.Field(input);
+        _fields[fieldId] = field;
+        return field;
+    }
+
+    /// <summary>解析失败描红对应字段（形状通道）；文字仍在状态行（双通道，DESIGN.md §2/§6）。</summary>
+    private void MarkInvalidField(UserException ex)
+    {
+        if (ex.Field is { } field && _fields.TryGetValue(field, out var box)) box.SetInvalid(true);
     }
 
     /// <summary>下拉框当前项对应的状态值；未知原值项（加载或提取时追加的末项）返回原值，不静默改值。</summary>

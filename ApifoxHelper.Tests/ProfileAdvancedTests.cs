@@ -99,35 +99,40 @@ public class ProfileAdvancedTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void ParseObject_BlankMeansNotSet(string text) => Assert.Null(ProfileAdvanced.ParseObject(text, "鉴权 auth"));
+    public void ParseObject_BlankMeansNotSet(string text) => Assert.Null(ProfileAdvanced.ParseObject(text, "鉴权 auth", ProfileAdvanced.FieldAuth));
 
     [Fact]
-    public void ParseObject_ExplicitNullMeansNotSet() => Assert.Null(ProfileAdvanced.ParseObject("null", "鉴权 auth"));
+    public void ParseObject_ExplicitNullMeansNotSet() => Assert.Null(ProfileAdvanced.ParseObject("null", "鉴权 auth", ProfileAdvanced.FieldAuth));
 
     [Fact]
     public void ParseObject_ParsesObjectAndRejectsOtherKinds()
     {
-        var parsed = ProfileAdvanced.ParseObject("""{"type":"apiKey","in":"header"}""", "鉴权 auth");
+        var parsed = ProfileAdvanced.ParseObject("""{"type":"apiKey","in":"header"}""", "鉴权 auth", ProfileAdvanced.FieldAuth);
         Assert.NotNull(parsed);
         Assert.Equal("apiKey", parsed["type"]?.GetValue<string>());
 
-        var arrayEx = Assert.Throws<UserException>(() => ProfileAdvanced.ParseObject("""[1]""", "鉴权 auth"));
+        var arrayEx = Assert.Throws<UserException>(() => ProfileAdvanced.ParseObject("""[1]""", "鉴权 auth", ProfileAdvanced.FieldAuth));
         Assert.Equal("鉴权 auth 必须是 JSON 对象。", arrayEx.Message);
-        Assert.Equal("鉴权 auth 必须是 JSON 对象。", Assert.Throws<UserException>(() => ProfileAdvanced.ParseObject("5", "鉴权 auth")).Message);
+        Assert.Equal(ProfileAdvanced.FieldAuth, arrayEx.Field);
+        Assert.Equal("鉴权 auth 必须是 JSON 对象。", Assert.Throws<UserException>(() => ProfileAdvanced.ParseObject("5", "鉴权 auth", ProfileAdvanced.FieldAuth)).Message);
     }
 
     [Fact]
     public void ParseObject_InvalidJsonUsesFrozenPageWording()
     {
-        Assert.Equal("鉴权 auth 不是合法 JSON", Assert.Throws<UserException>(() => ProfileAdvanced.ParseObject("{type:", "鉴权 auth")).Message);
-        Assert.Equal("安全方案 不是合法 JSON", Assert.Throws<UserException>(() => ProfileAdvanced.ParseObject("x", "安全方案")).Message);
+        var authEx = Assert.Throws<UserException>(() => ProfileAdvanced.ParseObject("{type:", "鉴权 auth", ProfileAdvanced.FieldAuth));
+        Assert.Equal("鉴权 auth 不是合法 JSON", authEx.Message);
+        Assert.Equal(ProfileAdvanced.FieldAuth, authEx.Field);
+        var securityEx = Assert.Throws<UserException>(() => ProfileAdvanced.ParseObject("x", "安全方案", ProfileAdvanced.FieldSecurityScheme));
+        Assert.Equal("安全方案 不是合法 JSON", securityEx.Message);
+        Assert.Equal(ProfileAdvanced.FieldSecurityScheme, securityEx.Field);
     }
 
     [Fact]
     public void ParseArray_BlankMeansEmptyAndObjectsAreKept()
     {
-        Assert.Empty(ProfileAdvanced.ParseArray("", "公共 Header 参数"));
-        var parsed = ProfileAdvanced.ParseArray("""[{"in":"header","name":"X-Request-Id"}]""", "公共 Header 参数");
+        Assert.Empty(ProfileAdvanced.ParseArray("", "公共 Header 参数", ProfileAdvanced.FieldHeaderParameters));
+        var parsed = ProfileAdvanced.ParseArray("""[{"in":"header","name":"X-Request-Id"}]""", "公共 Header 参数", ProfileAdvanced.FieldHeaderParameters);
         Assert.Single(parsed);
         Assert.Equal("X-Request-Id", parsed[0]["name"]?.GetValue<string>());
     }
@@ -135,9 +140,16 @@ public class ProfileAdvancedTests
     [Fact]
     public void ParseArray_RejectsNonArrayAndNonObjectElements()
     {
-        Assert.Equal("公共 Header 参数 必须是 JSON 数组。", Assert.Throws<UserException>(() => ProfileAdvanced.ParseArray("""{"in":"header"}""", "公共 Header 参数")).Message);
-        Assert.Equal("公共 Header 参数 的元素必须是 JSON 对象。", Assert.Throws<UserException>(() => ProfileAdvanced.ParseArray("[1]", "公共 Header 参数")).Message);
-        Assert.Equal("公共 Header 参数 不是合法 JSON", Assert.Throws<UserException>(() => ProfileAdvanced.ParseArray("[x", "公共 Header 参数")).Message);
+        var nonArray = Assert.Throws<UserException>(() => ProfileAdvanced.ParseArray("""{"in":"header"}""", "公共 Header 参数", ProfileAdvanced.FieldHeaderParameters));
+        Assert.Equal("公共 Header 参数 必须是 JSON 数组。", nonArray.Message);
+        var nonObject = Assert.Throws<UserException>(() => ProfileAdvanced.ParseArray("[1]", "公共 Header 参数", ProfileAdvanced.FieldHeaderParameters));
+        Assert.Equal("公共 Header 参数 的元素必须是 JSON 对象。", nonObject.Message);
+        var invalid = Assert.Throws<UserException>(() => ProfileAdvanced.ParseArray("[x", "公共 Header 参数", ProfileAdvanced.FieldHeaderParameters));
+        Assert.Equal("公共 Header 参数 不是合法 JSON", invalid.Message);
+        // 三条拒绝都定位到同一字段（公共 Header 参数），对话框据此描红。
+        Assert.Equal(ProfileAdvanced.FieldHeaderParameters, nonArray.Field);
+        Assert.Equal(ProfileAdvanced.FieldHeaderParameters, nonObject.Field);
+        Assert.Equal(ProfileAdvanced.FieldHeaderParameters, invalid.Field);
     }
 
     // ── 字段整体解析与应用 ────────────────────────────────────────────────
@@ -158,8 +170,12 @@ public class ProfileAdvancedTests
     }
 
     [Fact]
-    public void ParseFields_FolderIdMustBeNumber() =>
-        Assert.Equal("目录 ID 应为数字。", Assert.Throws<UserException>(() => ProfileAdvanced.ParseFields("abc", "developing", "", "", "", "", "")).Message);
+    public void ParseFields_FolderIdMustBeNumber()
+    {
+        var ex = Assert.Throws<UserException>(() => ProfileAdvanced.ParseFields("abc", "developing", "", "", "", "", ""));
+        Assert.Equal("目录 ID 应为数字。", ex.Message);
+        Assert.Equal(ProfileAdvanced.FieldFolderId, ex.Field);
+    }
 
     [Fact]
     public void ParseFields_TrimsServerIdAndParsesRemaining()
@@ -177,6 +193,7 @@ public class ProfileAdvancedTests
         // 目录 ID 与鉴权都不合法时报第一条；整体拒绝由对话框保证（Apply 不被调用）。
         var ex = Assert.Throws<UserException>(() => ProfileAdvanced.ParseFields("abc", "developing", "", "", "{bad", "", ""));
         Assert.Equal("目录 ID 应为数字。", ex.Message);
+        Assert.Equal(ProfileAdvanced.FieldFolderId, ex.Field);
     }
 
     [Fact]

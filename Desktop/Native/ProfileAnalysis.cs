@@ -37,6 +37,12 @@ public static class ProfileAnalysis
     public const int DefaultReadConcurrency = 4;
     public const string DefaultGenericDataProperty = "data";
 
+    /// <summary>字段标识（配置 JSON 的 camelCase 属性名）：解析失败时随 UserException.Field 定位描红。</summary>
+    public const string FieldMaxTraceDepth = "maxTraceDepth";
+    public const string FieldMaxMethodsPerEndpoint = "maxMethodsPerEndpoint";
+    public const string FieldXmlDocPaths = "xmlDocPaths";
+    public const string FieldReadConcurrency = "readConcurrency";
+
     /// <summary>封装清单 → 每行「类型名=数据属性名」（与冻结页面同一格式）。</summary>
     public static string FormatWrappers(IEnumerable<ResponseWrapperRule> wrappers) =>
         string.Join("\n", wrappers.Select(w => w.TypeName + "=" + w.DataMember));
@@ -72,18 +78,16 @@ public static class ProfileAnalysis
     public static string FormatXmlDocPaths(IEnumerable<KeyValuePair<string, string>> paths) =>
         string.Join("\n", paths.Select(p => p.Key + "=" + p.Value));
 
-    /// <summary>
-    /// 解析 XML 文档路径：每行「项目名=路径」，项目名与路径都去空白；缺「=」或项目名为空的行明确拒绝——
+    /// <summary>解析 XML 文档路径：每行「项目名=路径」，项目名与路径都去空白；缺「=」或项目名为空的行明确拒绝——
     /// 冻结页面会静默丢弃这样的行，原生拒绝让用户知道值没有被采纳。同名（不区分大小写）行后者覆盖前者，
-    /// 与冻结页面对象属性重复赋值一致。
-    /// </summary>
+    /// 与冻结页面对象属性重复赋值一致。</summary>
     public static Dictionary<string, string> ParseXmlDocPaths(string text)
     {
         var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var line in text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0))
         {
             var separator = line.IndexOf('=');
-            if (separator <= 0) throw new UserException("XML 文档路径每行应为「项目名=路径」。");
+            if (separator <= 0) throw new UserException("XML 文档路径每行应为「项目名=路径」。", field: FieldXmlDocPaths);
             paths[line[..separator].Trim()] = line[(separator + 1)..].Trim();
         }
         return paths;
@@ -99,8 +103,8 @@ public static class ProfileAnalysis
         return new AnalysisFields(
             configuration.Length == 0 ? DefaultConfigurationName : configuration,
             ParseSymbols(symbolsText),
-            ParseNumber(depthText, "调用深度", DefaultMaxTraceDepth),
-            ParseNumber(budgetText, "方法预算", DefaultMaxMethodsPerEndpoint),
+            ParseNumber(depthText, "调用深度", DefaultMaxTraceDepth, FieldMaxTraceDepth),
+            ParseNumber(budgetText, "方法预算", DefaultMaxMethodsPerEndpoint, FieldMaxMethodsPerEndpoint),
             ParseXmlDocPaths(xmlDocPathsText));
     }
 
@@ -110,7 +114,7 @@ public static class ProfileAnalysis
     public static CliFields ParseCli(string nodePathText, string cliScriptPathText, string concurrencyText) => new(
         TextOrNull(nodePathText),
         TextOrNull(cliScriptPathText),
-        ParseNumber(concurrencyText, "读取并发", DefaultReadConcurrency));
+        ParseNumber(concurrencyText, "读取并发", DefaultReadConcurrency, FieldReadConcurrency));
 
     /// <summary>
     /// 把全部字段应用到配置对象；数字越界钳制与 JSON 命名取值校验仍由 ProfileStore 在「保存」时执行。
@@ -147,10 +151,10 @@ public static class ProfileAnalysis
         profile.Apifox.ReadConcurrency = cli.ReadConcurrency;
     }
 
-    private static int ParseNumber(string text, string label, int fallback) =>
+    private static int ParseNumber(string text, string label, int fallback, string field) =>
         text.Trim().Length == 0 ? fallback
         : int.TryParse(text.Trim(), out var value) ? value
-        : throw new UserException(label + "应为数字。");
+        : throw new UserException(label + "应为数字。", field: field);
 
     private static string? TextOrNull(string text)
     {

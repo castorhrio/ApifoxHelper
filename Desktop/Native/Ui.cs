@@ -136,8 +136,8 @@ internal static class Ui
 
     /// <summary>
     /// 输入框镀铬（DESIGN.md §6「输入框」）：1px 描边面板——常态 Line，聚焦描边 Accent，
-    /// 色判定在 FieldChrome（与测试工程共享编译）。内外尺寸双向同步：文本框改宽高时面板跟随，
-    /// 面板被布局拉伸（行助手设宽设高）时文本框跟随。
+    /// 校验失败描边 BadText（<see cref="FieldBox.SetInvalid"/>），色判定在 FieldChrome（与测试工程共享编译）。
+    /// 内外尺寸双向同步：文本框改宽高时面板跟随，面板被布局拉伸（行助手设宽设高）时文本框跟随。
     /// </summary>
     public static FieldBox Field(TextBox input) => new(input);
 
@@ -145,6 +145,7 @@ internal static class Ui
     {
         private readonly TextBox _inner;
         private bool _syncing;
+        private bool _invalid;
 
         public FieldBox(TextBox inner)
         {
@@ -154,13 +155,23 @@ internal static class Ui
             Margin = new Padding(0);
             inner.GotFocus += (_, _) => RefreshChrome();
             inner.LostFocus += (_, _) => RefreshChrome();
+            // 用户改值后旧判定不再适用：解除校验失败描边（文字状态行由对话框自行管理）。
+            inner.TextChanged += (_, _) => SetInvalid(false);
             inner.Resize += (_, _) => SyncFromInner();
             Resize += (_, _) => SyncFromOuter();
             Controls.Add(inner);
             Size = new Size(inner.Width + Padding.Horizontal, inner.Height + Padding.Vertical);
         }
 
-        private void RefreshChrome() => BackColor = FieldChrome.Border(_inner.Focused, UiTokens.Line, UiTokens.Accent);
+        /// <summary>校验失败标记：描边 BadText（DESIGN.md §6「输入框」，双通道中的形状通道——文字仍在状态行）。</summary>
+        public void SetInvalid(bool invalid)
+        {
+            if (_invalid == invalid) return;
+            _invalid = invalid;
+            RefreshChrome();
+        }
+
+        private void RefreshChrome() => BackColor = FieldChrome.Border(_inner.Focused, _invalid, UiTokens.Line, UiTokens.Accent, UiTokens.BadText);
 
         private void SyncFromInner()
         {

@@ -33,6 +33,8 @@ internal sealed class ProfileAnalysisDialog : Form
     private readonly TextBox _nodePath = Ui.Input();
     private readonly TextBox _cliPath = Ui.Input();
     private readonly Label _statusLine = Ui.StatusLine();
+    /// <summary>字段标识 → 描边面板：解析失败按 UserException.Field 定位描红（DESIGN.md §6 校验失败描边）。</summary>
+    private readonly Dictionary<string, Ui.FieldBox> _fields = [];
 
     public ProfileAnalysisDialog(ProjectProfile profile)
     {
@@ -72,11 +74,11 @@ internal sealed class ProfileAnalysisDialog : Form
         AddRow(grid, "分析配置名", Ui.Field(_configuration));
         AddRow(grid, "编译常量", Ui.Field(_symbols));
         AddHint(grid, "留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。");
-        AddRow(grid, "调用深度", Ui.Field(_depth));
-        AddRow(grid, "方法预算", Ui.Field(_budget));
+        AddRow(grid, "调用深度", Field(_depth, ProfileAnalysis.FieldMaxTraceDepth));
+        AddRow(grid, "方法预算", Field(_budget, ProfileAnalysis.FieldMaxMethodsPerEndpoint));
         AddHint(grid, "数字留空用默认值。");
         _xmlDocPaths.Height = 56;
-        AddRow(grid, "XML 文档路径", Ui.Field(_xmlDocPaths));
+        AddRow(grid, "XML 文档路径", Field(_xmlDocPaths, ProfileAnalysis.FieldXmlDocPaths));
         AddHint(grid, "可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。");
         AddRow(grid, "去掉 Async 后缀", _suppressAsync, widen: false);
         AddHint(grid, "与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。");
@@ -87,7 +89,7 @@ internal sealed class ProfileAnalysisDialog : Form
         AddRow(grid, "字段说明必填", _requireProperty, widen: false);
 
         AddSection(grid, "Apifox CLI");
-        AddRow(grid, "读取并发", Ui.Field(_concurrency));
+        AddRow(grid, "读取并发", Field(_concurrency, ProfileAnalysis.FieldReadConcurrency));
         AddHint(grid, "只读详情的并发数（1–8）；写入始终串行。");
         AddRow(grid, "node 路径", Ui.Field(_nodePath));
         AddRow(grid, "cli.js 路径", Ui.Field(_cliPath));
@@ -165,8 +167,23 @@ internal sealed class ProfileAnalysisDialog : Form
         }
         catch (UserException ex)
         {
+            MarkInvalidField(ex);
             SetStatus(ex.Message, UiTokens.BadText);
         }
+    }
+
+    /// <summary>包 1px 描边并登记字段标识；解析失败时按 UserException.Field 描红对应输入框。</summary>
+    private Ui.FieldBox Field(TextBox input, string fieldId)
+    {
+        var field = Ui.Field(input);
+        _fields[fieldId] = field;
+        return field;
+    }
+
+    /// <summary>解析失败描红对应字段（形状通道）；文字仍在状态行（双通道，DESIGN.md §2/§6）。</summary>
+    private void MarkInvalidField(UserException ex)
+    {
+        if (ex.Field is { } field && _fields.TryGetValue(field, out var box)) box.SetInvalid(true);
     }
 
     /// <summary>下拉框当前项对应的命名策略；未知原值项（追加的末项）返回原值，不静默改值。</summary>

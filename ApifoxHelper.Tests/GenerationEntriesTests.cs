@@ -70,6 +70,9 @@ public class GenerationEntriesTests
         // 冻结页面会把非法数字静默变成默认值；原生明确拒绝，让用户知道值没有被采纳。
         var ex = Assert.Throws<UserException>(() => GenerationEntries.ParseFields("", "", "abc", "20"));
         Assert.Equal("超时秒数应为数字。", ex.Message);
+        // 字段标识定位失败输入框（校验失败描边，DESIGN.md §6）：标识即配置 JSON 属性名。
+        Assert.Equal(GenerationEntries.FieldTimeoutSeconds, ex.Field);
+        Assert.Equal("timeoutSeconds", ex.Field);
     }
 
     [Fact]
@@ -77,6 +80,8 @@ public class GenerationEntriesTests
     {
         var ex = Assert.Throws<UserException>(() => GenerationEntries.ParseFields("", "", "90", "1x"));
         Assert.Equal("每批数量应为数字。", ex.Message);
+        Assert.Equal(GenerationEntries.FieldMaxSlotsPerRequest, ex.Field);
+        Assert.Equal("maxSlotsPerRequest", ex.Field);
     }
 
     // ── 应用到配置对象 ────────────────────────────────────────────────────

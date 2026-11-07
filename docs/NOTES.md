@@ -387,6 +387,16 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 472 用例全部通过（含既有令牌接线机械检查对新增代码的扫描——无就地颜色/字体/间距值，Padding(1) 发丝边为 §5 允许值）。本轮无纯逻辑服务链路新增（切片是呈现层镀铬），FieldChrome 两向口径已由单元断言钉住，无需 /tmp 控制台运行时验证。**发丝边常态观感、聚焦描边出现与消失、尺寸同步在 100%/200% DPI 的真机观感仍未验证**（Linux 无法运行 WinForms GUI）——接线与口径已在 Linux 以断言钉住；Windows 真机需按「项目设置 → 编辑配置：输入框为 1px 浅灰发丝边（无 3D 凹边）→ 点入输入框看描边变强调色蓝 → Tab 离开描边复原 → 模块与模板：拖宽窗口/看多行 JSON 编辑位与模块编辑框高度正常 → 注释回写：跳过位置清单每条只显示一行」走一遍。未改写入安全语义（纯呈现层）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「校验失败描边：字段定位链路」（2026-11-07 第二十六轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（4403587）的 Linux `dotnet build` 0 警告 0 错误、472 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：上一轮（第二十五轮）挂账明确「校验失败描边 `BadText`」需一条字段定位链路——共享解析单一口径（`GenerationEntries.ParseFields`、`ProfileAdvanced.ParseFields`、`ProfileAnalysis` 各解析方法）以逐字文案抛 `UserException`，对话框取不到失败字段；本轮即接这条链路（设计基线 §6「校验失败内联 `BadText` 文字 + 描边 `BadText`，不弹窗」的文字一半已全域成立，本轮补形状一半）。
+- **字段定位链路（非破坏）**：`UserException` 增加可选 `Field` 属性（配置 JSON 的 camelCase 属性名，默认 null）——既有构造与调用点零改动，REST 错误响应只取 `Message`（`Api/ErrorHandling.cs`），网络 JSON 形状不变；三个共享解析文件在拒绝路径以命名参数附加字段标识，**文案逐字不变**：`GenerationEntries`（`timeoutSeconds`/`maxSlotsPerRequest`）、`ProfileAdvanced`（`folderId`/`auth`/`securityScheme`/`headerParameters`，`ParseObject`/`ParseArray` 增加 field 参数）、`ProfileAnalysis`（`maxTraceDepth`/`maxMethodsPerEndpoint`/`xmlDocPaths`/`readConcurrency`）；字段标识以公共常量单一落点（对话框、测试共用，不复制字符串）。
+- **描边口径**：`FieldChrome.Border(focused, invalid, line, accent, bad)` 三态判定，**失败 > 聚焦 > 常态**——聚焦失败字段正是要修它的时刻，错误信号不能被聚焦色盖掉；`Ui.FieldBox.SetInvalid(bool)` 置位/解除，内层 `TextChanged` 自动解除（用户改值后旧判定不再适用；文字状态行由对话框自行管理）；「颜色 + 文字」双通道保持：描红是形状通道，说明文字仍在状态行。
+- **对话框接入（共享解析口径覆盖面）**：「模型服务」「模块与模板」「序列化与分析」三个配置对话框把会解析失败的输入框经本地 `Field(input, fieldId)` 助手登记（标识 → `FieldBox`），解析失败 catch 中 `MarkInvalidField(ex)` 按 `UserException.Field` 描红对应输入框；不会解析失败的字段（服务地址/模型/编译常量/封装行/node 路径等）维持原 `Ui.Field` 直包。`CapabilitiesDialog` 的探测输入走 `CanRun` 布尔门控（按钮禁用、无抛出路径）、候选/手工说明走 `DraftService.ValidateText`（单输入框、文案就在状态行），均无字段歧义，不属本轮口径面。
+- **测试 472 → 475 用例**：`FieldChromeTests` +3（失败描边两态——聚焦与否都是 BadText、三对话框描红接线机械检查、`ProfileAnalysis` 字段标识即 JSON 属性名），既有拒绝文案用例全部补 `Field` 断言（消息与字段标识双重钉住）。**变异验证五处实测可红**（各自独立变红、还原后全绿，还原一律手工逆编辑）：FieldChrome 失败/聚焦优先级翻转（1 红）；`Ui.FieldBox` 改值解除接线删除（1 红）；`GenerationEntries` 丢弃字段标识（2 红：超时/每批）；GenerationDialog 描红调用删除（1 红）；ProfileAdvancedDialog 字段登记删除（1 红）。**期间变异抓出两个机械检查盲区并修复**：接线断言用子串 `Contains` 时被注释行骗过（`// inner.TextChanged += ...` 仍含子串）——`Ui.cs` 改值解除断言与三对话框描红调用断言改为行首正则（注释行不再命中）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 475 用例全部通过（含令牌接线机械检查对新增代码的扫描——无就地颜色/字体/间距值）。共享解析链路（拒绝文案 + 字段标识）由测试工程直接编译生产源码断言（非副本），无需 /tmp 控制台另验；对话框描红的呈现与改值解除是 WinForms 行为，Linux 无法运行 GUI。**失败描边出现/解除、失败 > 聚焦的优先级、改值自动解除的真机观感仍未验证**（G-D5 复核）——Windows 真机需按「模型服务：超时秒数填 abc → 确定看状态行文案 + 超时秒数框描红、其余框不红 → 改成 90 后描红即消失 → 确定；模块与模板：鉴权 auth 填 {bad → 确定看该框描红 → 从接口提取回填合法 JSON 后描红消失」走一遍。未改写入安全语义（`UserException.Field` 为可选元数据，服务层校验与门禁一行未动；REST JSON 形状不变）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

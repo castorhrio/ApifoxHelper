@@ -6,28 +6,38 @@ using Xunit;
 namespace ApifoxHelper.Tests;
 
 /// <summary>
-/// 输入框形态断言（FieldChrome，共享源码单一口径）：输入框常态 1px Line 发丝边、聚焦描边 Accent，
-/// 不用系统 3D 边框（DESIGN.md §6「输入框」）。镀铬工厂的接线由源码机械检查钉住：
+/// 输入框形态断言（FieldChrome，共享源码单一口径）：输入框常态 1px Line 发丝边、聚焦描边 Accent、
+/// 校验失败描边 BadText（DESIGN.md §6「输入框」），不用系统 3D 边框。镀铬工厂的接线由源码机械检查钉住：
 /// 全部输入框经 Ui.Input/Ui.Preview 出厂，可编辑输入框一律经 Ui.Field 包描边，
-/// 绕过工厂的输入框会退回系统边框。校验失败描边 BadText 待字段定位接入（DESIGN.md §8 挂账）。
+/// 绕过工厂的输入框会退回系统边框；共享解析口径的配置对话框在解析失败时按 UserException.Field 描红对应输入框。
 /// </summary>
 public class FieldChromeTests
 {
     private static readonly Color Line = Color.FromArgb(0xE3, 0xE8, 0xF0);
     private static readonly Color Accent = Color.FromArgb(0x0B, 0x53, 0x94);
+    private static readonly Color Bad = Color.FromArgb(0xB9, 0x1C, 0x1C);
 
     [Fact]
     public void FocusedField_UsesAccentBorder() =>
-        Assert.Equal(Accent, FieldChrome.Border(focused: true, Line, Accent));
+        Assert.Equal(Accent, FieldChrome.Border(focused: true, invalid: false, Line, Accent, Bad));
 
     [Fact]
     public void UnfocusedField_UsesHairlineBorder() =>
-        Assert.Equal(Line, FieldChrome.Border(focused: false, Line, Accent));
+        Assert.Equal(Line, FieldChrome.Border(focused: false, invalid: false, Line, Accent, Bad));
+
+    [Fact]
+    public void InvalidField_UsesBadBorder_FocusedOrNot()
+    {
+        // 校验失败描边优先于聚焦：聚焦失败字段正是要修它的时刻，错误信号不能被聚焦色盖掉。
+        Assert.Equal(Bad, FieldChrome.Border(focused: false, invalid: true, Line, Accent, Bad));
+        Assert.Equal(Bad, FieldChrome.Border(focused: true, invalid: true, Line, Accent, Bad));
+    }
 
     [Fact]
     public void BorderColors_MatchDesignDoc()
     {
         Assert.Contains("`Panel` 底 + 1px `Line`；聚焦描边 `Accent`", Repo.DesignSection(6));
+        Assert.Contains("校验失败内联 `BadText` 文字 + 描边 `BadText`，不弹窗", Repo.DesignSection(6));
     }
 
     // ── 工厂接线机械检查 ──────────────────────────────────────────────
@@ -63,9 +73,13 @@ public class FieldChromeTests
     public void Factory_WiresFocusChromeAndSizeSync()
     {
         var ui = Repo.Source("Desktop", "Native", "Ui.cs");
-        Assert.Contains("FieldChrome.Border(_inner.Focused, UiTokens.Line, UiTokens.Accent)", ui);
+        Assert.Contains("FieldChrome.Border(_inner.Focused, _invalid, UiTokens.Line, UiTokens.Accent, UiTokens.BadText)", ui);
         Assert.Contains("inner.GotFocus += (_, _) => RefreshChrome();", ui);
         Assert.Contains("inner.LostFocus += (_, _) => RefreshChrome();", ui);
+        // 校验失败描边由对话框按 UserException.Field 置位；用户改值后旧判定不再适用，工厂自动解除。
+        // 行首正则断言（非子串）：接线被注释掉也算删除，同样变异可红。
+        Assert.Contains("public void SetInvalid(bool invalid)", ui);
+        Assert.Matches(@"(?m)^\s*inner\.TextChanged \+= \(_, _\) => SetInvalid\(false\);", ui);
         // 描边面板：1px 发丝边由 Padding(1) 与 Line 底色构成（同 HairlineCore 的做法）。
         Assert.Contains("BackColor = UiTokens.Line;", ui);
         Assert.Contains("Padding = new Padding(1);", ui);
@@ -95,6 +109,32 @@ public class FieldChromeTests
         Assert.Contains("AddBoxRow(detailGrid, Ui.Field(_answers), 44)", Repo.Source("Desktop", "Native", "CandidatesDialog.cs"));
         Assert.Contains("Ui.Field(_name)", Repo.Source("Desktop", "Native", "TasksPage.cs"));
         Assert.Contains("Ui.Field(_name)", Repo.Source("Desktop", "Native", "ProjectsPage.cs"));
+    }
+
+    [Fact]
+    public void ParseDialogs_MarkFailedFields()
+    {
+        // 共享解析口径的三个配置对话框：解析失败按 UserException.Field 描红对应输入框
+        // （文字仍在状态行，双通道）；接线由机械检查钉住，防字段标识与输入框登记被删。
+        // 描红调用用行首正则断言（非子串）：接线被注释掉也算删除，同样变异可红。
+        var generation = Repo.Source("Desktop", "Native", "GenerationDialog.cs");
+        Assert.Matches(@"(?m)^\s*MarkInvalidField\(ex\);", generation);
+        Assert.Contains("Field(_timeout, GenerationEntries.FieldTimeoutSeconds)", generation);
+        Assert.Contains("Field(_batch, GenerationEntries.FieldMaxSlotsPerRequest)", generation);
+
+        var advanced = Repo.Source("Desktop", "Native", "ProfileAdvancedDialog.cs");
+        Assert.Matches(@"(?m)^\s*MarkInvalidField\(ex\);", advanced);
+        Assert.Contains("Field(_folderId, ProfileAdvanced.FieldFolderId)", advanced);
+        Assert.Contains("Field(_auth, ProfileAdvanced.FieldAuth)", advanced);
+        Assert.Contains("Field(_security, ProfileAdvanced.FieldSecurityScheme)", advanced);
+        Assert.Contains("Field(_headers, ProfileAdvanced.FieldHeaderParameters)", advanced);
+
+        var analysis = Repo.Source("Desktop", "Native", "ProfileAnalysisDialog.cs");
+        Assert.Matches(@"(?m)^\s*MarkInvalidField\(ex\);", analysis);
+        Assert.Contains("Field(_depth, ProfileAnalysis.FieldMaxTraceDepth)", analysis);
+        Assert.Contains("Field(_budget, ProfileAnalysis.FieldMaxMethodsPerEndpoint)", analysis);
+        Assert.Contains("Field(_xmlDocPaths, ProfileAnalysis.FieldXmlDocPaths)", analysis);
+        Assert.Contains("Field(_concurrency, ProfileAnalysis.FieldReadConcurrency)", analysis);
     }
 
     [Fact]

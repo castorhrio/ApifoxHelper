@@ -142,6 +142,7 @@ public class ProfileAnalysisTests
         // 冻结页面会静默丢弃这样的行；原生明确拒绝，让用户知道值没有被采纳。
         var ex = Assert.Throws<UserException>(() => ProfileAnalysis.ParseXmlDocPaths("Api=ok.xml\n" + line));
         Assert.Equal("XML 文档路径每行应为「项目名=路径」。", ex.Message);
+        Assert.Equal(ProfileAnalysis.FieldXmlDocPaths, ex.Field);
     }
 
     [Fact]
@@ -177,13 +178,25 @@ public class ProfileAnalysisTests
     }
 
     [Theory]
-    [InlineData("abc", "40", "调用深度应为数字。")]
-    [InlineData("3", "1x", "方法预算应为数字。")]
-    public void ParseAnalysis_NonNumericRejectedNotSilentlyDefaulted(string depth, string budget, string message)
+    [InlineData("abc", "40", "调用深度应为数字。", "maxTraceDepth")]
+    [InlineData("3", "1x", "方法预算应为数字。", "maxMethodsPerEndpoint")]
+    public void ParseAnalysis_NonNumericRejectedNotSilentlyDefaulted(string depth, string budget, string message, string field)
     {
         // 冻结页面会把非法数字静默变成默认值；原生明确拒绝，让用户知道值没有被采纳。
         var ex = Assert.Throws<UserException>(() => ProfileAnalysis.ParseAnalysis("", "", depth, budget, ""));
         Assert.Equal(message, ex.Message);
+        // 字段标识定位失败输入框（校验失败描边，DESIGN.md §6）：标识即配置 JSON 属性名。
+        Assert.Equal(field, ex.Field);
+    }
+
+    [Fact]
+    public void FieldIds_AreConfigJsonPropertyNames()
+    {
+        // 对话框按 UserException.Field 找输入框；标识取配置 JSON 的 camelCase 属性名（单一来源）。
+        Assert.Equal("maxTraceDepth", ProfileAnalysis.FieldMaxTraceDepth);
+        Assert.Equal("maxMethodsPerEndpoint", ProfileAnalysis.FieldMaxMethodsPerEndpoint);
+        Assert.Equal("xmlDocPaths", ProfileAnalysis.FieldXmlDocPaths);
+        Assert.Equal("readConcurrency", ProfileAnalysis.FieldReadConcurrency);
     }
 
     // ── Apifox CLI 字段 ───────────────────────────────────────────────────
@@ -211,6 +224,7 @@ public class ProfileAnalysisTests
     {
         var ex = Assert.Throws<UserException>(() => ProfileAnalysis.ParseCli("", "", "8x"));
         Assert.Equal("读取并发应为数字。", ex.Message);
+        Assert.Equal(ProfileAnalysis.FieldReadConcurrency, ex.Field);
     }
 
     // ── 应用到配置对象 ────────────────────────────────────────────────────

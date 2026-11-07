@@ -35,6 +35,10 @@ public static class GenerationEntries
     public const int DefaultTimeoutSeconds = 120;
     public const int DefaultMaxSlotsPerRequest = 30;
 
+    /// <summary>字段标识（配置 JSON 的 camelCase 属性名）：解析失败时随 UserException.Field 定位描红。</summary>
+    public const string FieldTimeoutSeconds = "timeoutSeconds";
+    public const string FieldMaxSlotsPerRequest = "maxSlotsPerRequest";
+
     /// <summary>解析后的生成设置；BaseUrl/Model 去空白后为空即 null（与冻结页面「|| null」同一结果）。</summary>
     public sealed record Fields(string? BaseUrl, string? Model, int TimeoutSeconds, int MaxSlotsPerRequest);
 
@@ -45,13 +49,13 @@ public static class GenerationEntries
     public static Fields ParseFields(string baseUrlText, string modelText, string timeoutText, string batchText) => new(
         TextOrNull(baseUrlText),
         TextOrNull(modelText),
-        ParseNumber(timeoutText, "超时秒数", DefaultTimeoutSeconds),
-        ParseNumber(batchText, "每批数量", DefaultMaxSlotsPerRequest));
+        ParseNumber(timeoutText, "超时秒数", DefaultTimeoutSeconds, FieldTimeoutSeconds),
+        ParseNumber(batchText, "每批数量", DefaultMaxSlotsPerRequest, FieldMaxSlotsPerRequest));
 
-    private static int ParseNumber(string text, string label, int fallback) =>
+    private static int ParseNumber(string text, string label, int fallback, string field) =>
         text.Trim().Length == 0 ? fallback
         : int.TryParse(text.Trim(), out var value) ? value
-        : throw new UserException(label + "应为数字。");
+        : throw new UserException(label + "应为数字。", field: field);
 
     private static string? TextOrNull(string text)
     {

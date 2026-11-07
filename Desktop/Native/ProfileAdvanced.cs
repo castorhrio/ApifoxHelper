@@ -74,28 +74,28 @@ public static class ProfileAdvanced
     /// JSON 对象字段：留空与「null」都是不设置；非法 JSON →「X 不是合法 JSON」（与冻结页面同一文案）；
     /// 合法但不是对象时明确拒绝（REST 路由的绑定同样拒绝，这里提前内联给出）。
     /// </summary>
-    public static JsonObject? ParseObject(string text, string label)
+    public static JsonObject? ParseObject(string text, string label, string field)
     {
-        var node = ParseNode(text, label);
+        var node = ParseNode(text, label, field);
         if (node is null) return null;
-        return node as JsonObject ?? throw new UserException(label + " 必须是 JSON 对象。");
+        return node as JsonObject ?? throw new UserException(label + " 必须是 JSON 对象。", field: field);
     }
 
     /// <summary>JSON 数组字段：留空即空清单；非法、非数组与数组中的非对象元素都明确拒绝（REST 绑定同样拒绝）。</summary>
-    public static List<JsonObject> ParseArray(string text, string label)
+    public static List<JsonObject> ParseArray(string text, string label, string field)
     {
-        var node = ParseNode(text, label);
+        var node = ParseNode(text, label, field);
         if (node is null) return [];
-        if (node is not JsonArray array) throw new UserException(label + " 必须是 JSON 数组。");
+        if (node is not JsonArray array) throw new UserException(label + " 必须是 JSON 数组。", field: field);
         var items = new List<JsonObject>();
         foreach (var item in array)
         {
-            items.Add(item as JsonObject ?? throw new UserException(label + " 的元素必须是 JSON 对象。"));
+            items.Add(item as JsonObject ?? throw new UserException(label + " 的元素必须是 JSON 对象。", field: field));
         }
         return items;
     }
 
-    private static JsonNode? ParseNode(string text, string label)
+    private static JsonNode? ParseNode(string text, string label, string field)
     {
         var trimmed = text.Trim();
         if (trimmed.Length == 0) return null;
@@ -105,12 +105,18 @@ public static class ProfileAdvanced
         }
         catch (JsonException)
         {
-            throw new UserException(label + " 不是合法 JSON");
+            throw new UserException(label + " 不是合法 JSON", field: field);
         }
     }
 
     /// <summary>JSON 字段回填文本：2 空格缩进、中文原样（与冻结页面的提取回填同一可读口径）。</summary>
     public static string FormatJson(JsonNode? node) => node is null ? "" : JsonSerializer.Serialize(node, JsonDefaults.Options);
+
+    /// <summary>字段标识（配置 JSON 的 camelCase 属性名）：解析失败时随 UserException.Field 定位描红。</summary>
+    public const string FieldFolderId = "folderId";
+    public const string FieldAuth = "auth";
+    public const string FieldSecurityScheme = "securityScheme";
+    public const string FieldHeaderParameters = "headerParameters";
 
     /// <summary>解析后的模板字段；FolderId 的数字校验在这里统一给出。</summary>
     public sealed record TemplateFields(
@@ -126,16 +132,16 @@ public static class ProfileAdvanced
     public static TemplateFields ParseFields(string folderIdText, string status, string serverIdText, string tagsText, string authText, string securityText, string headersText)
     {
         var folder = folderIdText.Trim();
-        if (folder.Length > 0 && !long.TryParse(folder, out _)) throw new UserException("目录 ID 应为数字。");
+        if (folder.Length > 0 && !long.TryParse(folder, out _)) throw new UserException("目录 ID 应为数字。", field: FieldFolderId);
         var server = serverIdText.Trim();
         return new TemplateFields(
             folder.Length == 0 ? null : long.Parse(folder),
             status,
             server.Length == 0 ? null : server,
             ParseTags(tagsText),
-            ParseObject(authText, "鉴权 auth"),
-            ParseObject(securityText, "安全方案"),
-            ParseArray(headersText, "公共 Header 参数"));
+            ParseObject(authText, "鉴权 auth", FieldAuth),
+            ParseObject(securityText, "安全方案", FieldSecurityScheme),
+            ParseArray(headersText, "公共 Header 参数", FieldHeaderParameters));
     }
 
     /// <summary>把模块与模板字段应用到配置对象；真正的规整与落盘仍由 ProfileStore.Save 单一口径执行。</summary>
