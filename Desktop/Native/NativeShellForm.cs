@@ -169,7 +169,8 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<Sync.CompatService>(),
             _host.Services.GetRequiredService<Apifox.ApifoxCli>(),
             _host.Store,
-            _host.Jobs);
+            _host.Jobs,
+            _host.Services.GetRequiredService<CredentialStore>());
         _tasksPage = new TasksPage(
             _host.Services.GetRequiredService<TaskStore>(),
             _host.Services.GetRequiredService<SourceScanService>(),

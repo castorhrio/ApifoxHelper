@@ -9,9 +9,10 @@ namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
 /// 项目配置页：列出配置，新建/编辑核心字段（名称、仓库、API 项目、回写范围、Swagger 来源、Apifox 目标），
-/// 「模块与模板」编辑模块范围与新接口模板（含从既有接口提取），「连接与写入探测」经既有 CompatService
+/// 「模块与模板」编辑模块范围与新接口模板（含从既有接口提取），「模型服务」编辑注释草稿生成方式与
+/// 模型服务密钥（DPAPI 加密存储在 CredentialStore），「连接与写入探测」经既有 CompatService
 /// 检查 CLI/登录/项目读取并按需运行写入兼容探测（F02，写入门禁的唯一登记入口）。
-/// 保存走 ProfileStore（含路径与取值校验）；模型服务等其余高级设置保持原值，不在本页编辑。
+/// 保存走 ProfileStore（含路径与取值校验）。
 /// </summary>
 internal sealed class ProjectsPage : UserControl, INativePage
 {
@@ -20,19 +21,21 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private readonly ApifoxCli _cli;
     private readonly FileStore _store;
     private readonly JobRunner _jobs;
+    private readonly CredentialStore _credentials;
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
     private readonly Panel _empty;
     private readonly Label _status = Ui.StatusLine();
     private readonly Button _editButton;
     private readonly Button _probeButton;
 
-    public ProjectsPage(ProfileStore profiles, CompatService compat, ApifoxCli cli, FileStore store, JobRunner jobs)
+    public ProjectsPage(ProfileStore profiles, CompatService compat, ApifoxCli cli, FileStore store, JobRunner jobs, CredentialStore credentials)
     {
         _profiles = profiles;
         _compat = compat;
         _cli = cli;
         _store = store;
         _jobs = jobs;
+        _credentials = credentials;
 
         var newButton = Ui.Primary("新建配置");
         newButton.Click += (_, _) => ShowDialog(null);
@@ -158,7 +161,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
     private void ShowDialog(ProjectProfile? editing)
     {
-        using var dialog = new ProfileDialog(_profiles, _cli, editing);
+        using var dialog = new ProfileDialog(_profiles, _cli, _credentials, editing);
         if (dialog.ShowDialog(FindForm()) == DialogResult.OK)
         {
             LoadProfiles();
@@ -176,7 +179,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
 /// <summary>
 /// 配置编辑对话框：核心字段 + 内联校验（ProfileStore.Save 抛出的 UserException 显示在状态行，不弹窗）。
-/// 「模块与模板」入口打开高级编辑（模块范围与新接口模板），改动应用到同一配置对象，随「保存」一起落盘。
+/// 「模块与模板」入口打开高级编辑（模块范围与新接口模板），「模型服务」入口打开生成方式与密钥编辑，
+/// 改动应用到同一配置对象，随「保存」一起落盘。
 /// </summary>
 internal sealed class ProfileDialog : Form
 {
@@ -184,6 +188,7 @@ internal sealed class ProfileDialog : Form
 
     private readonly ProfileStore _profiles;
     private readonly ApifoxCli _cli;
+    private readonly CredentialStore _credentials;
     private readonly ProjectProfile? _editing;
     private readonly ProjectProfile _profile;
 
@@ -198,10 +203,11 @@ internal sealed class ProfileDialog : Form
     private readonly Label _status = Ui.StatusLine();
     private readonly Button _findButton;
 
-    public ProfileDialog(ProfileStore profiles, ApifoxCli cli, ProjectProfile? editing)
+    public ProfileDialog(ProfileStore profiles, ApifoxCli cli, CredentialStore credentials, ProjectProfile? editing)
     {
         _profiles = profiles;
         _cli = cli;
+        _credentials = credentials;
         _editing = editing;
         _profile = editing ?? new ProjectProfile();
 
@@ -221,6 +227,8 @@ internal sealed class ProfileDialog : Form
         browseButton.Click += (_, _) => BrowseWorkspace();
         var advancedButton = Ui.Ghost("模块与模板…");
         advancedButton.Click += (_, _) => ShowAdvanced();
+        var generationButton = Ui.Ghost("模型服务…");
+        generationButton.Click += (_, _) => ShowGeneration();
 
         _swaggerType.Items.AddRange(SwaggerChoices);
         _swaggerType.SelectedIndexChanged += (_, _) => _swaggerLocation.Enabled = _swaggerType.SelectedIndex > 0;
@@ -252,8 +260,9 @@ internal sealed class ProfileDialog : Form
         AddRow(grid, "Swagger 位置", _swaggerLocation);
         AddRow(grid, "Apifox 项目 ID", _projectId);
         AddRow(grid, "分支", _branch);
-        AddRow(grid, "", Ui.Caption("模块范围与接口模板在「模块与模板」中编辑；模型服务等其余设置保持原值，新建时使用默认值。"));
+        AddRow(grid, "", Ui.Caption("模块范围与接口模板在「模块与模板」中编辑，模型服务在「模型服务」中配置；密钥在配置保存后设置。"));
         AddRow(grid, "", advancedButton);
+        AddRow(grid, "", generationButton);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，符合 Windows「主行动在右」惯例。
@@ -297,6 +306,15 @@ internal sealed class ProfileDialog : Form
         using var dialog = new ProfileAdvancedDialog(_cli, _profile);
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         SetStatus("模块与模板已更新，随「保存」写入。", UiTokens.OkText);
+    }
+
+    /// <summary>打开「模型服务」：生成方式与密钥的改动应用到同一配置对象，密钥单独即时生效。</summary>
+    private void ShowGeneration()
+    {
+        CollectCoreFields();
+        using var dialog = new GenerationDialog(_credentials, _profiles, _profile, _editing is not null);
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        SetStatus("模型服务设置已更新，随「保存」写入。", UiTokens.OkText);
     }
 
     /// <summary>把核心输入字段的当前值收集到配置对象（保存与打开高级编辑共用）。</summary>
