@@ -29,11 +29,12 @@ public class ScrollHostTests
         // 子项多为不接收焦点的标签，且内容盖住宿主可视面时宿主自己的 MouseDown 收不到——
         // 取焦必须递归挂到子树上（可自取焦的按钮与输入框除外）。行首正则断言：被注释掉也算删除，变异可红。
         var ui = Repo.Source("Desktop", "Native", "Ui.cs");
-        Assert.Matches(@"(?m)^\s*ControlAdded \+= \(_, e\) => HookFocus\(e\.Control\);", ui);
+        Assert.Matches(@"(?m)^\s*ControlAdded \+= \(_, e\) => \{ if \(e\.Control is not null\) HookFocus\(e\.Control\); \};", ui);
         Assert.Matches(@"(?m)^\s*private void HookFocus\(Control control\)", ui);
         Assert.Matches(@"(?m)^\s*if \(control is ButtonBase or TextBoxBase\) return;", ui);
         Assert.Matches(@"(?m)^\s*control\.MouseDown \+= \(_, _\) => Focus\(\);", ui);
         Assert.Matches(@"(?m)^\s*foreach \(Control child in control\.Controls\) HookFocus\(child\);", ui);
+        Assert.Matches(@"(?m)^\s*control\.ControlAdded \+= \(_, e\) => \{ if \(e\.Control is not null\) HookFocus\(e\.Control\); \};", ui);
         Assert.Matches(@"(?m)^\s*protected override void OnMouseDown\(MouseEventArgs e\)", ui);
         Assert.Matches(@"(?m)^\s*Focus\(\);", ui);
     }
@@ -70,5 +71,50 @@ public class ScrollHostTests
         var supplements = Repo.Source("Desktop", "Native", "SupplementsDialog.cs");
         Assert.Matches(@"(?m)^\s*private readonly Panel _editorsScroll = Ui\.ScrollHost\(\);", supplements);
         Assert.Matches(@"(?m)^\s*_editorsScroll\.Dock = DockStyle\.Fill;", supplements);
+    }
+
+    [Fact]
+    public void ProfileAndNewTaskDialogs_Grids_UseScrollHost()
+    {
+        // 配置编辑（十七行字段与提示、底部四个子配置入口与导出）与新建任务（十二行、底部离线模式）
+        // 的网格内容高于对话框可视高度：必须放入可滚动宿主，否则底部行被裁掉且 FixedDialog 无法拉高补救
+        //（第三十二轮前的真实缺陷，与第三十一轮任务详情同类）。
+        var projects = Repo.Source("Desktop", "Native", "ProjectsPage.cs");
+        Assert.Matches(@"(?m)^\s*var gridScroll = Ui\.ScrollHost\(\);", projects);
+        Assert.Matches(@"(?m)^\s*gridScroll\.BackColor = UiTokens\.Panel;", projects);
+        Assert.Matches(@"(?m)^\s*gridScroll\.Controls\.Add\(grid\);", projects);
+        Assert.Matches(@"(?m)^\s*Controls\.Add\(gridScroll\);", projects);
+        // 旧直连写法（网格直接停靠窗体）不得回归；网格保持 Dock=Top + AutoSize（Dock=Fill 退回不可滚动）。
+        Assert.DoesNotMatch(@"(?m)^\s*Controls\.Add\(grid\);", projects);
+        Assert.Contains("new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel", projects);
+
+        var tasks = Repo.Source("Desktop", "Native", "TasksPage.cs");
+        Assert.Matches(@"(?m)^\s*var gridScroll = Ui\.ScrollHost\(\);", tasks);
+        Assert.Matches(@"(?m)^\s*gridScroll\.Controls\.Add\(grid\);", tasks);
+        Assert.Matches(@"(?m)^\s*Controls\.Add\(gridScroll\);", tasks);
+        Assert.DoesNotMatch(@"(?m)^\s*Controls\.Add\(grid\);", tasks);
+        Assert.Contains("new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel", tasks);
+    }
+
+    [Fact]
+    public void ConfigDialogs_Grids_UseScrollHostFactoryOnly()
+    {
+        // 三个配置子对话框此前在 TableLayoutPanel 上就地开 AutoScroll（无点击取焦）——
+        // DESIGN.md §6 要求长内容区宿主一律经 Ui.ScrollHost 工厂；AutoScroll 的口径只在工厂内。
+        foreach (var name in new[] { "GenerationDialog.cs", "ProfileAdvancedDialog.cs", "ProfileAnalysisDialog.cs" })
+        {
+            var source = Repo.Source("Desktop", "Native", name);
+            Assert.Matches(@"(?m)^\s*var gridScroll = Ui\.ScrollHost\(\);", source);
+            Assert.Matches(@"(?m)^\s*gridScroll\.BackColor = UiTokens\.Panel;", source);
+            Assert.Matches(@"(?m)^\s*gridScroll\.Controls\.Add\(grid\);", source);
+            Assert.Matches(@"(?m)^\s*Controls\.Add\(gridScroll\);", source);
+            Assert.DoesNotMatch(@"(?m)^\s*Controls\.Add\(grid\);", source);
+            Assert.DoesNotMatch(@"(?m)^\s*AutoScroll\b", source);
+            Assert.Contains("new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel", source);
+        }
+
+        // 工厂自身的 AutoScroll 仍在（口径唯一落点）。
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        Assert.Matches(@"(?m)^\s*AutoScroll = true;", ui);
     }
 }

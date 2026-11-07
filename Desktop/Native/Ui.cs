@@ -236,7 +236,8 @@ internal static class Ui
             SetStyle(ControlStyles.Selectable | ControlStyles.StandardClick, true);
             TabStop = false;
             // 内容盖住宿主可视面时，点击落在子控件上，宿主自己的 MouseDown 收不到——对子树代挂取焦。
-            ControlAdded += (_, e) => HookFocus(e.Control);
+            // e.Control 注解可空，事件源不保证非空。
+            ControlAdded += (_, e) => { if (e.Control is not null) HookFocus(e.Control); };
         }
 
         private void HookFocus(Control control)
@@ -245,7 +246,7 @@ internal static class Ui
             if (control is ButtonBase or TextBoxBase) return;
             control.MouseDown += (_, _) => Focus();
             foreach (Control child in control.Controls) HookFocus(child);
-            control.ControlAdded += (_, e) => HookFocus(e.Control);
+            control.ControlAdded += (_, e) => { if (e.Control is not null) HookFocus(e.Control); };
         }
 
         protected override void OnMouseDown(MouseEventArgs e)

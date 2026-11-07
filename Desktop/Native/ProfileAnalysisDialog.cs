@@ -57,7 +57,8 @@ internal sealed class ProfileAnalysisDialog : Form
         AcceptButton = applyButton;
         CancelButton = cancelButton;
 
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, AutoScroll = true, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
+        // 长内容区（DESIGN.md §6）：网格统一经 Ui.ScrollHost 出厂（AutoScroll 与点击取焦只有一份口径）。
+        var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
@@ -104,7 +105,10 @@ internal sealed class ProfileAnalysisDialog : Form
         _statusLine.Dock = DockStyle.Fill;
         statusHost.Controls.Add(_statusLine);
 
-        Controls.Add(grid);
+        var gridScroll = Ui.ScrollHost();
+        gridScroll.BackColor = UiTokens.Panel;
+        gridScroll.Controls.Add(grid);
+        Controls.Add(gridScroll);
         Controls.Add(buttons);
         Controls.Add(statusHost);
 

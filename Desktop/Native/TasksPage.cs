@@ -1092,7 +1092,8 @@ internal sealed class NewTaskDialog : Form
         // 指定接口为多行输入：内层文本框定高，Ui.Field 的尺寸双向同步会带着描边面板一起变高。
         _keys.Height = 62;
 
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
+        // 网格十二行（模块清单、指定接口、版本备注与提示）高于可视高度：放入可滚动宿主，离线模式行可达（DESIGN.md §6 长内容区）。
+        var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddRow(grid, "项目配置", _profile);
@@ -1119,7 +1120,10 @@ internal sealed class NewTaskDialog : Form
         _status.Dock = DockStyle.Fill;
         statusHost.Controls.Add(_status);
 
-        Controls.Add(grid);
+        var gridScroll = Ui.ScrollHost();
+        gridScroll.BackColor = UiTokens.Panel;
+        gridScroll.Controls.Add(grid);
+        Controls.Add(gridScroll);
         Controls.Add(buttons);
         Controls.Add(statusHost);
 

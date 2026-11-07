@@ -284,7 +284,8 @@ internal sealed class ProfileDialog : Form
         AcceptButton = saveButton;
         CancelButton = cancelButton;
 
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0), AutoSize = true };
+        // 网格十几个字段加提示行高于可视高度：放入可滚动宿主，底部子配置入口与导出可达（DESIGN.md §6 长内容区）。
+        var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddRow(grid, "名称", Field(_name, ProfileStore.FieldName));
@@ -314,7 +315,10 @@ internal sealed class ProfileDialog : Form
         _status.Dock = DockStyle.Fill;
         statusHost.Controls.Add(_status);
 
-        Controls.Add(grid);
+        var gridScroll = Ui.ScrollHost();
+        gridScroll.BackColor = UiTokens.Panel;
+        gridScroll.Controls.Add(grid);
+        Controls.Add(gridScroll);
         Controls.Add(buttons);
         Controls.Add(statusHost);
 

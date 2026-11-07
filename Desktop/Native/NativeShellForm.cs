@@ -15,7 +15,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// <summary>
 /// 原生桌面壳（F16）：原生菜单 + 左侧导航 + 页面区。
 /// 复用进程内服务（HelperHost），不嵌网页；"在浏览器中打开"不在本壳的菜单中。
-/// 工作流按迭代逐切片接入原生界面；未接入处如实显示禁用态或说明行，不冒充可用。
+/// 主工作流（配置 → 任务 → 审阅 → 检查 → 计划 → 同步 → 报告）全程在原生窗口完成；本壳是默认入口，过渡壳只按 --web 显式回退（方案 2.4）。
 /// </summary>
 internal sealed class NativeShellForm : Form
 {
