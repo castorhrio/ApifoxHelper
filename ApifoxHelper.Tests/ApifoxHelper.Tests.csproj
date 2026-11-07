@@ -36,6 +36,7 @@
     <Compile Include="..\Desktop\Native\SyncExecution.cs" Link="Shared\SyncExecution.cs" />
     <Compile Include="..\Desktop\Native\BuildStatus.cs" Link="Shared\BuildStatus.cs" />
     <Compile Include="..\Desktop\Native\DraftEntries.cs" Link="Shared\DraftEntries.cs" />
+    <Compile Include="..\Desktop\Native\SupplementEntries.cs" Link="Shared\SupplementEntries.cs" />
     <Compile Include="..\Reports\ReportFormats.cs" Link="Shared\ReportFormats.cs" />
     <Compile Include="..\Sync\CheckModels.cs" Link="Shared\CheckModels.cs" />
     <Compile Include="..\Contracts\DiffEngine.cs" Link="Shared\DiffEngine.cs" />

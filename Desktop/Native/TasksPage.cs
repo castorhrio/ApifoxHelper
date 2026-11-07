@@ -36,6 +36,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly ContractReviewService _reviews;
     private readonly CheckService _checks;
     private readonly DecisionService _decisionSaves;
+    private readonly SupplementService _supplementSaves;
     private readonly ReportExportService _exports;
     private readonly SyncPlanService _syncPlans;
     private readonly SyncExecutor _syncExecutor;
@@ -79,6 +80,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Button _importRemoteButton;
     private readonly Button _remoteCheckButton;
     private readonly Button _decisionsButton;
+    private readonly Button _supplementsButton;
     private readonly Button _remoteViewButton;
     private readonly Button _syncButton;
     private readonly Button _reportButton;
@@ -89,7 +91,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private bool _runningShown;
     private bool _splitAdjusted;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, BuildService builds, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, ReportExportService exports, SyncPlanService syncPlans, SyncExecutor syncExecutor)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, BuildService builds, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, SupplementService supplementSaves, ReportExportService exports, SyncPlanService syncPlans, SyncExecutor syncExecutor)
     {
         _tasks = tasks;
         _scan = scan;
@@ -102,6 +104,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _reviews = reviews;
         _checks = checks;
         _decisionSaves = decisionSaves;
+        _supplementSaves = supplementSaves;
         _exports = exports;
         _syncPlans = syncPlans;
         _syncExecutor = syncExecutor;
@@ -169,6 +172,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _remoteCheckButton.Click += (_, _) => StartRemoteCheck();
         _decisionsButton = Ui.Ghost("处理差异确认");
         _decisionsButton.Click += (_, _) => ShowDecisions();
+        _supplementsButton = Ui.Ghost("补充说明");
+        _supplementsButton.Click += (_, _) => ShowSupplements();
         _remoteViewButton = Ui.Ghost("查看检查结果");
         _remoteViewButton.Click += (_, _) => ShowCheckResults();
         _syncButton = Ui.Ghost("同步预览");
@@ -176,6 +181,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _remoteActions.Controls.Add(_importRemoteButton);
         _remoteActions.Controls.Add(_remoteCheckButton);
         _remoteActions.Controls.Add(_decisionsButton);
+        _remoteActions.Controls.Add(_supplementsButton);
         _remoteActions.Controls.Add(_remoteViewButton);
         _remoteActions.Controls.Add(_syncButton);
 
@@ -259,7 +265,7 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
         AddDetailRow(grid, _remoteActions);
-        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。「处理差异确认」在检查完成后可用：高风险变化逐项确认、说明冲突选择与模型绑定，保存后需重新检查才会生效。「同步预览」在检查完成后可用：勾选接口生成冻结计划，查看逐动作写入内容、排除原因与保留设置；「确认同步」在计划待确认且未过期时可用，逐项写入并立即回读核对，失败即停，执行结束后可「重新核对（只读）」；离线任务不能同步。"));
+        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。「处理差异确认」与「补充说明」在检查完成后可用：前者逐项确认高风险变化、选择说明冲突与绑定模型，后者逐接口补充接口标题、说明、参数与请求体、200 响应的说明或选择「保留现状」；两者保存后都需重新检查才会生效。「同步预览」在检查完成后可用：勾选接口生成冻结计划，查看逐动作写入内容、排除原因与保留设置；「确认同步」在计划待确认且未过期时可用，逐项写入并立即回读核对，失败即停，执行结束后可「重新核对（只读）」；离线任务不能同步。"));
         AddDetailRow(grid, SectionCaption("报告与交接"));
         AddDetailRow(grid, _reportStatus);
         AddDetailRow(grid, _reportButton);
@@ -459,6 +465,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _importRemoteButton.Enabled = scanReady && (_selectedTask?.OfflineMode ?? false);
         _remoteCheckButton.Enabled = scanReady;
         _decisionsButton.Enabled = scanReady && _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
+        // 补充说明与差异确认同门控：编辑位来自检查结果（离线任务同样可用，补充是本机任务数据）。
+        _supplementsButton.Enabled = scanReady && _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
         _remoteViewButton.Enabled = scanReady && _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
         // 同步预览需要检查结果；离线任务不能同步（对话框内也如实指引，双重保险）。
         _syncButton.Enabled = scanReady && _selectedTask is { OfflineMode: false } && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
@@ -884,6 +892,15 @@ internal sealed class TasksPage : UserControl, INativePage
     {
         if (_selectedTask is null) return;
         using var dialog = new DecisionsDialog(_tasks, _selectedTask, _decisionSaves);
+        dialog.ShowDialog(FindForm());
+        LoadTasks();
+    }
+
+    /// <summary>打开补充说明（F10：逐接口编辑业务说明补充，经共享 SupplementService 保存并递增任务版本）：关闭后刷新任务列表。</summary>
+    private void ShowSupplements()
+    {
+        if (_selectedTask is null) return;
+        using var dialog = new SupplementsDialog(_tasks, _selectedTask, _supplementSaves);
         dialog.ShowDialog(FindForm());
         LoadTasks();
     }

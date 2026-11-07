@@ -94,39 +94,8 @@ public static class ApifoxRoutes
             decisions = tasks.Read<DecisionStore>(id, TaskFiles.Decisions) ?? new DecisionStore(),
             supplement = tasks.Read<SupplementStore>(id, TaskFiles.Supplement) ?? new SupplementStore(),
         }));
-        app.MapPut("/api/tasks/{id}/supplement", async (string id, SupplementStore body, TaskStore tasks, HttpContext http) =>
-        {
-            foreach (var entry in body.Entries)
-            {
-                if (entry.Field == "example" && entry.Value is not null)
-                {
-                    try
-                    {
-                        JsonNode.Parse(entry.Value);
-                    }
-                    catch (JsonException)
-                    {
-                        throw new UserException($"{entry.ResourceKey} {entry.Location} 的示例不是合法 JSON。");
-                    }
-                }
-                if (entry.Value is not null && entry.Value.Length > 65535) throw new UserException("说明过长。");
-            }
-            await tasks.UpdateAsync(id, t =>
-            {
-                // 内容没有变化时不改写，也不让已有的检查结果和同步计划失效，“保存”可以重复点击。
-                var existing = tasks.Read<SupplementStore>(id, TaskFiles.Supplement) ?? new SupplementStore();
-                if (SupplementContent(existing) == SupplementContent(body))
-                {
-                    body = existing;
-                    return;
-                }
-                foreach (var entry in body.Entries) entry.UpdatedAt = DateTimeOffset.Now;
-                tasks.Write(id, TaskFiles.Supplement, body);
-                t.Revision++;
-                if (t.Stages.Remote.Status is "previewable" or "awaitingConfirm") t.Stages.Remote.Status = "expired";
-            }, http.RequestAborted);
-            return Json(body);
-        });
+        app.MapPut("/api/tasks/{id}/supplement", async (string id, SupplementStore body, SupplementService supplements, HttpContext http) =>
+            Json(await supplements.SaveAsync(id, body, http.RequestAborted)));
         app.MapPut("/api/tasks/{id}/decisions", async (string id, DecisionStore body, DecisionService decisions, HttpContext http) =>
             Json(await decisions.SaveAsync(id, body, http.RequestAborted)));
         app.MapPut("/api/tasks/{id}/response-contract", async (string id, ContractReviewRequest request, ContractReviewService reviews, HttpContext http) =>
@@ -177,12 +146,6 @@ public static class ApifoxRoutes
             return Results.File(file.Bytes, file.ContentType, file.FileName);
         });
     }
-
-    /// <summary>补充说明的实际内容（忽略更新时间与条目顺序），用于判断保存是否真的有修改。</summary>
-    private static string SupplementContent(SupplementStore store) => Canonical.HashOf(store.Entries
-        .Select(e => new { e.ResourceKey, e.Location, e.Field, e.Value, e.KeepAsIs })
-        .OrderBy(e => e.ResourceKey, StringComparer.Ordinal).ThenBy(e => e.Location, StringComparer.Ordinal).ThenBy(e => e.Field, StringComparer.Ordinal)
-        .ToList());
 }
 
 public sealed class ContractReviewRequest

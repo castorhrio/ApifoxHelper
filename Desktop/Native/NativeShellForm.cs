@@ -177,6 +177,7 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<ContractReviewService>(),
             _host.Services.GetRequiredService<Sync.CheckService>(),
             _host.Services.GetRequiredService<Sync.DecisionService>(),
+            _host.Services.GetRequiredService<Sync.SupplementService>(),
             _host.Services.GetRequiredService<Reports.ReportExportService>(),
             _host.Services.GetRequiredService<Sync.SyncPlanService>(),
             _host.Services.GetRequiredService<Sync.SyncExecutor>());
