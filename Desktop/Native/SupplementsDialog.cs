@@ -203,7 +203,7 @@ internal sealed class SupplementsDialog : Form
             _list.Items.Add(item);
         }
         _list.EndUpdate();
-        if (_list.Items.Count > 0) _list.Items[0].Selected = true;
+        if (_list.Items.Count > 0) Ui.SelectItem(_list.Items[0]);
     }
 
     private void RefreshListCounts()

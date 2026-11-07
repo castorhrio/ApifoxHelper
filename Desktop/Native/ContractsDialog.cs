@@ -326,7 +326,7 @@ internal sealed class ContractsDialog : Form
         {
             if (item.Tag is ResponseContract contract && contract.EndpointKey == endpointKey)
             {
-                item.Selected = true;
+                Ui.SelectItem(item);
                 return;
             }
         }

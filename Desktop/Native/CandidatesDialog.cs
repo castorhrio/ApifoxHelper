@@ -372,7 +372,7 @@ internal sealed class CandidatesDialog : Form
         {
             if (item.Tag is CommentCandidate candidate && candidate.Id == candidateId)
             {
-                item.Selected = true;
+                Ui.SelectItem(item);
                 return;
             }
         }

@@ -408,7 +408,7 @@ internal sealed class TasksPage : UserControl, INativePage
         {
             if (item.Tag is CheckTask task && task.Id == taskId)
             {
-                item.Selected = true;
+                Ui.SelectItem(item);
                 return;
             }
         }

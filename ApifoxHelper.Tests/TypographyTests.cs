@@ -36,6 +36,33 @@ public class TypographyTests
         }
     }
 
+    // ── 工程进度自述（D11：不向用户自述工程进度）────────────────────
+
+    public static TheoryData<string> ProgressNarration => new()
+    {
+        "开发中", "迭代中", "本切片", "后续切片", "尚未接入", "待接入",
+    };
+
+    [Theory]
+    [MemberData(nameof(ProgressNarration))]
+    public void Copy_DoesNotNarrateOwnProgress(string phrase)
+    {
+        foreach (var source in Repo.NativeSources())
+        {
+            foreach (var line in source.Text.Split('\n'))
+            {
+                if (!line.Contains(phrase, StringComparison.Ordinal)) continue;
+                Assert.True(IsDomainStatusLine(line),
+                    $"{source.Name}:出现「{phrase}」。界面不向用户自述工程进度（设计验收 D11、方案 §6.2 #12）；"
+                    + "描述业务对象状态的领域值（如接口状态枚举）须登记在 IsDomainStatusLine 白名单。");
+            }
+        }
+    }
+
+    /// <summary>领域状态白名单（按行首内容精确匹配）：Apifox 接口状态枚举「开发中」描述接口自身，不是工具的工程进度。</summary>
+    private static bool IsDomainStatusLine(string line) =>
+        line.TrimStart().StartsWith("(\"developing\", \"开发中\")", StringComparison.Ordinal);
+
     // ── 排版（D10/D4）────────────────────────────────────────────────
 
     [Fact]

@@ -97,6 +97,26 @@ public class ListRowsTests
         Assert.Matches(@"CheckBoxes = checkBoxes", ui);
     }
 
+    /// <summary>
+    /// 程序化选中只走 Ui.SelectItem：列表重建后 FocusedItem 丢失，只恢复 Selected 时
+    /// 方向键从列表头部重新开始、详情跳到第一行；选中与焦点标记必须同时恢复（Windows 列表惯例）。
+    /// </summary>
+    [Fact]
+    public void ProgrammaticSelection_RestoresKeyboardFocus()
+    {
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        var helper = Regex.Match(ui, @"public static void SelectItem\(ListViewItem item\)\s*\{[^}]*\}");
+        Assert.True(helper.Success, "Ui 缺少 SelectItem 程序选中口径（列表选中唯一入口）。");
+        Assert.Contains("item.Selected = true;", helper.Value);
+        Assert.Contains("item.Focused = true;", helper.Value);
+
+        foreach (var source in Repo.NativeSources().Where(s => !s.IsUi))
+        {
+            Assert.False(Regex.IsMatch(source.Text, @"^(?!\s*//).*\.Selected\s*=\s*true", RegexOptions.Multiline),
+                $"{source.Name}:程序化选中绕过 Ui.SelectItem——重建列表后焦点标记丢失，方向键会从列表头部重新开始。");
+        }
+    }
+
     [Fact]
     public void CapabilitiesDialog_EscClosesLikeTitleBarX()
     {

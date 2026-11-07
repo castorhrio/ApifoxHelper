@@ -259,7 +259,7 @@ internal sealed class CheckResultsDialog : Form
         _hint.Visible = false;
         _list.Visible = true;
         var target = selectedKey is null ? null : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as EndpointCheck)?.Key == selectedKey);
-        (target ?? _list.Items[0]).Selected = true;
+        Ui.SelectItem(target ?? _list.Items[0]);
     }
 
     private void ShowHint(string message, Color color)

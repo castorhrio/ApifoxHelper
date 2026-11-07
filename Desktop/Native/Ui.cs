@@ -283,6 +283,16 @@ internal static class Ui
         return list;
     }
 
+    /// <summary>
+    /// 程序列表选中（唯一入口）：除 Selected 外同时恢复 Focused——列表重建后 FocusedItem 丢失，
+    /// 只恢复选中时方向键从列表头部重新开始、详情跳到第一行；恢复焦点标记后键盘导航从选中项继续（Windows 列表惯例）。
+    /// </summary>
+    public static void SelectItem(ListViewItem item)
+    {
+        item.Selected = true;
+        item.Focused = true;
+    }
+
     private static void DrawListRow(object? sender, DrawListViewItemEventArgs e)
     {
         // 整行底色与选中标记（标记每行画一次，画在行首）。

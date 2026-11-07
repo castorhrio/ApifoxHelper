@@ -372,12 +372,12 @@ internal sealed class DecisionsDialog : Form
             {
                 if (ReferenceEquals(item.Tag, keep))
                 {
-                    item.Selected = true;
+                    Ui.SelectItem(item);
                     return;
                 }
             }
         }
-        _list.Items[0].Selected = true;
+        Ui.SelectItem(_list.Items[0]);
     }
 
     private Entry? Current() => _list.SelectedItems.Count > 0 ? _list.SelectedItems[0].Tag as Entry : null;

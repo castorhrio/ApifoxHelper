@@ -155,7 +155,7 @@ internal sealed class PropagationDialog : Form
         _list.EndUpdate();
         if (_list.Items.Count > 0)
         {
-            _list.Items[0].Selected = true;
+            Ui.SelectItem(_list.Items[0]);
         }
         else
         {

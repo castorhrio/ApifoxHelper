@@ -398,7 +398,7 @@ internal sealed class NativeShellForm : Form
     private void ShowAbout()
     {
         MessageBox.Show(this,
-            $"Apifox 助手 {TaskStore.ToolVersion}（原生桌面界面·开发中）\n\n本地服务：{_host.Url}\n资料目录：{_host.Store.Root}\n.NET：{RuntimeInformation.FrameworkDescription}",
+            $"Apifox 助手 {TaskStore.ToolVersion}\n\n本地服务：{_host.Url}\n资料目录：{_host.Store.Root}\n.NET：{RuntimeInformation.FrameworkDescription}",
             "关于 Apifox 助手", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 

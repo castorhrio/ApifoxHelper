@@ -669,7 +669,7 @@ internal sealed class SyncPreviewDialog : Form
             _actionList.Items.Add(row);
         }
         _actionList.EndUpdate();
-        if (_actionList.Items.Count > 0) _actionList.Items[0].Selected = true;
+        if (_actionList.Items.Count > 0) Ui.SelectItem(_actionList.Items[0]);
 
         _excludedList.BeginUpdate();
         _excludedList.Items.Clear();
