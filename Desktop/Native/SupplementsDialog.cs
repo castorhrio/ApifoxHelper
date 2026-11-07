@@ -45,7 +45,7 @@ internal sealed class SupplementsDialog : Form
     private readonly Label _counts = Ui.Mono();
     private readonly ListView _list = Ui.List();
     private readonly Panel _editorsHost = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Lg, UiTokens.Lg, UiTokens.Sm) };
-    private readonly Panel _editorsScroll = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, AutoScroll = true };
+    private readonly Panel _editorsScroll = Ui.ScrollHost();
     private readonly Label _hint = new()
     {
         Dock = DockStyle.Fill,
@@ -124,6 +124,8 @@ internal sealed class SupplementsDialog : Form
         editorsCaption.Dock = DockStyle.Top;
         editorsCaption.TextAlign = ContentAlignment.MiddleLeft;
         editorsCaption.Padding = new Padding(0, 0, 0, UiTokens.Sm);
+        // 对象初始化器不能跟在方法调用后（CS1003），Dock 在此补设。
+        _editorsScroll.Dock = DockStyle.Fill;
         _editorsHost.Controls.Add(_editorsScroll);
         _editorsHost.Controls.Add(editorsCaption);
 

@@ -220,6 +220,42 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 长内容区的可滚动宿主（DESIGN.md §6「长内容区」）：内容超出可视高度时出滚动条；
+    /// 子项多为不接收焦点的标签，点击内容的任意处（含标签上）把焦点交给宿主，滚轮随后可滚动
+    /// （任务详情、补充说明编辑区共用）。不是 Tab 停靠点，不改变 Tab 序。
+    /// </summary>
+    public static Panel ScrollHost() => new ScrollPanel();
+
+    private sealed class ScrollPanel : Panel
+    {
+        public ScrollPanel()
+        {
+            AutoScroll = true;
+            BackColor = UiTokens.Bg;
+            // Panel 默认不可选中：不开 Selectable 就 Focus() 不到，滚轮事件到不了宿主。
+            SetStyle(ControlStyles.Selectable | ControlStyles.StandardClick, true);
+            TabStop = false;
+            // 内容盖住宿主可视面时，点击落在子控件上，宿主自己的 MouseDown 收不到——对子树代挂取焦。
+            ControlAdded += (_, e) => HookFocus(e.Control);
+        }
+
+        private void HookFocus(Control control)
+        {
+            // 按钮与输入框点击自带焦点，滚轮事件也会沿父链传播到宿主，不代劳（复选框同属 ButtonBase）。
+            if (control is ButtonBase or TextBoxBase) return;
+            control.MouseDown += (_, _) => Focus();
+            foreach (Control child in control.Controls) HookFocus(child);
+            control.ControlAdded += (_, e) => HookFocus(e.Control);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            Focus();
+        }
+    }
+
+    /// <summary>
     /// 列表（DESIGN.md §6「列表行」）：自绘选中态——选中行 Bg 底 + 左侧 3px Accent 标记，
     /// 不用系统高亮蓝；未选行 Panel 底；逐子项语义色（Muted/Ok/Warn/Bad）保留（ListRows 判定）。
     /// 表头沿用系统绘制（与既有外观一致）；复选框列由本工厂绘制（自绘模式下系统不再画）。

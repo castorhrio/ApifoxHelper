@@ -57,6 +57,8 @@ internal sealed class TasksPage : UserControl, INativePage
     // 详情区（固定控件，按任务刷新文本，不整面板重建）。
     private readonly Label _detailHint;
     private readonly TableLayoutPanel _detail;
+    // 详情有九个分区、高于可视高度：放进可滚动宿主，底部动作（同步/报告）可达（DESIGN.md §6 长内容区）。
+    private readonly Panel _detailScroll = Ui.ScrollHost();
     private readonly Label _detailName = Ui.Section();
     private readonly Label _detailMeta = Ui.Caption();
     private readonly Label _detailRange = Ui.Caption();
@@ -229,8 +231,10 @@ internal sealed class TasksPage : UserControl, INativePage
         listHost.Controls.Add(Ui.Hairline(_list));
         listHost.Controls.Add(_empty);
         _split.Panel1.Controls.Add(listHost);
+        // 停靠按集合倒序生效：滚动宿主最后加入、在提示标签之下填满剩余空间。
+        _detailScroll.Controls.Add(_detail);
         _split.Panel2.Controls.Add(_detailHint);
-        _split.Panel2.Controls.Add(_detail);
+        _split.Panel2.Controls.Add(_detailScroll);
         _split.Panel2.BackColor = UiTokens.Bg;
         // Panel2MinSize 与 SplitterDistance 依赖真实宽度，等首次显示页面再设置（构造期控件还没有尺寸）。
         _split.SplitterWidth = 1;
@@ -424,11 +428,11 @@ internal sealed class TasksPage : UserControl, INativePage
         var task = _selectedTask;
         if (task is null)
         {
-            _detail.Visible = false;
+            _detailScroll.Visible = false;
             _detailHint.Visible = true;
             return;
         }
-        _detail.Visible = true;
+        _detailScroll.Visible = true;
         _detailHint.Visible = false;
 
         _detailName.Text = task.Name;
