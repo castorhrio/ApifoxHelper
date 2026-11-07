@@ -43,6 +43,8 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly SyncPlanService _syncPlans;
     private readonly SyncExecutor _syncExecutor;
 
+    private const int TaskNameColumnWidth = 200;
+
     private readonly ListView _list = Ui.List();
     private readonly Panel _empty;
     private readonly Label _status = Ui.StatusLine();
@@ -124,7 +126,9 @@ internal sealed class TasksPage : UserControl, INativePage
         var refreshButton = Ui.Ghost("刷新");
         refreshButton.Click += (_, _) => RefreshData();
         _list.SelectedIndexChanged += (_, _) => OnSelectedChanged();
-        _list.Columns.Add("任务", 200);
+        // 标识列（首列）吸收剩余可视宽度：窗口或列表尺寸变化即重算（ListColumns 口径）。
+        _list.Resize += (_, _) => FitColumns();
+        _list.Columns.Add("任务", TaskNameColumnWidth);
         _list.Columns.Add("配置", 140);
         _list.Columns.Add("下一步", 150);
         _list.Columns.Add("接口", 56);
@@ -380,6 +384,7 @@ internal sealed class TasksPage : UserControl, INativePage
                 _list.Items.Add(item);
             }
             _list.EndUpdate();
+            FitColumns();
             _empty.Visible = tasks.Count == 0;
             _list.Visible = tasks.Count > 0;
             SetStatus(null);
@@ -400,6 +405,17 @@ internal sealed class TasksPage : UserControl, INativePage
         {
             SetStatus("读取任务失败：" + Redactor.Redact(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// 标识列（首列「任务」）吸收剩余可视宽度（ListColumns 口径）：列合计对齐可视宽度，
+    /// 默认窗口宽度下「更新时间」等列尾列不再被横向滚动条藏住；窗口放不下固定列合计时
+    /// 首列回退设计宽度、横向滚动条如实出现。Resize 与重建后都会调用。
+    /// </summary>
+    private void FitColumns()
+    {
+        var widths = _list.Columns.Cast<ColumnHeader>().Select(c => c.Width).ToArray();
+        _list.Columns[0].Width = ListColumns.FillWidth(_list.ClientSize.Width, TaskNameColumnWidth, widths);
     }
 
     private void SelectTask(string taskId)

@@ -31,6 +31,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private readonly Button _probeButton;
     // 选中保留：列表在切页、刷新与保存后都会重建，按配置 Id 恢复选中与键盘焦点（与任务页同一口径）。
     private string? _selectedId;
+    private const int ProfileNameColumnWidth = 180;
 
     public ProjectsPage(ProfileStore profiles, CompatService compat, ApifoxCli cli, FileStore store, JobRunner jobs, CredentialStore credentials)
     {
@@ -56,8 +57,10 @@ internal sealed class ProjectsPage : UserControl, INativePage
             _probeButton.Enabled = _list.SelectedIndices.Count > 0;
         };
         _list.DoubleClick += (_, _) => ShowDialog(Selected());
+        // 标识列（首列）吸收剩余可视宽度：窗口或列表尺寸变化即重算（ListColumns 口径）。
+        _list.Resize += (_, _) => FitColumns();
 
-        _list.Columns.Add("名称", 180);
+        _list.Columns.Add("名称", ProfileNameColumnWidth);
         _list.Columns.Add("API 项目", 260);
         _list.Columns.Add("Apifox 项目", 110);
         _list.Columns.Add("分支", 100);
@@ -140,6 +143,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
                 _list.Items.Add(item);
             }
             _list.EndUpdate();
+            FitColumns();
             // 重建后先禁用编辑/探测，恢复选中时由选中事件重新启用；原选中项已不存在则保持禁用。
             _editButton.Enabled = false;
             _probeButton.Enabled = false;
@@ -156,6 +160,17 @@ internal sealed class ProjectsPage : UserControl, INativePage
         {
             SetStatus("读取配置失败：" + Redactor.Redact(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// 标识列（首列「名称」）吸收剩余可视宽度（ListColumns 口径）：列合计对齐可视宽度，
+    /// 最小窗口宽度下「更新时间」等列尾列不再被横向滚动条藏住；窗口放不下固定列合计时
+    /// 首列回退设计宽度、横向滚动条如实出现。Resize 与重建后都会调用。
+    /// </summary>
+    private void FitColumns()
+    {
+        var widths = _list.Columns.Cast<ColumnHeader>().Select(c => c.Width).ToArray();
+        _list.Columns[0].Width = ListColumns.FillWidth(_list.ClientSize.Width, ProfileNameColumnWidth, widths);
     }
 
     /// <summary>重建后恢复选中与键盘焦点（经 Ui.SelectItem 唯一入口）；原选中项已不存在（如被删除）时不动作。</summary>
