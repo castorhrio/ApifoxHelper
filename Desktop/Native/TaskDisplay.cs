@@ -499,4 +499,64 @@ public static class TaskDisplay
         if (value == "new") return "新建模型";
         return long.TryParse(value, out _) ? "绑定远端 " + value : value;
     }
+
+    /// <summary>同步计划状态（SyncPlan.Status）的色调：待确认/执行中=accent，已核对=ok，部分完成/已过期/已中断=warn，失败=bad，已取消=muted。</summary>
+    public static string SyncPlanTone(string status) => status switch
+    {
+        "awaitingConfirm" or "executing" => "accent",
+        "verified" => "ok",
+        "partial" or "expired" or "interrupted" => "warn",
+        "failed" => "bad",
+        "canceled" => "muted",
+        _ => "normal",
+    };
+
+    /// <summary>同步计划状态：同步预览里显示的计划状态文字。</summary>
+    public static string SyncPlanStatusText(string status) => status switch
+    {
+        "awaitingConfirm" => "待确认",
+        "executing" => "执行中",
+        "verified" => "已核对",
+        "partial" => "部分完成",
+        "failed" => "失败",
+        "expired" => "已过期",
+        "interrupted" => "已中断",
+        "canceled" => "已取消",
+        _ => status,
+    };
+
+    /// <summary>同步计划动作类型（PlanAction.Kind）：写入清单里逐动作显示。</summary>
+    public static string PlanActionKindText(string kind) => kind switch
+    {
+        "createModel" => "新建模型",
+        "updateModel" => "更新模型",
+        "createEndpoint" => "新建接口",
+        "updateEndpoint" => "更新接口",
+        _ => kind,
+    };
+
+    /// <summary>同步计划逐动作状态（PlanAction.State）的色调：待执行=accent，已写入/结果不确定=warn，已写入并核对=ok，写入失败/核对未通过/目标已变化=bad，未执行=muted。</summary>
+    public static string PlanActionStateTone(string state) => state switch
+    {
+        "pending" => "accent",
+        "written" or "unknown" => "warn",
+        "verified" => "ok",
+        "writeFailed" or "verifyFailed" or "conflict" => "bad",
+        "notRun" => "muted",
+        _ => "normal",
+    };
+
+    /// <summary>同步计划逐动作状态：写入清单里逐动作显示的状态文字。</summary>
+    public static string PlanActionStateText(string state) => state switch
+    {
+        "pending" => "待执行",
+        "written" => "已写入",
+        "verified" => "已写入并核对",
+        "writeFailed" => "写入失败",
+        "unknown" => "结果不确定",
+        "verifyFailed" => "核对未通过",
+        "conflict" => "目标已变化",
+        "notRun" => "未执行",
+        _ => state,
+    };
 }

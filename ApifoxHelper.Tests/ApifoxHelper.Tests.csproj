@@ -1,14 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- 测试目标是纯逻辑（令牌接线扫描、状态文案完备），不引用主工程：
+    <!-- 测试目标是纯逻辑（令牌接线扫描、状态文案完备、同步勾选口径），不引用主工程：
          主工程是 net8.0-windows + WinForms，其测试宿主在 Linux 上无法启动；
-         共享源码（TaskDisplay.cs）让状态断言在 Linux CI 可运行。 -->
+         共享源码让这些断言在 Linux CI 可运行。共享的模型/核心文件只依赖 BCL。 -->
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="System.Collections.Concurrent" />
+    <Using Include="System.Security.Cryptography" />
+    <Using Include="System.Text" />
+    <Using Include="System.Text.Encodings.Web" />
+    <Using Include="System.Text.Json" />
+    <Using Include="System.Text.Json.Nodes" />
+    <Using Include="System.Text.Json.Serialization" />
+    <Using Include="System.Text.RegularExpressions" />
+    <Using Include="System.Globalization" />
+    <Using Include="ApifoxHelper.Infrastructure" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
@@ -19,7 +32,12 @@
   <ItemGroup>
     <!-- 与主工程共享同一份文件：主工程改动该文件即同时改变两边，断言始终对准真实实现。 -->
     <Compile Include="..\Desktop\Native\TaskDisplay.cs" Link="Shared\TaskDisplay.cs" />
+    <Compile Include="..\Desktop\Native\SyncSelection.cs" Link="Shared\SyncSelection.cs" />
     <Compile Include="..\Reports\ReportFormats.cs" Link="Shared\ReportFormats.cs" />
+    <Compile Include="..\Sync\CheckModels.cs" Link="Shared\CheckModels.cs" />
+    <Compile Include="..\Contracts\DiffEngine.cs" Link="Shared\DiffEngine.cs" />
+    <Compile Include="..\Contracts\DocModel.cs" Link="Shared\DocModel.cs" />
+    <Compile Include="..\Infrastructure\Core.cs" Link="Shared\Core.cs" />
   </ItemGroup>
 
 </Project>

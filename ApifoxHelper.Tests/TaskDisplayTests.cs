@@ -43,6 +43,9 @@ public class TaskDisplayTests
     public static IEnumerable<object[]> DiffRisks() => Statuses("Contracts/DiffEngine.cs", "normal / incompatible");
     public static IEnumerable<object[]> DecisionStates() => Statuses("Sync/CheckModels.cs", "accepted / excluded");
     public static IEnumerable<object[]> ModelBindingValues() => Statuses("Sync/CheckModels.cs", "ID 字符串 / new");
+    public static IEnumerable<object[]> SyncPlanStatuses() => Statuses("Sync/PlanModels.cs", "awaitingConfirm / executing");
+    public static IEnumerable<object[]> PlanActionKinds() => Statuses("Sync/PlanModels.cs", "createModel / updateModel");
+    public static IEnumerable<object[]> PlanActionStates() => Statuses("Sync/PlanModels.cs", "pending / written");
 
     [Theory]
     [MemberData(nameof(SourceStatuses))]
@@ -232,6 +235,26 @@ public class TaskDisplayTests
     [MemberData(nameof(ModelBindingValues))]
     public void ModelBindingValue_HasChineseText(string value) => Assert.NotEqual(value, TaskDisplay.ModelBindingText(value));
 
+    [Theory]
+    [MemberData(nameof(SyncPlanStatuses))]
+    public void SyncPlanStatus_HasChineseTextAndTone(string status)
+    {
+        Assert.NotEqual(status, TaskDisplay.SyncPlanStatusText(status));
+        Assert.Contains(TaskDisplay.SyncPlanTone(status), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(PlanActionKinds))]
+    public void PlanActionKind_HasChineseText(string kind) => Assert.NotEqual(kind, TaskDisplay.PlanActionKindText(kind));
+
+    [Theory]
+    [MemberData(nameof(PlanActionStates))]
+    public void PlanActionState_HasChineseTextAndTone(string state)
+    {
+        Assert.NotEqual(state, TaskDisplay.PlanActionStateText(state));
+        Assert.Contains(TaskDisplay.PlanActionStateTone(state), Tones);
+    }
+
     [Fact]
     public void ModelBinding_ComposesValueText()
     {
@@ -271,6 +294,11 @@ public class TaskDisplayTests
         Assert.Equal("mystery", TaskDisplay.DocOriginText("mystery"));
         Assert.Equal("mystery", TaskDisplay.DecisionStateText("mystery"));
         Assert.Equal("normal", TaskDisplay.DecisionStateTone("mystery"));
+        Assert.Equal("mystery", TaskDisplay.SyncPlanStatusText("mystery"));
+        Assert.Equal("normal", TaskDisplay.SyncPlanTone("mystery"));
+        Assert.Equal("mystery", TaskDisplay.PlanActionKindText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.PlanActionStateText("mystery"));
+        Assert.Equal("normal", TaskDisplay.PlanActionStateTone("mystery"));
         Assert.Equal("running", TaskDisplay.JobStateText("running"));
         Assert.Equal("normal", TaskDisplay.SlotTone("mystery"));
         Assert.Equal("normal", TaskDisplay.ReviewTone("mystery"));
@@ -330,6 +358,9 @@ public class TaskDisplayTests
             .Concat(Statuses("Contracts/DiffEngine.cs", "normal / incompatible").Select(o => TaskDisplay.DiffRiskText((string)o[0])))
             .Concat(Statuses("Sync/CheckModels.cs", "accepted / excluded").Select(o => TaskDisplay.DecisionStateText((string)o[0])))
             .Concat(Statuses("Sync/CheckModels.cs", "ID 字符串 / new").Select(o => TaskDisplay.ModelBindingText((string)o[0])))
+            .Concat(Statuses("Sync/PlanModels.cs", "awaitingConfirm / executing").Select(o => TaskDisplay.SyncPlanStatusText((string)o[0])))
+            .Concat(Statuses("Sync/PlanModels.cs", "createModel / updateModel").Select(o => TaskDisplay.PlanActionKindText((string)o[0])))
+            .Concat(Statuses("Sync/PlanModels.cs", "pending / written").Select(o => TaskDisplay.PlanActionStateText((string)o[0])))
             .Concat(["成功", "失败", "已取消"]);
         foreach (var text in outputs)
         {

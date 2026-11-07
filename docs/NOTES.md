@@ -179,6 +179,22 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 164 用例全部通过（含令牌接线机械检查对新文件 DecisionsDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「查看检查结果 → 处理差异确认 → 逐项确认/选择/绑定 → 保存 → 重新检查」只在代码与编译层面成立（决策保存的服务链路已在 Linux 真实执行）；Windows 真机需按该路径走一遍，并核对：保存后任务列表 Apifox 列变「计划已过期」、重复保存提示内容未变化、检查结果对话框的过期提示出现。如实挂账。
 - 未改写入安全语义（决策校验为行为保持提取）；本轮未连接或写入 Apifox；决策只写任务数据，同步预览/执行如实挂账为后续切片。
 
+## 原生切片「同步预览」（2026-11-07 第十一轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（f211046）的 Linux `dotnet build` 0 警告 0 错误、164 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。
+- **原生交互推进一小步（F12 同步预览的只读部分接入原生）**：旅程第 7 步「同步预览：勾选接口 → 生成冻结计划 → 查看逐动作内容与排除清单」现在可以在原生界面完成；计划生成复用既有已验证的 `SyncPlanService`（写入门禁、检查版本一致、逐接口重读远端核对指纹、cli-schema 校验、模型依赖排序全部不变），本层只做勾选、进度与预览，无任何写入动作。
+  - 任务详情「Apifox 差异与同步」区新增「同步预览」按钮（门控：扫描完成、无作业运行、非离线、任务目录已有 diff.json），打开 `Desktop/Native/SyncPreviewDialog.cs`：
+    - **勾选页**：接口清单（方法+路径等宽、名称、状态颜色+文字、待确认计数）；不可同步的状态（无变化/阻断/仅源码/离线）勾选立即弹回并整行灰显；「全选可同步（N）」只勾选状态可同步且无未确认高风险项的接口；「查看已有计划」在任务目录已有 plan.json 时可用。
+    - **生成**：走共享 `JobRunner`（同一任务同一时刻一个作业的既有约束生效），进度与「停止」在对话框状态行；`SyncPlanService` 逐接口响应取消。成功切换预览页；失败/取消在状态行给原因与下一步。
+    - **预览页（只读）**：目标项目/分支、CLI 版本、计划指纹（前 12 位）与生成时间；接口/模型/排除计数；计划状态（任务版本已前进时按「已过期」显示并提示重新检查后重新生成，与冻结页面同一规则）；写入清单按执行顺序（# / 动作 / 资源 / 远端 ID / 改动 / CLI 校验 / 状态）；选中动作显示写入内容——`FileStore.ReadNode` → `Redactor.RedactNode` → `JsonDefaults.Options` 序列化，与 Web `/plan/payload` 同一口径；未纳入计划清单（资源+原因）；范围外影响、警告、保留设置与执行语义固定说明；固定说明行如实挂账「执行同步与回读核对将在后续切片接入」。
+  - 勾选口径提取为 `Desktop/Native/SyncSelection.cs`（不依赖 WinForms，与测试工程共享编译）：可勾选 = new/structure/docs 且非离线；「全选可同步」再排除有未确认高风险项；待确认 = NeedsDecision 且决策不是 accepted。计划阶段的最终排除判断（模型依赖、远端指纹、门禁）仍在 `SyncPlanService` 单一口径，该文件不复制写入边界。
+- **TaskDisplay 增补映射**：`SyncPlan.Status` 8 值（SyncPlanStatusText/SyncPlanTone）、`PlanAction.Kind` 4 值（PlanActionKindText）、`PlanAction.State` 8 值（PlanActionStateText/PlanActionStateTone）；`PlanModels.cs` 的三个取值行已是独立纯值行，机械检查解析器可直接断言。
+- **测试 164 → 188 用例**：新增 SyncPlanStatuses（8）/PlanActionKinds（4）/PlanActionStates（8）理论用例，未知值回退与文案禁词检查覆盖新映射；新文件 `SyncSelectionTests`（4 用例，对真实 CheckResult/DecisionStore 类型断言）。测试工程共享编译扩展为 TaskDisplay/SyncSelection/ReportFormats/CheckModels/DiffEngine/DocModel/Core，csproj 以 `<Using>` 镜像主工程全局 using。**变异验证实测可红**：删除 `PlanActionStateText` 的 `conflict` 臂 → 对应理论用例变红；`SyncableStatuses` 删 `docs` → SyncSelectionTests 3 用例变红；还原后全绿。
+- **csproj 教训（本轮踩坑，记录在案）**：编辑测试工程 csproj 时一度把共享编译 ItemGroup 留成两份，SDK 10 的 NETSDK1022「Duplicate Compile items」报得完全正确——重复项正是被求值两次的两个 `../` 共享文件；与「SDK 是否支持 `../` 共享编译」无关。修复后 0 警告 0 错误。
+- **Linux 运行时验证（本轮新增，超出仅编译验证的口径）**：同步预览链路不触碰 WinForms，在 /tmp 以一次性 net8.0 控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore/Redactor、Profiles 的 ProfileStore/ProjectProfile、Tasks/、Contracts 的 DiffEngine/DocModel、Sync 的 CheckModels/PlanModels、Desktop/Native 的 SyncSelection/TaskDisplay，镜像 GlobalUsings；不进仓库、已清理），在真实 `FileStore`/`TaskStore` 上创建在线/离线任务并写入夹具 diff.json/decisions.json/plan.json 与写入内容文件，23 项断言全部通过。**并当场抓到一个真实缺陷**：写入内容预览最初用 `JsonNode.ToString()` 渲染，默认严格转义把「已脱敏」与中文全部变成 `\uXXXX`——已改为项目唯一序列化口径 `JsonDefaults.Options`（缩进、中文原样）后渲染，运行时断言钉住「中文原样 + 敏感值已脱敏 + 缩进 + 可再解析」四点。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 188 用例全部通过（含令牌接线机械检查对新文件 SyncPreviewDialog.cs 与 SyncSelection.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「同步预览 → 勾选 → 生成 → 逐动作查看/写入内容/排除清单」只在代码与编译层面成立（勾选口径、计划数据形状与脱敏渲染链路已在 Linux 真实执行；计划生成的服务链路是 F12 已有真实项目验证记录的既有代码，本轮未改动）；Windows 真机需按「任一已检查的在线任务 → 同步预览 → 勾选 → 生成同步预览 → 核对写入清单与 Web 同步页一致 → 选中动作核对写入内容脱敏」走一遍。如实挂账。
+- 未改写入安全语义（`SyncPlanService` 未动一行）；本轮未连接或写入 Apifox；同步执行与回读核对（F13）如实挂账为下一片。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。
