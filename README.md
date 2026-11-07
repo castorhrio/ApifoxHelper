@@ -4,15 +4,17 @@
 
 本目录自成一体：有自己的项目文件、`Directory.Build.props`/`Directory.Packages.props`（截断外层仓库的 MSBuild 继承），不引用任何业务项目，也不在业务解决方案中。可以整个目录移到仓库之外使用。
 
-## 原生桌面客户端（开发中）
+## 原生桌面客户端（默认入口）
 
-交互形态重构（docs/方案.md 第 2 节，F16）已开始：技术栈决策为 WinForms 原生（docs/DECISIONS/D1-桌面技术栈.md），设计基线见 docs/DESIGN.md。当前纵切片覆盖「项目设置 → 新建任务 → 源码扫描（进度/取消）→ 查看注释缺口（只读：按状态筛选注释位置，查看现状、覆盖接口与证据数）→ 查看代码证据（只读：该位置的代码证据分类、摘要、文件行区间与代码片段）→ 注释候选审阅（规则提取生成代码可证实的约束草稿；逐条对照证据后接受/搁置/驳回，只写任务数据、不写源码）→ 注释回写（从已接受候选生成计划，逐文件预览统一差异，原生确认后回写源码或导出 .patch 补丁）→ 生成文档核对（只读：已确认注释是否进入源码、XML 文档与 Swagger，三环状态与 XML 文件清单）→ 响应契约审阅（逐接口对照分支与代码证据后确认/拒绝/重置，只写任务数据并递增任务版本）」，直接复用进程内服务；模型生成、材料导入、手工填写、定向构建、检查、同步与报告尚未接入原生界面。启动方式：
+交互形态重构（docs/方案.md 第 2 节，F16）：技术栈决策为 WinForms 原生（docs/DECISIONS/D1-桌面技术栈.md），设计基线见 docs/DESIGN.md。双击 `ApifoxHelper.exe` 直接打开原生窗口，主工作流全程不嵌网页：项目设置（含连接与写入探测、模型服务、序列化与分析、配置导出）→ 新建任务与源码扫描（进度/取消）→ 注释缺口与代码证据 → 注释候选审阅（规则提取、模型生成、材料导入、手工填写）→ 注释回写或导出补丁 → 定向构建与生成文档核对 → 响应契约审阅 → Apifox 差异检查与差异确认 → 补充说明 → 同步预览、确认同步与回读核对 → 报告导出与前端交接。写入动作全部复用既有服务层的安全语义（计划哈希绑定、失败即停、部分完成如实显示），原生层只做预览与确认。
+
+过渡壳按需回退：
 
 ```text
-ApifoxHelper.exe --native
+ApifoxHelper.exe --web
 ```
 
-默认启动（不带 `--native`）仍打开现有 WinForms + WebView2 过渡壳，二者共用同一资料目录与本地服务。
+`--web` 打开此前默认的 WinForms + WebView2 过渡壳（内嵌网页，页面层已冻结、只修阻断性缺陷）。两个壳共用同一资料目录与本地服务。
 
 构建与机械检查（Linux CI 可编译，Windows GUI 真机验证见 docs/NOTES.md 挂账）：
 
@@ -23,7 +25,7 @@ dotnet test ApifoxHelper.Tests   # 令牌接线机械检查（DESIGN.md 与 UiTo
 
 ## 桌面版
 
-工具是一个 Windows 桌面程序：双击 `ApifoxHelper.exe` 打开窗口，窗口内用 Microsoft Edge WebView2 显示操作页面。页面与本地服务都在同一个进程里，关闭窗口即退出。
+工具是一个 Windows 桌面程序：双击 `ApifoxHelper.exe` 打开原生桌面客户端（见上文）。`--web` 打开的过渡壳在窗口内用 Microsoft Edge WebView2 显示操作页面。页面与本地服务都在同一个进程里，关闭窗口即退出。
 
 ### 打包
 
@@ -37,11 +39,11 @@ cd ApifoxHelper
 
 ### 使用者电脑需要
 
-- Microsoft Edge WebView2 运行时：Windows 11 自带，Windows 10 一般已随 Edge 安装。缺失时窗口会提示，可以点“下载 WebView2 运行时”，或点“在浏览器中打开”先用浏览器操作。
-- Node.js 与 Apifox CLI：`npm install -g apifox-cli`，并在终端执行一次 `apifox auth login`。工具复用 CLI 的登录态，不在页面中收集令牌。
+- 原生桌面客户端无额外界面依赖；`--web` 过渡壳需要 Microsoft Edge WebView2 运行时（Windows 11 自带，Windows 10 一般已随 Edge 安装；缺失时过渡壳窗口会提示）。
+- Node.js 与 Apifox CLI：`npm install -g apifox-cli`，并在终端执行一次 `apifox auth login`。工具复用 CLI 的登录态，不收集令牌。
 - 分析源码需要本机安装 .NET SDK（读取目标框架的参考程序集），被分析的项目最好已经 restore 过。
 
-### 窗口功能
+### 过渡壳窗口功能（`--web`）
 
 - 菜单“文件”：在浏览器中打开、打开资料目录、打开日志目录、退出；“视图”：刷新、缩放、开发者工具；“帮助 → 关于”显示版本、资料目录和运行时版本。
 - 下载报告、补丁时弹出“另存为”对话框。
@@ -53,13 +55,13 @@ cd ApifoxHelper
 ### 命令行参数
 
 ```text
-ApifoxHelper.exe [--data <资料目录>] [--port <端口>] [--headless] [--native]
+ApifoxHelper.exe [--data <资料目录>] [--port <端口>] [--headless] [--web]
 ```
 
 - `--data`：资料目录，默认 `%LOCALAPPDATA%\ApifoxHelper`（也可用环境变量 `APIFOXHELPER_DATA`）。
 - `--port`：首选端口，默认 5179，被占用时自动换一个空闲端口。
-- `--headless`：不打开窗口，只运行本地服务；从终端启动时输出访问地址，Ctrl+C 退出。用于自动化或没有 WebView2 的环境。
-- `--native`：打开原生桌面界面（开发中，见上文）。
+- `--headless`：不打开窗口，只运行本地服务；从终端启动时输出访问地址，Ctrl+C 退出。用于自动化或 CI。
+- `--web`：打开冻结的过渡壳（内嵌网页，仅供回退）；不带此参数即启动原生桌面客户端。`--native` 保留为兼容写法，行为与默认相同。
 
 开发调试：`dotnet run --project ApifoxHelper/ApifoxHelper.csproj`。
 

@@ -6,47 +6,6 @@ using Microsoft.Extensions.Logging;
 
 namespace ApifoxHelper.Desktop;
 
-public sealed record LaunchOptions(int Port, string DataRoot, bool Headless, bool Native = false)
-{
-    public const string Usage = "用法：ApifoxHelper.exe [--data <资料目录>] [--port <端口>] [--headless] [--native]";
-
-    public static LaunchOptions Parse(string[] args)
-    {
-        var port = 5179;
-        string? data = null;
-        var headless = false;
-        var native = false;
-        for (var i = 0; i < args.Length; i++)
-        {
-            string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"参数 {args[i]} 缺少取值。");
-            switch (args[i])
-            {
-                case "--port":
-                    if (!int.TryParse(Next(), NumberStyles.Integer, CultureInfo.InvariantCulture, out port) || port is < 0 or > 65535)
-                    {
-                        throw new ArgumentException("端口必须是 0–65535 的整数。");
-                    }
-                    break;
-                case "--data":
-                    data = Next();
-                    break;
-                case "--headless":
-                case "--no-browser": // 兼容旧版命令行参数
-                    headless = true;
-                    break;
-                case "--native":
-                    native = true;
-                    break;
-                default:
-                    throw new ArgumentException("未知参数：" + args[i]);
-            }
-        }
-        data ??= Environment.GetEnvironmentVariable("APIFOXHELPER_DATA")
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ApifoxHelper");
-        return new LaunchOptions(port, Path.GetFullPath(data), headless, native);
-    }
-}
-
 public static class DesktopApp
 {
     private const string Title = "Apifox 助手";
@@ -105,18 +64,19 @@ public static class DesktopApp
             return 0;
         }
 
-        if (options.Native)
+        if (options.Web)
         {
-            // F16 原生桌面纵切片：不嵌网页，直接复用进程内服务。
-            using var nativeForm = new Native.NativeShellForm(host);
-            instance.OnActivationRequested(nativeForm.ActivateFromOtherInstance);
-            Application.Run(nativeForm);
+            // 冻结的过渡壳（WinForms + WebView2 内嵌冻结页面）：只按 --web 显式回退，不再作为默认交互（方案 2.4）。
+            using var form = new MainForm(host);
+            instance.OnActivationRequested(form.ActivateFromOtherInstance);
+            Application.Run(form);
             return 0;
         }
 
-        using var form = new MainForm(host);
-        instance.OnActivationRequested(form.ActivateFromOtherInstance);
-        Application.Run(form);
+        // 默认入口：原生桌面客户端（F16），不嵌网页，直接复用进程内服务。
+        using var nativeForm = new Native.NativeShellForm(host);
+        instance.OnActivationRequested(nativeForm.ActivateFromOtherInstance);
+        Application.Run(nativeForm);
         return 0;
     }
 
