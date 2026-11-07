@@ -557,6 +557,16 @@
 - **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 569 用例全部通过（含令牌接线与 G-D4 机械检查对两对话框改动的扫描）。**证据双击激活与按钮态的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「选中带证据的候选 → 双击该行 → 证据对话框打开 → 关闭 → 双击列表空白区与列头 → 无对话框弹出 → 点击空白区清空选中 → 「查看代码证据」按钮变禁用」走一遍。纯呈现层：候选与缺口数据、审阅/手工/导入链路一行未动（`ShowEvidence` 收敛为行载荷参数，两处调用点行为等价）；响应契约对话框的证据按钮态经 `SetButtons(null)` 本就正确、且无双击接线，不属本缺陷面，如实记录一行未动；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「补充保存主按钮每次尝试后按状态恢复」（2026-11-08 第四十一轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（20f51b3）的 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误、569 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：逐屏复核继续按第四十轮同族（按钮态纪律）排查全部对话框的异步动作按钮——发现一个真实状态缺陷：**补充说明对话框的保存主按钮禁用后没有任何恢复路径**。
+- **缺陷机理（具名 pass：harden，纯呈现层）**：`SaveCurrent` 在保存开始时 `_saveButton.Enabled = false`，但全文件没有任何 `_saveButton.Enabled = true`——成功路径收尾只调 `ReloadEditors()`（只管放弃按钮），被拒路径只调 `MarkDirty()`（同样只管放弃按钮），一次保存（成功或被拒）后主按钮**残留禁用**，无法继续保存其他接口、也无法重试失败保存；F10 补充说明的核心场景（逐接口补充并保存多个接口）在对话框内第二次保存即不可达，只能关闭重开。同族对照：ApplyPlanDialog 的 SetBusy、SyncPreviewDialog/GenerationDialog/ProfileAdvancedDialog/CapabilitiesDialog 的异步按钮全部有对称恢复，本对话框是唯一缺口；与第四十轮「残留启用」同族反向——同一纪律：按钮态必须由状态推导，不得残留上一次的状态。
+- **修复口径**：门控收敛为 `UpdateSaveState()` 单一口径（选中接口 + 已保存补充可读 + 不在保存中三者齐备才可用），三处接线——构造尾部（初始禁用，等数据）、`ReloadEditors` 头部（选中变化/放弃修改/保存成功统一经此）、`MarkDirty`（保存被拒后随 `_saving = false` 恢复）；执行中禁用锚点保留（`_saving = true` 后显式禁用；保存期间编辑位 TextChanged 经 MarkDirty→UpdateSaveState 也因 `!_saving` 保持禁用，不会中途亮回）；清空选中后保存随放弃一起禁用，状态行说明缺什么（「选择接口后可编辑与保存说明补充。」，§7 禁用条款）；启用不得写死为 true 由机械检查钉住。
+- **测试 569 → 572 用例**：新增 `SupplementSaveStateTests`（3）——门控方法与表达式行首正则、三处接线计数（=3）、写死 `Enabled = true` 禁令、空选中状态行锚点；执行中「置位+禁用」相邻锚点、两条被拒路径 `_saving = false → MarkDirty()` 计数（=2）、成功路径 `_saving = false → ReloadEditors()`；DESIGN.md §8 条款断言。
+- **变异验证五处实测可红**（各自独立变红、还原后全绿，还原以切片后基准副本覆盖并核对 diff 干净）：`ReloadEditors` 接线删除（1 红）、门控写死 true（1 红）、执行中禁用锚点删除（1 红）、`MarkDirty` 接线删除（1 红）、DESIGN.md 条款行删除（1 红）。
+- **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 572 用例全部通过（含令牌接线与 G-D4 机械检查对本对话框改动的扫描）。**补充保存按钮状态恢复的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「选接口 → 改一处 → 保存 → 按钮仍可用 → 换接口再保存 → 仍可用 → 制造校验拒绝 → 按钮仍可重试 → 清空选中 → 保存禁用且状态行说明缺什么」走一遍。纯呈现层：补充数据、校验与保存链路一行未动（`SupplementEntries`/`SupplementService` 一行未改，保存请求与门禁口径不变）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

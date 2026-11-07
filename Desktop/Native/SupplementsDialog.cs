@@ -131,6 +131,7 @@ internal sealed class SupplementsDialog : Form
         Controls.Add(actionRow);
         _hint.Visible = false;
         _discardButton.Enabled = false;
+        UpdateSaveState();
         SetStatus("选择接口编辑说明补充；保存后重新检查，补充才会进入合并结果与同步计划。", UiTokens.Muted);
     }
 
@@ -217,8 +218,11 @@ internal sealed class SupplementsDialog : Form
         _editorsScroll.Controls.Clear();
         _editors = [];
         _discardButton.Enabled = false;
+        UpdateSaveState();
         if (Current() is not { } check || _supplement is null)
         {
+            // 清空选中后保存随放弃一起禁用，并说明缺什么（保存可用性随选中变化，不残留上一次的状态）。
+            SetStatus("选择接口后可编辑与保存说明补充。", UiTokens.Muted);
             UpdateCounts();
             return;
         }
@@ -274,8 +278,14 @@ internal sealed class SupplementsDialog : Form
     {
         _dirty = EditorsChanged();
         _discardButton.Enabled = _dirty && !_saving;
+        UpdateSaveState();
         UpdateCounts();
     }
+
+    /// <summary>保存主按钮的门控单一口径：选中接口、已保存补充可读、不在保存中三者齐备才可用。
+    /// 此前保存中禁用后没有任何恢复路径，一次保存（成功或被拒）后按钮残留禁用、无法继续保存其他接口。</summary>
+    private void UpdateSaveState() =>
+        _saveButton.Enabled = Current() is not null && _supplement is not null && !_saving;
 
     private void DiscardEdits()
     {
