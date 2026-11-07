@@ -24,6 +24,7 @@ public static class ServiceRegistration
         services.AddSingleton<Apifox.RemoteSnapshotService>();
         services.AddSingleton<Contracts.OpenApiSource>();
         services.AddSingleton<Sync.CompatService>();
+        services.AddSingleton<Sync.DecisionService>();
         services.AddSingleton<Sync.CheckService>();
         services.AddSingleton<Sync.SyncPlanService>();
         services.AddSingleton<Sync.SyncExecutor>();

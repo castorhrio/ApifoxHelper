@@ -161,6 +161,24 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 160 用例全部通过（含令牌接线机械检查对新文件 ReportsDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「查看报告与导出 → 原生另存为」的对话框交互只在代码与编译层面成立（导出的服务链路已在 Linux 真实执行）；Windows 真机需按「任一任务 → 查看报告与导出 → 核对预览与 Web 报告页一致 → 四格式分别另存为 → 打开文件核对内容与编码 → 与 Web 下载同名文件比对字节」走一遍。如实挂账。
 - 未改写入安全语义（导出为既有已验证报告链路的行为保持提取）；未连接或写入 Apifox；报告文件只在用户显式「另存为」或既有 Web 下载时写出。
 
+## 原生切片「差异确认」（2026-11-07 第十轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（b2c4b18）的 Linux `dotnet build` 0 警告 0 错误、160 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。
+- **原生交互推进一小步（Apifox 差异检查 → 差异确认，F09 决策部分接入原生）**：旅程第 6 步的后半——检查结果里需要人处理的事项现在可以在原生界面里逐项决定并保存；写入范围限于任务数据（decisions.json 与任务版本递增），不写源码、不访问 Apifox。
+  - 任务详情「Apifox 差异与同步」区新增「处理差异确认」按钮（与「查看检查结果」同门控：任务目录已有 diff.json 且无作业运行），打开 `Desktop/Native/DecisionsDialog.cs`。条目清单与冻结页面同一口径，四类：
+    1. **高风险变化逐项确认**（diff.Items 的 NeedsDecision，只列接口侧条目——模型侧的结构差异与冻结页面一致经共享模型更新确认处理）；
+    2. **说明冲突选择**（接口与模型的 DocChanges 中 Decision=conflict 的条目，选保留远端/使用目标）；
+    3. **模型绑定**（MappingState=candidate/ambiguous 的模型，绑定远端 ID 或新建）；
+    4. **共享模型更新确认**（Status=changed 的模型，范围外影响面在详情中如实列出）。
+  - 待处理判断只看 decisions.json 与检查结果的差集：条目状态列实时反映已保存决策（已确认/已排除/使用目标/保留远端/绑定远端 N/新建模型/待处理），保存后条目不消失，重新检查后才按新决策重算（与冻结页面「保存 → 重新检查」两步一致）。筛选支持 全部/待处理/四类各自。
+  - 保存经共享 `Sync/DecisionService` 的唯一校验口径：内容变化时递增任务版本并把 previewable/awaitingConfirm 的远端阶段置为 expired（旧检查与旧计划过期）；内容未变化时不写文件、不递增（保存可重复点击），对话框按版本是否变化如实区分「已保存…重新检查后生效」与「决策内容没有变化，未修改任务」。拒绝原因（校验文案）原样内联展示，不弹窗；已保存决策读取失败时停用全部保存动作，避免用空决策覆盖既有选择。
+  - 「PUT /api/tasks/{id}/decisions」路由原先内联的校验与保存原样提取为 `DecisionService.SaveAsync`（校验文案逐字保留），路由改为调用同一服务（行为与响应不变）——冻结页面与原生对话框从此单一口径。这是本轮唯一触碰既有链路的改动，纯行为保持提取。
+- **TaskDisplay 增补映射**：差异确认决策值（accepted=已确认/ok、excluded=已排除/muted）与模型绑定取值（数字=「绑定远端 N」、new=新建模型、空=未确认、不可解析原样回退）；`DecisionStore.Items` 与 `ModelBindings` 的 `<summary>` 增补机器可解析取值行（`accepted / excluded`、`ID 字符串 / new`）。**再次踩到第三轮修过的解析陷阱**：值清单与中文前缀同行时首值（accepted）被解析器丢弃、从未断言——本轮已在提交前发现并改为独立纯值行，accepted/excluded 均在断言内。说明冲突选择的 keepRemote/useTarget 文案复用既有 `DocDecisionText`，未新增映射。
+- **测试 160 → 164 用例**：新增决策值（2，含色调）、模型绑定取值（1）与绑定文案组合（数字/null/空/未知回退）断言；未知值回退与文案禁词检查覆盖新映射。变异验证实测可红：删除 `DecisionStateText` 的 `excluded` 臂 → `DecisionState_HasChineseTextAndTone("excluded")` 变红；删除 `ModelBindingText` 的 `new` 臂 → `ModelBindingValue_HasChineseText("new")` 变红；还原后全绿。
+- **Linux 运行时验证（本轮新增，超出仅编译验证的口径）**：决策链路不触碰 WinForms，在 /tmp 以一次性 net8.0 控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore/Redactor、Tasks/、Profiles 的 ProfileStore/ProjectProfile、Contracts/、Sync 的 CheckModels+DecisionService，镜像 GlobalUsings；不进仓库、已清理），在真实 `FileStore`/`TaskStore` 上创建任务并执行共享 `DecisionService.SaveAsync`，13 项断言全部通过：三类合法决策落盘回读一致、内容变化递增任务版本、previewable 远端阶段被置为 expired、相同内容重复保存不递增、移除决策键视为变化、三类非法值（maybe/overwrite/非数字绑定）逐一拒绝且文案与原路由逐字一致、被拒保存不改动任务、new 与数字绑定合法、不存在的任务拒绝。注入变异（删除校验行）未单独做——拒绝文案断言即钉住校验存在。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 164 用例全部通过（含令牌接线机械检查对新文件 DecisionsDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「查看检查结果 → 处理差异确认 → 逐项确认/选择/绑定 → 保存 → 重新检查」只在代码与编译层面成立（决策保存的服务链路已在 Linux 真实执行）；Windows 真机需按该路径走一遍，并核对：保存后任务列表 Apifox 列变「计划已过期」、重复保存提示内容未变化、检查结果对话框的过期提示出现。如实挂账。
+- 未改写入安全语义（决策校验为行为保持提取）；本轮未连接或写入 Apifox；决策只写任务数据，同步预览/执行如实挂账为后续切片。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

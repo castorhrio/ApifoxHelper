@@ -8,7 +8,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// <summary>
 /// Apifox 差异检查结果（只读）：逐接口状态、结构差异、说明合并结果、数据模型与检查问题。
 /// 数据来自任务目录 diff.json（检查落盘产物）；检查在任务页发起，本对话框无写入动作。
-/// 差异确认、说明冲突选择、模型绑定与同步预览不在本切片：如实显示，不提供入口。
+/// 差异确认（高风险变化、说明冲突、模型绑定）在任务页「处理差异确认」中进行；本对话框只读，同步预览不在本切片。
 /// 状态表：尚未检查=空态指引；读取失败=内联错误与下一步；检查之后任务有变化=过期提示（结果仍如实展示）；
 /// 正常=概要行 + 筛选 + 接口列表 + 选中接口详情（结构差异/说明合并/备注/质量提示/阻断）+ 模型清单 + 问题清单。
 /// </summary>
@@ -135,7 +135,7 @@ internal sealed class CheckResultsDialog : Form
         detailHost.Controls.Add(detailInner);
         detailHost.Controls.Add(detailCaption);
 
-        var modelsCaption = Ui.Caption("数据模型（映射与状态；绑定确认在后续切片接入）");
+        var modelsCaption = Ui.Caption("数据模型（映射与状态；绑定确认在任务页「处理差异确认」中完成）");
         modelsCaption.Dock = DockStyle.Top;
         var modelsInner = Ui.Hairline(_modelList);
         modelsInner.Dock = DockStyle.Fill;

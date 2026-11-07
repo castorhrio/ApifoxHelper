@@ -41,6 +41,8 @@ public class TaskDisplayTests
     public static IEnumerable<object[]> DocOrigins() => Statuses("Sync/CheckModels.cs", "swagger / comment / sourceDoc");
     public static IEnumerable<object[]> DiffChanges() => Statuses("Contracts/DiffEngine.cs", "added / removed / changed");
     public static IEnumerable<object[]> DiffRisks() => Statuses("Contracts/DiffEngine.cs", "normal / incompatible");
+    public static IEnumerable<object[]> DecisionStates() => Statuses("Sync/CheckModels.cs", "accepted / excluded");
+    public static IEnumerable<object[]> ModelBindingValues() => Statuses("Sync/CheckModels.cs", "ID 字符串 / new");
 
     [Theory]
     [MemberData(nameof(SourceStatuses))]
@@ -218,6 +220,28 @@ public class TaskDisplayTests
         Assert.Contains(TaskDisplay.DiffRiskTone(risk), Tones);
     }
 
+    [Theory]
+    [MemberData(nameof(DecisionStates))]
+    public void DecisionState_HasChineseTextAndTone(string value)
+    {
+        Assert.NotEqual(value, TaskDisplay.DecisionStateText(value));
+        Assert.Contains(TaskDisplay.DecisionStateTone(value), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(ModelBindingValues))]
+    public void ModelBindingValue_HasChineseText(string value) => Assert.NotEqual(value, TaskDisplay.ModelBindingText(value));
+
+    [Fact]
+    public void ModelBinding_ComposesValueText()
+    {
+        // 数字 ID 组合出「绑定远端 N」；空值=未确认；不可解析的值原样回退。
+        Assert.Equal("未确认", TaskDisplay.ModelBindingText(null));
+        Assert.Equal("未确认", TaskDisplay.ModelBindingText(""));
+        Assert.Equal("绑定远端 5545363", TaskDisplay.ModelBindingText("5545363"));
+        Assert.Equal("mystery", TaskDisplay.ModelBindingText("mystery"));
+    }
+
     [Fact]
     public void UnknownStatus_FallsBackToRawValue()
     {
@@ -245,6 +269,8 @@ public class TaskDisplayTests
         Assert.Equal("mystery", TaskDisplay.DiffRiskText("mystery"));
         Assert.Equal("mystery", TaskDisplay.DocDecisionText("mystery"));
         Assert.Equal("mystery", TaskDisplay.DocOriginText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.DecisionStateText("mystery"));
+        Assert.Equal("normal", TaskDisplay.DecisionStateTone("mystery"));
         Assert.Equal("running", TaskDisplay.JobStateText("running"));
         Assert.Equal("normal", TaskDisplay.SlotTone("mystery"));
         Assert.Equal("normal", TaskDisplay.ReviewTone("mystery"));
@@ -302,6 +328,8 @@ public class TaskDisplayTests
             .Concat(Statuses("Sync/CheckModels.cs", "swagger / comment / sourceDoc").Select(o => TaskDisplay.DocOriginText((string)o[0])))
             .Concat(Statuses("Contracts/DiffEngine.cs", "added / removed / changed").Select(o => TaskDisplay.DiffChangeText((string)o[0])))
             .Concat(Statuses("Contracts/DiffEngine.cs", "normal / incompatible").Select(o => TaskDisplay.DiffRiskText((string)o[0])))
+            .Concat(Statuses("Sync/CheckModels.cs", "accepted / excluded").Select(o => TaskDisplay.DecisionStateText((string)o[0])))
+            .Concat(Statuses("Sync/CheckModels.cs", "ID 字符串 / new").Select(o => TaskDisplay.ModelBindingText((string)o[0])))
             .Concat(["成功", "失败", "已取消"]);
         foreach (var text in outputs)
         {

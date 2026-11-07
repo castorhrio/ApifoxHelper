@@ -133,13 +133,15 @@ public sealed class SupplementStore
 
 public sealed class DecisionStore
 {
-    /// <summary>高风险差异逐项确认：diffId → accepted。未确认的接口不纳入结构同步。</summary>
+    /// <summary>accepted / excluded</summary>
+    /// <summary>高风险差异逐项确认的决策值：diffId → 决策值。未确认（含已排除）的接口不纳入结构同步。</summary>
     public Dictionary<string, string> Items { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>说明冲突的选择：DocChange.Id → keepRemote / useTarget。</summary>
     public Dictionary<string, string> DocChoices { get; set; } = new(StringComparer.Ordinal);
 
-    /// <summary>模型绑定确认：源模型名 → 远端模型 ID（字符串）或 "new"。</summary>
+    /// <summary>ID 字符串 / new</summary>
+    /// <summary>模型绑定取值：源模型名 → 远端模型 ID（字符串）或 "new"。</summary>
     public Dictionary<string, string> ModelBindings { get; set; } = new(StringComparer.Ordinal);
 }
 

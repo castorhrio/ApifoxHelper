@@ -127,21 +127,8 @@ public static class ApifoxRoutes
             }, http.RequestAborted);
             return Json(body);
         });
-        app.MapPut("/api/tasks/{id}/decisions", async (string id, DecisionStore body, TaskStore tasks, HttpContext http) =>
-        {
-            foreach (var value in body.Items.Values) if (value is not ("accepted" or "excluded")) throw new UserException("决策值无效。");
-            foreach (var value in body.DocChoices.Values) if (value is not ("keepRemote" or "useTarget")) throw new UserException("说明选择无效。");
-            foreach (var value in body.ModelBindings.Values) if (value != "new" && !long.TryParse(value, out _)) throw new UserException("模型绑定无效。");
-            await tasks.UpdateAsync(id, t =>
-            {
-                var existing = tasks.Read<DecisionStore>(id, TaskFiles.Decisions) ?? new DecisionStore();
-                if (Canonical.HashOf(existing) == Canonical.HashOf(body)) return;
-                tasks.Write(id, TaskFiles.Decisions, body);
-                t.Revision++;
-                if (t.Stages.Remote.Status is "previewable" or "awaitingConfirm") t.Stages.Remote.Status = "expired";
-            }, http.RequestAborted);
-            return Json(body);
-        });
+        app.MapPut("/api/tasks/{id}/decisions", async (string id, DecisionStore body, DecisionService decisions, HttpContext http) =>
+            Json(await decisions.SaveAsync(id, body, http.RequestAborted)));
         app.MapPut("/api/tasks/{id}/response-contract", async (string id, ContractReviewRequest request, ContractReviewService reviews, HttpContext http) =>
             Json(await reviews.ReviewAsync(id, request.EndpointKey, request.ReviewState, http.RequestAborted)));
 

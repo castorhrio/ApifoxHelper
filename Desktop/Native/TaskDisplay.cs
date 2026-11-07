@@ -475,4 +475,28 @@ public static class TaskDisplay
         "responseData" => "响应数据",
         _ => kind,
     };
+
+    /// <summary>差异确认决策值（DecisionStore.Items）的色调：已确认=ok，已排除=muted。</summary>
+    public static string DecisionStateTone(string value) => value switch
+    {
+        "accepted" => "ok",
+        "excluded" => "muted",
+        _ => "normal",
+    };
+
+    /// <summary>差异确认决策值：高风险变化与共享模型更新确认的当前状态文字。</summary>
+    public static string DecisionStateText(string value) => value switch
+    {
+        "accepted" => "已确认",
+        "excluded" => "已排除",
+        _ => value,
+    };
+
+    /// <summary>模型绑定决策值（DecisionStore.ModelBindings）：数字 ID 显示为绑定远端，new 为新建模型，空为未确认；未知值原样回退。</summary>
+    public static string ModelBindingText(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "未确认";
+        if (value == "new") return "新建模型";
+        return long.TryParse(value, out _) ? "绑定远端 " + value : value;
+    }
 }
