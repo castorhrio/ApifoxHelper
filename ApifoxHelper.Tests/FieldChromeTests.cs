@@ -7,9 +7,11 @@ namespace ApifoxHelper.Tests;
 
 /// <summary>
 /// 输入框形态断言（FieldChrome，共享源码单一口径）：输入框常态 1px Line 发丝边、聚焦描边 Accent、
-/// 校验失败描边 BadText（DESIGN.md §6「输入框」），不用系统 3D 边框。镀铬工厂的接线由源码机械检查钉住：
-/// 全部输入框经 Ui.Input/Ui.Preview 出厂，可编辑输入框一律经 Ui.Field 包描边，
-/// 绕过工厂的输入框会退回系统边框；共享解析口径的配置对话框在解析失败时按 UserException.Field 描红对应输入框。
+/// 校验失败描边 BadText（DESIGN.md §6「输入框」），不用系统 3D 边框；多行可编辑输入框 Enter 换行
+/// 而不触发对话框主按钮（AcceptsReturn，工厂单一落点）。镀铬工厂的接线由源码机械检查钉住：
+/// 全部输入框经 Ui.Input/Ui.Preview 出厂（字段与属性两种声明形式都在检查内），
+/// 可编辑输入框一律经 Ui.Field 包描边，绕过工厂的输入框会退回系统边框；
+/// 共享解析口径的配置对话框在解析失败时按 UserException.Field 描红对应输入框。
 /// </summary>
 public class FieldChromeTests
 {
@@ -49,7 +51,11 @@ public class FieldChromeTests
         {
             Assert.False(Regex.IsMatch(source.Text, @"new\s+TextBox\b"),
                 $"{source.Name}:直接构造 TextBox。输入框一律经 Ui.Input()/Ui.Preview() 出厂（DESIGN.md §6 输入框：不用系统 3D 边框）。");
-            foreach (var match in Regex.Matches(source.Text, @"TextBox\s+\w+\s*=\s*([^;\n]+);").Cast<Match>())
+            // 目标类型 new() 的属性形式（TextBox X { get; } = new()）同样绕过工厂——此前只查字段形式，是检查盲区。
+            Assert.False(Regex.IsMatch(source.Text, @"TextBox\s+\w+[^=;\n]*=\s*new\s*[\(\w]"),
+                $"{source.Name}:直接构造 TextBox（属性/目标类型 new 形式）。输入框一律经 Ui.Input()/Ui.Preview() 出厂（DESIGN.md §6 输入框：不用系统 3D 边框）。");
+            // 字段与属性两种声明都要从工厂出厂（属性形式此前也不在检查内）。
+            foreach (var match in Regex.Matches(source.Text, @"TextBox\s+\w+[^=;\n]*=\s*([^;\n]+);").Cast<Match>())
             {
                 var factory = match.Groups[1].Value;
                 Assert.True(factory.StartsWith("Ui.Input(") || factory.StartsWith("Ui.Preview("),
@@ -93,12 +99,29 @@ public class FieldChromeTests
     public void Factories_SetBorderlessChromeAndPreviewReadonly()
     {
         var ui = Repo.Source("Desktop", "Native", "Ui.cs");
-        Assert.Matches(@"TextBox\s*\{\s*Multiline = multiline,\s*WordWrap = wordWrap,\s*UseSystemPasswordChar = password,\s*ScrollBars = scrollBars\s*\}", ui);
+        // 多行可编辑输入框 Enter 换行（AcceptsReturn）：窗体设了 AcceptButton 时，未设该属性的
+        // 多行 TextBox 会把 Enter 交给主按钮（WinForms 文档行为）——模块范围/指定接口/JSON 编辑位
+        // 等「每行一条」的输入将无法换行，「指定接口」里按 Enter 甚至直接开始扫描。只读 Preview
+        // 不设（Enter 触发查看器对话框的关闭按钮与 Esc 同语义）。
+        Assert.Matches(@"TextBox\s*\{\s*Multiline = multiline,\s*WordWrap = wordWrap,\s*UseSystemPasswordChar = password,\s*ScrollBars = scrollBars,\s*AcceptsReturn = multiline\s*\}", ui);
         Assert.Matches(@"TextBox\s*\{\s*ReadOnly = true,\s*Multiline = multiline,\s*WordWrap = wordWrap,\s*ScrollBars = scrollBars\s*\}", ui);
         Assert.Contains("box.BorderStyle = BorderStyle.None;", ui);
         Assert.Contains("box.BackColor = UiTokens.Panel;", ui);
         Assert.Contains("if (mono) box.Font = UiTokens.Mono.Value;", ui);
         Assert.Contains("if (caption) box.Font = UiTokens.Caption.Value;", ui);
+    }
+
+    [Fact]
+    public void SupplementEditors_UseInputFactoryWithFieldChrome()
+    {
+        // 补充说明编辑位此前是裸 new() TextBox 绕过工厂（无聚焦描边、Enter 触发对话框「关闭」），
+        // 与其余 35 处输入框同一形态收口（DESIGN.md §6 输入框）；接线由行首正则钉住防回退。
+        var supplements = Repo.Source("Desktop", "Native", "SupplementsDialog.cs");
+        Assert.Matches(@"(?m)^\s*public TextBox Text \{ get; \} = Ui\.Input\(multiline: true, scrollBars: ScrollBars\.Vertical\);", supplements);
+        Assert.Matches(@"(?m)^\s*var field = Ui\.Field\(box\.Text\);", supplements);
+        Assert.Matches(@"(?m)^\s*field\.Dock = DockStyle\.Fill;", supplements);
+        Assert.False(supplements.Contains("Ui.Hairline(box.Text)"),
+            "SupplementsDialog:编辑位不得回到只读预览的 Hairline 镀铬——可编辑输入框经 Ui.Field 包描边（聚焦 Accent）。");
     }
 
     [Fact]

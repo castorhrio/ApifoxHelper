@@ -484,6 +484,20 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 543 用例全部通过（含令牌接线机械检查对 ProjectsPage.cs 改动的扫描——无就地颜色/字体/间距值）。列表重建后按 Selected + Focused 恢复、`Items.Clear` 触发选中事件均为 WinForms 确定行为（与任务页三十三轮同法同源核对）；**配置页选中恢复与保存后定位的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「选中某配置 → 切到检查任务再切回 → 选中行保持且方向键从该行继续 → 编辑该配置保存 → 对话框关闭后该行仍选中、「编辑/连接与写入探测」可用 → 新建配置保存 → 新行被选中」走一遍。未改写入安全语义（纯呈现层：选中恢复不影响任何配置数据、校验与保存链路一行未动；`ProfileDialog.Saved` 是新增只读属性，不进入任何 JSON）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「多行输入的 Enter 换行与补充编辑位工厂收口」（2026-11-07 第三十五轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（5014053）的 Linux `dotnet build` 0 警告 0 错误、543 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：逐个输入框核对键盘语义（三十四轮 GUI 均未真机运行）发现两个真实缺陷——
+  1. **多行输入框的 Enter 被对话框主按钮吃掉**：`Ui.Input` 多行模式未设 `AcceptsReturn`，而 WinForms 文档行为是「窗体设了 AcceptButton 时，未设该属性的多行 TextBox 把 Enter 交给主按钮」。全部可编辑多行输入都坐在设了 AcceptButton 的对话框里，六个对话框受影响：新建任务「指定接口」（每行一个「GET /路径」，按 Enter 直接开始扫描作业）、「模块与模板」的模块范围与鉴权/安全方案/公共 Header 三个 JSON 编辑位（多行 JSON 根本打不出来，按 Enter 直接「应用」并报校验错）、「序列化与分析」的响应封装与 XML 文档路径（「每行：…」格式无法换行）、手工填写说明（按 Enter 提前提交）、候选审阅的待确认问题回答与补充说明编辑位（按 Enter 关闭对话框，未保存输入被丢弃）。
+  2. **补充说明编辑位绕过输入框工厂**：`SupplementsDialog.EditorBox.Text` 是裸 `new()` TextBox（有 `BackColor=Panel` 但沿用系统 3D 边框，且经只读预览的 `Ui.Hairline` 包裹——无聚焦 Accent 描边，与 §6「输入框」相悖）。第二十五轮「全部 35 处」的清单漏掉它，正因机械检查 `TextBoxes_AreOnlyCreatedByFactory` 只匹配字段声明形式 `TextBox _x = …`，匹配不到属性声明形式 `public TextBox Text { get; } = new()`——与第二十六轮「接线断言被注释行骗过」同类的检查盲区。
+- **原生交互推进（具名 pass：harden + polish，纯呈现层）**：
+  - `Ui.Input` 工厂统一设 `AcceptsReturn = multiline`（单一落点；单行输入保持 Enter=主按钮的 Windows 惯例）。只读 `Ui.Preview` 不设——Enter 触发查看器对话框的关闭按钮与 Esc 同语义，保持不变。
+  - `SupplementsDialog.EditorBox.Text` 改经 `Ui.Input(multiline: true, scrollBars: Vertical)` 出厂，编辑位包裹从 `Ui.Hairline` 改为 `Ui.Field`（获得聚焦 Accent 描边与失败描边能力；补 `Dock = Fill` 保持原 Hairline 面板的占位——Percent 列 + 48px 行不变）。`AcceptsReturn` 随工厂自动获得。
+  - 机械检查盲区收口：`TextBoxes_AreOnlyCreatedByFactory` 增加属性/目标类型 new 形式的构造禁令（`TextBox X { … } = new(…)` 同样拒绝），工厂断言的声明正则从字段形式推广到属性形式（两种声明都必须从工厂出厂）。
+- **测试 543 → 544 用例**：`Factories_SetBorderlessChromeAndPreviewReadonly` 的 Input 初始化器正则补 `AcceptsReturn = multiline`（Preview 正则不含该属性，继续钉住只读框不设）；`TextBoxes_AreOnlyCreatedByFactory` 收口盲区；新增 `SupplementEditors_UseInputFactoryWithFieldChrome`（行首正则：编辑位经工厂出厂、`Ui.Field` 包裹、`Dock = Fill` 占位、不得回到 `Ui.Hairline`）。
+- **变异验证四处实测可红**（各自独立变红、还原后全绿，还原一律以切片后基准副本覆盖并核对 diff）：删 Input 的 `AcceptsReturn = multiline`（1 红）、Preview 加 `AcceptsReturn = true`（1 红——只读框的初始化器正则被钉死）、编辑位回退属性形式裸 `new()`（1 红——正是本轮修复前的原始缺陷形态，新检查直接抓住）、`Ui.Field` 退回 `Ui.Hairline`（2 红：定向接线断言 + 通用「含 Input 必含 Field」文件级检查）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 544 用例全部通过（含令牌接线机械检查对 Ui.cs/SupplementsDialog.cs 改动的扫描——无就地颜色/字体/间距值）。多行 TextBox 未设 `AcceptsReturn` 时 Enter 触发窗体 AcceptButton 是 WinForms 文档行为（与单行输入、Esc 语义同源核对）；**Enter 换行与聚焦描边在六个对话框的真机观感仍未验证**（Linux 无法运行 WinForms GUI，G-D5 复核）——Windows 真机需按「新建任务：『指定接口』输入两行接口后按 Enter，换行而不开始扫描 → 模块与模板：鉴权 auth 粘贴/键入多行 JSON 按 Enter 换行 → 补充说明：编辑位点入后按 Enter 换行且对话框不关闭、聚焦时描边为 Accent → 单行输入（如配置名称）按 Enter 仍触发主按钮」走一遍。未改写入安全语义（纯呈现层：六处输入的取值、校验与保存链路一行未动——`AcceptsReturn` 只改 Enter 键的解释，不改任何文本内容口径）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

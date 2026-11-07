@@ -104,6 +104,8 @@ internal static class Ui
 
     /// <summary>
     /// 可编辑输入框（DESIGN.md §6「输入框」）：去系统 3D 边框、面板底色；
+    /// 多行输入 Enter 换行（AcceptsReturn），不触发对话框主按钮——模块范围、指定接口、
+    /// JSON 编辑位等「每行一条」的输入靠 Enter 分行，主按钮用点击或 Tab 进入；
     /// 放入界面时必须经 <see cref="Field"/> 包 1px 描边（常态 Line、聚焦 Accent）。
     /// </summary>
     public static TextBox Input(
@@ -113,7 +115,7 @@ internal static class Ui
         bool wordWrap = true,
         bool password = false,
         ScrollBars scrollBars = ScrollBars.None) =>
-        Box(new TextBox { Multiline = multiline, WordWrap = wordWrap, UseSystemPasswordChar = password, ScrollBars = scrollBars }, mono, caption);
+        Box(new TextBox { Multiline = multiline, WordWrap = wordWrap, UseSystemPasswordChar = password, ScrollBars = scrollBars, AcceptsReturn = multiline }, mono, caption);
 
     /// <summary>只读预览框：同一镀铬加 ReadOnly；放入界面时经 Hairline 包发丝边（只读无聚焦描边）。</summary>
     public static TextBox Preview(

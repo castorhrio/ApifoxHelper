@@ -22,13 +22,7 @@ internal sealed class SupplementsDialog : Form
     private sealed class EditorBox(SupplementEntries.Editor editor)
     {
         public SupplementEntries.Editor Editor { get; } = editor;
-        public TextBox Text { get; } = new()
-        {
-            Multiline = true,
-            ScrollBars = ScrollBars.Vertical,
-            BackColor = UiTokens.Panel,
-            Font = UiTokens.Body.Value,
-        };
+        public TextBox Text { get; } = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
         public CheckBox Keep { get; } = new() { Text = "保留现状，本次不补充", AutoSize = true };
     }
 
@@ -242,12 +236,14 @@ internal sealed class SupplementsDialog : Form
             _editors.Add(box);
 
             AddRow(grid, Ui.Caption(editor.Label, muted: false));
-            var hairline = Ui.Hairline(box.Text);
+            var field = Ui.Field(box.Text);
+            // 原宿主（Hairline 面板）自带 Dock=Fill：FieldBox 保持同一占位（Percent 列 + 48px 行）。
+            field.Dock = DockStyle.Fill;
             var row = grid.RowCount;
             grid.RowCount = row + 1;
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-            hairline.Margin = new Padding(0, 0, 0, UiTokens.Xs);
-            grid.Controls.Add(hairline, 0, row);
+            field.Margin = new Padding(0, 0, 0, UiTokens.Xs);
+            grid.Controls.Add(field, 0, row);
             AddRow(grid, box.Keep);
         }
         _editorsScroll.Controls.Add(grid);
