@@ -13,7 +13,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 与冻结页面同一口径：高风险变化只逐项确认接口侧条目（accepted；模型侧的结构差异经共享模型更新确认处理）；
 /// 说明冲突选保留远端/使用目标；候选与同名多个模型绑定远端 ID 或新建。不写源码、不访问 Apifox。
 /// 状态表：尚未检查=空态指引；读取失败=内联错误与下一步（已保存决策读取失败时停用保存，避免覆盖）；
-/// 没有待处理条目=如实说明；正常=计数行 + 筛选 + 列表 + 详情与动作。保存后需重新检查，决策才会生效。
+/// 没有待处理条目=如实说明；筛选下没有条目=提示换筛选且筛选器保持可用（恢复路径本身不禁用）；
+/// 正常=计数行 + 筛选 + 列表 + 详情与动作。保存后需重新检查，决策才会生效。
 /// </summary>
 internal sealed class DecisionsDialog : Form
 {
@@ -181,17 +182,20 @@ internal sealed class DecisionsDialog : Form
         }
         catch (Exception ex)
         {
+            _filter.Enabled = false;
             ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新检查再试。", UiTokens.BadText);
             return;
         }
         if (result is null)
         {
+            _filter.Enabled = false;
             ShowHint("尚未检查。先在任务页点「开始检查」：差异确认的条目（高风险变化、说明冲突、模型绑定）来自检查结果。", UiTokens.Muted);
             return;
         }
         if (!ReloadDecisions(out var error))
         {
             // 读取不到已保存决策时不提供保存动作，避免用空决策覆盖既有选择。
+            _filter.Enabled = false;
             ShowHint("读取已保存决策失败：" + error + "。为避免覆盖已有决策，保存已停用；请关闭后重试。", UiTokens.BadText);
             return;
         }
@@ -199,6 +203,7 @@ internal sealed class DecisionsDialog : Form
         RefreshStates();
         if (_entries.Count == 0)
         {
+            _filter.Enabled = false;
             ShowHint("没有需要处理的差异确认：检查结果中没有高风险变化、说明冲突、待绑定的模型与待确认的共享模型更新。", UiTokens.Muted);
             return;
         }
@@ -309,13 +314,14 @@ internal sealed class DecisionsDialog : Form
         _ => "",
     };
 
+    /// <summary>提示态的共享出口：隐藏列表并停用动作，不触碰筛选器——筛选器启停由调用方按状态决定
+    /// （打开期无数据时先禁用再提示；运行期筛选为空时必须保持可用，见 ApplyFilter）。</summary>
     private void ShowHint(string message, Color color)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
-        _filter.Enabled = false;
         EnableActions(null);
         _counts.Text = "";
         _detail.Text = "";
@@ -358,6 +364,9 @@ internal sealed class DecisionsDialog : Form
         _list.EndUpdate();
         if (_list.Items.Count == 0)
         {
+            // 筛选下没有条目时，筛选器本身是提示语「换一个筛选再试」所指的恢复路径，必须保持可用——
+            // 此前随共享提示出口一并禁用，点开一个空分类或确认完「待处理」最后一条后对话框锁死在本状态，只能关闭重开。
+            _filter.Enabled = true;
             ShowHint(_entries.Count == 0
                 ? "没有需要处理的差异确认。"
                 : "这个筛选下没有条目。换一个筛选再试。",
