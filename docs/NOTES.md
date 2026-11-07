@@ -587,6 +587,17 @@
 - **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 581 用例全部通过（含令牌接线与 G-D4 机械检查对 TasksPage 改动的扫描——新注释无禁词、无档外值）。**契约审阅关闭后横幅与过期提示即时更新的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「选中已检查的任务 → 打开响应契约 → 确认一条 → 关闭 → 引导横幅立即指向重新检查、远端状态行出现「任务内容在检查后有变化」、列表「下一步」列同步更新」走一遍。纯呈现层：ContractReviewService 的审阅校验、写入与版本递增一行未动（刷新只重读磁盘）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+
+## 原生切片「接口追踪明细可见」（2026-11-08 第四十四轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（c999842）的 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误、581 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：第四十～四十三轮按同族纪律（按钮态残留/状态滞留/空态锁死）复核全部对话框与任务页入口，未再发现该族缺陷——本轮转向服务输出与界面的覆盖对照：逐一核对 REST 路由与落盘产物在原生（及冻结页面）的可见性，发现 **evidence.json 的逐接口 Coverage 是唯一没有任何界面呈现的服务输出**（冻结页面同样未使用 `/api/tasks/{id}/coverage/{endpointKey}` 路由）。
+- **切片背景（具名 pass：clarify，纯只读）**：扫描时 `EvidenceCollector.Collect` 为每个范围内接口记录调用链追踪明细——读取了哪些方法体（MethodsRead）、未解析的调用（重载无法唯一确定、超过调用深度、超出单接口分析预算，含重载候选）、外部调用（不可回写）与单接口方法预算是否超限（BudgetExceeded）。方法预算（`Analysis.MaxMethodsPerEndpoint`，第十九轮起可在项目设置「序列化与分析」配置）用尽后调用链追踪提前收手——这是逐接口的分析降级：用户在契约审阅里看到「类型未确定」、在候选审阅里看到证据缺失，却没有任何地方能解释为什么，与 F03「明确降级、不按同名猜实现」相悖；第二十轮补了扫描级的警告/未解析符号/外部类型清单（symbols.json + source-manifest.json），逐接口层（evidence.json Coverage）是最后缺口。
+- **实现口径**：注释缺口对话框（扫描产物的只读透明视图同族位置）新增「接口追踪明细」ghost——扫描结果可读后显示，读取失败与无数据由追踪对话框自己的空态如实说明（与缺口清单的读取语义解耦，不做连坐）；新只读对话框 `Desktop/Native/EndpointTraceDialog.cs`：逐接口列表（接口等宽、读取方法/未解析调用/外部调用计数，零显示「—」、预算列「超限」警示文字色——颜色+文字双通道）+ 选中接口的明细（方法清单、逐条未解析调用「表达式：原因（候选：…）」、外部调用「外部调用（外部类型，不可回写）：」与降级清单同族前缀、预算超限说明并指向「方法预算」调整入口、证据数）；「查看代码证据」经既有 `EvidenceDialog` 只读对照（行内门控与按钮同值：该行证据数 > 0，清空选中如实禁用——第四十轮同族纪律）；无写入动作。计数、预算与明细文字口径提取为共享的 `Desktop/Native/EndpointTrace`（不依赖 WinForms，输入取原始值/字符串集合，与 ScanOverview 同法不绑模型类型），与测试工程单一编译。
+- **测试 581 → 589 用例**：新增 `EndpointTraceTests`（8）——CountText 两档（0→「—」）、BudgetCell 两档（超限 warn/「超限」，正常 muted/「—」）、明细行全段（预算说明含「方法预算」调整入口、方法清单、未解析计数与带候选行、外部调用前缀、证据行）与空段省略（干净接口不显示降级段、无方法体与无证据如实说明）；接线机械检查（行首正则，被注释掉也算删除）：缺口对话框入口的工厂出厂/Click 接线/显示与空态隐藏/ShowTrace 方法，追踪对话框的 Ui.List/Ui.Preview/Ui.Ghost 出厂、证据按钮行内门控与空选中禁用相邻锚点、「Enabled = true」写死禁令；csproj 共享编译清单含 EndpointTrace.cs；DESIGN.md §8 条款。
+- **变异验证六处实测可红**（各自独立变红、还原以基准副本覆盖并核对 diff 干净）：删缺口对话框入口 Click 接线（1 红）、删追踪对话框空选中禁用分支（1 红）、BudgetCell 超限色调改 muted（1 红——改共享源码后须重编测试工程再跑，第一遍 `--no-build` 未生效已重做）、删 csproj 共享编译行（14 个 CS0103 编译错误双重可红）、删 DESIGN.md §8 条款行（1 红）、删 DetailLines 预算超限说明行（1 红；还原后未重编导致残留一红，重编后全绿——变异流程记录：改共享源码的变异与还原都要重编）。
+- **Linux 运行时验证**：链路不触碰 WinForms，/tmp 一次性控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore、Profiles 的 ProjectProfile/ProfileStore、Tasks 的 TaskModels/TaskFiles/TaskStore、Source 的 SourceModels、Desktop/Native/EndpointTrace，镜像 GlobalUsings；不进仓库、已清理），在真实 FileStore/ProfileStore/TaskStore 上创建配置与任务，经服务的真实写路径（TaskStore.Write → JsonDefaults）落盘 evidence.json 夹具（超限接口 + 干净接口），23 项断言全部通过：落盘形状（camelCase 键 coverage/endpointKey/methodsRead/budgetExceeded；**JsonDefaults 转义口径核实——`UnicodeRanges.All` 中文原样、HTML 敏感字符仍按默认规则转义，候选「Map<T>(T)」落盘为 `Map\u003CT\u003E(T)`，回读后原值一致**；脚本首版把「落盘无转义」误设为预期，核对编码器配置后确认为脚本断言误设、服务一行未改）、回读逐字段一致（含嵌套候选列表）、口径在回读数据上的全部段落渲染、干净接口空段省略、旧任务缺 coverage 键按空处理（对话框空态口径）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 589 用例全部通过（含令牌接线与 G-D4 机械检查对新增两文件与 ScanResultsDialog 改动的扫描——无禁词、无档外值）。**追踪明细对话框的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「扫描一个含通用封装与外部调用的真实项目 → 注释缺口 → 接口追踪明细 → 超限行警示色与「超限」文字 → 选中接口看方法清单与未解析调用 → 点「查看代码证据」→ 清空选中证据按钮禁用」走一遍。纯只读：服务层（扫描/证据/契约/检查/同步）一行未动；本轮未连接或写入 Apifox，未调用任何模型服务。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

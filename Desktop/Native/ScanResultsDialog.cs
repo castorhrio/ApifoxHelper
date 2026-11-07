@@ -11,7 +11,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 顶部注释覆盖率行与分析等级、扫描时间来自扫描落盘的 symbols.json 与 source-manifest.json；
 /// 选中条目可打开其代码证据（EvidenceDialog，只读），也可手工填写说明或删除失效 param 标签（经既有
 /// DraftService.AddManualAsync 写任务数据成为候选，不写源码、不访问 Apifox；候选在「查看注释候选」审阅）；
-/// 「分析警告与降级」打开只读清单（扫描警告、未解析符号与不可回写的外部类型——降级如实可见）。
+/// 「分析警告与降级」打开只读清单（扫描警告、未解析符号与不可回写的外部类型——降级如实可见）；
+/// 「接口追踪明细」打开逐接口的调用链追踪只读视图（读取方法、未解析调用、外部调用与预算超限）。
 /// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）。
 /// </summary>
 internal sealed class ScanResultsDialog : Form
@@ -26,6 +27,7 @@ internal sealed class ScanResultsDialog : Form
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
     private readonly Label _coverage = Ui.Caption();
     private readonly Button _warningsButton;
+    private readonly Button _traceButton;
     private readonly ListView _list = Ui.List();
     private readonly Button _evidenceButton;
     private readonly Button _manualButton;
@@ -76,6 +78,10 @@ internal sealed class ScanResultsDialog : Form
         _warningsButton = Ui.Ghost(ScanOverview.Headline(0));
         _warningsButton.Visible = false;
         _warningsButton.Click += (_, _) => ShowDegradations();
+        // 接口追踪明细与降级清单同族：同一次扫描落盘的只读透明视图（证据文件里的逐接口调用链追踪）。
+        _traceButton = Ui.Ghost("接口追踪明细");
+        _traceButton.Visible = false;
+        _traceButton.Click += (_, _) => ShowTrace();
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
         // 双击=查看证据经共享入口：命中哪行看哪行的证据（行自身 Tag，不借当前选中），双击列头与空白区不动作。
         Ui.ActivateItem(_list, item => ShowEvidence(item.Tag as DocSlot));
@@ -130,9 +136,11 @@ internal sealed class ScanResultsDialog : Form
         buttonRow.Controls.Add(_manualButton);
         buttonRow.Controls.Add(_removeStaleButton);
         buttonRow.Controls.Add(_warningsButton);
+        buttonRow.Controls.Add(_traceButton);
         _removeStaleButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _manualButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _warningsButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _traceButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次状态行、详情框、筛选行，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -174,8 +182,16 @@ internal sealed class ScanResultsDialog : Form
         _degradations = ScanOverview.DegradationItems(manifest?.Warnings, output.UnresolvedSymbols, output.ExternalTypes);
         _warningsButton.Text = ScanOverview.Headline(_degradations.Count);
         _warningsButton.Visible = _degradations.Count > 0;
+        _traceButton.Visible = true;
         UpdateCounts();
         ApplyFilter();
+    }
+
+    /// <summary>打开接口追踪明细（只读）：逐接口的调用链读取、未解析调用、外部调用与预算超限，来自 evidence.json。</summary>
+    private void ShowTrace()
+    {
+        using var dialog = new EndpointTraceDialog(_tasks, _task);
+        dialog.ShowDialog(this);
     }
 
     private void ShowHint(string message, Color color)
@@ -191,6 +207,7 @@ internal sealed class ScanResultsDialog : Form
         _coverage.Visible = false;
         _coverage.Text = "";
         _warningsButton.Visible = false;
+        _traceButton.Visible = false;
         _degradations = [];
         _counts.Text = "";
         _detail.Text = "";
