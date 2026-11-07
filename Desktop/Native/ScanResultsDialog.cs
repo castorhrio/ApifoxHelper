@@ -8,7 +8,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// <summary>
 /// 注释缺口清单（只读）：展示扫描得到的全部注释位置（DocSlot），按状态筛选，逐条显示现状、覆盖接口与证据数；
 /// 选中条目可打开其代码证据（EvidenceDialog，同样只读）。
-/// 数据来自任务目录的 symbols.json（扫描产物），无任何写入动作；审阅与回写在后续切片接入。
+/// 数据来自任务目录的 symbols.json（扫描产物），无任何写入动作；候选审阅在「查看注释候选」、源码回写在「注释回写」进行，本对话框只读。
 /// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=计数行 + 列表（空列表即全部有效）。
 /// </summary>
 internal sealed class ScanResultsDialog : Form

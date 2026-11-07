@@ -4,6 +4,7 @@ using System.Windows.Forms;
 using ApifoxHelper.Api;
 using ApifoxHelper.Comments;
 using ApifoxHelper.Profiles;
+using ApifoxHelper.Reports;
 using ApifoxHelper.Source;
 using ApifoxHelper.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -173,7 +174,8 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<CommentPlanService>(),
             _host.Services.GetRequiredService<PropagationService>(),
             _host.Services.GetRequiredService<ContractReviewService>(),
-            _host.Services.GetRequiredService<Sync.CheckService>());
+            _host.Services.GetRequiredService<Sync.CheckService>(),
+            _host.Services.GetRequiredService<Reports.ReportExportService>());
 
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;

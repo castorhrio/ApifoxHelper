@@ -28,5 +28,6 @@ public static class ServiceRegistration
         services.AddSingleton<Sync.SyncPlanService>();
         services.AddSingleton<Sync.SyncExecutor>();
         services.AddSingleton<Reports.ReportService>();
+        services.AddSingleton<Reports.ReportExportService>();
     }
 }

@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using ApifoxHelper.Comments;
 using ApifoxHelper.Profiles;
+using ApifoxHelper.Reports;
 using ApifoxHelper.Source;
 using ApifoxHelper.Sync;
 using ApifoxHelper.Tasks;
@@ -12,8 +13,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）
 /// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）+ 注释回写 + 生成文档核对（后台作业、只读结果视图）
 /// + 响应契约（扫描时追踪落盘，逐条确认/拒绝/重置）
-/// + Apifox 差异检查（只读后台作业，需要时先加载冻结 Swagger；离线任务先导入远端 JSON；只读结果视图）。
-/// 差异确认、同步与报告不在本切片：如实显示"后续切片接入"，不提供入口。
+/// + Apifox 差异检查（只读后台作业，需要时先加载冻结 Swagger；离线任务先导入远端 JSON；只读结果视图）
+/// + 报告与交接（Markdown 预览 + 原生另存为导出，渲染与字节口径走共享 ReportExportService）。
+/// 差异确认与同步不在本切片：如实显示"后续切片接入"，不提供入口。
 /// </summary>
 internal sealed class TasksPage : UserControl, INativePage
 {
@@ -26,6 +28,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly PropagationService _propagation;
     private readonly ContractReviewService _reviews;
     private readonly CheckService _checks;
+    private readonly ReportExportService _exports;
 
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
     private readonly Panel _empty;
@@ -61,13 +64,15 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Button _importRemoteButton;
     private readonly Button _remoteCheckButton;
     private readonly Button _remoteViewButton;
+    private readonly Button _reportButton;
+    private readonly Label _reportStatus = Ui.StatusText();
 
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 500 };
     private CheckTask? _selectedTask;
     private bool _runningShown;
     private bool _splitAdjusted;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, ContractReviewService reviews, CheckService checks)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, ContractReviewService reviews, CheckService checks, ReportExportService exports)
     {
         _tasks = tasks;
         _scan = scan;
@@ -78,6 +83,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _propagation = propagation;
         _reviews = reviews;
         _checks = checks;
+        _exports = exports;
 
         var newButton = Ui.Primary("新建任务");
         newButton.Click += (_, _) => ShowNewTaskDialog();
@@ -133,6 +139,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _remoteActions.Controls.Add(_importRemoteButton);
         _remoteActions.Controls.Add(_remoteCheckButton);
         _remoteActions.Controls.Add(_remoteViewButton);
+
+        _reportButton = Ui.Ghost("查看报告与导出");
+        _reportButton.Click += (_, _) => ShowReports();
 
         _empty = BuildEmpty();
 
@@ -210,7 +219,11 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
         AddDetailRow(grid, _remoteActions);
-        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。差异确认、同步与报告将在后续切片接入。"));
+        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。差异确认与同步将在后续切片接入。"));
+        AddDetailRow(grid, SectionCaption("报告与交接"));
+        AddDetailRow(grid, _reportStatus);
+        AddDetailRow(grid, _reportButton);
+        AddDetailRow(grid, Ui.Caption("报告基于当前任务数据生成并脱敏：分阶段结果、接口变化与未完成事项如实列出。导出 Markdown/HTML/JSON 报告与前端交接说明后自行发给前端或测试。"));
         return grid;
     }
 
@@ -377,6 +390,7 @@ internal sealed class TasksPage : UserControl, INativePage
             : File.Exists(_tasks.FilePath(task.Id, TaskFiles.Diff)) ? "重新检查" : "开始检查";
 
         RefreshContractSection();
+        RefreshReportSection();
 
         var job = _jobs.Running(task.Id);
         ShowJobState(job);
@@ -398,6 +412,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _importRemoteButton.Enabled = scanReady && (_selectedTask?.OfflineMode ?? false);
         _remoteCheckButton.Enabled = scanReady;
         _remoteViewButton.Enabled = scanReady && _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
+        // 报告随时可看（与冻结页面一致，不要求先扫描）；作业执行中任务文件在被改写，禁用避免读到半份结果。
+        _reportButton.Enabled = _selectedTask is not null && job is null;
         if (job is not null)
         {
             _runningShown = true;
@@ -569,6 +585,37 @@ internal sealed class TasksPage : UserControl, INativePage
         using var dialog = new ContractsDialog(_tasks, _selectedTask, _reviews);
         dialog.ShowDialog(FindForm());
         RefreshContractSection();
+    }
+
+    /// <summary>报告区状态行：任务目录里已导出的报告副本（report.md / handoff.md）与时间；预览与导出随时可用。</summary>
+    private void RefreshReportSection()
+    {
+        if (_selectedTask is null) return;
+        try
+        {
+            var exported = new[] { TaskFiles.ReportMarkdown, TaskFiles.Handoff }
+                .Select(f => new FileInfo(_tasks.FilePath(_selectedTask.Id, f)))
+                .Where(f => f.Exists)
+                .ToList();
+            _reportStatus.Text = exported.Count > 0
+                ? "状态：任务目录已有导出副本 " + string.Join("、", exported.Select(f => $"{f.Name}（{f.LastWriteTime:MM-dd HH:mm}）"))
+                : "状态：尚未导出报告";
+            _reportStatus.ForeColor = exported.Count > 0 ? UiTokens.Text : UiTokens.Muted;
+        }
+        catch (Exception ex)
+        {
+            _reportStatus.Text = "状态：报告状态读取失败：" + Redactor.Redact(ex.Message);
+            _reportStatus.ForeColor = UiTokens.BadText;
+        }
+    }
+
+    /// <summary>打开报告与交接（只读预览 + 原生另存为导出，渲染走共享 ReportExportService）：关闭后刷新导出状态行。</summary>
+    private void ShowReports()
+    {
+        if (_selectedTask is null) return;
+        using var dialog = new ReportsDialog(_exports, _selectedTask);
+        dialog.ShowDialog(FindForm());
+        RefreshReportSection();
     }
 
     /// <summary>配置了 Swagger、还没冻结过且不是离线任务：检查前先加载并冻结 Swagger（与冻结页面同一规则，避免不知情地退化为只按远端现状比较）。</summary>

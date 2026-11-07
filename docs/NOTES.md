@@ -148,6 +148,19 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 153 用例全部通过（含令牌接线机械检查对新文件 CheckResultsDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「导入离线远端 / 检查 / 查看结果」只在代码与编译层面成立，且在线检查依赖本机 Apifox CLI 登录态，本环境不可能端到端执行；Windows 真机需按「扫描 →（配置 Swagger 时）加载 Swagger 并检查 → 查看检查结果 → 逐接口对照结构差异与说明合并 →（离线任务）导入 JSON 后检查」走一遍，并核对失败路径（未绑定项目 ID、未导入离线远端）的错误文案。如实挂账。
 - 未改写入安全语义（检查与导入均为既有服务的只读复用）；本轮未连接或写入 Apifox（`RunAsync` 只在用户显式点击时开始，且需真实 CLI 登录态）。
 
+## 原生切片「报告与交接」（2026-11-07 第九轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（3bb0e5b）的 Linux `dotnet build` 0 警告 0 错误、153 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。
+- **原生交互推进一小步（Apifox 差异检查 → 报告与交接，F14 接入原生）**：旅程第 9 步——报告是唯一不依赖写入探测、离线也可用的收尾步骤（对应 3.3「只检查不同步」变体），服务层早已验证（F14 已实现（已验证）），本轮只接入交互；预览与导出只读任务数据并写出报告文件，不写源码、不访问 Apifox。
+  - 「Apifox 差异与同步」区的固定说明行从「差异确认、同步与报告将在后续切片接入」改为「差异确认与同步将在后续切片接入」，其后新增「报告与交接」区：状态行如实显示任务目录已有的导出副本（report.md / handoff.md 与时间；尚无则显示「尚未导出报告」），「查看报告与导出」按钮打开 `Desktop/Native/ReportsDialog.cs`；按钮不要求先扫描（与冻结页面一致，报告随时可看），作业执行中禁用（任务文件在被改写，避免读到半份结果）。
+  - 导出口径先收敛为单一落点：`PUT`/`GET /api/tasks/{id}/reports/{format}` 路由原先内联四个格式的渲染与字节处理，本轮原样提取为 `Reports/ReportExportService`（`Preview`＝报告对象 + Markdown 不落盘；`Render`＝按格式产出文件名/内容类型/字节，json/md/handoff 照旧写任务目录副本），格式 → 文件名/内容类型表落在只依赖 BCL 的 `Reports/ReportFormats.cs`；路由改为调用同一服务（行为与字节不变）。这是本轮唯一触碰既有链路的改动，纯行为保持提取——桌面「另存为」与 Web 下载从此共用同一份渲染与字节口径。
+  - 报告对话框（只读预览 + 导出）：正文区显示 Markdown 源文（等宽、只读，与「导出 Markdown」内容一致），动作行按冻结页面同一主次——「前端交接说明」为实心主按钮，「导出 Markdown / 导出 HTML / 导出 JSON」为 ghost，全部经原生 `SaveFileDialog`（默认文件名取自共享格式表）写出，UTF-8 无 BOM 与 Web 下载同字节；结果与失败原因在底部状态行内联显示（服务拒绝原样展示、其他异常脱敏），不弹窗；任务数据读取失败时正文区显示指引并禁用导出（空态不留白）。
+  - 本轮无新增状态枚举，TaskDisplay 未变；报告内容全部经既有 `ReportService` 脱敏，共享报告不含凭据（D 系列文案与状态双通道条款沿用既有实现）。
+- **测试 153 → 160 用例**：测试工程照 TaskDisplay.cs 同法共享编译 `Reports/ReportFormats.cs`（不引用主工程，Linux 可运行），新增格式口径断言：四格式逐一钉住文件名与内容类型（json=report.json/application/json、md=report.md/text/markdown、html=report.html/text/html、handoff=handoff.md/text/markdown）+ 未知格式（preview/pdf/空）返回 null（由服务包装成「报告格式无效。」拒绝）。变异验证实测可红：删除 `TryDescribe` 的 `handoff` 映射臂 → `TryDescribe_MatchesWebDownloadCaliber(format: "handoff")` 变红，还原后全绿。
+- **Linux 运行时验证（本轮新增，超出此前仅编译验证的口径）**：主工程是 net8.0-windows（Linux 无法运行），但报告链路不触碰 WinForms——在 /tmp 搭一次性 net8.0 控制台（工程文件链接主仓 `Infrastructure/`、`Tasks/`、`Profiles/`、`Source/`、`Comments/`、`Contracts/`、`Sync/CheckModels+PlanModels`、`Reports/` 等纯逻辑源文件与镜像 GlobalUsings，不进产品仓库、已清理），在真实 `FileStore`/`TaskStore` 上创建任务并执行 `Preview` 与四格式 `Render`，24 项断言全部通过：预览 Markdown 含任务名且为 CRLF、四格式文件名/内容类型与冻结页面下载一致、字节均无 BOM、md/handoff 的任务目录副本与下载字节逐字节一致、report.json 副本可解析、`preview` 格式被拒绝且文案不变。报告内容的真实数据形态（分阶段表格、未完成事项）仍以 Web 时代已验证的 `ReportService` 为准，本轮未改其逻辑。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 160 用例全部通过（含令牌接线机械检查对新文件 ReportsDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「查看报告与导出 → 原生另存为」的对话框交互只在代码与编译层面成立（导出的服务链路已在 Linux 真实执行）；Windows 真机需按「任一任务 → 查看报告与导出 → 核对预览与 Web 报告页一致 → 四格式分别另存为 → 打开文件核对内容与编码 → 与 Web 下载同名文件比对字节」走一遍。如实挂账。
+- 未改写入安全语义（导出为既有已验证报告链路的行为保持提取）；未连接或写入 Apifox；报告文件只在用户显式「另存为」或既有 Web 下载时写出。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

@@ -179,29 +179,15 @@ public static class ApifoxRoutes
             return Json(jobs.Start(id, "定向构建", async job => await build.RunAsync(id, job)));
         });
 
-        app.MapGet("/api/tasks/{id}/reports/{format}", (string id, string format, ReportService reports, TaskStore tasks) =>
+        app.MapGet("/api/tasks/{id}/reports/{format}", (string id, string format, ReportExportService exports) =>
         {
-            var report = reports.Build(id);
-            var markdown = reports.Markdown(report);
-            switch (format)
+            if (format == "preview")
             {
-                case "json":
-                    tasks.Write(id, TaskFiles.ReportJson, report);
-                    return Results.File(Encoding.UTF8.GetBytes(report.ToJsonString(JsonDefaults.Options)), "application/json", "report.json");
-                case "md":
-                    FileStore.WriteText(tasks.FilePath(id, TaskFiles.ReportMarkdown), markdown);
-                    return Results.File(new UTF8Encoding(false).GetBytes(markdown), "text/markdown", "report.md");
-                case "html":
-                    return Results.File(new UTF8Encoding(false).GetBytes(reports.Html(markdown)), "text/html", "report.html");
-                case "handoff":
-                    var handoff = reports.Handoff(report);
-                    FileStore.WriteText(tasks.FilePath(id, TaskFiles.Handoff), handoff);
-                    return Results.File(new UTF8Encoding(false).GetBytes(handoff), "text/markdown", "handoff.md");
-                case "preview":
-                    return Json(new { report, markdown });
-                default:
-                    throw new UserException("报告格式无效。");
+                var preview = exports.Preview(id);
+                return Json(new { report = preview.Report, markdown = preview.Markdown });
             }
+            var file = exports.Render(id, format);
+            return Results.File(file.Bytes, file.ContentType, file.FileName);
         });
     }
 
