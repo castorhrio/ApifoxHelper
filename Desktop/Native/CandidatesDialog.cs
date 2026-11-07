@@ -8,9 +8,10 @@ namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
 /// 注释候选审阅：展示任务目录 comment-drafts.json 中的注释候选，逐条对照候选文字、待确认问题与代码证据，
-/// 执行接受 / 搁置 / 驳回。审阅经 DraftService.UpdateAsync 走既有校验（占位文字、覆盖确认、待确认问题需先回答），
-/// 只写任务数据，不写源码、不访问 Apifox；源码回写仍不在本切片。
-/// 状态表：读取失败=内联错误与下一步；没有候选=引导先「规则提取候选」；正常=计数行 + 列表 + 详情与审阅动作。
+/// 执行接受 / 搁置 / 驳回；并可导入编码助手结果（DraftService.ImportResultAsync，候选写任务数据）。
+/// 审阅经 DraftService.UpdateAsync 走既有校验（占位文字、覆盖确认、待确认问题需先回答），
+/// 只写任务数据，不写源码、不访问 Apifox；源码回写在「注释回写」进行。
+/// 状态表：读取失败=内联错误与下一步；没有候选=引导各生成入口（仍可导入）；正常=计数行 + 列表 + 详情与审阅动作。
 /// </summary>
 internal sealed class CandidatesDialog : Form
 {
@@ -37,6 +38,7 @@ internal sealed class CandidatesDialog : Form
     private readonly Button _acceptButton;
     private readonly Button _deferButton;
     private readonly Button _rejectButton;
+    private readonly Button _importButton;
     private readonly Button _evidenceButton;
     private readonly Label _status = Ui.StatusLine();
     private readonly Label _hint = new()
@@ -87,6 +89,8 @@ internal sealed class CandidatesDialog : Form
         _deferButton.Click += (_, _) => RunReview("deferred");
         _rejectButton = Ui.Ghost("驳回");
         _rejectButton.Click += (_, _) => RunReview("rejected");
+        _importButton = Ui.Ghost("导入编码助手结果");
+        _importButton.Click += (_, _) => ImportResult();
 
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
@@ -129,7 +133,8 @@ internal sealed class CandidatesDialog : Form
         AddCaptionRow(detailGrid, _overwrite);
         AddCaptionRow(detailGrid, _status);
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 6, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 7, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -138,13 +143,15 @@ internal sealed class CandidatesDialog : Form
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _deferButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _rejectButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _importButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         closeButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         actionRow.Controls.Add(_acceptButton, 0, 0);
         actionRow.Controls.Add(_deferButton, 1, 0);
         actionRow.Controls.Add(_rejectButton, 2, 0);
-        actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 3, 0);
-        actionRow.Controls.Add(_evidenceButton, 4, 0);
-        actionRow.Controls.Add(closeButton, 5, 0);
+        actionRow.Controls.Add(_importButton, 3, 0);
+        actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 4, 0);
+        actionRow.Controls.Add(_evidenceButton, 5, 0);
+        actionRow.Controls.Add(closeButton, 6, 0);
 
         // 停靠按集合倒序生效：筛选行最先停靠（顶部），其次按钮行（最底部）、详情区，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -170,8 +177,8 @@ internal sealed class CandidatesDialog : Form
         {
             var run = store.Runs.Count > 0 ? store.Runs[^1] : null;
             ShowHint(run is null
-                ? "还没有注释候选。请先在任务里点「规则提取候选」，生成代码可证实的约束草稿。"
-                : "规则提取没有生成候选：约束类草稿只覆盖代码可证实的约束（校验、默认值、守卫、枚举显示名）；方法与类型的用途说明需要模型生成、材料导入或手工填写，将在后续切片接入。",
+                ? "还没有注释候选。可以在任务页「规则提取候选」「模型生成候选」「导出材料」生成，或点「导入编码助手结果」导回，也可以在「查看注释缺口」里手工填写。"
+                : "规则提取没有生成候选：约束类草稿只覆盖代码可证实的约束（校验、默认值、守卫、枚举显示名）；方法与类型的用途说明可点「导入编码助手结果」导回、在任务页「模型生成候选」，或在「查看注释缺口」里手工填写。",
                 UiTokens.Muted);
             return;
         }
@@ -385,6 +392,65 @@ internal sealed class CandidatesDialog : Form
         if (_slotsById.GetValueOrDefault(candidate.SlotId) is not { } slot) return;
         using var dialog = new EvidenceDialog(_tasks, _task, slot);
         dialog.ShowDialog(this);
+    }
+
+    /// <summary>
+    /// 导入编码助手结果：选择结果 JSON，经既有 DraftService.ImportResultAsync 校验并写入候选
+    /// （slotId 不在本次扫描、占位文字等拒绝原因如实列出）；导入后刷新清单，逐条审阅。
+    /// </summary>
+    private async void ImportResult()
+    {
+        using var picker = new OpenFileDialog { Title = "导入编码助手结果", Filter = "结果 JSON|*.json", CheckFileExists = true };
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        _importButton.Enabled = false;
+        string json;
+        try
+        {
+            json = await File.ReadAllTextAsync(picker.FileName, Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            if (!IsDisposed) SetStatus("读取结果文件失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+            _importButton.Enabled = true;
+            return;
+        }
+        DraftImportResult result;
+        try
+        {
+            result = await _drafts.ImportResultAsync(_task.Id, json, CancellationToken.None);
+        }
+        catch (UserException ex)
+        {
+            if (!IsDisposed) SetStatus(ex.Message, UiTokens.WarnText);
+            _importButton.Enabled = true;
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (!IsDisposed) SetStatus("导入结果失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+            _importButton.Enabled = true;
+            return;
+        }
+        if (IsDisposed) return;
+        try
+        {
+            _store = _drafts.Load(_task.Id);
+        }
+        catch (Exception ex)
+        {
+            // 导入已成功，重新读取失败时如实说明，不显示成导入失败。
+            SetStatus("候选已导入，但重新读取候选失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+            _importButton.Enabled = true;
+            return;
+        }
+        _hint.Visible = false;
+        _list.Visible = true;
+        _filter.Enabled = true;
+        UpdateCounts();
+        ApplyFilter();
+        _importButton.Enabled = true;
+        SetStatus(DraftEntries.ImportDoneText(result.Imported, result.Rejected, result.Errors),
+            result.Rejected > 0 ? UiTokens.WarnText : UiTokens.OkText);
     }
 
     private void SetStatus(string message, Color color)

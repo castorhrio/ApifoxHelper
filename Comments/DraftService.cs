@@ -313,6 +313,13 @@ public sealed partial class DraftService(TaskStore tasks, CredentialStore creden
         };
     }
 
+    /// <summary>材料涉及的源码文件清单（去重、按出现顺序）：确认发送与导出的提示用同一口径。</summary>
+    public static List<string> EvidenceFiles(JsonObject material) =>
+        ((JsonArray)material["endpoints"]!).SelectMany(e => ((JsonArray)e!["evidence"]!).Select(x => x!["file"]!.GetValue<string>())).Distinct().ToList();
+
+    /// <summary>没有需要生成草稿的注释位置时的拒绝文案（材料导出与模型生成共用）。</summary>
+    public const string NoSlotsMessage = "没有需要生成草稿的注释位置。";
+
     public async Task<object> GenerateWithModelAsync(string taskId, List<string> slotIds, bool confirmSend, JobContext job)
     {
         var task = tasks.Get(taskId);
@@ -364,7 +371,7 @@ public sealed partial class DraftService(TaskStore tasks, CredentialStore creden
         return new { run.Status, run.RequestedSlots, run.Produced, run.Rejected, errors = run.Errors };
     }
 
-    public async Task<object> ImportResultAsync(string taskId, string json, CancellationToken ct)
+    public async Task<DraftImportResult> ImportResultAsync(string taskId, string json, CancellationToken ct)
     {
         var result = ModelClient.ParseResult(json);
         if (!string.IsNullOrEmpty(result.Format) && result.Format != ResultFormat) throw new UserException($"结果格式应为 {ResultFormat}。");
@@ -383,7 +390,7 @@ public sealed partial class DraftService(TaskStore tasks, CredentialStore creden
             Status = accepted.Count == 0 ? "noResult" : rejected.Count > 0 ? "partial" : "succeeded",
         };
         await SaveCandidatesAsync(taskId, accepted, run, ct);
-        return new { imported = accepted.Count, rejected = rejected.Count, errors = run.Errors };
+        return new DraftImportResult(accepted.Count, rejected.Count, run.Errors);
     }
 
     private static (List<CommentCandidate> Accepted, List<string> Rejected) Validate(List<ExternalCandidate> candidates, ScanOutput scan, EvidenceStore evidence, string source)

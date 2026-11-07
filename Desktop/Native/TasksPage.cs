@@ -11,7 +11,8 @@ namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
 /// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）
-/// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）+ 注释回写 + 生成文档核对（后台作业、只读结果视图）
+/// + 注释候选（规则提取/模型生成/材料导出的生成入口、逐条审阅接受/搁置/驳回、注释回写）
+/// + 生成文档核对（后台作业、只读结果视图）
 /// + 响应契约（扫描时追踪落盘，逐条确认/拒绝/重置）
 /// + 定向构建（用户确认后经既有 BuildService 在工作区执行 dotnet build --no-restore 刷新 XML 文档，
 /// 结果落盘 build.json；「查看构建输出」只读展示命令、退出码、耗时与输出尾部）
@@ -57,6 +58,8 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Button _gapButton;
     private readonly Button _candidatesButton;
     private readonly Button _ruleButton;
+    private readonly Button _modelButton;
+    private readonly Button _exportMaterialButton;
     private readonly Button _applyButton;
     private readonly Button _scanButton;
     private readonly Button _checkButton;
@@ -121,6 +124,10 @@ internal sealed class TasksPage : UserControl, INativePage
         _candidatesButton.Click += (_, _) => ShowCandidates();
         _ruleButton = Ui.Ghost("规则提取候选");
         _ruleButton.Click += (_, _) => StartRuleExtraction();
+        _modelButton = Ui.Ghost("模型生成候选");
+        _modelButton.Click += (_, _) => StartModelGeneration();
+        _exportMaterialButton = Ui.Ghost("导出材料");
+        _exportMaterialButton.Click += (_, _) => ExportMaterial();
         _applyButton = Ui.Ghost("注释回写");
         _applyButton.Click += (_, _) => ShowApply();
         _scanButton = Ui.Ghost("开始扫描");
@@ -130,6 +137,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _scanActions.Controls.Add(_gapButton);
         _scanActions.Controls.Add(_candidatesButton);
         _scanActions.Controls.Add(_ruleButton);
+        _scanActions.Controls.Add(_modelButton);
+        _scanActions.Controls.Add(_exportMaterialButton);
         _scanActions.Controls.Add(_applyButton);
         _scanActions.Controls.Add(_scanButton);
         _scanActions.Controls.Add(_cancelButton);
@@ -235,7 +244,7 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _sourceStatus);
         AddDetailRow(grid, _sourceNumbers);
         AddDetailRow(grid, _scanActions);
-        AddDetailRow(grid, Ui.Caption("「查看注释缺口」「规则提取候选」「查看注释候选」与「注释回写」在扫描完成后可用；「注释回写」需要有已接受且未回写的候选。模型生成、材料导入与手工填写将在后续切片接入。"));
+        AddDetailRow(grid, Ui.Caption("「查看注释缺口」「规则提取候选」「模型生成候选」「导出材料」「查看注释候选」与「注释回写」在扫描完成后可用；「注释回写」需要有已接受且未回写的候选。「模型生成候选」只在配置的草稿生成方式为 OpenAI 兼容模型服务时可用，发送材料前会先确认范围；没有模型服务时可用「导出材料」交给编码助手处理，或在「查看注释缺口」里手工填写，结果都在「查看注释候选」审阅。"));
         AddDetailRow(grid, SectionCaption("生成文档"));
         AddDetailRow(grid, _generatedStatus);
         AddDetailRow(grid, _generatedNumbers);
@@ -437,6 +446,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _gapButton.Enabled = scanReady;
         _candidatesButton.Enabled = scanReady;
         _ruleButton.Enabled = scanReady;
+        // 模型生成与冻结页面同一规则：配置的草稿生成方式为 OpenAI 兼容模型服务时可用；密钥缺失由服务在执行时拒绝并说明。
+        _modelButton.Enabled = scanReady && DraftEntries.CanGenerateModel(_selectedTask?.ProfileSnapshot.Generation.Mode);
+        _exportMaterialButton.Enabled = scanReady;
         _applyButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
         _checkButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
         _viewButton.Enabled = scanReady && _selectedTask is { Stages.Generated.CheckedAt: not null };
@@ -516,12 +528,13 @@ internal sealed class TasksPage : UserControl, INativePage
         _jobs.Cancel(_selectedTask.Id);
     }
 
-    /// <summary>打开注释缺口清单（只读）：数据来自扫描落盘的 symbols.json，无写入动作。</summary>
+    /// <summary>打开注释缺口清单：证据查看只读；手工填写与删除失效标签经既有 AddManualAsync 写任务数据成为候选。</summary>
     private void ShowScanResults()
     {
         if (_selectedTask is null) return;
-        using var dialog = new ScanResultsDialog(_tasks, _selectedTask);
+        using var dialog = new ScanResultsDialog(_tasks, _drafts, _selectedTask);
         dialog.ShowDialog(FindForm());
+        LoadTasks();
     }
 
     /// <summary>规则提取候选（后台作业）：只生成代码可证实的约束说明，写入任务目录 comment-drafts.json。</summary>
@@ -551,6 +564,108 @@ internal sealed class TasksPage : UserControl, INativePage
         using var dialog = new CandidatesDialog(_drafts, _tasks, _selectedTask);
         dialog.ShowDialog(FindForm());
         LoadTasks();
+    }
+
+    /// <summary>
+    /// 模型生成候选（需确认的外部发送）：先按材料口径统计位置与涉及源码文件，原生确认（默认按钮在「取消」）后
+    /// 经共享 JobRunner 调既有 DraftService.GenerateWithModelAsync；候选写入任务数据，不写源码、不访问 Apifox。
+    /// </summary>
+    private void StartModelGeneration()
+    {
+        if (_selectedTask is null) return;
+        var taskId = _selectedTask.Id;
+        int slots;
+        List<string> files;
+        try
+        {
+            var material = _drafts.BuildMaterial(taskId, [], out var included);
+            slots = included.Count;
+            if (slots == 0)
+            {
+                SetStatus(DraftService.NoSlotsMessage, UiTokens.WarnText);
+                return;
+            }
+            files = DraftService.EvidenceFiles(material);
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message, UiTokens.WarnText);
+            return;
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法准备生成材料：" + Redactor.Redact(ex.Message));
+            return;
+        }
+        var choice = MessageBox.Show(this,
+            DraftEntries.ModelConfirmText(slots, files),
+            "确认发送材料",
+            MessageBoxButtons.OKCancel,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (choice != DialogResult.OK) return;
+        try
+        {
+            _jobs.Start(taskId, "模型生成草稿", async job => await _drafts.GenerateWithModelAsync(taskId, [], true, job));
+            RefreshDetail();
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法开始模型生成：" + Redactor.Redact(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 导出材料：按冻结页面同一落点写任务目录副本 material.json，另经原生「另存为」写出同一内容（UTF-8 无 BOM）；
+    /// 交给编码助手生成候选后用「导入编码助手结果」导回。只读扫描产物并写材料文件，不写源码、不访问 Apifox。
+    /// </summary>
+    private void ExportMaterial()
+    {
+        if (_selectedTask is null) return;
+        var taskId = _selectedTask.Id;
+        JsonObject material;
+        int slots;
+        try
+        {
+            material = _drafts.BuildMaterial(taskId, [], out var included);
+            slots = included.Count;
+            if (slots == 0)
+            {
+                SetStatus(DraftService.NoSlotsMessage, UiTokens.WarnText);
+                return;
+            }
+            FileStore.WriteText(_tasks.FilePath(taskId, TaskFiles.Material), material.ToJsonString(JsonDefaults.Options));
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message, UiTokens.WarnText);
+            return;
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法准备导出材料：" + Redactor.Redact(ex.Message));
+            return;
+        }
+        using var dialog = new SaveFileDialog
+        {
+            Title = "导出材料",
+            FileName = DraftEntries.MaterialFileName(taskId),
+            Filter = "材料文件（*.json）|*.json|全部文件（*.*）|*.*",
+        };
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
+        try
+        {
+            File.WriteAllText(dialog.FileName, material.ToJsonString(JsonDefaults.Options), new UTF8Encoding(false));
+            SetStatus(DraftEntries.MaterialExportDoneText(slots), UiTokens.OkText);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("材料导出失败：" + Redactor.Redact(ex.Message));
+        }
     }
 
     /// <summary>打开注释回写（生成计划、预览差异、确认后写源码或导出补丁）：关闭后刷新任务列表的回写计数。</summary>

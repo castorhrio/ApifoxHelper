@@ -46,6 +46,9 @@ public sealed class DraftStore
     public List<GenerationRun> Runs { get; set; } = new();
 }
 
+/// <summary>导入编码助手结果的结果：导入与拒绝数量、拒绝原因（与冻结页面响应同一形状，属性名序列化为 imported/rejected/errors）。</summary>
+public sealed record DraftImportResult(int Imported, int Rejected, List<string> Errors);
+
 public sealed class GenerationRun
 {
     public string Id { get; set; } = "";

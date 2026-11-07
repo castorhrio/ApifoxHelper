@@ -114,12 +114,12 @@ public static class ApiRoutes
         app.MapPost("/api/tasks/{id}/comment-drafts/material", (string id, MaterialRequest request, DraftService drafts, TaskStore tasks) =>
         {
             var material = drafts.BuildMaterial(id, request.SlotIds, out var included);
-            if (included.Count == 0) throw new UserException("没有需要生成草稿的注释位置。");
+            if (included.Count == 0) throw new UserException(DraftService.NoSlotsMessage);
             FileStore.WriteText(tasks.FilePath(id, TaskFiles.Material), material.ToJsonString(JsonDefaults.Options));
             return Json(new
             {
                 slots = included.Count,
-                files = ((JsonArray)material["endpoints"]!).SelectMany(e => ((JsonArray)e!["evidence"]!).Select(x => x!["file"]!.GetValue<string>())).Distinct().ToList(),
+                files = DraftService.EvidenceFiles(material),
                 material,
             });
         });
