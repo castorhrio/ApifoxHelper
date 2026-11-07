@@ -897,13 +897,15 @@ internal sealed class TasksPage : UserControl, INativePage
         _contractStatus.ForeColor = blocked > 0 ? UiTokens.BadText : pending > 0 ? UiTokens.WarnText : UiTokens.OkText;
     }
 
-    /// <summary>打开响应契约审阅（确认/拒绝/重置写任务数据并递增任务版本，不写源码、不访问 Apifox）：关闭后刷新状态行。</summary>
+    /// <summary>打开响应契约审阅（确认/拒绝/重置写任务数据并递增任务版本，不写源码、不访问 Apifox）：关闭后整页重读。</summary>
     private void ShowContracts()
     {
         if (_selectedTask is null) return;
         using var dialog = new ContractsDialog(_tasks, _selectedTask, _reviews);
         dialog.ShowDialog(FindForm());
-        RefreshContractSection();
+        // 契约审阅递增任务版本（旧检查与旧计划过期）：与注释回写、差异确认等写任务数据的入口同一口径，
+        // 关闭后整页重读——引导横幅、「任务内容在检查后有变化」提示与列表「下一步」列不得滞留旧版本。
+        LoadTasks();
     }
 
     /// <summary>报告区状态行：任务目录里已导出的报告副本（report.md / handoff.md）与时间；预览与导出随时可用。</summary>

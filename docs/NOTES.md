@@ -577,6 +577,16 @@
 - **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 576 用例全部通过（含令牌接线与 G-D4 机械检查对 DecisionsDialog 改动的扫描——新注释无禁词、无档外值）。**筛选空态换筛选恢复与打开期禁用态的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「打开一个没有模型绑定的任务的差异确认 → 点「模型绑定」筛选 → 提示出现且筛选器仍可点 → 换回「全部」列表恢复 → 「待处理」下确认最后一条 → 空表提示出现且筛选器可点 → 换「全部」能看到已确认条目并「撤销确认」」走一遍。纯呈现层：决策数据、DecisionService 校验与保存链路一行未动（门控与保存路径零改动）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「契约审阅关闭后按新任务版本刷新」（2026-11-08 第四十三轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（c5ff1d5）的 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误、576 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：逐屏复核继续按第四十～四十二轮同族（动作之后的状态必须重新推导）排查任务页九个写任务数据入口的关闭后刷新——发现一个真实的滞留缺陷：**响应契约审阅对话框关闭后，详情与列表滞留旧任务版本**。
+- **缺陷机理（具名 pass：harden，纯呈现层）**：契约审阅（确认/拒绝/重置）经共享 `ContractReviewService` 写 responseContract.json 并递增任务版本（`t.Revision++`，使旧检查与旧计划过期），但 `TasksPage.ShowContracts` 关闭对话框后只调 `RefreshContractSection()` 刷新契约计数行。后果三条且都能实际触发：引导横幅（`NextStep.Compute` 按 `CheckedRevision != Revision` 计算）不重算——确认契约后「下一步」仍指向旧动作而不是重新检查；远端状态行的「（任务内容在检查后有变化，需要重新检查）」后缀（按 `CheckedRevision < Revision` 推导）不出现；任务列表「下一步」列同样滞留。要等一次无关刷新（切页、作业结束、换选任务）才纠正，方案 3.2「界面始终给出唯一下一步」在这段窗口内给的是旧的一步。同族对照：注释回写（ShowApply）、差异确认（ShowDecisions）、补充说明（ShowSupplements）、同步预览（ShowSyncPreview）、缺口清单与候选审阅（ShowScanResults/ShowCandidates）关闭后都是 `LoadTasks()` 整页重读，契约对话框是唯一不一致；报告对话框的 `RefreshReportSection()` 只读导出副本、不写任务数据，不在本缺陷面。
+- **修复口径**：`ShowContracts` 关闭后与同族入口同一口径 `LoadTasks()` 整页重读——任务对象从磁盘重读（页面内存中的 `CheckTask` 是审阅前的旧实例，契约审阅写的是服务自己从磁盘加载的副本），契约计数（RefreshDetail 内既有 RefreshContractSection）、引导横幅、远端状态行与列表「下一步」列全部从新版本推导，一轮刷新全部到位。
+- **测试 576 → 581 用例**：新增 `ContractReviewRefreshTests`（5）——ShowContracts 方法体（锚点定位）「ShowDialog 之后 LoadTasks」相邻锚点（正则允许语句前有注释行，语句被注释掉仍算删除）、方法体内不得出现直连 `RefreshContractSection()`（只刷契约行是修复前的缺陷形态）；`ContractReviewService` 契约写入与 `t.Revision++` 的相邻锚点（刷新必要性的服务侧来源）；TasksPage 远端状态行「（任务内容在检查后有变化，需要重新检查）」按版本推导的正则与横幅重算行（滞留后果的两条呈现，钉住刷新所服务的口径）；DESIGN.md §8 条款断言。
+- **变异验证五处实测可红**（各自独立变红、还原后全绿，还原以切片后基准副本覆盖并核对 diff 干净）：删 ShowContracts 的 `LoadTasks();`（1 红）、改回直连 `RefreshContractSection();`（2 红：整页重读锚点 + 直连禁令）、删服务端 `t.Revision++`（1 红）、删远端状态行版本推进提示（1 红）、删 DESIGN.md §8 条款行（1 红）。
+- **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 581 用例全部通过（含令牌接线与 G-D4 机械检查对 TasksPage 改动的扫描——新注释无禁词、无档外值）。**契约审阅关闭后横幅与过期提示即时更新的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「选中已检查的任务 → 打开响应契约 → 确认一条 → 关闭 → 引导横幅立即指向重新检查、远端状态行出现「任务内容在检查后有变化」、列表「下一步」列同步更新」走一遍。纯呈现层：ContractReviewService 的审阅校验、写入与版本递增一行未动（刷新只重读磁盘）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。
