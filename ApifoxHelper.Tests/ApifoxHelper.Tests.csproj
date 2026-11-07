@@ -45,6 +45,7 @@
     <Compile Include="..\Desktop\Native\ScanOverview.cs" Link="Shared\ScanOverview.cs" />
     <Compile Include="..\Desktop\Native\ApifoxPicker.cs" Link="Shared\ApifoxPicker.cs" />
     <Compile Include="..\Desktop\Native\AttentionCue.cs" Link="Shared\AttentionCue.cs" />
+    <Compile Include="..\Desktop\Native\LastPage.cs" Link="Shared\LastPage.cs" />
     <Compile Include="..\Desktop\Native\ListRows.cs" Link="Shared\ListRows.cs" />
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />

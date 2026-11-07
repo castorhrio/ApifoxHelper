@@ -25,6 +25,7 @@ internal sealed class NativeShellForm : Form
 
     private readonly HelperHost _host;
     private readonly WindowPlacement _placement;
+    private readonly LastPage _lastPage;
     private readonly Panel _navPanel = new() { Dock = DockStyle.Left, Width = NavWidth, BackColor = UiTokens.Nav, Padding = new Padding(UiTokens.Sm) };
     private readonly Panel _marker = new() { Width = 3, BackColor = UiTokens.Accent, Visible = false };
     private readonly Panel _content = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg) };
@@ -92,6 +93,7 @@ internal sealed class NativeShellForm : Form
 
         _placement = new WindowPlacement(Path.Combine(host.Store.Root, "desktop-window-native.json"));
         _placement.Restore(this);
+        _lastPage = new LastPage(Path.Combine(host.Store.Root, "desktop-page-native.json"));
     }
 
     private Button NavButton(string text)
@@ -227,7 +229,9 @@ internal sealed class NativeShellForm : Form
 
         _navProjects.Enabled = true;
         _navTasks.Enabled = true;
-        ShowPage(_projectsPage, _navProjects);
+        // 回到上次使用的页面；无记录或值不认识时落在项目设置页（首次启动的缺省）。
+        if (_lastPage.Read() == LastPageKeys.Tasks) ShowPage(_tasksPage, _navTasks);
+        else ShowPage(_projectsPage, _navProjects);
     }
 
     private void ShowPage(Control? page, Button nav)
@@ -241,6 +245,8 @@ internal sealed class NativeShellForm : Form
         SelectNav(nav);
         PositionMarker(nav);
         if (page is INativePage shown) shown.OnPageShown();
+        // 记住本次使用的页面，下次启动回到这里；保存失败不影响切换。
+        _lastPage.Save(ReferenceEquals(nav, _navTasks) ? LastPageKeys.Tasks : LastPageKeys.Projects);
     }
 
     /// <summary>导航选中项左侧的 3px 强调色标记。</summary>
