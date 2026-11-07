@@ -66,7 +66,7 @@ internal sealed class ScanResultsDialog : Form
         _list.Columns.Add("文件:行", 320);
         _evidenceButton = Ui.Ghost("查看代码证据");
         _evidenceButton.Enabled = false;
-        _evidenceButton.Click += (_, _) => ShowEvidence();
+        _evidenceButton.Click += (_, _) => ShowEvidence(_list.SelectedItems[0]?.Tag as DocSlot);
         _manualButton = Ui.Ghost("手工填写说明");
         _manualButton.Enabled = false;
         _manualButton.Click += (_, _) => ShowManualFill();
@@ -77,10 +77,8 @@ internal sealed class ScanResultsDialog : Form
         _warningsButton.Visible = false;
         _warningsButton.Click += (_, _) => ShowDegradations();
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
-        _list.DoubleClick += (_, _) =>
-        {
-            if (_evidenceButton.Enabled) ShowEvidence();
-        };
+        // 双击=查看证据经共享入口：命中哪行看哪行的证据（行自身 Tag，不借当前选中），双击列头与空白区不动作。
+        Ui.ActivateItem(_list, item => ShowEvidence(item.Tag as DocSlot));
 
         _filter.Items.AddRange(FilterChoices);
         _filter.SelectedIndex = 0;
@@ -278,10 +276,10 @@ internal sealed class ScanResultsDialog : Form
         _detail.SelectionLength = 0;
     }
 
-    /// <summary>打开所选位置的代码证据（只读）：数据来自扫描落盘的 evidence.json，无写入动作。</summary>
-    private void ShowEvidence()
+    /// <summary>打开注释位置的代码证据（只读）：数据来自扫描落盘的 evidence.json，无写入动作；按钮与双击共用这一份行内门控。</summary>
+    private void ShowEvidence(DocSlot? slot)
     {
-        if (_list.SelectedItems[0]?.Tag is not DocSlot slot) return;
+        if (slot is null || slot.EvidenceIds.Count == 0) return;
         using var dialog = new EvidenceDialog(_tasks, _task, slot);
         dialog.ShowDialog(this);
     }

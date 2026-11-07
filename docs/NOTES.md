@@ -544,6 +544,19 @@
 - **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 567 用例全部通过（含令牌接线与 G-D4 机械检查对 Ui.cs/ProjectsPage.cs 改动的扫描——新注释无禁词、无档外值）。**双击行激活与双击空白区不动作的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「双击配置行 → 打开该行编辑对话框 → 关闭 → 双击列表空白区 → 无任何对话框弹出 → 方向键导航不受影响」走一遍。纯呈现层：配置数据、选中保留、刷新与保存口径一行未动（`Selected()` 仍服务编辑按钮与选中保留，一行未改）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「证据入口按行收口：双击与按钮共用行内门控」（2026-11-08 第四十轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（51386c5）的 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误、567 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：处理第三十九轮的明确挂账——候选审阅与注释缺口两对话框的「双击=查看代码证据」仍走裸 `ListView.DoubleClick`（借当前选中）；逐行对照两对话框的证据入口时另发现一个真实状态缺陷：**候选审阅对话框清空选中后「查看代码证据」按钮残留启用**——ShowDetail 的空选中分支只禁用了审阅三钮（`SetButtons(null)`），证据按钮的启用态保持上一次选中行的值，按钮看起来可点、点击后经 ShowEvidence 的空选中守卫静默无响应，违反设计基线 §7「禁用：控件禁用 + 一句话说明缺什么」；姊妹对话框 ScanResultsDialog 的空选中分支本就正确禁用证据按钮，同族不同行为。
+- **缺陷机理（具名 pass：harden，纯呈现层）**：两对话框的旧双击接线 `_list.DoubleClick += (_, _) => { if (_evidenceButton.Enabled) ShowEvidence(); }` 借「当前选中」与「按钮启用态」做双重中介——`ListView.DoubleClick` 不区分命中行（第三十九轮同型），按钮启用态也可能滞后于选中变化（上述残留缺陷正是同一根因的另一面）。
+- **修复口径**：
+  - 双击接线换共享入口 `Ui.ActivateItem`（第三十九轮唯一入口）：命中哪行看哪行的证据（行自身 Tag 载荷，`item => ShowEvidence(item.Tag as CommentCandidate/DocSlot)`），双击列头与空白区不动作。
+  - `ShowEvidence` 收敛为行载荷参数单一落点（`ShowEvidence(CommentCandidate?/DocSlot?)`），按钮点击传选中行载荷、双击传命中行载荷，共用同一份行内门控——证据数 > 0 才打开（与按钮启用条件同值；旧按钮路径的有效门控是「按钮禁用即点不到」，与该口径等价，统一为纯行为保持）。
+  - 候选审阅对话框空选中分支补 `_evidenceButton.Enabled = false;`（对齐注释缺口对话框的既有正确行为）；「覆盖」勾选的启用态在空选中下同样短暂残留、但每次选中都会按该行重算且审阅动作自带空选中守卫，无功能后果，如实记录不动。
+- **测试 567 → 569 用例**：`ListActivationTests` +2——`EvidenceDialogs_ActivateOnlyViaSharedEntry`（两对话框 `Ui.ActivateItem` 接线行首正则 + 裸 `_list.DoubleClick` 禁令）与 `EvidenceEntry_SharesOneRowScopedGate`（行载荷签名、按钮载荷、行内门控正则、空选中禁用锚点）；`DesignDoc_DeclaresDoubleClickRule` 条款断言补「证据」「列头」。
+- **变异验证六处实测可红**（各自独立变红、还原后全绿，还原一律以切片后基准副本覆盖并核对 diff）：空选中禁用行删除（1 红）、候选审阅 `ActivateItem` 接线删除（1 红）、注释缺口 `ActivateItem` 接线删除（1 红）、行内门控弱化（去证据数条件，1 红）、DESIGN.md 条款去掉「列头」（1 红）、删除 `Ui.ActivateItem` 工厂本体（主工程 `dotnet build` CS0117——ProjectsPage/CandidatesDialog/ScanResultsDialog 三处调用点可红；测试工程不编译界面源码，界面接线的「编译可红」以主工程构建为准）。
+- **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 569 用例全部通过（含令牌接线与 G-D4 机械检查对两对话框改动的扫描）。**证据双击激活与按钮态的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「选中带证据的候选 → 双击该行 → 证据对话框打开 → 关闭 → 双击列表空白区与列头 → 无对话框弹出 → 点击空白区清空选中 → 「查看代码证据」按钮变禁用」走一遍。纯呈现层：候选与缺口数据、审阅/手工/导入链路一行未动（`ShowEvidence` 收敛为行载荷参数，两处调用点行为等价）；响应契约对话框的证据按钮态经 `SetButtons(null)` 本就正确、且无双击接线，不属本缺陷面，如实记录一行未动；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。
