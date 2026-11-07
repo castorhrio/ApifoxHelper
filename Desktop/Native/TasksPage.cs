@@ -44,11 +44,18 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly SyncExecutor _syncExecutor;
 
     private const int TaskNameColumnWidth = 200;
+    // 分割面板口径（单一落点）：详情区设计宽 420、可收窄下限 360，列表下限 320。
+    // 首次显示的分割距离与可行性门控都用这些常量，不出现第二处数字。
+    private const int DetailDesignWidth = 420;
+    private const int DetailMinWidth = 360;
+    private const int ListMinWidth = 320;
 
     private readonly ListView _list = Ui.List();
     private readonly Panel _empty;
     private readonly Label _status = Ui.StatusLine();
-    private readonly SplitContainer _split = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Line };
+    // 详情区固定设计宽（FixedPanel = Panel2）：窗口缩放时详情不变、列表吸收剩余宽度，
+    // 与「标识列吸收剩余可视宽度」（ListColumns）同一方向；缺省 None 会让详情区随窗口按比例放大、偏离设计宽。
+    private readonly SplitContainer _split = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Line, FixedPanel = FixedPanel.Panel2 };
 
     // 下一步引导横幅（口径在 NextStep）：标题按语义色调着色，动作按钮映射到本页既有入口。
     private readonly FlowLayoutPanel _nextHead = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
@@ -324,12 +331,17 @@ internal sealed class TasksPage : UserControl, INativePage
 
     public void OnPageShown()
     {
-        if (!_splitAdjusted && _split.Width > 800)
+        // 首次显示时按当前宽度布置分割：详情区取设计宽，列表吸收剩余。门控按可行性条件
+        // （详情设计宽 + 列表下限 + 分隔条宽）而不是任意魔数——壳最小窗口（1024）下分割面板约 776px，
+        // 旧门槛宽度过大、在此恒假，分割距离停在 WinForms 默认值 50px，任务列表只剩一条缝。
+        if (!_splitAdjusted && _split.Width >= DetailDesignWidth + ListMinWidth + _split.SplitterWidth)
         {
             try
             {
-                _split.Panel2MinSize = 360;
-                _split.SplitterDistance = _split.Width - 420;
+                _split.Panel2MinSize = DetailMinWidth;
+                _split.SplitterDistance = _split.Width - DetailDesignWidth;
+                // 顺序在分割距离之后：此时距离已不小于列表下限，设置最小尺寸不会与当前布局冲突。
+                _split.Panel1MinSize = ListMinWidth;
             }
             catch (InvalidOperationException)
             {
