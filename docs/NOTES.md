@@ -406,6 +406,16 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 495 用例全部通过（含令牌接线机械检查对 ProjectsPage.cs/ProfileStore.cs 改动的扫描）。保存校验拒绝路径（文案 + 字段标识 + 无半份状态）在 Linux 真实文件系统上执行；描红的呈现与改值解除是 WinForms 行为，**失败描红出现/解除、失败 > 聚焦优先级的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「新建配置：名称留空直接保存 → 状态行文案 + 名称框描红 → 填入名称后描红消失；仓库根目录填相对路径保存 → 该框描红；Swagger 来源选文件、位置留空保存 → 位置框描红」走一遍。未改写入安全语义（字段标识为可选元数据，`Validate`/`Normalize` 校验逻辑与门禁一行未动；REST JSON 形状不变）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「新建任务的指定接口与版本备注」（2026-11-07 第二十八轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（164b3c5）的 Linux `dotnet build` 0 警告 0 错误、495 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：方案 3.2「新建任务：选择配置与模块」与冻结页面 newTask 表单（`Web/app.js` 的 `endpointKeys: lines(f.keys.value)`、`sourceVersionNote: f.note.value`）对照原生 `NewTaskDialog`——原生只有模块与路径前缀两个范围维度，**「指定接口」（`endpointKeys`，每行一个「GET /路径」，与路径前缀取并集——按接口身份精确圈定扫描范围）与「版本备注」（任务级 `sourceVersionNote`，留空回退配置级备注，报告「未绑定代码版本」提示的数据来源）两项输入在原生缺失**，原生用户无法按接口圈定任务范围；本轮补上。
+- **共享口径（唯一落点）**：新增 `Desktop/Native/TaskCreation.cs`（不依赖 WinForms，与测试工程共享编译）——`LineValues`（按 \n 分行、逐行去空白含行尾 \r、丢弃空行，与冻结页面 `lines()` 同一结果）、`VersionNote`（去空白，空白交 null——由 `TaskStore.Create` 回退到配置级备注）、`KeysHint`/`NotePlaceholder`（与冻结页面输入框占位文字同一字面）、`NoteFallbackHint`（「留空则用项目配置里的版本备注。」——回退语义在 TaskStore，说明文字如实交代）；「GET /路径」的规整（方法大写、路径补斜杠）、非法行丢弃与去重仍在 `TaskStore.Create` 单一口径，原生层不复制。
+- **对话框接入**：`NewTaskDialog` 新增多行「指定接口」输入（`Ui.Input(multiline: true)` + 垂直滚动条，内层定高 62 由 `Ui.Field` 尺寸双向同步带着描边面板变高）与「版本备注」输入（占位文字），字段顺序与冻结页面一致（模块 → 路径前缀 → 指定接口 → 版本备注 → 离线模式），两个输入框都经工厂出厂并包 1px 描边（DESIGN.md §6）；`Confirm` 的 `CreateTaskRequest` 增设 `EndpointKeys = TaskCreation.LineValues(...)` 与 `SourceVersionNote = TaskCreation.VersionNote(...)`。期间踩坑一次并记录：字段初始化器里 `Ui.Input(...) { Height = 62 }` 不是合法 C#——对象初始化器只能跟在 `new` 表达式后，不能跟在方法调用结果后（CS1003），改在构造函数里设高。
+- **测试 495 → 508 用例**：`TaskStore` 以共享源码编入测试工程（只依赖 BCL 与已共享的 Core/FileStore/ProfileStore——沿用第二十七轮「链路验证不依赖 /tmp 一次性工程」的先例），新增 `TaskCreationTests`（13）：`LineValues` 混合换行/空行/首尾空白、空白文本空清单；`VersionNote` 去空白与空白交 null；提示文字与冻结页面占位逐字一致；**真实 `FileStore`/`ProfileStore`/`TaskStore` 链路**（临时目录、真实工作区与 .csproj 夹具）——规整（小写方法、缺斜杠、非法行、重复行）、任务级备注空白回退配置值与有值覆盖、落盘后重读逐值一致、未知模块拒绝文案逐字、`InScope` 范围语义（接口身份按原大小写精确匹配——`get /api/users` 不匹配 `GET /api/users`；指定接口与路径前缀取并集，前缀忽略大小写；两者皆空为全项目——**范围判定语义此前无仓内用例**）；对话框接线机械检查（行首正则——提交口径经共享 TaskCreation、两输入框行标签与 `Ui.Field` 包裹、提示与占位取共享常量不复制字面）。
+- **变异验证六处实测可红**（各自独立变红、还原后全绿，还原一律手工逆编辑）：`LineValues` 去掉空行过滤（2 红）、`VersionNote` 空白返回空串而非 null（1 红——注意 TaskStore 的回退判 `IsNullOrWhiteSpace`，空串也回退，只有直接断言 null 的用例能抓住）、`TaskStore` 规整去掉方法大写（1 红）、对话框 `EndpointKeys` 接线注释掉（1 红——行首正则不被注释行骗过）、`KeysHint` 字面改写（1 红）、`InScope` 接口身份改忽略大小写（1 红——恢复时 sed 的逆模式没写对，残留由 git diff 揪出手工修正，验证「还原必须核对 diff」的纪律）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 508 用例全部通过（含令牌接线机械检查对 TasksPage.cs/TaskCreation.cs 改动的扫描——无就地颜色/字体/间距值）。任务创建链路（规整/去重/备注回退/范围判定/落盘重读）在 Linux 真实文件系统上执行。**两个新输入框的布局与描边在 Windows 真机的观感仍未验证**（G-D5 复核）——Windows 真机需按「新建任务：对话框高度正常无裁切 → 指定接口填「get api/users」与非法行 → 创建后任务扫描范围只含该接口 → 版本备注留空时报告回退配置级备注」走一遍。未改写入安全语义（建任务的规整与回退在 `TaskStore.Create` 单一口径一行未动，原生层只收集文本）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

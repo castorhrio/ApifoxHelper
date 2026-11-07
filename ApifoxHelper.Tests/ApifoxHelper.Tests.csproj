@@ -47,7 +47,9 @@
     <Compile Include="..\Desktop\Native\ListRows.cs" Link="Shared\ListRows.cs" />
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />
+    <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />
     <Compile Include="..\Tasks\TaskModels.cs" Link="Shared\TaskModels.cs" />
+    <Compile Include="..\Tasks\TaskStore.cs" Link="Shared\TaskStore.cs" />
     <Compile Include="..\Infrastructure\FileStore.cs" Link="Shared\FileStore.cs" />
     <Compile Include="..\Profiles\ProjectProfile.cs" Link="Shared\ProjectProfile.cs" />
     <Compile Include="..\Profiles\ProfileStore.cs" Link="Shared\ProfileStore.cs" />

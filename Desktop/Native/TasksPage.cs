@@ -1034,7 +1034,7 @@ internal sealed class TasksPage : UserControl, INativePage
 }
 
 /// <summary>
-/// 新建任务对话框：选配置、可选模块与路径前缀；「创建并扫描」立即开始源码扫描作业。
+/// 新建任务对话框：选配置、可选模块、路径前缀、指定接口与版本备注；「创建并扫描」立即开始源码扫描作业。
 /// </summary>
 internal sealed class NewTaskDialog : Form
 {
@@ -1043,6 +1043,8 @@ internal sealed class NewTaskDialog : Form
     private readonly TextBox _name = Ui.Input();
     private readonly CheckedListBox _modules = new() { CheckOnClick = true, Height = 96, BorderStyle = BorderStyle.FixedSingle };
     private readonly TextBox _prefixes = Ui.Input();
+    private readonly TextBox _keys = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
+    private readonly TextBox _note = Ui.Input();
     private readonly CheckBox _offline = new() { Text = "离线模式（本次任务不访问 Apifox，仅源码阶段）", AutoSize = true };
     private readonly Label _status = Ui.StatusLine();
     private List<ModuleScope> _currentModules = [];
@@ -1066,7 +1068,7 @@ internal sealed class NewTaskDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 420);
+        ClientSize = new Size(560, 560);
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -1081,6 +1083,9 @@ internal sealed class NewTaskDialog : Form
 
         _profile.SelectedIndexChanged += (_, _) => LoadModules();
 
+        // 指定接口为多行输入：内层文本框定高，Ui.Field 的尺寸双向同步会带着描边面板一起变高。
+        _keys.Height = 62;
+
         var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -1091,6 +1096,11 @@ internal sealed class NewTaskDialog : Form
         AddRow(grid, "", Ui.Caption("勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。"));
         AddRow(grid, "路径前缀", Ui.Field(_prefixes));
         AddRow(grid, "", Ui.Caption("补充接口路径前缀，用「,」「;」分隔；可与模块并用。"));
+        AddRow(grid, "指定接口", Ui.Field(_keys));
+        AddRow(grid, "", Ui.Caption(TaskCreation.KeysHint));
+        AddRow(grid, "版本备注", Ui.Field(_note));
+        _note.PlaceholderText = TaskCreation.NotePlaceholder;
+        AddRow(grid, "", Ui.Caption(TaskCreation.NoteFallbackHint));
         AddRow(grid, "", _offline);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
@@ -1161,6 +1171,8 @@ internal sealed class NewTaskDialog : Form
             Name = _name.Text.Trim(),
             ModuleNames = moduleNames,
             PathPrefixes = prefixes,
+            EndpointKeys = TaskCreation.LineValues(_keys.Text),
+            SourceVersionNote = TaskCreation.VersionNote(_note.Text),
             OfflineMode = _offline.Checked,
         };
         StartScan = startScan;
