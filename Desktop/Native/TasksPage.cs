@@ -21,7 +21,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// + 报告与交接（Markdown 预览 + 原生另存为导出，渲染与字节口径走共享 ReportExportService）
 /// + 同步预览与执行（勾选接口生成冻结计划并查看写入清单、排除原因与保留设置，经既有 SyncPlanService；
 /// 确认后经既有 SyncExecutor 执行同步——计划哈希绑定、逐动作写入并回读核对、失败即停、可在动作之间停止；
-/// 「重新核对（只读）」复用 VerifyAsync）。
+/// 「重新核对（只读）」复用 VerifyAsync）
+/// + 「下一步」引导（方案 3.2「界面始终给出唯一下一步」）：任务列表「下一步」列与详情顶部引导横幅，
+/// 口径经共享的 NextStep 与冻结页面同一规则同一文案；横幅动作映射到本页既有入口，只做引导不改变状态。
 /// </summary>
 internal sealed class TasksPage : UserControl, INativePage
 {
@@ -45,6 +47,12 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Panel _empty;
     private readonly Label _status = Ui.StatusLine();
     private readonly SplitContainer _split = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Line };
+
+    // 下一步引导横幅（口径在 NextStep）：标题按语义色调着色，动作按钮映射到本页既有入口。
+    private readonly FlowLayoutPanel _nextHead = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+    private readonly Label _nextTitle = Ui.Body();
+    private readonly Label _nextDetail = Ui.Caption();
+    private readonly FlowLayoutPanel _nextActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
 
     // 详情区（固定控件，按任务刷新文本，不整面板重建）。
     private readonly Label _detailHint;
@@ -116,10 +124,22 @@ internal sealed class TasksPage : UserControl, INativePage
         _list.SelectedIndexChanged += (_, _) => OnSelectedChanged();
         _list.Columns.Add("任务", 200);
         _list.Columns.Add("配置", 140);
+        _list.Columns.Add("下一步", 150);
         _list.Columns.Add("接口", 56);
         _list.Columns.Add("注释候选", 76);
         _list.Columns.Add("Apifox", 110);
         _list.Columns.Add("更新时间", 140);
+
+        var nextTag = new Label
+        {
+            Text = "下一步",
+            AutoSize = true,
+            Font = UiTokens.CaptionBold.Value,
+            ForeColor = UiTokens.Muted,
+            Margin = new Padding(0, 0, UiTokens.Sm, 0),
+        };
+        _nextHead.Controls.Add(nextTag);
+        _nextHead.Controls.Add(_nextTitle);
 
         _gapButton = Ui.Ghost("查看注释缺口");
         _gapButton.Click += (_, _) => ShowScanResults();
@@ -243,6 +263,9 @@ internal sealed class TasksPage : UserControl, INativePage
     {
         var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Lg, UiTokens.Lg, 0) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        AddDetailRow(grid, _nextHead);
+        AddDetailRow(grid, _nextDetail);
+        AddDetailRow(grid, _nextActions);
         AddDetailRow(grid, _detailName);
         AddDetailRow(grid, _detailMeta);
         AddDetailRow(grid, _detailRange);
@@ -339,10 +362,13 @@ internal sealed class TasksPage : UserControl, INativePage
             {
                 var item = new ListViewItem(task.Name) { Tag = task };
                 item.SubItems.Add(task.ProfileSnapshot.Name);
+                var next = NextStep.Compute(task);
+                var nextCell = item.SubItems.Add(next.Title);
                 item.SubItems.Add(task.Stages.Source.Endpoints > 0 ? task.Stages.Source.Endpoints.ToString() : "—");
                 item.SubItems.Add(task.Stages.Source.Candidates > 0 ? task.Stages.Source.Candidates.ToString() : "—");
                 var remote = item.SubItems.Add(TaskDisplay.RemoteStatusText(task.Stages.Remote.Status));
                 item.UseItemStyleForSubItems = false;
+                nextCell.ForeColor = ToneColor(next.Tone);
                 remote.ForeColor = ToneColor(TaskDisplay.RemoteTone(task.Stages.Remote.Status));
                 item.SubItems.Add(task.UpdatedAt.LocalDateTime.ToString("MM-dd HH:mm"));
                 _list.Items.Add(item);
@@ -409,6 +435,8 @@ internal sealed class TasksPage : UserControl, INativePage
             ? "范围：" + string.Join("、", task.ModuleNames) + " " + string.Join(" ", task.PathPrefixes)
             : task.ModuleNames.Count > 0 ? "范围：模块 " + string.Join("、", task.ModuleNames) : "范围：API 项目全部接口";
 
+        RefreshNextBanner(NextStep.Compute(task));
+
         var source = task.Stages.Source;
         _sourceStatus.Text = "状态：" + TaskDisplay.SourceStatusText(source.Status);
         _sourceStatus.ForeColor = ToneColor(TaskDisplay.SourceTone(source.Status));
@@ -432,7 +460,7 @@ internal sealed class TasksPage : UserControl, INativePage
 
         // 远端区按钮：离线任务先导入作为「远端」的 OpenAPI JSON；配置了 Swagger 且未冻结时，下一次检查先加载并冻结 Swagger。
         _importRemoteButton.Visible = task.OfflineMode;
-        _remoteCheckButton.Text = NeedsSwaggerLoad(task) ? "加载 Swagger 并检查"
+        _remoteCheckButton.Text = NextStep.NeedsSwaggerLoad(task) ? "加载 Swagger 并检查"
             : File.Exists(_tasks.FilePath(task.Id, TaskFiles.Diff)) ? "重新检查" : "开始检查";
 
         RefreshContractSection();
@@ -443,12 +471,55 @@ internal sealed class TasksPage : UserControl, INativePage
         ShowJobState(job);
     }
 
+    /// <summary>下一步引导横幅：标题按语义色调着色，动作按钮映射到本页既有入口（只做引导，不改变状态）。</summary>
+    private void RefreshNextBanner(NextStep.Step next)
+    {
+        _nextTitle.Text = next.Title;
+        _nextTitle.ForeColor = ToneColor(next.Tone);
+        _nextDetail.Text = next.Detail;
+        _nextActions.Controls.Clear();
+        if (next.PrimaryLabel is { } primary) _nextActions.Controls.Add(NextActionButton(primary, next.PrimaryAction));
+        if (next.SecondaryLabel is { } secondary) _nextActions.Controls.Add(NextActionButton(secondary, next.SecondaryAction));
+    }
+
+    private Button NextActionButton(string label, string? action)
+    {
+        var button = Ui.Ghost(label);
+        button.Margin = new Padding(0, 0, UiTokens.Sm, 0);
+        button.Click += (_, _) => RunNextAction(action);
+        return button;
+    }
+
+    /// <summary>引导动作 → 本页既有入口；入口自身的门控与异常处理（状态行内联）保持不变。</summary>
+    private void RunNextAction(string? action)
+    {
+        switch (action)
+        {
+            case "startScan": StartScan(); break;
+            case "startRuleExtraction": StartRuleExtraction(); break;
+            case "openApply": ShowApply(); break;
+            case "openPropagation": ShowPropagation(); break;
+            case "openCandidates": ShowCandidates(); break;
+            case "importOfflineRemote": ImportOfflineRemote(); break;
+            case "startCheck": StartRemoteCheck(); break;
+            case "openDecisions": ShowDecisions(); break;
+            case "openSync": ShowSyncPreview(); break;
+            case "openReports": ShowReports(); break;
+            case "openRemoteResults": ShowCheckResults(); break;
+        }
+    }
+
     /// <summary>扫描区按作业状态切换：按钮（空闲）或进度 + 取消（执行中）。控件位置固定，不跳位。</summary>
     private void ShowJobState(JobInfo? job)
     {
         // 缺口清单、候选审阅、规则提取、注释回写、传播核对、响应契约与远端检查都基于扫描落盘产物：扫描完成后可用，
         // 作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）；后台作业的进度与取消共用同一套固定占位控件。
         var scanReady = _selectedTask is { Stages.Source.ScannedAt: not null } && job is null;
+        // 引导横幅的动作与各区按钮同一纪律：作业执行中一律禁用（进度在上方状态行）。
+        foreach (var bannerButton in _nextActions.Controls.OfType<Button>())
+        {
+            bannerButton.Enabled = job is null;
+        }
         _gapButton.Enabled = scanReady;
         _candidatesButton.Enabled = scanReady;
         _ruleButton.Enabled = scanReady;
@@ -832,18 +903,12 @@ internal sealed class TasksPage : UserControl, INativePage
         RefreshReportSection();
     }
 
-    /// <summary>配置了 Swagger、还没冻结过且不是离线任务：检查前先加载并冻结 Swagger（与冻结页面同一规则，避免不知情地退化为只按远端现状比较）。</summary>
-    private static bool NeedsSwaggerLoad(CheckTask task) =>
-        !task.OfflineMode
-        && task.ProfileSnapshot.Swagger.Type is not (null or "" or "none")
-        && task.Stages.Remote.SourceHash is null;
-
     /// <summary>Apifox 差异检查（只读后台作业）：需要时先加载并冻结 Swagger，再读取远端与目标比较，结果落盘 diff.json；不写入远端。</summary>
     private void StartRemoteCheck()
     {
         if (_selectedTask is null) return;
         var taskId = _selectedTask.Id;
-        var loadSwagger = NeedsSwaggerLoad(_selectedTask);
+        var loadSwagger = NextStep.NeedsSwaggerLoad(_selectedTask);
         try
         {
             _jobs.Start(taskId, "契约检查", async job =>
