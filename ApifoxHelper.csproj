@@ -17,12 +17,20 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- 在 Linux（CI）上编译 net8.0-windows：仅取 Windows 引用包完成编译验证，不在 Linux 运行 GUI。 -->
+    <EnableWindowsTargeting Condition="$([MSBuild]::IsOSPlatform('Linux'))">true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- 只在桌面相关文件中显式引用 WinForms/GDI+ 命名空间，避免与其余代码中的同名类型冲突。 -->
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 测试工程目录在本工程目录内：从默认编译通配中排除，由 ApifoxHelper.Tests.csproj 单独编译。 -->
+    <Compile Remove="ApifoxHelper.Tests\**" />
+    <EmbeddedResource Remove="ApifoxHelper.Tests\**" />
   </ItemGroup>
 
   <ItemGroup>

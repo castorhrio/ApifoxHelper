@@ -4,6 +4,23 @@
 
 本目录自成一体：有自己的项目文件、`Directory.Build.props`/`Directory.Packages.props`（截断外层仓库的 MSBuild 继承），不引用任何业务项目，也不在业务解决方案中。可以整个目录移到仓库之外使用。
 
+## 原生桌面客户端（开发中）
+
+交互形态重构（docs/方案.md 第 2 节，F16）已开始：技术栈决策为 WinForms 原生（docs/DECISIONS/D1-桌面技术栈.md），设计基线见 docs/DESIGN.md。当前纵切片覆盖「项目设置 → 新建任务 → 源码扫描（进度/取消）→ 查看注释缺口（只读：按状态筛选注释位置，查看现状、覆盖接口与证据数）」，直接复用进程内服务；注释审阅、检查、同步与报告尚未接入原生界面。启动方式：
+
+```text
+ApifoxHelper.exe --native
+```
+
+默认启动（不带 `--native`）仍打开现有 WinForms + WebView2 过渡壳，二者共用同一资料目录与本地服务。
+
+构建与机械检查（Linux CI 可编译，Windows GUI 真机验证见 docs/NOTES.md 挂账）：
+
+```text
+dotnet build                  # 主工程（net8.0-windows 仅编译；Linux 由 csproj 内的条件属性启用）
+dotnet test ApifoxHelper.Tests   # 令牌接线机械检查（DESIGN.md 与 UiTokens 逐值一致、界面代码无就地颜色/字体/间距值）与状态文案完备断言
+```
+
 ## 桌面版
 
 工具是一个 Windows 桌面程序：双击 `ApifoxHelper.exe` 打开窗口，窗口内用 Microsoft Edge WebView2 显示操作页面。页面与本地服务都在同一个进程里，关闭窗口即退出。
@@ -36,12 +53,13 @@ cd ApifoxHelper
 ### 命令行参数
 
 ```text
-ApifoxHelper.exe [--data <资料目录>] [--port <端口>] [--headless]
+ApifoxHelper.exe [--data <资料目录>] [--port <端口>] [--headless] [--native]
 ```
 
 - `--data`：资料目录，默认 `%LOCALAPPDATA%\ApifoxHelper`（也可用环境变量 `APIFOXHELPER_DATA`）。
 - `--port`：首选端口，默认 5179，被占用时自动换一个空闲端口。
 - `--headless`：不打开窗口，只运行本地服务；从终端启动时输出访问地址，Ctrl+C 退出。用于自动化或没有 WebView2 的环境。
+- `--native`：打开原生桌面界面（开发中，见上文）。
 
 开发调试：`dotnet run --project ApifoxHelper/ApifoxHelper.csproj`。
 

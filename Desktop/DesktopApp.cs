@@ -6,15 +6,16 @@ using Microsoft.Extensions.Logging;
 
 namespace ApifoxHelper.Desktop;
 
-public sealed record LaunchOptions(int Port, string DataRoot, bool Headless)
+public sealed record LaunchOptions(int Port, string DataRoot, bool Headless, bool Native = false)
 {
-    public const string Usage = "用法：ApifoxHelper.exe [--data <资料目录>] [--port <端口>] [--headless]";
+    public const string Usage = "用法：ApifoxHelper.exe [--data <资料目录>] [--port <端口>] [--headless] [--native]";
 
     public static LaunchOptions Parse(string[] args)
     {
         var port = 5179;
         string? data = null;
         var headless = false;
+        var native = false;
         for (var i = 0; i < args.Length; i++)
         {
             string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"参数 {args[i]} 缺少取值。");
@@ -33,13 +34,16 @@ public sealed record LaunchOptions(int Port, string DataRoot, bool Headless)
                 case "--no-browser": // 兼容旧版命令行参数
                     headless = true;
                     break;
+                case "--native":
+                    native = true;
+                    break;
                 default:
                     throw new ArgumentException("未知参数：" + args[i]);
             }
         }
         data ??= Environment.GetEnvironmentVariable("APIFOXHELPER_DATA")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ApifoxHelper");
-        return new LaunchOptions(port, Path.GetFullPath(data), headless);
+        return new LaunchOptions(port, Path.GetFullPath(data), headless, native);
     }
 }
 
@@ -98,6 +102,15 @@ public static class DesktopApp
         if (options.Headless)
         {
             Application.Run(new HeadlessContext(host, instance));
+            return 0;
+        }
+
+        if (options.Native)
+        {
+            // F16 原生桌面纵切片：不嵌网页，直接复用进程内服务。
+            using var nativeForm = new Native.NativeShellForm(host);
+            instance.OnActivationRequested(nativeForm.ActivateFromOtherInstance);
+            Application.Run(nativeForm);
             return 0;
         }
 

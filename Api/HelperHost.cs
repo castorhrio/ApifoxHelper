@@ -65,6 +65,11 @@ public sealed class HelperHost : IAsyncDisposable
 
     public FileStore Store { get; }
 
+    /// <summary>
+    /// 进程内服务容器：原生桌面界面（Desktop/Native）直接解析服务层，不经 HTTP。
+    /// </summary>
+    public IServiceProvider Services => _app.Services;
+
     public LocalSecurity Security { get; }
 
     /// <summary>桌面窗口创建后注册本机能力（如选择目录）；无界面模式保持为空。</summary>

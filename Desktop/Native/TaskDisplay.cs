@@ -1,0 +1,143 @@
+namespace ApifoxHelper.Desktop.Native;
+
+/// <summary>
+/// 状态与枚举值的中文文案与语义色调（设计验收 D3 状态双通道、D9 状态完备、D11 文案口径的机械面）。
+/// 本文件不依赖 WinForms 与 UiTokens：以共享源码方式编入测试工程，状态完备断言因此可在 Linux 上运行。
+/// 未知状态原样返回，界面如实显示原始值，不编造"成功"或"干净"。
+/// </summary>
+public static class TaskDisplay
+{
+    /// <summary>语义色调：ok / warn / bad / accent / muted / normal。界面层把它映射到 UiTokens 颜色。</summary>
+    public static string SourceTone(string status) => status switch
+    {
+        "applied" => "ok",
+        "partiallyApplied" => "warn",
+        "failed" => "bad",
+        "scanned" or "reviewing" or "planReady" => "accent",
+        "notStarted" => "muted",
+        _ => "normal",
+    };
+
+    public static string GeneratedTone(string status) => status switch
+    {
+        "verified" => "ok",
+        "partial" => "warn",
+        "pending" => "accent",
+        "notChecked" => "muted",
+        "unavailable" => "bad",
+        _ => "normal",
+    };
+
+    public static string RemoteTone(string status) => status switch
+    {
+        "verified" => "ok",
+        "partial" or "expired" or "interrupted" => "warn",
+        "failed" => "bad",
+        "executing" or "pending" or "previewable" or "awaitingConfirm" or "snapshotReady" => "accent",
+        "notChecked" => "muted",
+        _ => "normal",
+    };
+
+    /// <summary>注释位置状态（DocSlot.Status）的色调：缺口=warn，失效/无效=bad，有效=ok。</summary>
+    public static string SlotTone(string status) => status switch
+    {
+        "valid" => "ok",
+        "missing" or "empty" => "warn",
+        "stale" or "invalidXml" or "inheritDocUnresolved" => "bad",
+        "inheritDoc" => "muted",
+        "unsupported" => "muted",
+        _ => "normal",
+    };
+
+    public static string SourceStatusText(string status) => status switch
+    {
+        "notStarted" => "未扫描",
+        "scanned" => "已扫描",
+        "reviewing" => "审阅中",
+        "planReady" => "注释计划就绪",
+        "applied" => "已回写",
+        "partiallyApplied" => "部分回写",
+        "failed" => "扫描失败",
+        _ => status,
+    };
+
+    public static string GeneratedStatusText(string status) => status switch
+    {
+        "notChecked" => "未核对",
+        "pending" => "待处理",
+        "verified" => "已核对",
+        "partial" => "部分核对",
+        "unavailable" => "不可用",
+        _ => status,
+    };
+
+    public static string RemoteStatusText(string status) => status switch
+    {
+        "notChecked" => "未检查",
+        "snapshotReady" => "快照就绪",
+        "pending" => "待处理",
+        "previewable" => "可预览",
+        "awaitingConfirm" => "待确认",
+        "executing" => "同步执行中",
+        "verified" => "已核对",
+        "partial" => "部分完成",
+        "failed" => "失败",
+        "expired" => "计划已过期",
+        "interrupted" => "已中断",
+        _ => status,
+    };
+
+    /// <summary>后台作业结束态（JobRunner）：成功 / 失败 / 已取消；未知值原样显示。</summary>
+    public static string JobStateText(string state) => state switch
+    {
+        "succeeded" => "成功",
+        "failed" => "失败",
+        "canceled" => "已取消",
+        _ => state,
+    };
+
+    /// <summary>注释位置状态：缺口清单里逐条显示的状态文字。</summary>
+    public static string SlotStatusText(string status) => status switch
+    {
+        "valid" => "有效",
+        "missing" => "缺失",
+        "empty" => "空",
+        "stale" => "已失效",
+        "inheritDoc" => "继承文档",
+        "inheritDocUnresolved" => "继承无法解析",
+        "invalidXml" => "XML 无效",
+        "unsupported" => "不支持",
+        _ => status,
+    };
+
+    /// <summary>注释标注点（DocSlot.Tag）：summary / param / returns。</summary>
+    public static string SlotTagText(string tag) => tag switch
+    {
+        "summary" => "说明",
+        "param" => "参数",
+        "returns" => "返回",
+        _ => tag,
+    };
+
+    /// <summary>注释位置的角色（DocSlot.Role）：说明属于哪一层。</summary>
+    public static string SlotRoleText(string role) => role switch
+    {
+        "endpoint" => "接口",
+        "request" => "请求",
+        "response" => "响应",
+        "enum" => "枚举",
+        _ => role,
+    };
+
+    /// <summary>注释位置的符号种类（DocSlot.SymbolKind）。</summary>
+    public static string SymbolKindText(string kind) => kind switch
+    {
+        "method" => "方法",
+        "type" => "类型",
+        "property" => "属性",
+        "recordParameter" => "记录参数",
+        "enum" => "枚举",
+        "enumMember" => "枚举成员",
+        _ => kind,
+    };
+}
