@@ -31,6 +31,8 @@ public class TaskDisplayTests
     public static IEnumerable<object[]> PropagationSourceStates() => Statuses("Comments/PropagationService.cs", "written / notWritten");
     public static IEnumerable<object[]> PropagationXmlStates() => Statuses("Comments/PropagationService.cs", "present / different / missing / noXml");
     public static IEnumerable<object[]> PropagationSwaggerStates() => Statuses("Comments/PropagationService.cs", "present / different / missing / notRendered");
+    public static IEnumerable<object[]> ContractReviewStates() => Statuses("Source/SourceModels.cs", "pending / confirmed / rejected / blocked");
+    public static IEnumerable<object[]> ContractDataKinds() => Statuses("Source/SourceModels.cs", "type / null / none / anonymous");
 
     [Theory]
     [MemberData(nameof(SourceStatuses))]
@@ -140,6 +142,22 @@ public class TaskDisplayTests
         Assert.Contains(TaskDisplay.PropagationSwaggerTone(state), Tones);
     }
 
+    [Theory]
+    [MemberData(nameof(ContractReviewStates))]
+    public void ContractReviewState_HasChineseTextAndTone(string state)
+    {
+        Assert.NotEqual(state, TaskDisplay.ContractStateText(state));
+        Assert.Contains(TaskDisplay.ContractTone(state), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(ContractDataKinds))]
+    public void ContractDataKind_HasChineseTextAndTone(string kind)
+    {
+        Assert.NotEqual(kind, TaskDisplay.ContractDataKindText(kind));
+        Assert.Contains(TaskDisplay.ContractDataKindTone(kind), Tones);
+    }
+
     [Fact]
     public void UnknownStatus_FallsBackToRawValue()
     {
@@ -157,6 +175,8 @@ public class TaskDisplayTests
         Assert.Equal("mystery", TaskDisplay.PropagationSourceText("mystery"));
         Assert.Equal("mystery", TaskDisplay.PropagationXmlText("mystery"));
         Assert.Equal("mystery", TaskDisplay.PropagationSwaggerText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.ContractStateText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.ContractDataKindText("mystery"));
         Assert.Equal("running", TaskDisplay.JobStateText("running"));
         Assert.Equal("normal", TaskDisplay.SlotTone("mystery"));
         Assert.Equal("normal", TaskDisplay.ReviewTone("mystery"));
@@ -165,6 +185,8 @@ public class TaskDisplayTests
         Assert.Equal("normal", TaskDisplay.PropagationSourceTone("mystery"));
         Assert.Equal("normal", TaskDisplay.PropagationXmlTone("mystery"));
         Assert.Equal("normal", TaskDisplay.PropagationSwaggerTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.ContractTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.ContractDataKindTone("mystery"));
     }
 
     [Fact]
@@ -197,6 +219,8 @@ public class TaskDisplayTests
             .Concat(Statuses("Comments/PropagationService.cs", "written / notWritten").Select(o => TaskDisplay.PropagationSourceText((string)o[0])))
             .Concat(Statuses("Comments/PropagationService.cs", "present / different / missing / noXml").Select(o => TaskDisplay.PropagationXmlText((string)o[0])))
             .Concat(Statuses("Comments/PropagationService.cs", "present / different / missing / notRendered").Select(o => TaskDisplay.PropagationSwaggerText((string)o[0])))
+            .Concat(Statuses("Source/SourceModels.cs", "pending / confirmed / rejected / blocked").Select(o => TaskDisplay.ContractStateText((string)o[0])))
+            .Concat(Statuses("Source/SourceModels.cs", "type / null / none / anonymous").Select(o => TaskDisplay.ContractDataKindText((string)o[0])))
             .Concat(["成功", "失败", "已取消"]);
         foreach (var text in outputs)
         {

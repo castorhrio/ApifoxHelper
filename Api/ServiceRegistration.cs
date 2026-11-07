@@ -14,6 +14,7 @@ public static class ServiceRegistration
         services.AddSingleton<TaskStore>();
         services.AddSingleton<ProjectLoader>();
         services.AddSingleton<SourceScanService>();
+        services.AddSingleton<ContractReviewService>();
         services.AddSingleton<Comments.ModelClient>();
         services.AddSingleton<Comments.DraftService>();
         services.AddSingleton<Comments.CommentPlanService>();

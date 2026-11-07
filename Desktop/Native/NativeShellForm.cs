@@ -171,7 +171,8 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<ProfileStore>(),
             _host.Services.GetRequiredService<DraftService>(),
             _host.Services.GetRequiredService<CommentPlanService>(),
-            _host.Services.GetRequiredService<PropagationService>());
+            _host.Services.GetRequiredService<PropagationService>(),
+            _host.Services.GetRequiredService<ContractReviewService>());
 
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;

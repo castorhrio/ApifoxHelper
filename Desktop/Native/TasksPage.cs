@@ -9,7 +9,8 @@ namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
 /// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）
-/// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）+ 注释回写 + 生成文档核对（后台作业、只读结果视图）。
+/// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）+ 注释回写 + 生成文档核对（后台作业、只读结果视图）
+/// + 响应契约（扫描时追踪落盘，逐条确认/拒绝/重置）。
 /// Apifox 检查/同步与报告不在本切片：如实显示"本切片未接入"，不提供入口。
 /// </summary>
 internal sealed class TasksPage : UserControl, INativePage
@@ -21,6 +22,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly DraftService _drafts;
     private readonly CommentPlanService _plans;
     private readonly PropagationService _propagation;
+    private readonly ContractReviewService _reviews;
 
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
     private readonly Panel _empty;
@@ -48,6 +50,8 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Button _cancelButton;
     private readonly Label _generatedStatus = Ui.StatusText();
     private readonly Label _generatedNumbers = Ui.Mono();
+    private readonly Button _contractButton;
+    private readonly Label _contractStatus = Ui.StatusText();
     private readonly Label _remoteStatus = Ui.StatusText();
     private readonly Label _remoteNumbers = Ui.Mono();
 
@@ -56,7 +60,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private bool _runningShown;
     private bool _splitAdjusted;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, ContractReviewService reviews)
     {
         _tasks = tasks;
         _scan = scan;
@@ -65,6 +69,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _drafts = drafts;
         _plans = plans;
         _propagation = propagation;
+        _reviews = reviews;
 
         var newButton = Ui.Primary("新建任务");
         newButton.Click += (_, _) => ShowNewTaskDialog();
@@ -107,6 +112,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _viewButton.Click += (_, _) => ShowPropagation();
         _generatedActions.Controls.Add(_checkButton);
         _generatedActions.Controls.Add(_viewButton);
+
+        _contractButton = Ui.Ghost("查看响应契约");
+        _contractButton.Click += (_, _) => ShowContracts();
 
         _empty = BuildEmpty();
 
@@ -176,6 +184,10 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _generatedNumbers);
         AddDetailRow(grid, _generatedActions);
         AddDetailRow(grid, Ui.Caption("「核对传播」需要有已接受的注释候选；核对不构建项目，XML 与 Swagger 重新生成后才会更新。定向构建将在后续切片接入。"));
+        AddDetailRow(grid, SectionCaption("响应契约"));
+        AddDetailRow(grid, _contractStatus);
+        AddDetailRow(grid, _contractButton);
+        AddDetailRow(grid, Ui.Caption("契约在扫描时从返回表达式与调用链静态追踪生成；「查看响应契约」在扫描完成后可用。确认后的契约在后续 Apifox 检查中替换该接口的 200 响应体；确认或拒绝后需重新检查才会生效。"));
         AddDetailRow(grid, SectionCaption("Apifox 差异与同步"));
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
@@ -340,6 +352,8 @@ internal sealed class TasksPage : UserControl, INativePage
             ? "尚未检查"
             : $"新增 {remote.Added} · 结构变化 {remote.StructureChanged} · 说明变化 {remote.DocChanged} · 冲突 {remote.Conflicts} · 阻断 {remote.Blocked}";
 
+        RefreshContractSection();
+
         var job = _jobs.Running(task.Id);
         ShowJobState(job);
     }
@@ -347,8 +361,8 @@ internal sealed class TasksPage : UserControl, INativePage
     /// <summary>扫描区按作业状态切换：按钮（空闲）或进度 + 取消（执行中）。控件位置固定，不跳位。</summary>
     private void ShowJobState(JobInfo? job)
     {
-        // 缺口清单、候选审阅、规则提取、注释回写与传播核对都基于扫描落盘产物：扫描完成后可用，作业执行中与未扫描时禁用
-        // （禁用态说明见下方固定说明行）；传播核对等后台作业的进度与取消与扫描共用同一套固定占位控件。
+        // 缺口清单、候选审阅、规则提取、注释回写、传播核对与响应契约都基于扫描落盘产物：扫描完成后可用，
+        // 作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）；后台作业的进度与取消共用同一套固定占位控件。
         var scanReady = _selectedTask is { Stages.Source.ScannedAt: not null } && job is null;
         _gapButton.Enabled = scanReady;
         _candidatesButton.Enabled = scanReady;
@@ -356,6 +370,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _applyButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
         _checkButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
         _viewButton.Enabled = scanReady && _selectedTask is { Stages.Generated.CheckedAt: not null };
+        _contractButton.Enabled = scanReady;
         if (job is not null)
         {
             _runningShown = true;
@@ -490,6 +505,41 @@ internal sealed class TasksPage : UserControl, INativePage
         if (_selectedTask is null) return;
         using var dialog = new PropagationDialog(_tasks, _selectedTask);
         dialog.ShowDialog(FindForm());
+    }
+
+    /// <summary>响应契约区状态行：契约在扫描时落盘，这里只读统计；确认/拒绝在契约对话框中执行。</summary>
+    private void RefreshContractSection()
+    {
+        List<ResponseContract>? contracts;
+        try
+        {
+            contracts = _selectedTask is null ? null : _tasks.Read<List<ResponseContract>>(_selectedTask.Id, TaskFiles.ResponseContract);
+        }
+        catch (Exception ex)
+        {
+            _contractStatus.Text = "状态：契约清单读取失败：" + Redactor.Redact(ex.Message) + "。请重新扫描后再打开。";
+            _contractStatus.ForeColor = UiTokens.BadText;
+            return;
+        }
+        if (contracts is null || contracts.Count == 0)
+        {
+            _contractStatus.Text = "状态：没有需要补充的响应契约（未配置通用响应封装，或接口返回具体类型）";
+            _contractStatus.ForeColor = UiTokens.Muted;
+            return;
+        }
+        var pending = contracts.Count(c => c.ReviewState == "pending");
+        var blocked = contracts.Count(c => c.ReviewState == "blocked");
+        _contractStatus.Text = $"状态：共 {contracts.Count} 个 · 待确认 {pending} · 已确认 {contracts.Count(c => c.ReviewState == "confirmed")} · 已拒绝 {contracts.Count(c => c.ReviewState == "rejected")} · 已阻断 {blocked} · 已失效 {contracts.Count(c => c.ReviewState == "stale")}";
+        _contractStatus.ForeColor = blocked > 0 ? UiTokens.BadText : pending > 0 ? UiTokens.WarnText : UiTokens.OkText;
+    }
+
+    /// <summary>打开响应契约审阅（确认/拒绝/重置写任务数据并递增任务版本，不写源码、不访问 Apifox）：关闭后刷新状态行。</summary>
+    private void ShowContracts()
+    {
+        if (_selectedTask is null) return;
+        using var dialog = new ContractsDialog(_tasks, _selectedTask, _reviews);
+        dialog.ShowDialog(FindForm());
+        RefreshContractSection();
     }
 
     private void ShowNewTaskDialog()

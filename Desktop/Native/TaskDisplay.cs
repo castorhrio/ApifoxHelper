@@ -290,6 +290,46 @@ public static class TaskDisplay
         _ => state,
     };
 
+    /// <summary>响应契约审阅状态（ResponseContract.ReviewState）的色调：已确认=ok，待确认/已失效=warn，已拒绝=muted，已阻断=bad。</summary>
+    public static string ContractTone(string state) => state switch
+    {
+        "confirmed" => "ok",
+        "pending" or "stale" => "warn",
+        "rejected" => "muted",
+        "blocked" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>响应契约审阅状态：契约清单与审阅结果里逐条显示的状态文字。</summary>
+    public static string ContractStateText(string state) => state switch
+    {
+        "pending" => "待确认",
+        "confirmed" => "已确认",
+        "rejected" => "已拒绝",
+        "blocked" => "已阻断",
+        "stale" => "已失效",
+        _ => state,
+    };
+
+    /// <summary>响应分支 data 形状（ResponseBranch.DataKind）的色调：无法确定=warn，其余形状=muted。</summary>
+    public static string ContractDataKindTone(string kind) => kind switch
+    {
+        "unknown" => "warn",
+        "null" or "none" or "anonymous" => "muted",
+        _ => "normal",
+    };
+
+    /// <summary>响应分支 data 形状：分支清单里逐条显示的形状文字。</summary>
+    public static string ContractDataKindText(string kind) => kind switch
+    {
+        "type" => "具体类型",
+        "null" => "空",
+        "none" => "无返回体",
+        "anonymous" => "匿名对象",
+        "unknown" => "无法确定",
+        _ => kind,
+    };
+
     /// <summary>代码证据类型（CodeEvidence.Kind）：证据清单里逐条显示的分类标签。</summary>
     public static string EvidenceKindText(string kind) => kind switch
     {

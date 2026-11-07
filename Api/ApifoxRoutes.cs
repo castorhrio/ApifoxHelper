@@ -142,23 +142,8 @@ public static class ApifoxRoutes
             }, http.RequestAborted);
             return Json(body);
         });
-        app.MapPut("/api/tasks/{id}/response-contract", async (string id, ContractReviewRequest request, TaskStore tasks, HttpContext http) =>
-        {
-            ResponseContract? updated = null;
-            await tasks.UpdateAsync(id, t =>
-            {
-                var contracts = tasks.Read<List<ResponseContract>>(id, TaskFiles.ResponseContract) ?? new List<ResponseContract>();
-                var contract = contracts.FirstOrDefault(c => c.EndpointKey == request.EndpointKey) ?? throw new UserException("响应契约不存在。", 404);
-                if (request.ReviewState == "confirmed" && contract.ReviewState == "blocked") throw new UserException("该响应契约存在未解析点或多个形状，不能确认。");
-                if (request.ReviewState is not ("confirmed" or "rejected" or "pending")) throw new UserException("审阅状态无效。");
-                contract.ReviewState = request.ReviewState;
-                contract.ReviewedAt = DateTimeOffset.Now;
-                tasks.Write(id, TaskFiles.ResponseContract, contracts);
-                t.Revision++;
-                updated = contract;
-            }, http.RequestAborted);
-            return Json(updated);
-        });
+        app.MapPut("/api/tasks/{id}/response-contract", async (string id, ContractReviewRequest request, ContractReviewService reviews, HttpContext http) =>
+            Json(await reviews.ReviewAsync(id, request.EndpointKey, request.ReviewState, http.RequestAborted)));
 
         app.MapPost("/api/tasks/{id}/plan", (string id, CreatePlanRequest request, SyncPlanService plans, JobRunner jobs) =>
         {

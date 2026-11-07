@@ -15,9 +15,11 @@ internal sealed class EvidenceDialog : Form
 {
     private readonly TaskStore _tasks;
     private readonly string _taskId;
-    private readonly DocSlot _slot;
+    private readonly string _title;
+    private readonly string _location;
+    private readonly IReadOnlyCollection<string> _evidenceIds;
 
-    private readonly Label _location = Ui.Caption();
+    private readonly Label _locationLabel = Ui.Caption();
     private readonly Label _counts = Ui.Mono();
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
     private readonly TextBox _snippet = new()
@@ -38,12 +40,20 @@ internal sealed class EvidenceDialog : Form
     };
 
     public EvidenceDialog(TaskStore tasks, CheckTask task, DocSlot slot)
+        : this(tasks, task, string.IsNullOrWhiteSpace(slot.Display) ? slot.SymbolId : slot.Display, slot.File + ":" + slot.Line, slot.EvidenceIds)
+    {
+    }
+
+    /// <summary>按证据编号集合打开（响应契约条目等没有注释位置的场景）。</summary>
+    public EvidenceDialog(TaskStore tasks, CheckTask task, string title, string location, IReadOnlyCollection<string> evidenceIds)
     {
         _tasks = tasks;
         _taskId = task.Id;
-        _slot = slot;
+        _title = title;
+        _location = location;
+        _evidenceIds = evidenceIds;
 
-        Text = "代码证据 — " + (string.IsNullOrWhiteSpace(slot.Display) ? slot.SymbolId : slot.Display);
+        Text = "代码证据 — " + title;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -65,8 +75,8 @@ internal sealed class EvidenceDialog : Form
         var headRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 2, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
         headRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         headRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        _location.TextAlign = ContentAlignment.MiddleLeft;
-        headRow.Controls.Add(_location, 0, 0);
+        _locationLabel.TextAlign = ContentAlignment.MiddleLeft;
+        headRow.Controls.Add(_locationLabel, 0, 0);
         headRow.Controls.Add(_counts, 1, 0);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
@@ -96,8 +106,8 @@ internal sealed class EvidenceDialog : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
-        _location.Text = _slot.File + ":" + _slot.Line;
-        _location.Font = UiTokens.Mono.Value;
+        _locationLabel.Text = _location;
+        _locationLabel.Font = UiTokens.Mono.Value;
 
         EvidenceStore? store;
         try
@@ -109,7 +119,7 @@ internal sealed class EvidenceDialog : Form
             ShowHint("读取代码证据失败：" + Redactor.Redact(ex.Message) + "。请关闭后重新扫描再试。", UiTokens.BadText);
             return;
         }
-        var wanted = _slot.EvidenceIds.ToHashSet(StringComparer.Ordinal);
+        var wanted = _evidenceIds.ToHashSet(StringComparer.Ordinal);
         var items = store?.Items.Where(item => wanted.Contains(item.Id)).ToList() ?? [];
         if (items.Count == 0)
         {
