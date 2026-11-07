@@ -56,9 +56,9 @@ internal sealed class NativeShellForm : Form
         Font = UiTokens.Body.Value;
 
         _navProjects = NavButton("项目设置");
-        _navProjects.Click += (_, _) => ShowPage(_projectsPage, _navProjects);
+        _navProjects.Click += (_, _) => ShowProjects();
         _navTasks = NavButton("检查任务");
-        _navTasks.Click += (_, _) => ShowPage(_tasksPage, _navTasks);
+        _navTasks.Click += (_, _) => ShowTasks();
 
         _navPanel.Controls.Add(_marker);
         var version = Ui.Caption("v" + TaskStore.ToolVersion);
@@ -133,6 +133,13 @@ internal sealed class NativeShellForm : Form
     private MenuStrip BuildMenu()
     {
         static ToolStripMenuItem Item(string text, Action onClick) => new(text, null, (_, _) => onClick());
+        // 手势与动作的配对取自共享口径（ShellShortcuts），界面代码不就地写快捷键。
+        static ToolStripMenuItem BoundItem(string text, ShellShortcuts.Entry entry, Action onClick)
+        {
+            var item = Item(text, onClick);
+            item.ShortcutKeys = (Keys)new KeysConverter().ConvertFromString(entry.Gesture)!;
+            return item;
+        }
 
         var file = new ToolStripMenuItem("文件(&F)");
         file.DropDownItems.AddRange(new ToolStripItem[]
@@ -142,12 +149,32 @@ internal sealed class NativeShellForm : Form
             new ToolStripSeparator(),
             Item("退出(&X)", Close),
         });
+        var view = new ToolStripMenuItem("视图(&V)");
+        view.DropDownItems.AddRange(new ToolStripItem[]
+        {
+            BoundItem("项目设置(&P)", ShellShortcuts.Projects, ShowProjects),
+            BoundItem("检查任务(&T)", ShellShortcuts.Tasks, ShowTasks),
+            new ToolStripSeparator(),
+            BoundItem("刷新当前页(&R)", ShellShortcuts.Refresh, RefreshVisiblePage),
+        });
         var help = new ToolStripMenuItem("帮助(&H)");
-        help.DropDownItems.Add(Item("关于 Apifox 助手(&A)", ShowAbout));
+        help.DropDownItems.Add(BoundItem("关于 Apifox 助手(&A)", ShellShortcuts.About, ShowAbout));
 
         var menu = new MenuStrip { Dock = DockStyle.Top, Font = UiTokens.Body.Value };
-        menu.Items.AddRange(new ToolStripItem[] { file, help });
+        menu.Items.AddRange(new ToolStripItem[] { file, view, help });
         return menu;
+    }
+
+    private void ShowProjects() => ShowPage(_projectsPage, _navProjects);
+
+    private void ShowTasks() => ShowPage(_tasksPage, _navTasks);
+
+    /// <summary>刷新当前可见页的数据（与该页「刷新」按钮同一口径）；页面尚未创建时不动作。</summary>
+    private void RefreshVisiblePage()
+    {
+        if (_shutdownStarted || IsDisposed || Disposing) return;
+        if (_projectsPage is { Visible: true }) _projectsPage.RefreshData();
+        if (_tasksPage is { Visible: true }) _tasksPage.RefreshData();
     }
 
     protected override async void OnLoad(EventArgs e)
@@ -390,4 +417,7 @@ internal interface INativePage
 
     /// <summary>页面被隐藏时调用：停止轮询等后台展示工作。</summary>
     void OnPageHidden();
+
+    /// <summary>重读本页数据（壳的「刷新当前页」F5 与本页「刷新」按钮共用同一口径）。</summary>
+    void RefreshData();
 }

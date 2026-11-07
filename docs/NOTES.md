@@ -416,6 +416,16 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 508 用例全部通过（含令牌接线机械检查对 TasksPage.cs/TaskCreation.cs 改动的扫描——无就地颜色/字体/间距值）。任务创建链路（规整/去重/备注回退/范围判定/落盘重读）在 Linux 真实文件系统上执行。**两个新输入框的布局与描边在 Windows 真机的观感仍未验证**（G-D5 复核）——Windows 真机需按「新建任务：对话框高度正常无裁切 → 指定接口填「get api/users」与非法行 → 创建后任务扫描范围只含该接口 → 版本备注留空时报告回退配置级备注」走一遍。未改写入安全语义（建任务的规整与回退在 `TaskStore.Create` 单一口径一行未动，原生层只收集文本）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「壳键盘快捷键：方案 2.1 原生工作流要素收口」（2026-11-07 第二十九轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（5766a49）的 Linux `dotnet build` 0 警告 0 错误、508 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：方案 2.1 列举的原生工作流要素——原生窗口与菜单、键盘快捷键、原生文件/目录选择、原生确认对话框、系统通知、多窗口协作——原生壳已有菜单（Alt 助记符）、原生文件/目录选择、原生确认、任务栏闪烁（AttentionCue）、对话框即窗口，但主窗口没有任何全局快捷键（只有菜单助记符与对话框 Enter/Esc），「键盘快捷键」是清单最后一个未落地项，设计验收 D12「快捷键可用」也没有落点。本轮补上，2.1 原生工作流要素至此全部落地。
+- **手势只取 Windows 惯例**：Ctrl+1 项目设置、Ctrl+2 检查任务（浏览器与 IDE 的页签惯例）、F5 刷新当前页（与两页已有「刷新」按钮同一口径）、F1 关于（帮助菜单唯一入口，F1=帮助的系统惯例）。不给「退出」（系统 Alt+F4 是惯例，不再发明 Ctrl+Q）与「打开资料目录/日志目录」发明手势（保留菜单助记符 Alt+F 后 D/L），如实挂账；壳级快捷键不占用文本框编辑键——保留清单 Ctrl+C/V/X/A/Z/Y 声明在共享口径内并由测试钉住。模态对话框打开期间主窗体菜单不路由（WinForms 模态语义），壳级快捷键不会穿透对话框，无需额外代码。
+- **共享口径（唯一落点）**：新增 `Desktop/Native/ShellShortcuts.cs`（不依赖 WinForms，与测试工程共享编译）——`Entry`（Action 动作 id + Gesture 手势文字）、四个具名条目与 `All` 全集、`GestureOf` 查找（未知动作返回 null）、`ReservedEditingKeys` 编辑键保留清单；规则是「新增快捷键必须在此登记，界面代码不就地写手势」。壳经 `KeysConverter.ConvertFromString` 把手势文字接到菜单项 `ShortcutKeys`（绑定值与菜单自动显示的提示取同一来源，不会漂移）；动作 id 由壳分发到既有入口，本文件不执行动作。**运行时解析已核对 .NET 8 官方源码确认**：KeysConverter 显式注册 `"1"`→`Keys.D1`（0–9 全部，注释写明用于菜单快捷键显示）与 `"Ctrl"`→`Keys.Control`、F1–F12 逐键注册——「Ctrl+1」「F5」「F1」解析确定，不存在「Linux 编译通过、真机启动即崩」的隐患。
+- **壳接线**：新增「视图(&V)」菜单——项目设置(&P)（Ctrl+1）、检查任务(&T)（Ctrl+2）、刷新当前页(&R)（F5）；「关于 Apifox 助手」绑 F1。侧栏按钮与菜单项收敛为 `ShowProjects`/`ShowTasks` 单一分发（切页口径——目标页面 + 选中标记——不出现第二份）；`RefreshVisiblePage` 只刷可见页、经页面协议新成员 `INativePage.RefreshData()`（两页「刷新」按钮同步改走 RefreshData，刷新路径单一；对话框关闭等内部重载仍走各自 LoadTasks/LoadProfiles，与刷新入口无关）；页面尚未创建（启动中）、退出已开始、窗口已释放时不动作。
+- **测试 508 → 515 用例**：新增 `ShellShortcutsTests`（7）：`All` 四条目、动作 id 逐值且唯一；四手势逐字（Ctrl+1/Ctrl+2/F5/F1）；`GestureOf` 查找与未知 null；手势不占编辑键（保留清单）；三条接线机械检查（行首正则，不被注释行骗过）——ShortcutKeys 只能取 `entry.Gesture` 且四个菜单项经 `ShellShortcuts.Projects/Tasks/Refresh/About` 具名条目、侧栏与菜单共用 ShowProjects/ShowTasks 且刷新只刷可见页、`INativePage` 声明 RefreshData 且两页实现并让「刷新」按钮走它。**变异验证六处实测可红**（各自独立变红、还原后全绿，还原一律手工逆编辑）：共享口径 F5 改 F6（2 红）、ShortcutKeys 绑定行注释（1 红）、ShowTasks 导航标发改错（1 红）、刷新改调 OnPageShown 而非 RefreshData（1 红）、任务页刷新按钮回退直调 LoadTasks（1 红）、切页手势改编辑键 Ctrl+C（2 红）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 515 用例全部通过（含令牌接线机械检查对 NativeShellForm.cs/ShellShortcuts.cs 改动的扫描——无就地颜色/字体/间距值）。快捷键的实际按键路由、菜单内手势提示的呈现是 WinForms 运行时行为，**Linux 无法运行 GUI：「视图」菜单与四个快捷键的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「Ctrl+1/Ctrl+2 在两页间切换且侧栏选中标记跟随 → F5 重读当前页数据 → 打开任一模态对话框按键不触发壳动作 → 视图菜单内可见 Ctrl+1/Ctrl+2/F5 提示 → F1 打开关于 → 文本框内 Ctrl+C/V 复制粘贴不受影响」走一遍。未改写入安全语义（纯入口接线：切页只改变可见页、刷新只重读列表数据，均与既有按钮同一口径，不改变任何任务状态）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

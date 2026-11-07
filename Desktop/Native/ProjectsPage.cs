@@ -46,7 +46,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
         _probeButton = Ui.Ghost("连接与写入探测");
         _probeButton.Click += (_, _) => ShowCapabilities();
         var refreshButton = Ui.Ghost("刷新");
-        refreshButton.Click += (_, _) => LoadProfiles();
+        refreshButton.Click += (_, _) => RefreshData();
         _list.SelectedIndexChanged += (_, _) =>
         {
             _editButton.Enabled = _list.SelectedIndices.Count > 0;
@@ -114,6 +114,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
     public void OnPageHidden()
     {
     }
+
+    public void RefreshData() => LoadProfiles();
 
     private void LoadProfiles()
     {

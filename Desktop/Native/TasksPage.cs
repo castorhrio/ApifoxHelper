@@ -120,7 +120,7 @@ internal sealed class TasksPage : UserControl, INativePage
         var newButton = Ui.Primary("新建任务");
         newButton.Click += (_, _) => ShowNewTaskDialog();
         var refreshButton = Ui.Ghost("刷新");
-        refreshButton.Click += (_, _) => LoadTasks();
+        refreshButton.Click += (_, _) => RefreshData();
         _list.SelectedIndexChanged += (_, _) => OnSelectedChanged();
         _list.Columns.Add("任务", 200);
         _list.Columns.Add("配置", 140);
@@ -337,6 +337,8 @@ internal sealed class TasksPage : UserControl, INativePage
     {
         _timer.Stop();
     }
+
+    public void RefreshData() => LoadTasks();
 
     protected override void Dispose(bool disposing)
     {
