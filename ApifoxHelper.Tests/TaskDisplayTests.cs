@@ -26,6 +26,8 @@ public class TaskDisplayTests
     public static IEnumerable<object[]> CandidateBases() => Statuses("Comments/DraftModels.cs", "code / needsConfirmation");
     public static IEnumerable<object[]> CandidateSources() => Statuses("Comments/DraftModels.cs", "rule / model / file / manual");
     public static IEnumerable<object[]> GenerationRunStatuses() => Statuses("Comments/DraftModels.cs", "succeeded / partial");
+    public static IEnumerable<object[]> PlanStatuses() => Statuses("Comments/CommentPlanService.cs", "ready / applying / applied");
+    public static IEnumerable<object[]> FileApplyStates() => Statuses("Comments/CommentPlanService.cs", "applied / skipped / failed");
 
     [Theory]
     [MemberData(nameof(SourceStatuses))]
@@ -95,6 +97,22 @@ public class TaskDisplayTests
     [MemberData(nameof(GenerationRunStatuses))]
     public void GenerationRunStatus_HasChineseText(string status) => Assert.NotEqual(status, TaskDisplay.RunStatusText(status));
 
+    [Theory]
+    [MemberData(nameof(PlanStatuses))]
+    public void PlanStatus_HasChineseTextAndTone(string status)
+    {
+        Assert.NotEqual(status, TaskDisplay.PlanStatusText(status));
+        Assert.Contains(TaskDisplay.PlanTone(status), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(FileApplyStates))]
+    public void FileApplyState_HasChineseTextAndTone(string state)
+    {
+        Assert.NotEqual(state, TaskDisplay.FileApplyStateText(state));
+        Assert.Contains(TaskDisplay.FileApplyTone(state), Tones);
+    }
+
     [Fact]
     public void UnknownStatus_FallsBackToRawValue()
     {
@@ -107,9 +125,13 @@ public class TaskDisplayTests
         Assert.Equal("mystery", TaskDisplay.CandidateBasisText("mystery"));
         Assert.Equal("mystery", TaskDisplay.CandidateSourceText("mystery"));
         Assert.Equal("mystery", TaskDisplay.RunStatusText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.PlanStatusText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.FileApplyStateText("mystery"));
         Assert.Equal("running", TaskDisplay.JobStateText("running"));
         Assert.Equal("normal", TaskDisplay.SlotTone("mystery"));
         Assert.Equal("normal", TaskDisplay.ReviewTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.PlanTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.FileApplyTone("mystery"));
     }
 
     [Fact]
@@ -137,6 +159,8 @@ public class TaskDisplayTests
             .Concat(Statuses("Comments/DraftModels.cs", "code / needsConfirmation").Select(o => TaskDisplay.CandidateBasisText((string)o[0])))
             .Concat(Statuses("Comments/DraftModels.cs", "rule / model / file / manual").Select(o => TaskDisplay.CandidateSourceText((string)o[0])))
             .Concat(Statuses("Comments/DraftModels.cs", "succeeded / partial").Select(o => TaskDisplay.RunStatusText((string)o[0])))
+            .Concat(Statuses("Comments/CommentPlanService.cs", "ready / applying / applied").Select(o => TaskDisplay.PlanStatusText((string)o[0])))
+            .Concat(Statuses("Comments/CommentPlanService.cs", "applied / skipped / failed").Select(o => TaskDisplay.FileApplyStateText((string)o[0])))
             .Concat(["成功", "失败", "已取消"]);
         foreach (var text in outputs)
         {

@@ -191,6 +191,48 @@ public static class TaskDisplay
         _ => status,
     };
 
+    /// <summary>注释计划状态（CommentPlan.Status）的色调：已回写=ok，部分回写/已过期=warn，回写失败=bad，可回写/回写中=accent。</summary>
+    public static string PlanTone(string status) => status switch
+    {
+        "applied" => "ok",
+        "partial" or "expired" => "warn",
+        "failed" => "bad",
+        "ready" or "applying" => "accent",
+        _ => "normal",
+    };
+
+    /// <summary>注释计划状态：回写预览与结果里显示的状态文字。</summary>
+    public static string PlanStatusText(string status) => status switch
+    {
+        "ready" => "可回写",
+        "applying" => "回写中",
+        "applied" => "已回写",
+        "partial" => "部分回写",
+        "expired" => "已过期",
+        "failed" => "回写失败",
+        _ => status,
+    };
+
+    /// <summary>逐文件回写结果（FileApplyResult.State）的色调：已写入=ok，已跳过=muted，文件已变化=warn，失败=bad。</summary>
+    public static string FileApplyTone(string state) => state switch
+    {
+        "applied" => "ok",
+        "skipped" => "muted",
+        "conflict" => "warn",
+        "failed" => "bad",
+        _ => "normal",
+    };
+
+    /// <summary>逐文件回写结果：回写后逐文件显示的结果文字。</summary>
+    public static string FileApplyStateText(string state) => state switch
+    {
+        "applied" => "已写入",
+        "skipped" => "已跳过",
+        "conflict" => "文件已变化",
+        "failed" => "失败",
+        _ => state,
+    };
+
     /// <summary>代码证据类型（CodeEvidence.Kind）：证据清单里逐条显示的分类标签。</summary>
     public static string EvidenceKindText(string kind) => kind switch
     {
