@@ -1,32 +1,48 @@
 using System.Drawing;
 using System.Windows.Forms;
+using ApifoxHelper.Infrastructure;
 using ApifoxHelper.Profiles;
+using ApifoxHelper.Sync;
 
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 项目配置页：列出配置，新建/编辑核心字段（名称、仓库、API 项目、回写范围、Swagger 来源、Apifox 目标）。
+/// 项目配置页：列出配置，新建/编辑核心字段（名称、仓库、API 项目、回写范围、Swagger 来源、Apifox 目标），
+/// 「连接与写入探测」经既有 CompatService 检查 CLI/登录/项目读取并按需运行写入兼容探测（F02，写入门禁的唯一登记入口）。
 /// 保存走 ProfileStore（含路径与取值校验）；本切片不编辑模块、模板与模型服务等高级设置，编辑时保持原值。
 /// </summary>
 internal sealed class ProjectsPage : UserControl, INativePage
 {
     private readonly ProfileStore _profiles;
+    private readonly CompatService _compat;
+    private readonly FileStore _store;
+    private readonly JobRunner _jobs;
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
     private readonly Panel _empty;
     private readonly Label _status = Ui.StatusLine();
     private readonly Button _editButton;
+    private readonly Button _probeButton;
 
-    public ProjectsPage(ProfileStore profiles)
+    public ProjectsPage(ProfileStore profiles, CompatService compat, FileStore store, JobRunner jobs)
     {
         _profiles = profiles;
+        _compat = compat;
+        _store = store;
+        _jobs = jobs;
 
         var newButton = Ui.Primary("新建配置");
         newButton.Click += (_, _) => ShowDialog(null);
         _editButton = Ui.Ghost("编辑");
         _editButton.Click += (_, _) => ShowDialog(Selected());
+        _probeButton = Ui.Ghost("连接与写入探测");
+        _probeButton.Click += (_, _) => ShowCapabilities();
         var refreshButton = Ui.Ghost("刷新");
         refreshButton.Click += (_, _) => LoadProfiles();
-        _list.SelectedIndexChanged += (_, _) => _editButton.Enabled = _list.SelectedIndices.Count > 0;
+        _list.SelectedIndexChanged += (_, _) =>
+        {
+            _editButton.Enabled = _list.SelectedIndices.Count > 0;
+            _probeButton.Enabled = _list.SelectedIndices.Count > 0;
+        };
         _list.DoubleClick += (_, _) => ShowDialog(Selected());
 
         _list.Columns.Add("名称", 180);
@@ -47,6 +63,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
         var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), Padding = new Padding(0, 0, UiTokens.Md, 0) };
         buttons.Controls.Add(newButton);
         buttons.Controls.Add(_editButton);
+        buttons.Controls.Add(_probeButton);
         buttons.Controls.Add(refreshButton);
         _status.Dock = DockStyle.Fill;
         toolbar.Controls.Add(buttons, 0, 0);
@@ -110,6 +127,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
             _empty.Visible = profiles.Count == 0;
             _list.Visible = profiles.Count > 0;
             _editButton.Enabled = false;
+            _probeButton.Enabled = false;
             SetStatus(null);
         }
         catch (UserException ex)
@@ -141,6 +159,14 @@ internal sealed class ProjectsPage : UserControl, INativePage
         {
             LoadProfiles();
         }
+    }
+
+    /// <summary>打开连接与写入探测（只读连接检查 + 可选的写入兼容探测，写入边界在 CompatService 单一口径）。</summary>
+    private void ShowCapabilities()
+    {
+        if (Selected() is not { } profile) return;
+        using var dialog = new CapabilitiesDialog(_compat, _store, _jobs, profile);
+        dialog.ShowDialog(FindForm());
     }
 }
 

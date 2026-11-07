@@ -17,47 +17,48 @@ public sealed class CompatService(FileStore store, ApifoxCli cli)
     public WriteCompatRecord? Verified(string cliVersion) =>
         Load().Records.Where(r => r.Passed && r.CliVersion == cliVersion).OrderByDescending(r => r.At).FirstOrDefault();
 
-    public async Task<object> CapabilitiesAsync(ProjectProfile profile, CancellationToken ct)
+    public async Task<CapabilityReport> CapabilitiesAsync(ProjectProfile profile, CancellationToken ct)
     {
-        string? node = null, script = null, version = null, cliError = null;
+        var report = new CapabilityReport();
         try
         {
             var entry = ApifoxCli.Resolve(profile.Apifox);
-            node = entry.Node;
-            script = entry.Script;
-            version = await cli.VersionAsync(profile.Apifox, ct);
+            report.Cli.Node = entry.Node;
+            report.Cli.Script = entry.Script;
+            report.Cli.Version = await cli.VersionAsync(profile.Apifox, ct);
+            report.Cli.Found = true;
         }
         catch (UserException ex)
         {
-            cliError = ex.Message;
+            report.Cli.Error = ex.Message;
         }
 
-        object? login = null;
-        object? project = null;
-        if (cliError is null)
+        if (report.Cli.Found)
         {
             var (loggedIn, message) = await cli.AuthStatusAsync(profile.Apifox, ct);
-            login = new { loggedIn, message };
+            report.Login = new CapabilityLogin { LoggedIn = loggedIn, Message = message };
             if (loggedIn && !string.IsNullOrWhiteSpace(profile.Apifox.ProjectId))
             {
                 var page = await cli.EndpointPageAsync(profile.Apifox, profile.Apifox.ProjectId!, profile.Apifox.BranchName, 1, 1, ct);
-                project = new { readable = page.Ok, total = page.Meta?["total"]?.GetValue<int>(), message = page.Ok ? "可读取" : page.Describe() };
+                report.Project = new CapabilityProject
+                {
+                    Readable = page.Ok,
+                    Total = page.Meta?["total"]?.GetValue<int>(),
+                    Message = page.Ok ? "可读取" : page.Describe(),
+                };
             }
         }
 
-        var verified = version is null ? null : Verified(version);
-        return new
+        var verified = report.Cli.Version is null ? null : Verified(report.Cli.Version);
+        report.WriteCompat = new CapabilityWriteCompat
         {
-            cli = new { found = cliError is null, node, script, version, error = cliError },
-            login,
-            project,
-            writeCompat = new
-            {
-                verified = verified is not null,
-                record = verified,
-                message = verified is not null ? $"CLI {version} 已于 {verified.At:yyyy-MM-dd HH:mm} 通过写入探测" : "当前 CLI 版本尚未通过写入探测：只允许只读检查。",
-            },
+            Verified = verified is not null,
+            Record = verified,
+            Message = verified is not null
+                ? $"CLI {report.Cli.Version} 已于 {verified.At:yyyy-MM-dd HH:mm} 通过写入探测"
+                : "当前 CLI 版本尚未通过写入探测：只允许只读检查。",
         };
+        return report;
     }
 
     public async Task<WriteCompatRecord> ProbeAsync(ProjectProfile profile, WriteProbeRequest request, string workDir, CancellationToken ct)

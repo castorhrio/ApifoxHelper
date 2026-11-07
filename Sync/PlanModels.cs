@@ -116,3 +116,45 @@ public sealed class WriteProbeRequest
     /// <summary>必须为 true：探测会对指定的测试接口做两次内容不变的写入与一次说明临时修改并恢复。</summary>
     public bool Confirm { get; set; }
 }
+
+/// <summary>
+/// 连接检查结果（CompatService.CapabilitiesAsync）：CLI、登录、项目读取与写入兼容四项。
+/// 原生「连接与写入探测」对话框进程内读取同一形状；Web /api/capabilities 路由序列化的也是这份类型，
+/// JSON 键名与路由行为保持不变。
+/// </summary>
+public sealed class CapabilityReport
+{
+    public CapabilityCli Cli { get; set; } = new();
+    public CapabilityLogin? Login { get; set; }
+    public CapabilityProject? Project { get; set; }
+    public CapabilityWriteCompat WriteCompat { get; set; } = new();
+}
+
+public sealed class CapabilityCli
+{
+    public bool Found { get; set; }
+    public string? Node { get; set; }
+    public string? Script { get; set; }
+    public string? Version { get; set; }
+    public string? Error { get; set; }
+}
+
+public sealed class CapabilityLogin
+{
+    public bool LoggedIn { get; set; }
+    public string Message { get; set; } = "";
+}
+
+public sealed class CapabilityProject
+{
+    public bool Readable { get; set; }
+    public int? Total { get; set; }
+    public string Message { get; set; } = "";
+}
+
+public sealed class CapabilityWriteCompat
+{
+    public bool Verified { get; set; }
+    public WriteCompatRecord? Record { get; set; }
+    public string Message { get; set; } = "";
+}

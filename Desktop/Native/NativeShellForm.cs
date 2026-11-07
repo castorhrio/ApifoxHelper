@@ -164,7 +164,11 @@ internal sealed class NativeShellForm : Form
         }
         if (IsDisposed || Disposing) return;
 
-        _projectsPage = new ProjectsPage(_host.Services.GetRequiredService<ProfileStore>());
+        _projectsPage = new ProjectsPage(
+            _host.Services.GetRequiredService<ProfileStore>(),
+            _host.Services.GetRequiredService<Sync.CompatService>(),
+            _host.Store,
+            _host.Jobs);
         _tasksPage = new TasksPage(
             _host.Services.GetRequiredService<TaskStore>(),
             _host.Services.GetRequiredService<SourceScanService>(),

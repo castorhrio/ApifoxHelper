@@ -37,8 +37,10 @@
     <Compile Include="..\Desktop\Native\BuildStatus.cs" Link="Shared\BuildStatus.cs" />
     <Compile Include="..\Desktop\Native\DraftEntries.cs" Link="Shared\DraftEntries.cs" />
     <Compile Include="..\Desktop\Native\SupplementEntries.cs" Link="Shared\SupplementEntries.cs" />
+    <Compile Include="..\Desktop\Native\CompatEntries.cs" Link="Shared\CompatEntries.cs" />
     <Compile Include="..\Reports\ReportFormats.cs" Link="Shared\ReportFormats.cs" />
     <Compile Include="..\Sync\CheckModels.cs" Link="Shared\CheckModels.cs" />
+    <Compile Include="..\Sync\PlanModels.cs" Link="Shared\PlanModels.cs" />
     <Compile Include="..\Contracts\DiffEngine.cs" Link="Shared\DiffEngine.cs" />
     <Compile Include="..\Contracts\DocModel.cs" Link="Shared\DocModel.cs" />
     <Compile Include="..\Infrastructure\Core.cs" Link="Shared\Core.cs" />
