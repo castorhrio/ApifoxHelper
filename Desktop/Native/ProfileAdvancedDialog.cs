@@ -18,15 +18,15 @@ internal sealed class ProfileAdvancedDialog : Form
     private readonly ApifoxCli _cli;
     private readonly ProjectProfile _profile;
 
-    private readonly TextBox _modules = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
-    private readonly TextBox _folderId = new();
+    private readonly TextBox _modules = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
+    private readonly TextBox _folderId = Ui.Input();
     private readonly ComboBox _status = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox _serverId = new();
-    private readonly TextBox _tags = new();
-    private readonly TextBox _auth = MultilineJson();
-    private readonly TextBox _security = MultilineJson();
-    private readonly TextBox _headers = MultilineJson();
-    private readonly TextBox _templateEndpoint = new();
+    private readonly TextBox _serverId = Ui.Input();
+    private readonly TextBox _tags = Ui.Input();
+    private readonly TextBox _auth = Ui.Input(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
+    private readonly TextBox _security = Ui.Input(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
+    private readonly TextBox _headers = Ui.Input(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
+    private readonly TextBox _templateEndpoint = Ui.Input();
     private readonly Button _extractButton;
     private readonly Label _statusLine = Ui.StatusLine();
 
@@ -62,21 +62,21 @@ internal sealed class ProfileAdvancedDialog : Form
         AddSection(grid, "模块范围");
         AddHint(grid, "每行：模块名=路径前缀1,路径前缀2，例如 财务=/api/finance/；新建任务时可按模块选择范围。");
         _modules.Height = 72;
-        AddRow(grid, "模块", _modules);
+        AddRow(grid, "模块", Ui.Field(_modules));
 
         AddSection(grid, "新接口模板");
         AddHint(grid, "新建接口创建时的目录与公共设置；只随创建写入这些字段，不克隆脚本、用例或 Mock。");
-        AddRow(grid, "目录 ID", _folderId);
+        AddRow(grid, "目录 ID", Ui.Field(_folderId));
         AddHint(grid, "留空表示未指定目录；未指定目录时新接口无法创建。");
         AddRow(grid, "状态", _status);
-        AddRow(grid, "服务 ID", _serverId);
-        AddRow(grid, "标签", _tags);
+        AddRow(grid, "服务 ID", Ui.Field(_serverId));
+        AddRow(grid, "标签", Ui.Field(_tags));
         AddHint(grid, "用「,」分隔。");
-        AddRow(grid, "鉴权 auth", _auth);
-        AddRow(grid, "安全方案", _security);
-        AddRow(grid, "公共 Header", _headers);
+        AddRow(grid, "鉴权 auth", Ui.Field(_auth));
+        AddRow(grid, "安全方案", Ui.Field(_security));
+        AddRow(grid, "公共 Header", Ui.Field(_headers));
         AddHint(grid, "JSON 对象或数组；留空表示不设置。");
-        AddRow(grid, "从既有接口提取", Row(_templateEndpoint, 120, _extractButton));
+        AddRow(grid, "从既有接口提取", Row(Ui.Field(_templateEndpoint), 120, _extractButton));
         AddHint(grid, "填写接口 ID 后提取其目录、状态、服务、鉴权、安全方案、公共 Header 与标签填入上方字段；请检查后再保存。");
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
@@ -94,8 +94,6 @@ internal sealed class ProfileAdvancedDialog : Form
 
         LoadValues();
     }
-
-    private static TextBox MultilineJson() => new() { Multiline = true, ScrollBars = ScrollBars.Both, WordWrap = false, Font = UiTokens.Mono.Value };
 
     private static Label SectionCaption(string text) => new()
     {

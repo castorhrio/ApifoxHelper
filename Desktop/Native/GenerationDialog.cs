@@ -21,11 +21,11 @@ internal sealed class GenerationDialog : Form
     private readonly bool _profileExists;
 
     private readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox _baseUrl = new();
-    private readonly TextBox _model = new();
-    private readonly TextBox _timeout = new();
-    private readonly TextBox _batch = new();
-    private readonly TextBox _key = new() { UseSystemPasswordChar = true };
+    private readonly TextBox _baseUrl = Ui.Input();
+    private readonly TextBox _model = Ui.Input();
+    private readonly TextBox _timeout = Ui.Input();
+    private readonly TextBox _batch = Ui.Input();
+    private readonly TextBox _key = Ui.Input(password: true);
     private readonly Button _saveKeyButton;
     private readonly Label _statusLine = Ui.StatusLine();
 
@@ -69,16 +69,16 @@ internal sealed class GenerationDialog : Form
 
         AddSection(grid, "注释草稿生成");
         AddRow(grid, "生成方式", _mode);
-        AddRow(grid, "服务地址", _baseUrl);
+        AddRow(grid, "服务地址", Ui.Field(_baseUrl));
         AddHint(grid, "例如 https://api.openai.com/v1；只发送用户确认的材料。");
-        AddRow(grid, "模型", _model);
-        AddRow(grid, "超时秒数", _timeout);
-        AddRow(grid, "每批数量", _batch);
+        AddRow(grid, "模型", Ui.Field(_model));
+        AddRow(grid, "超时秒数", Ui.Field(_timeout));
+        AddRow(grid, "每批数量", Ui.Field(_batch));
         AddHint(grid, "每次请求最多包含的注释位置数；数字留空用默认值。");
 
         AddSection(grid, "服务密钥");
         _key.Width = 280;
-        AddRow(grid, "服务密钥", Row(_key, _saveKeyButton));
+        AddRow(grid, "服务密钥", Row(Ui.Field(_key), _saveKeyButton));
         AddHint(grid, GenerationEntries.KeyHint + "。");
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };

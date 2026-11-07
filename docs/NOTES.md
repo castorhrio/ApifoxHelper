@@ -376,6 +376,17 @@
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 463 用例全部通过（含令牌接线机械检查对 TasksPage.cs 改动与 NextStep.cs 新文件的扫描）。**引导横幅与「下一步」列的 Windows 真机观感仍未验证**（Linux 无法运行 WinForms GUI）——口径与落盘链路已在 Linux 真实执行；Windows 真机需按「新建任务看横幅提示扫描 → 扫描后看缺口引导 → 接受候选看计划引导 → 回写后看核对引导 → 检查后看待确认引导 → 列表「下一步」列与选中任务横幅一致」走一遍。未改写入安全语义（纯引导，不改变任何状态）；本轮未连接或写入 Apifox，未调用任何模型服务。
 
 
+## 原生切片「输入框形态：1px 发丝边 + 聚焦强调色描边」（2026-11-07 第二十五轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（4f5e2a9）的 Linux `dotnet build` 0 警告 0 错误、463 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：方案 2.1 原生工作流要素与冻结页面 REST 能力此前已全部接入（第二十四轮确认），本轮按设计基线（docs/DESIGN.md）§6 控件形态逐条找缺口——「输入框：`Panel` 底 + 1px `Line`；聚焦描边 `Accent`」规格已写、代码未落：全部 35 处可编辑输入框（项目配置、新建任务、连接与写入探测、模型服务、模块与模板、序列化与分析、候选回答、手工填写说明）都用 WinForms 默认 3D 边框、聚焦无任何反馈，与第二十三轮修掉的「列表行系统高亮蓝」同类，是 §6 最后一个未落地的控件形态条款（菜单/按钮/状态行/列表行均已落地）。
+- **口径收口为单一落点**：`Desktop/Native/FieldChrome.cs`（不依赖 WinForms、与测试工程共享编译，同 ListRows 先例）——`Border(focused, line, accent)`：聚焦描边 `Accent`、常态 `Line` 发丝边。绘制在 `Ui.Field` 工厂（`Desktop/Native/Ui.cs`）的 1px 描边面板（`FieldBox : Panel`，Padding(1) + Line 底色，与 HairlineCore 同法），聚焦经 `GotFocus`/`LostFocus` 重绘；内外尺寸双向同步（文本框改宽高时面板跟随、面板被行助手设宽设高时文本框跟随，重入护栏防互相触发），既有 `AddRow` 的 `field.Width = Math.Max(field.Width, 480)`、`Row(300, …)`、`_modules.Height = 72` 等布局代码零改动继续成立。
+- **全部构造站点经工厂**：可编辑输入框 35 处改 `Ui.Input(...)`（单行、多行模块/封装/XML 路径编辑、mono JSON 编辑位、密码位）+ 放置处 `Ui.Field(...)` 包裹（原 3D 边框退出）；`ProfileAdvancedDialog` 的 `MultilineJson()` 局部助手并入工厂参数后删除。只读预览框（注释回写差异、构建输出、检查结果、契约/决策/传播详情、证据片段、报告预览、同步写入内容、缺口降级清单等 15 处）收敛为 `Ui.Preview(...)` 统一镀铬，沿用 `Ui.Hairline` 发丝边（只读无聚焦描边，非 §6 输入框）。机械检查断言：Desktop/Native 除 Ui.cs 外禁止任何 `new TextBox`/目标类型 `new()`，TextBox 声明必须以 `Ui.Input(`/`Ui.Preview(` 开头（同第二十三轮对 ListView 的精确断言，含目标类型 new() 盲区）；含 `Ui.Input(` 的文件必有 `Ui.Field(`（无边框输入框在 Bg 底上不可见）。
+- **顺带修复一个真实缺陷**：注释回写对话框（ApplyPlanDialog）跳过位置清单把同一个 `ListViewItem` 加了两次（`Items.Add(skip.Display)` 已加入列表、行尾又 `Items.Add(item)`），每条跳过原因会显示两行；改为 `new ListViewItem(...)` 构造后加入一次（与上方文件清单循环同型）。
+- **如实挂账**：「校验失败内联 `BadText` 文字 + 描边 `BadText`」中的描边部分未落地——校验失败字段定位在共享解析单一口径内（`GenerationEntries.ParseFields`、`ProfileAdvanced.ParseFields` 等以逐字文案抛 `UserException`，对话框拿不到失败字段；改共享解析签名会动 Web 路由共用的口径），逐字段描红需要一条字段定位链路，另切片接入；当前校验失败仍为状态行内联文字（这一半已在全域成立）。ComboBox 下拉与 CheckedListBox 不在 §6 输入框范围（WinForms 自定义边框需自绘或 OwnerDraw，无真机验证不冒险），DESIGN.md §8 记录。
+- **测试 463 → 472 用例**：新增 `FieldChromeTests`（9：聚焦/常态两向口径断言、DESIGN.md §6 条款在文断言、工厂绕过检查、输入框必有 Field 包裹检查、聚焦接线/镀铬/尺寸同步源码断言、Preview ReadOnly 断言、关键对话框放置点抽查、只读框 Hairline 抽查）。**变异验证实测可红**（五处，各自独立变红、还原后全绿，还原一律手工逆编辑——对已改动文件用 git checkout 会冲掉本轮切片）：FieldChrome 聚焦优先级翻转（2 红：聚焦/常态两向）、删 GotFocus 接线（1 红）、对话框加裸 `new TextBox()`（1 红）、放置点去掉 `Ui.Field(`（1 红）、Preview 丢 `ReadOnly = true`（1 红）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 472 用例全部通过（含既有令牌接线机械检查对新增代码的扫描——无就地颜色/字体/间距值，Padding(1) 发丝边为 §5 允许值）。本轮无纯逻辑服务链路新增（切片是呈现层镀铬），FieldChrome 两向口径已由单元断言钉住，无需 /tmp 控制台运行时验证。**发丝边常态观感、聚焦描边出现与消失、尺寸同步在 100%/200% DPI 的真机观感仍未验证**（Linux 无法运行 WinForms GUI）——接线与口径已在 Linux 以断言钉住；Windows 真机需按「项目设置 → 编辑配置：输入框为 1px 浅灰发丝边（无 3D 凹边）→ 点入输入框看描边变强调色蓝 → Tab 离开描边复原 → 模块与模板：拖宽窗口/看多行 JSON 编辑位与模块编辑框高度正常 → 注释回写：跳过位置清单每条只显示一行」走一遍。未改写入安全语义（纯呈现层）；本轮未连接或写入 Apifox，未调用任何模型服务。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

@@ -28,14 +28,7 @@ internal sealed class PropagationDialog : Form
     };
     private readonly ListView _list = Ui.List();
     private readonly ListView _xmlList = Ui.List();
-    private readonly TextBox _detail = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Body.Value,
-    };
+    private readonly TextBox _detail = Ui.Preview(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _hint = new()
     {
         Dock = DockStyle.Fill,

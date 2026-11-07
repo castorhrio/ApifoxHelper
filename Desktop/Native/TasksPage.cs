@@ -1040,9 +1040,9 @@ internal sealed class NewTaskDialog : Form
 {
     private readonly ProfileStore _profiles;
     private readonly ComboBox _profile = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox _name = new();
+    private readonly TextBox _name = Ui.Input();
     private readonly CheckedListBox _modules = new() { CheckOnClick = true, Height = 96, BorderStyle = BorderStyle.FixedSingle };
-    private readonly TextBox _prefixes = new();
+    private readonly TextBox _prefixes = Ui.Input();
     private readonly CheckBox _offline = new() { Text = "离线模式（本次任务不访问 Apifox，仅源码阶段）", AutoSize = true };
     private readonly Label _status = Ui.StatusLine();
     private List<ModuleScope> _currentModules = [];
@@ -1085,11 +1085,11 @@ internal sealed class NewTaskDialog : Form
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddRow(grid, "项目配置", _profile);
-        AddRow(grid, "任务名称", _name);
+        AddRow(grid, "任务名称", Ui.Field(_name));
         AddRow(grid, "", Ui.Caption("留空则用「配置名 月-日 时:分」。"));
         AddRow(grid, "模块", _modules);
         AddRow(grid, "", Ui.Caption("勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。"));
-        AddRow(grid, "路径前缀", _prefixes);
+        AddRow(grid, "路径前缀", Ui.Field(_prefixes));
         AddRow(grid, "", Ui.Caption("补充接口路径前缀，用「,」「;」分隔；可与模块并用。"));
         AddRow(grid, "", _offline);
 

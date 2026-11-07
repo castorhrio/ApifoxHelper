@@ -24,15 +24,8 @@ internal sealed class CandidatesDialog : Form
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
     private readonly ListView _list = Ui.List();
-    private readonly TextBox _detail = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Caption.Value,
-    };
-    private readonly TextBox _answers = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, BackColor = UiTokens.Panel };
+    private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
+    private readonly TextBox _answers = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _answersCaption = Ui.Caption();
     private readonly CheckBox _overwrite = new() { AutoSize = true, Text = "覆盖该位置已有的有效注释（需要改写时勾选）" };
     private readonly Button _acceptButton;
@@ -129,7 +122,7 @@ internal sealed class CandidatesDialog : Form
         _answersCaption.Text = "待确认问题的回答";
         _answersCaption.Margin = new Padding(0, UiTokens.Sm, 0, 0);
         AddCaptionRow(detailGrid, _answersCaption);
-        AddBoxRow(detailGrid, Ui.Hairline(_answers), 44);
+        AddBoxRow(detailGrid, Ui.Field(_answers), 44);
         AddCaptionRow(detailGrid, _overwrite);
         AddCaptionRow(detailGrid, _status);
 

@@ -17,15 +17,7 @@ internal sealed class ReportsDialog : Form
     private readonly ReportExportService _exports;
     private readonly string _taskId;
 
-    private readonly TextBox _preview = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Both,
-        WordWrap = false,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Mono.Value,
-    };
+    private readonly TextBox _preview = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly Button _mdButton;
     private readonly Button _htmlButton;
     private readonly Button _jsonButton;

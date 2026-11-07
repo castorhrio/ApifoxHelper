@@ -15,15 +15,7 @@ internal sealed class BuildLogDialog : Form
     private readonly string _taskId;
     private readonly Label _summary = Ui.StatusText();
     private readonly Label _command = Ui.Mono();
-    private readonly TextBox _output = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Both,
-        WordWrap = false,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Mono.Value,
-    };
+    private readonly TextBox _output = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly Label _hint = new()
     {
         Dock = DockStyle.Fill,

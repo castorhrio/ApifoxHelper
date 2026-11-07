@@ -70,25 +70,10 @@ internal sealed class SyncPreviewDialog : Form
         Visible = false,
     };
     private readonly ListView _actionList = Ui.List();
-    private readonly TextBox _payload = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Both,
-        WordWrap = false,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Mono.Value,
-    };
+    private readonly TextBox _payload = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly ListView _excludedList = Ui.List();
     private readonly Panel _excludedHost;
-    private readonly TextBox _notes = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Body.Value,
-    };
+    private readonly TextBox _notes = Ui.Preview(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Button _applyButton;
     private readonly Button _verifyButton;
     private readonly Panel _page2;

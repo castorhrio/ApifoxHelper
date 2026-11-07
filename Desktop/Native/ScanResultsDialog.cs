@@ -30,14 +30,7 @@ internal sealed class ScanResultsDialog : Form
     private readonly Button _evidenceButton;
     private readonly Button _manualButton;
     private readonly Button _removeStaleButton;
-    private readonly TextBox _detail = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Caption.Value,
-    };
+    private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _status = Ui.StatusLine();
     private readonly Label _hint = new()
     {
@@ -364,7 +357,7 @@ internal sealed class ScanResultsDialog : Form
 internal sealed class ManualDraftDialog : Form
 {
     private readonly DocSlot _slot;
-    private readonly TextBox _text = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
+    private readonly TextBox _text = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _status = Ui.StatusLine();
 
     /// <summary>确认后的候选请求；Action 恒为 set，删除失效标签走 ScanResultsDialog 的直通入口。</summary>
@@ -396,9 +389,9 @@ internal sealed class ManualDraftDialog : Form
         var guidance = Ui.Caption("纯文本说明，不用 XML 标签；保存时自动转义 XML 字符。共享类型的说明只写可复用的字段含义。");
         guidance.Margin = new Padding(0, UiTokens.Sm, 0, UiTokens.Xs);
         grid.Controls.Add(guidance, 0, 1);
-        grid.SetRowSpan(_text, 1);
-        grid.Controls.Add(_text, 0, 2);
-        _text.Margin = new Padding(0);
+        var textHost = Ui.Field(_text);
+        textHost.Dock = DockStyle.Fill;
+        grid.Controls.Add(textHost, 0, 2);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，主行动（添加为候选）在最右。
@@ -462,16 +455,9 @@ internal sealed class ScanWarningsDialog : Form
         guidance.AutoSize = true;
         guidance.Margin = new Padding(0, 0, 0, UiTokens.Sm);
 
-        var text = new TextBox
-        {
-            ReadOnly = true,
-            Multiline = true,
-            ScrollBars = ScrollBars.Vertical,
-            BackColor = UiTokens.Panel,
-            Dock = DockStyle.Fill,
-            Font = UiTokens.Body.Value,
-            Text = string.Join(Environment.NewLine, items),
-        };
+        var text = Ui.Preview(multiline: true, scrollBars: ScrollBars.Vertical);
+        text.Dock = DockStyle.Fill;
+        text.Text = string.Join(Environment.NewLine, items);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(text));

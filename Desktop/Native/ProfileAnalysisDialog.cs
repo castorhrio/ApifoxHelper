@@ -19,19 +19,19 @@ internal sealed class ProfileAnalysisDialog : Form
     private readonly ComboBox _naming = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly CheckBox _enumAsString = new() { Text = "", AutoSize = true };
     private readonly CheckBox _nonNullable = new() { Text = "", AutoSize = true };
-    private readonly TextBox _wrappers = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
-    private readonly TextBox _configuration = new();
-    private readonly TextBox _symbols = new();
-    private readonly TextBox _depth = new();
-    private readonly TextBox _budget = new();
-    private readonly TextBox _xmlDocPaths = new() { Multiline = true, ScrollBars = ScrollBars.Vertical };
+    private readonly TextBox _wrappers = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
+    private readonly TextBox _configuration = Ui.Input();
+    private readonly TextBox _symbols = Ui.Input();
+    private readonly TextBox _depth = Ui.Input();
+    private readonly TextBox _budget = Ui.Input();
+    private readonly TextBox _xmlDocPaths = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly CheckBox _suppressAsync = new() { Text = "", AutoSize = true };
-    private readonly TextBox _dataProperty = new();
+    private readonly TextBox _dataProperty = Ui.Input();
     private readonly CheckBox _requireParam = new() { Text = "", AutoSize = true };
     private readonly CheckBox _requireProperty = new() { Text = "", AutoSize = true };
-    private readonly TextBox _concurrency = new();
-    private readonly TextBox _nodePath = new();
-    private readonly TextBox _cliPath = new();
+    private readonly TextBox _concurrency = Ui.Input();
+    private readonly TextBox _nodePath = Ui.Input();
+    private readonly TextBox _cliPath = Ui.Input();
     private readonly Label _statusLine = Ui.StatusLine();
 
     public ProfileAnalysisDialog(ProjectProfile profile)
@@ -65,32 +65,32 @@ internal sealed class ProfileAnalysisDialog : Form
         AddRow(grid, "非空引用类型", _nonNullable, widen: false);
         AddHint(grid, "与 Swashbuckle SupportNonNullableReferenceTypes 一致。");
         _wrappers.Height = 64;
-        AddRow(grid, "通用响应封装", _wrappers);
+        AddRow(grid, "通用响应封装", Ui.Field(_wrappers));
         AddHint(grid, "每行：类型名=数据属性名，例如 PNOSActionResult=Data；用于追踪 data 的实际类型（响应契约）。");
 
         AddSection(grid, "代码分析");
-        AddRow(grid, "分析配置名", _configuration);
-        AddRow(grid, "编译常量", _symbols);
+        AddRow(grid, "分析配置名", Ui.Field(_configuration));
+        AddRow(grid, "编译常量", Ui.Field(_symbols));
         AddHint(grid, "留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。");
-        AddRow(grid, "调用深度", _depth);
-        AddRow(grid, "方法预算", _budget);
+        AddRow(grid, "调用深度", Ui.Field(_depth));
+        AddRow(grid, "方法预算", Ui.Field(_budget));
         AddHint(grid, "数字留空用默认值。");
         _xmlDocPaths.Height = 56;
-        AddRow(grid, "XML 文档路径", _xmlDocPaths);
+        AddRow(grid, "XML 文档路径", Ui.Field(_xmlDocPaths));
         AddHint(grid, "可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。");
         AddRow(grid, "去掉 Async 后缀", _suppressAsync, widen: false);
         AddHint(grid, "与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。");
 
         AddSection(grid, "质量规则");
-        AddRow(grid, "通用 data 属性名", _dataProperty);
+        AddRow(grid, "通用 data 属性名", Ui.Field(_dataProperty));
         AddRow(grid, "参数说明必填", _requireParam, widen: false);
         AddRow(grid, "字段说明必填", _requireProperty, widen: false);
 
         AddSection(grid, "Apifox CLI");
-        AddRow(grid, "读取并发", _concurrency);
+        AddRow(grid, "读取并发", Ui.Field(_concurrency));
         AddHint(grid, "只读详情的并发数（1–8）；写入始终串行。");
-        AddRow(grid, "node 路径", _nodePath);
-        AddRow(grid, "cli.js 路径", _cliPath);
+        AddRow(grid, "node 路径", Ui.Field(_nodePath));
+        AddRow(grid, "cli.js 路径", Ui.Field(_cliPath));
         AddHint(grid, "可选；为空时自动查找 PATH 与全局 npm 目录。");
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };

@@ -35,23 +35,8 @@ internal sealed class CheckResultsDialog : Form
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
     private readonly ListView _list = Ui.List();
     private readonly ListView _modelList = Ui.List();
-    private readonly TextBox _detail = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Both,
-        WordWrap = false,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Body.Value,
-    };
-    private readonly TextBox _problems = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Body.Value,
-    };
+    private readonly TextBox _detail = Ui.Preview(multiline: true, wordWrap: false, scrollBars: ScrollBars.Both);
+    private readonly TextBox _problems = Ui.Preview(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Panel _problemsHost;
     private readonly Panel _modelsHost;
     private readonly Label _hint = new()

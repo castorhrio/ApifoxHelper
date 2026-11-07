@@ -102,6 +102,84 @@ internal static class Ui
         Margin = new Padding(0),
     };
 
+    /// <summary>
+    /// 可编辑输入框（DESIGN.md §6「输入框」）：去系统 3D 边框、面板底色；
+    /// 放入界面时必须经 <see cref="Field"/> 包 1px 描边（常态 Line、聚焦 Accent）。
+    /// </summary>
+    public static TextBox Input(
+        bool multiline = false,
+        bool mono = false,
+        bool caption = false,
+        bool wordWrap = true,
+        bool password = false,
+        ScrollBars scrollBars = ScrollBars.None) =>
+        Box(new TextBox { Multiline = multiline, WordWrap = wordWrap, UseSystemPasswordChar = password, ScrollBars = scrollBars }, mono, caption);
+
+    /// <summary>只读预览框：同一镀铬加 ReadOnly；放入界面时经 Hairline 包发丝边（只读无聚焦描边）。</summary>
+    public static TextBox Preview(
+        bool multiline = false,
+        bool mono = false,
+        bool caption = false,
+        bool wordWrap = true,
+        ScrollBars scrollBars = ScrollBars.None) =>
+        Box(new TextBox { ReadOnly = true, Multiline = multiline, WordWrap = wordWrap, ScrollBars = scrollBars }, mono, caption);
+
+    private static TextBox Box(TextBox box, bool mono, bool caption)
+    {
+        box.BorderStyle = BorderStyle.None;
+        box.BackColor = UiTokens.Panel;
+        box.Margin = new Padding(0);
+        if (mono) box.Font = UiTokens.Mono.Value;
+        if (caption) box.Font = UiTokens.Caption.Value;
+        return box;
+    }
+
+    /// <summary>
+    /// 输入框镀铬（DESIGN.md §6「输入框」）：1px 描边面板——常态 Line，聚焦描边 Accent，
+    /// 色判定在 FieldChrome（与测试工程共享编译）。内外尺寸双向同步：文本框改宽高时面板跟随，
+    /// 面板被布局拉伸（行助手设宽设高）时文本框跟随。
+    /// </summary>
+    public static FieldBox Field(TextBox input) => new(input);
+
+    public sealed class FieldBox : Panel
+    {
+        private readonly TextBox _inner;
+        private bool _syncing;
+
+        public FieldBox(TextBox inner)
+        {
+            _inner = inner;
+            BackColor = UiTokens.Line;
+            Padding = new Padding(1);
+            Margin = new Padding(0);
+            inner.GotFocus += (_, _) => RefreshChrome();
+            inner.LostFocus += (_, _) => RefreshChrome();
+            inner.Resize += (_, _) => SyncFromInner();
+            Resize += (_, _) => SyncFromOuter();
+            Controls.Add(inner);
+            Size = new Size(inner.Width + Padding.Horizontal, inner.Height + Padding.Vertical);
+        }
+
+        private void RefreshChrome() => BackColor = FieldChrome.Border(_inner.Focused, UiTokens.Line, UiTokens.Accent);
+
+        private void SyncFromInner()
+        {
+            if (_syncing) return;
+            _syncing = true;
+            Size = new Size(_inner.Width + Padding.Horizontal, _inner.Height + Padding.Vertical);
+            _syncing = false;
+        }
+
+        private void SyncFromOuter()
+        {
+            if (_syncing) return;
+            _syncing = true;
+            _inner.Location = new Point(Padding.Left, Padding.Top);
+            _inner.Size = new Size(Width - Padding.Horizontal, Height - Padding.Vertical);
+            _syncing = false;
+        }
+    }
+
     /// <summary>用 1px 发丝边（Line 色）包裹无边框内容控件。</summary>
     public static Panel Hairline(ListView inner)
     {

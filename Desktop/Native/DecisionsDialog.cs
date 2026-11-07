@@ -57,14 +57,7 @@ internal sealed class DecisionsDialog : Form
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
     private readonly ListView _list = Ui.List();
-    private readonly TextBox _detail = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Vertical,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Caption.Value,
-    };
+    private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
     private readonly Button _confirmButton;
     private readonly Button _useTargetButton;
     private readonly Button _keepRemoteButton;

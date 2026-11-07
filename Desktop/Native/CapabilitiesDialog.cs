@@ -31,9 +31,9 @@ internal sealed class CapabilitiesDialog : Form
     private readonly Label _projectDetail = Ui.Caption();
     private readonly Label _compatBadge = Ui.StatusText("—");
     private readonly Label _compatDetail = Ui.Caption();
-    private readonly TextBox _projectId = new();
-    private readonly TextBox _branch = new();
-    private readonly TextBox _endpointId = new();
+    private readonly TextBox _projectId = Ui.Input();
+    private readonly TextBox _branch = Ui.Input();
+    private readonly TextBox _endpointId = Ui.Input();
     private readonly CheckBox _confirm = new() { Text = "我确认这是可修改的测试接口", AutoSize = true };
     private readonly Button _runButton;
     private readonly Button _stopButton;
@@ -99,9 +99,9 @@ internal sealed class CapabilitiesDialog : Form
         probe.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         probe.Controls.Add(SectionCaption("写入兼容探测"));
         probe.Controls.Add(Ui.Caption("探测会对指定接口执行三类往返写入并逐项回读核对；请只使用专用测试项目或测试分支中的接口。"));
-        probe.Controls.Add(FormRow("测试项目 ID", _projectId));
-        probe.Controls.Add(FormRow("测试分支名", _branch));
-        probe.Controls.Add(FormRow("测试接口 ID", _endpointId));
+        probe.Controls.Add(FormRow("测试项目 ID", Ui.Field(_projectId)));
+        probe.Controls.Add(FormRow("测试分支名", Ui.Field(_branch)));
+        probe.Controls.Add(FormRow("测试接口 ID", Ui.Field(_endpointId)));
         probe.Controls.Add(FormRow("", _confirm));
         var actions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, UiTokens.Sm, 0, 0) };
         actions.Controls.Add(_runButton);

@@ -26,15 +26,7 @@ internal sealed class ApplyPlanDialog : Form
     private readonly ListView _list = Ui.List();
     private readonly ListView _skippedList = Ui.List();
     private readonly Panel _skippedHost;
-    private readonly TextBox _diff = new()
-    {
-        ReadOnly = true,
-        Multiline = true,
-        ScrollBars = ScrollBars.Both,
-        WordWrap = false,
-        BackColor = UiTokens.Panel,
-        Font = UiTokens.Mono.Value,
-    };
+    private readonly TextBox _diff = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly Button _applyButton;
     private readonly Button _patchButton;
     private readonly Button _regenButton;
@@ -227,7 +219,7 @@ internal sealed class ApplyPlanDialog : Form
         _skippedList.Items.Clear();
         foreach (var skip in plan.Skipped)
         {
-            var item = _skippedList.Items.Add(skip.Display);
+            var item = new ListViewItem(skip.Display);
             item.SubItems.Add(skip.Reason);
             _skippedList.Items.Add(item);
         }
