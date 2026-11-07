@@ -141,6 +141,56 @@ public static class TaskDisplay
         _ => kind,
     };
 
+    /// <summary>注释候选审阅状态（CommentCandidate.ReviewState）的色调：已接受=ok，待审阅/证据已变化=warn，搁置/驳回=muted。</summary>
+    public static string ReviewTone(string state) => state switch
+    {
+        "accepted" => "ok",
+        "pending" or "stale" => "warn",
+        "deferred" or "rejected" => "muted",
+        _ => "normal",
+    };
+
+    /// <summary>注释候选审阅状态：候选清单与审阅结果里逐条显示的状态文字。</summary>
+    public static string ReviewStateText(string state) => state switch
+    {
+        "pending" => "待审阅",
+        "accepted" => "已接受",
+        "deferred" => "已搁置",
+        "rejected" => "已驳回",
+        "stale" => "证据已变化",
+        _ => state,
+    };
+
+    /// <summary>注释候选的依据（CommentCandidate.Basis）：说明结论建立在什么之上。</summary>
+    public static string CandidateBasisText(string basis) => basis switch
+    {
+        "code" => "代码可证实",
+        "needsConfirmation" => "需业务确认",
+        "notCovered" => "分析未覆盖",
+        "confirmed" => "人工已确认",
+        _ => basis,
+    };
+
+    /// <summary>注释候选的来源（CommentCandidate.Source）。</summary>
+    public static string CandidateSourceText(string source) => source switch
+    {
+        "rule" => "规则提取",
+        "manual" => "手工填写",
+        "model" => "模型生成",
+        "file" => "导入结果",
+        _ => source,
+    };
+
+    /// <summary>草稿生成运行的结果（GenerationRun.Status）。</summary>
+    public static string RunStatusText(string status) => status switch
+    {
+        "succeeded" => "生成成功",
+        "partial" => "部分生成",
+        "failed" => "生成失败",
+        "noResult" => "没有生成候选",
+        _ => status,
+    };
+
     /// <summary>代码证据类型（CodeEvidence.Kind）：证据清单里逐条显示的分类标签。</summary>
     public static string EvidenceKindText(string kind) => kind switch
     {

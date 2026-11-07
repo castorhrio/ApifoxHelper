@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using ApifoxHelper.Comments;
 using ApifoxHelper.Profiles;
 using ApifoxHelper.Source;
 using ApifoxHelper.Tasks;
@@ -7,7 +8,8 @@ using ApifoxHelper.Tasks;
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）。
+/// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）
+/// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）。
 /// 生成文档核对与 Apifox 检查/同步不在本切片：如实显示"本切片未接入"，不提供入口。
 /// </summary>
 internal sealed class TasksPage : UserControl, INativePage
@@ -16,6 +18,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly SourceScanService _scan;
     private readonly JobRunner _jobs;
     private readonly ProfileStore _profiles;
+    private readonly DraftService _drafts;
 
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
     private readonly Panel _empty;
@@ -32,6 +35,8 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Label _sourceNumbers = Ui.Mono();
     private readonly FlowLayoutPanel _scanActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
     private readonly Button _gapButton;
+    private readonly Button _candidatesButton;
+    private readonly Button _ruleButton;
     private readonly Button _scanButton;
     private readonly Label _progress = Ui.StatusText();
     private readonly Button _cancelButton;
@@ -44,12 +49,13 @@ internal sealed class TasksPage : UserControl, INativePage
     private bool _runningShown;
     private bool _splitAdjusted;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts)
     {
         _tasks = tasks;
         _scan = scan;
         _jobs = jobs;
         _profiles = profiles;
+        _drafts = drafts;
 
         var newButton = Ui.Primary("新建任务");
         newButton.Click += (_, _) => ShowNewTaskDialog();
@@ -65,11 +71,17 @@ internal sealed class TasksPage : UserControl, INativePage
 
         _gapButton = Ui.Ghost("查看注释缺口");
         _gapButton.Click += (_, _) => ShowScanResults();
+        _candidatesButton = Ui.Ghost("查看注释候选");
+        _candidatesButton.Click += (_, _) => ShowCandidates();
+        _ruleButton = Ui.Ghost("规则提取候选");
+        _ruleButton.Click += (_, _) => StartRuleExtraction();
         _scanButton = Ui.Ghost("开始扫描");
         _scanButton.Click += (_, _) => StartScan();
         _cancelButton = Ui.DangerGhost("取消");
         _cancelButton.Click += (_, _) => CancelScan();
         _scanActions.Controls.Add(_gapButton);
+        _scanActions.Controls.Add(_candidatesButton);
+        _scanActions.Controls.Add(_ruleButton);
         _scanActions.Controls.Add(_scanButton);
         _scanActions.Controls.Add(_cancelButton);
         _scanActions.Controls.Add(_progress);
@@ -139,7 +151,7 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _sourceStatus);
         AddDetailRow(grid, _sourceNumbers);
         AddDetailRow(grid, _scanActions);
-        AddDetailRow(grid, Ui.Caption("注释审阅与回写在后续切片接入原生界面；「查看注释缺口」在扫描完成后可用。"));
+        AddDetailRow(grid, Ui.Caption("「查看注释缺口」「规则提取候选」与「查看注释候选」在扫描完成后可用；模型生成、材料导入、手工填写与源码回写将在后续切片接入。"));
         AddDetailRow(grid, SectionCaption("生成文档"));
         AddDetailRow(grid, _generatedStatus);
         AddDetailRow(grid, Ui.Caption("本切片未接入。"));
@@ -311,8 +323,11 @@ internal sealed class TasksPage : UserControl, INativePage
     /// <summary>扫描区按作业状态切换：按钮（空闲）或进度 + 取消（执行中）。控件位置固定，不跳位。</summary>
     private void ShowJobState(JobInfo? job)
     {
-        // 缺口清单来自扫描落盘产物：扫描完成后可用，作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）。
-        _gapButton.Enabled = _selectedTask is { Stages.Source.ScannedAt: not null } && job is null;
+        // 缺口清单、候选审阅与规则提取都基于扫描落盘产物：扫描完成后可用，作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）。
+        var scanReady = _selectedTask is { Stages.Source.ScannedAt: not null } && job is null;
+        _gapButton.Enabled = scanReady;
+        _candidatesButton.Enabled = scanReady;
+        _ruleButton.Enabled = scanReady;
         if (job is not null)
         {
             _runningShown = true;
@@ -381,6 +396,35 @@ internal sealed class TasksPage : UserControl, INativePage
         if (_selectedTask is null) return;
         using var dialog = new ScanResultsDialog(_tasks, _selectedTask);
         dialog.ShowDialog(FindForm());
+    }
+
+    /// <summary>规则提取候选（后台作业）：只生成代码可证实的约束说明，写入任务目录 comment-drafts.json。</summary>
+    private void StartRuleExtraction()
+    {
+        if (_selectedTask is null) return;
+        var taskId = _selectedTask.Id;
+        try
+        {
+            _jobs.Start(taskId, "规则提取候选", async job => await _drafts.GenerateRuleAsync(taskId, [], job.Token));
+            RefreshDetail();
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法开始规则提取：" + Redactor.Redact(ex.Message));
+        }
+    }
+
+    /// <summary>打开注释候选审阅（接受/搁置/驳回写任务数据，不写源码）：关闭后刷新任务列表的候选计数。</summary>
+    private void ShowCandidates()
+    {
+        if (_selectedTask is null) return;
+        using var dialog = new CandidatesDialog(_drafts, _tasks, _selectedTask);
+        dialog.ShowDialog(FindForm());
+        LoadTasks();
     }
 
     private void ShowNewTaskDialog()

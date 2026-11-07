@@ -1,9 +1,10 @@
 namespace ApifoxHelper.Comments;
 
 /// <summary>
-/// XML 注释候选。依据状态（basis）与审阅状态（reviewState）分开记录：
-/// basis：code（代码可证实）/ needsConfirmation（需业务确认）/ notCovered（分析未覆盖）/ confirmed（人工已确认）；
-/// reviewState：pending / accepted / deferred / rejected / stale（证据已变化，需重新审阅）。
+/// XML 注释候选。依据（basis）与审阅状态（reviewState）分开记录，含义：
+/// 依据——代码可证实 / 需业务确认 / 分析未覆盖 / 人工已确认；
+/// 审阅——待审阅 / 已接受 / 已搁置 / 已驳回 / 证据已变化（重新扫描后证据指纹不一致，需重新审阅）。
+/// 取值清单写在对应属性的注释里，测试据此断言中文映射完备（TaskDisplay.CandidateBasisText、ReviewStateText）。
 /// </summary>
 public sealed class CommentCandidate
 {
@@ -17,10 +18,12 @@ public sealed class CommentCandidate
     public List<string> EvidenceIds { get; set; } = new();
     public List<string> OpenQuestions { get; set; } = new();
     public string? Answers { get; set; }
+    /// <summary>code / needsConfirmation / notCovered / confirmed</summary>
     public string Basis { get; set; } = "needsConfirmation";
 
     /// <summary>rule / model / file / manual</summary>
     public string Source { get; set; } = "manual";
+    /// <summary>pending / accepted / deferred / rejected / stale</summary>
     public string ReviewState { get; set; } = "pending";
 
     /// <summary>"set" 写入/补全；"removeStale" 删除失效的 param 标签。</summary>

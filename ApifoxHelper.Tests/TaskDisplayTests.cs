@@ -22,6 +22,10 @@ public class TaskDisplayTests
     public static IEnumerable<object[]> SlotRoles() => Statuses("Source/SourceModels.cs", "endpoint / request / response");
     public static IEnumerable<object[]> SymbolKinds() => Statuses("Source/SourceModels.cs", "method / type / property");
     public static IEnumerable<object[]> EvidenceKinds() => Statuses("Source/SourceModels.cs", "route / binding / validation");
+    public static IEnumerable<object[]> ReviewStates() => Statuses("Comments/DraftModels.cs", "pending / accepted / deferred");
+    public static IEnumerable<object[]> CandidateBases() => Statuses("Comments/DraftModels.cs", "code / needsConfirmation");
+    public static IEnumerable<object[]> CandidateSources() => Statuses("Comments/DraftModels.cs", "rule / model / file / manual");
+    public static IEnumerable<object[]> GenerationRunStatuses() => Statuses("Comments/DraftModels.cs", "succeeded / partial");
 
     [Theory]
     [MemberData(nameof(SourceStatuses))]
@@ -71,6 +75,26 @@ public class TaskDisplayTests
     [MemberData(nameof(EvidenceKinds))]
     public void EvidenceKind_HasChineseText(string kind) => Assert.NotEqual(kind, TaskDisplay.EvidenceKindText(kind));
 
+    [Theory]
+    [MemberData(nameof(ReviewStates))]
+    public void ReviewState_HasChineseTextAndTone(string state)
+    {
+        Assert.NotEqual(state, TaskDisplay.ReviewStateText(state));
+        Assert.Contains(TaskDisplay.ReviewTone(state), Tones);
+    }
+
+    [Theory]
+    [MemberData(nameof(CandidateBases))]
+    public void CandidateBasis_HasChineseText(string basis) => Assert.NotEqual(basis, TaskDisplay.CandidateBasisText(basis));
+
+    [Theory]
+    [MemberData(nameof(CandidateSources))]
+    public void CandidateSource_HasChineseText(string source) => Assert.NotEqual(source, TaskDisplay.CandidateSourceText(source));
+
+    [Theory]
+    [MemberData(nameof(GenerationRunStatuses))]
+    public void GenerationRunStatus_HasChineseText(string status) => Assert.NotEqual(status, TaskDisplay.RunStatusText(status));
+
     [Fact]
     public void UnknownStatus_FallsBackToRawValue()
     {
@@ -79,8 +103,13 @@ public class TaskDisplayTests
         Assert.Equal("mystery", TaskDisplay.RemoteStatusText("mystery"));
         Assert.Equal("mystery", TaskDisplay.SlotStatusText("mystery"));
         Assert.Equal("mystery", TaskDisplay.EvidenceKindText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.ReviewStateText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.CandidateBasisText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.CandidateSourceText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.RunStatusText("mystery"));
         Assert.Equal("running", TaskDisplay.JobStateText("running"));
         Assert.Equal("normal", TaskDisplay.SlotTone("mystery"));
+        Assert.Equal("normal", TaskDisplay.ReviewTone("mystery"));
     }
 
     [Fact]
@@ -104,6 +133,10 @@ public class TaskDisplayTests
             .Concat(Statuses("Source/SourceModels.cs", "endpoint / request / response").Select(o => TaskDisplay.SlotRoleText((string)o[0])))
             .Concat(Statuses("Source/SourceModels.cs", "method / type / property").Select(o => TaskDisplay.SymbolKindText((string)o[0])))
             .Concat(Statuses("Source/SourceModels.cs", "route / binding / validation").Select(o => TaskDisplay.EvidenceKindText((string)o[0])))
+            .Concat(Statuses("Comments/DraftModels.cs", "pending / accepted / deferred").Select(o => TaskDisplay.ReviewStateText((string)o[0])))
+            .Concat(Statuses("Comments/DraftModels.cs", "code / needsConfirmation").Select(o => TaskDisplay.CandidateBasisText((string)o[0])))
+            .Concat(Statuses("Comments/DraftModels.cs", "rule / model / file / manual").Select(o => TaskDisplay.CandidateSourceText((string)o[0])))
+            .Concat(Statuses("Comments/DraftModels.cs", "succeeded / partial").Select(o => TaskDisplay.RunStatusText((string)o[0])))
             .Concat(["成功", "失败", "已取消"]);
         foreach (var text in outputs)
         {

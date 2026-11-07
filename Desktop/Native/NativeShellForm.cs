@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using ApifoxHelper.Api;
+using ApifoxHelper.Comments;
 using ApifoxHelper.Profiles;
 using ApifoxHelper.Source;
 using ApifoxHelper.Tasks;
@@ -167,7 +168,8 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<TaskStore>(),
             _host.Services.GetRequiredService<SourceScanService>(),
             _host.Jobs,
-            _host.Services.GetRequiredService<ProfileStore>());
+            _host.Services.GetRequiredService<ProfileStore>(),
+            _host.Services.GetRequiredService<DraftService>());
 
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;
