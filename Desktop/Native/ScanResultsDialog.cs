@@ -6,7 +6,8 @@ using ApifoxHelper.Tasks;
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 注释缺口清单（只读）：展示扫描得到的全部注释位置（DocSlot），按状态筛选，逐条显示现状、覆盖接口与证据数。
+/// 注释缺口清单（只读）：展示扫描得到的全部注释位置（DocSlot），按状态筛选，逐条显示现状、覆盖接口与证据数；
+/// 选中条目可打开其代码证据（EvidenceDialog，同样只读）。
 /// 数据来自任务目录的 symbols.json（扫描产物），无任何写入动作；审阅与回写在后续切片接入。
 /// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=计数行 + 列表（空列表即全部有效）。
 /// </summary>
@@ -15,11 +16,12 @@ internal sealed class ScanResultsDialog : Form
     private static readonly string[] FilterChoices = ["全部位置", "缺失", "空", "已失效", "有效", "其他问题"];
 
     private readonly TaskStore _tasks;
-    private readonly string _taskId;
+    private readonly CheckTask _task;
 
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly Button _evidenceButton;
     private readonly TextBox _detail = new()
     {
         ReadOnly = true,
@@ -41,7 +43,7 @@ internal sealed class ScanResultsDialog : Form
     public ScanResultsDialog(TaskStore tasks, CheckTask task)
     {
         _tasks = tasks;
-        _taskId = task.Id;
+        _task = task;
 
         Text = "注释缺口 — " + task.Name;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -58,7 +60,14 @@ internal sealed class ScanResultsDialog : Form
         _list.Columns.Add("状态", 110);
         _list.Columns.Add("角色", 60);
         _list.Columns.Add("文件:行", 320);
+        _evidenceButton = Ui.Ghost("查看代码证据");
+        _evidenceButton.Enabled = false;
+        _evidenceButton.Click += (_, _) => ShowEvidence();
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
+        _list.DoubleClick += (_, _) =>
+        {
+            if (_evidenceButton.Enabled) ShowEvidence();
+        };
 
         _filter.Items.AddRange(FilterChoices);
         _filter.SelectedIndex = 0;
@@ -95,6 +104,7 @@ internal sealed class ScanResultsDialog : Form
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, 0, UiTokens.Md) };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
+        buttonRow.Controls.Add(_evidenceButton);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次详情框、筛选行，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -109,7 +119,7 @@ internal sealed class ScanResultsDialog : Form
         ScanOutput? output;
         try
         {
-            output = _tasks.Read<ScanOutput>(_taskId, TaskFiles.Symbols);
+            output = _tasks.Read<ScanOutput>(_task.Id, TaskFiles.Symbols);
         }
         catch (Exception ex)
         {
@@ -136,6 +146,7 @@ internal sealed class ScanResultsDialog : Form
         _hint.Visible = true;
         _list.Visible = false;
         _filter.Enabled = false;
+        _evidenceButton.Enabled = false;
         _counts.Text = "";
         _detail.Text = "";
     }
@@ -172,7 +183,7 @@ internal sealed class ScanResultsDialog : Form
 
     private void ApplyFilter()
     {
-        _detail.Text = "";
+        ShowDetail();
         _list.BeginUpdate();
         _list.Items.Clear();
         foreach (var slot in _slots)
@@ -196,9 +207,11 @@ internal sealed class ScanResultsDialog : Form
         if (_list.SelectedItems.Count == 0)
         {
             _detail.Text = "";
+            _evidenceButton.Enabled = false;
             return;
         }
         if (_list.SelectedItems[0].Tag is not DocSlot slot) return;
+        _evidenceButton.Enabled = slot.EvidenceIds.Count > 0;
         var lines = new List<string>
         {
             "符号：" + slot.Display + "（" + TaskDisplay.SymbolKindText(slot.SymbolKind) + "）",
@@ -211,6 +224,14 @@ internal sealed class ScanResultsDialog : Form
         _detail.Text = string.Join(Environment.NewLine, lines);
         _detail.SelectionStart = 0;
         _detail.SelectionLength = 0;
+    }
+
+    /// <summary>打开所选位置的代码证据（只读）：数据来自扫描落盘的 evidence.json，无写入动作。</summary>
+    private void ShowEvidence()
+    {
+        if (_list.SelectedItems[0]?.Tag is not DocSlot slot) return;
+        using var dialog = new EvidenceDialog(_tasks, _task, slot);
+        dialog.ShowDialog(this);
     }
 
     private static Color ToneColor(string tone) => tone switch

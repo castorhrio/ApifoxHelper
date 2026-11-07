@@ -140,4 +140,23 @@ public static class TaskDisplay
         "enumMember" => "枚举成员",
         _ => kind,
     };
+
+    /// <summary>代码证据类型（CodeEvidence.Kind）：证据清单里逐条显示的分类标签。</summary>
+    public static string EvidenceKindText(string kind) => kind switch
+    {
+        "route" => "路由",
+        "binding" => "参数绑定",
+        "validation" => "校验",
+        "guard" => "守卫条件",
+        "return" => "返回语句",
+        "call" => "内部调用",
+        "queryFilter" => "查询过滤",
+        "mapping" => "字段映射",
+        "default" => "默认值",
+        "enumMember" => "枚举成员",
+        "existingDoc" => "现有注释",
+        "docDiagnostic" => "注释诊断",
+        "responseData" => "响应数据",
+        _ => kind,
+    };
 }

@@ -21,6 +21,7 @@ public class TaskDisplayTests
     public static IEnumerable<object[]> SlotTags() => Statuses("Source/SourceModels.cs", "summary / param / returns");
     public static IEnumerable<object[]> SlotRoles() => Statuses("Source/SourceModels.cs", "endpoint / request / response");
     public static IEnumerable<object[]> SymbolKinds() => Statuses("Source/SourceModels.cs", "method / type / property");
+    public static IEnumerable<object[]> EvidenceKinds() => Statuses("Source/SourceModels.cs", "route / binding / validation");
 
     [Theory]
     [MemberData(nameof(SourceStatuses))]
@@ -66,6 +67,10 @@ public class TaskDisplayTests
     [MemberData(nameof(SymbolKinds))]
     public void SymbolKind_HasChineseText(string kind) => Assert.NotEqual(kind, TaskDisplay.SymbolKindText(kind));
 
+    [Theory]
+    [MemberData(nameof(EvidenceKinds))]
+    public void EvidenceKind_HasChineseText(string kind) => Assert.NotEqual(kind, TaskDisplay.EvidenceKindText(kind));
+
     [Fact]
     public void UnknownStatus_FallsBackToRawValue()
     {
@@ -73,6 +78,7 @@ public class TaskDisplayTests
         Assert.Equal("mystery", TaskDisplay.SourceStatusText("mystery"));
         Assert.Equal("mystery", TaskDisplay.RemoteStatusText("mystery"));
         Assert.Equal("mystery", TaskDisplay.SlotStatusText("mystery"));
+        Assert.Equal("mystery", TaskDisplay.EvidenceKindText("mystery"));
         Assert.Equal("running", TaskDisplay.JobStateText("running"));
         Assert.Equal("normal", TaskDisplay.SlotTone("mystery"));
     }
@@ -97,6 +103,7 @@ public class TaskDisplayTests
             .Concat(Statuses("Source/SourceModels.cs", "summary / param / returns").Select(o => TaskDisplay.SlotTagText((string)o[0])))
             .Concat(Statuses("Source/SourceModels.cs", "endpoint / request / response").Select(o => TaskDisplay.SlotRoleText((string)o[0])))
             .Concat(Statuses("Source/SourceModels.cs", "method / type / property").Select(o => TaskDisplay.SymbolKindText((string)o[0])))
+            .Concat(Statuses("Source/SourceModels.cs", "route / binding / validation").Select(o => TaskDisplay.EvidenceKindText((string)o[0])))
             .Concat(["成功", "失败", "已取消"]);
         foreach (var text in outputs)
         {
@@ -104,13 +111,18 @@ public class TaskDisplayTests
         }
     }
 
-    /// <summary>从数据模型的注释行提取状态/枚举列表（"/// a / b / c" → ["a","b","c"]）。</summary>
+    /// <summary>
+    /// 从数据模型的注释行提取状态/枚举列表（"/// a / b / c" → ["a","b","c"]）。
+    /// 两端标记先剥掉：列表第一个值（紧贴 &lt;summary&gt;）与最后一个值（紧贴 &lt;/summary&gt;）同样要被断言到。
+    /// </summary>
     private static IEnumerable<object[]> Statuses(string relative, string marker)
     {
         var line = Repo.Source(relative.Split('/'))
             .Split('\n')
             .Single(l => l.Contains(marker, StringComparison.Ordinal));
         var tokens = line[(line.IndexOf("///", StringComparison.Ordinal) + 3)..]
+            .Replace("<summary>", "")
+            .Replace("</summary>", "")
             .Split('/')
             .Select(t => t.Trim())
             .Where(t => Regex.IsMatch(t, "^[a-z][A-Za-z]+$"))
