@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 桌面程序：WinForms 窗口内嵌 WebView2 显示本地页面，没有控制台窗口。 -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ApifoxHelper</AssemblyName>
+    <RootNamespace>ApifoxHelper</RootNamespace>
+    <Version>1.1.0</Version>
+    <Product>Apifox 助手</Product>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- 框架依赖发布时，本机只有更高主版本的 .NET 运行时也能启动。 -->
+    <RollForward>Major</RollForward>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 只在桌面相关文件中显式引用 WinForms/GDI+ 命名空间，避免与其余代码中的同名类型冲突。 -->
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+  </ItemGroup>
+
+  <!-- WebView2 包默认同时引用 WPF 包装程序集；本项目只用 WinForms，排除它以免引入 WPF 依赖与版本冲突警告。 -->
+  <Target Name="ExcludeWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Web\index.html" LogicalName="Web.index.html" />
+    <EmbeddedResource Include="Web\app.js" LogicalName="Web.app.js" />
+    <EmbeddedResource Include="Web\app.css" LogicalName="Web.app.css" />
+    <EmbeddedResource Include="Assets\app.ico" LogicalName="Assets.app.ico" />
+    <EmbeddedResource Include="Assets\app-icon.svg" LogicalName="Assets.app-icon.svg" />
+  </ItemGroup>
+
+</Project>

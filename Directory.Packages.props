@@ -1,0 +1,6 @@
+<Project>
+  <!-- 本工具自行管理包版本，不参与外层仓库的集中包管理。 -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

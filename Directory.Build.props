@@ -1,0 +1,3 @@
+<Project>
+  <!-- 截断 MSBuild 向上查找，避免继承外层仓库将来可能添加的 Directory.Build.props。 -->
+</Project>

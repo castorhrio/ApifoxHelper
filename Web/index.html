@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="helper-session" content="__SESSION_TOKEN__">
+  <title>Apifox 助手</title>
+  <link rel="icon" type="image/svg+xml" href="/app-icon.svg">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="brand">
+        <img class="brand-mark" src="/app-icon.svg" alt="" width="34" height="34">
+        <span>Apifox 助手</span>
+        <small>源码注释 → 契约 → Apifox</small>
+      </div>
+      <button class="nav-item" data-view="tasks">检查任务</button>
+      <button class="nav-item" data-view="profiles">项目设置</button>
+      <button class="nav-item" data-view="reports">历史报告</button>
+      <div class="foot" id="foot"></div>
+    </nav>
+    <main class="main" id="main"></main>
+  </div>
+  <div class="jobbar hidden" id="jobbar"></div>
+  <div class="toast-box" id="toasts"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

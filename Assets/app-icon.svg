@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Apifox 助手应用图标母版（32 px 及以上）。C# 注释符 // 的下一笔落成对勾：注释与接口文档已核对。
+       构成：三笔等宽圆头线，斜杠与对勾长边均为 60°，对勾短边 45°；对勾短边与第二笔的间距约 0.6 倍笔宽。
+       16–24 px 使用 app-icon-small.svg（只保留一笔斜杠）。app.ico 由这两个文件逐尺寸渲染打包。 -->
+  <title>Apifox 助手</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="52.2" fill="url(#tile)"/>
+  <g fill="none" stroke-width="18.62" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M53.31 157.86 L100.75 75.7" stroke="#FFFFFF"/>
+    <path d="M87.71 157.86 L135.14 75.7" stroke="#FFFFFF"/>
+    <path d="M124.85 153.38 L145.77 174.3 L202.69 75.7" stroke="#5EEAD4"/>
+  </g>
+</svg>

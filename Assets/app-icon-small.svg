@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- 小尺寸版（16–24 px）：去掉一笔斜杠、加粗笔画、底板放满，保证任务栏和标题栏里仍能认出“斜杠 + 对勾”。 -->
+  <title>Apifox 助手（小尺寸）</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="244" height="244" rx="54.9" fill="url(#tile)"/>
+  <g fill="none" stroke-width="23.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M54.75 165.17 L111.28 67.25" stroke="#FFFFFF"/>
+    <path d="M105.72 157.06 L133.41 184.75 L201.25 67.25" stroke="#5EEAD4"/>
+  </g>
+</svg>
