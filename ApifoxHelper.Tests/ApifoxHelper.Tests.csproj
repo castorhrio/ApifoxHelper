@@ -38,6 +38,9 @@
     <Compile Include="..\Desktop\Native\DraftEntries.cs" Link="Shared\DraftEntries.cs" />
     <Compile Include="..\Desktop\Native\SupplementEntries.cs" Link="Shared\SupplementEntries.cs" />
     <Compile Include="..\Desktop\Native\CompatEntries.cs" Link="Shared\CompatEntries.cs" />
+    <Compile Include="..\Desktop\Native\ProfileAdvanced.cs" Link="Shared\ProfileAdvanced.cs" />
+    <Compile Include="..\Profiles\ProjectProfile.cs" Link="Shared\ProjectProfile.cs" />
+    <Compile Include="..\Profiles\EndpointTemplateReader.cs" Link="Shared\EndpointTemplateReader.cs" />
     <Compile Include="..\Reports\ReportFormats.cs" Link="Shared\ReportFormats.cs" />
     <Compile Include="..\Sync\CheckModels.cs" Link="Shared\CheckModels.cs" />
     <Compile Include="..\Sync\PlanModels.cs" Link="Shared\PlanModels.cs" />

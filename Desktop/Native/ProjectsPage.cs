@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using ApifoxHelper.Apifox;
 using ApifoxHelper.Infrastructure;
 using ApifoxHelper.Profiles;
 using ApifoxHelper.Sync;
@@ -8,13 +9,15 @@ namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
 /// 项目配置页：列出配置，新建/编辑核心字段（名称、仓库、API 项目、回写范围、Swagger 来源、Apifox 目标），
-/// 「连接与写入探测」经既有 CompatService 检查 CLI/登录/项目读取并按需运行写入兼容探测（F02，写入门禁的唯一登记入口）。
-/// 保存走 ProfileStore（含路径与取值校验）；本切片不编辑模块、模板与模型服务等高级设置，编辑时保持原值。
+/// 「模块与模板」编辑模块范围与新接口模板（含从既有接口提取），「连接与写入探测」经既有 CompatService
+/// 检查 CLI/登录/项目读取并按需运行写入兼容探测（F02，写入门禁的唯一登记入口）。
+/// 保存走 ProfileStore（含路径与取值校验）；模型服务等其余高级设置保持原值，不在本页编辑。
 /// </summary>
 internal sealed class ProjectsPage : UserControl, INativePage
 {
     private readonly ProfileStore _profiles;
     private readonly CompatService _compat;
+    private readonly ApifoxCli _cli;
     private readonly FileStore _store;
     private readonly JobRunner _jobs;
     private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
@@ -23,10 +26,11 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private readonly Button _editButton;
     private readonly Button _probeButton;
 
-    public ProjectsPage(ProfileStore profiles, CompatService compat, FileStore store, JobRunner jobs)
+    public ProjectsPage(ProfileStore profiles, CompatService compat, ApifoxCli cli, FileStore store, JobRunner jobs)
     {
         _profiles = profiles;
         _compat = compat;
+        _cli = cli;
         _store = store;
         _jobs = jobs;
 
@@ -154,7 +158,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
     private void ShowDialog(ProjectProfile? editing)
     {
-        using var dialog = new ProfileDialog(_profiles, editing);
+        using var dialog = new ProfileDialog(_profiles, _cli, editing);
         if (dialog.ShowDialog(FindForm()) == DialogResult.OK)
         {
             LoadProfiles();
@@ -172,13 +176,16 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
 /// <summary>
 /// 配置编辑对话框：核心字段 + 内联校验（ProfileStore.Save 抛出的 UserException 显示在状态行，不弹窗）。
+/// 「模块与模板」入口打开高级编辑（模块范围与新接口模板），改动应用到同一配置对象，随「保存」一起落盘。
 /// </summary>
 internal sealed class ProfileDialog : Form
 {
     private static readonly string[] SwaggerChoices = ["无（暂不核对 Apifox 结构）", "文件（OpenAPI 3.0 JSON）", "URL（http/https 的 JSON 地址）"];
 
     private readonly ProfileStore _profiles;
+    private readonly ApifoxCli _cli;
     private readonly ProjectProfile? _editing;
+    private readonly ProjectProfile _profile;
 
     private readonly TextBox _name = new();
     private readonly TextBox _workspace = new();
@@ -191,10 +198,12 @@ internal sealed class ProfileDialog : Form
     private readonly Label _status = Ui.StatusLine();
     private readonly Button _findButton;
 
-    public ProfileDialog(ProfileStore profiles, ProjectProfile? editing)
+    public ProfileDialog(ProfileStore profiles, ApifoxCli cli, ProjectProfile? editing)
     {
         _profiles = profiles;
+        _cli = cli;
         _editing = editing;
+        _profile = editing ?? new ProjectProfile();
 
         Text = editing is null ? "新建配置" : "编辑配置：" + editing.Name;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -202,7 +211,7 @@ internal sealed class ProfileDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(680, 430);
+        ClientSize = new Size(680, 500);
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -210,6 +219,8 @@ internal sealed class ProfileDialog : Form
         _findButton.Click += async (_, _) => await FindProjectsAsync();
         var browseButton = Ui.Ghost("浏览…");
         browseButton.Click += (_, _) => BrowseWorkspace();
+        var advancedButton = Ui.Ghost("模块与模板…");
+        advancedButton.Click += (_, _) => ShowAdvanced();
 
         _swaggerType.Items.AddRange(SwaggerChoices);
         _swaggerType.SelectedIndexChanged += (_, _) => _swaggerLocation.Enabled = _swaggerType.SelectedIndex > 0;
@@ -241,7 +252,8 @@ internal sealed class ProfileDialog : Form
         AddRow(grid, "Swagger 位置", _swaggerLocation);
         AddRow(grid, "Apifox 项目 ID", _projectId);
         AddRow(grid, "分支", _branch);
-        AddRow(grid, "", Ui.Caption("模块范围、模板与模型服务等设置不在本切片编辑：编辑时保持原值，新建时使用默认值。"));
+        AddRow(grid, "", Ui.Caption("模块范围与接口模板在「模块与模板」中编辑；模型服务等其余设置保持原值，新建时使用默认值。"));
+        AddRow(grid, "", advancedButton);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，符合 Windows「主行动在右」惯例。
@@ -263,19 +275,44 @@ internal sealed class ProfileDialog : Form
     private void LoadValues()
     {
         if (_editing is null) return;
-        _name.Text = _editing.Name;
-        _workspace.Text = _editing.WorkspaceRoot;
-        _apiProject.Text = _editing.ApiProject;
-        _allowed.Text = string.Join("; ", _editing.AllowedSourcePaths);
-        _swaggerType.SelectedIndex = _editing.Swagger.Type switch
+        _name.Text = _profile.Name;
+        _workspace.Text = _profile.WorkspaceRoot;
+        _apiProject.Text = _profile.ApiProject;
+        _allowed.Text = string.Join("; ", _profile.AllowedSourcePaths);
+        _swaggerType.SelectedIndex = _profile.Swagger.Type switch
         {
             "file" => 1,
             "url" => 2,
             _ => 0,
         };
-        _swaggerLocation.Text = _editing.Swagger.Location ?? "";
-        _projectId.Text = _editing.Apifox.ProjectId ?? "";
-        _branch.Text = _editing.Apifox.BranchName ?? "";
+        _swaggerLocation.Text = _profile.Swagger.Location ?? "";
+        _projectId.Text = _profile.Apifox.ProjectId ?? "";
+        _branch.Text = _profile.Apifox.BranchName ?? "";
+    }
+
+    /// <summary>打开「模块与模板」：先把当前输入的核心字段收集到配置对象，提取才能用刚填写的 Apifox 目标。</summary>
+    private void ShowAdvanced()
+    {
+        CollectCoreFields();
+        using var dialog = new ProfileAdvancedDialog(_cli, _profile);
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        SetStatus("模块与模板已更新，随「保存」写入。", UiTokens.OkText);
+    }
+
+    /// <summary>把核心输入字段的当前值收集到配置对象（保存与打开高级编辑共用）。</summary>
+    private void CollectCoreFields()
+    {
+        _profile.Name = _name.Text;
+        _profile.WorkspaceRoot = _workspace.Text;
+        _profile.ApiProject = _apiProject.Text;
+        _profile.AllowedSourcePaths = _allowed.Text.Split([';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        _profile.Swagger = new SwaggerSource
+        {
+            Type = _swaggerType.SelectedIndex switch { 1 => "file", 2 => "url", _ => "none" },
+            Location = _swaggerLocation.Text.Trim().Length == 0 ? null : _swaggerLocation.Text.Trim(),
+        };
+        _profile.Apifox.ProjectId = _projectId.Text.Trim().Length == 0 ? null : _projectId.Text.Trim();
+        _profile.Apifox.BranchName = _branch.Text.Trim().Length == 0 ? null : _branch.Text.Trim();
     }
 
     private static Control Row(Control first, int width, Control second, Control third)
@@ -369,21 +406,10 @@ internal sealed class ProfileDialog : Form
 
     private void Save()
     {
-        var profile = _editing ?? new ProjectProfile();
-        profile.Name = _name.Text;
-        profile.WorkspaceRoot = _workspace.Text;
-        profile.ApiProject = _apiProject.Text;
-        profile.AllowedSourcePaths = _allowed.Text.Split([';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-        profile.Swagger = new SwaggerSource
-        {
-            Type = _swaggerType.SelectedIndex switch { 1 => "file", 2 => "url", _ => "none" },
-            Location = _swaggerLocation.Text.Trim().Length == 0 ? null : _swaggerLocation.Text.Trim(),
-        };
-        profile.Apifox.ProjectId = _projectId.Text.Trim().Length == 0 ? null : _projectId.Text.Trim();
-        profile.Apifox.BranchName = _branch.Text.Trim().Length == 0 ? null : _branch.Text.Trim();
+        CollectCoreFields();
         try
         {
-            _profiles.Save(profile, isNew: _editing is null);
+            _profiles.Save(_profile, isNew: _editing is null);
             DialogResult = DialogResult.OK;
         }
         catch (UserException ex)

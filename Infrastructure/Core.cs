@@ -157,6 +157,23 @@ public static class KeyedLocks
     }
 }
 
+/// <summary>
+/// JSON 节点的宽松数值读取：长整数、整数字符串与 JsonElement 数字都能读取；
+/// 只依赖 BCL，接口模板提取等纯逻辑链路共享编译。
+/// </summary>
+public static class JsonNodeValue
+{
+    public static long? ReadLong(JsonNode? node)
+    {
+        if (node is not JsonValue value) return null;
+        if (value.TryGetValue<long>(out var l)) return l;
+        if (value.TryGetValue<int>(out var i)) return i;
+        if (value.TryGetValue<string>(out var s) && long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        if (value.TryGetValue<JsonElement>(out var element) && element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out var e)) return e;
+        return null;
+    }
+}
+
 public static class TextUtil
 {
     public static string Truncate(string? text, int max)

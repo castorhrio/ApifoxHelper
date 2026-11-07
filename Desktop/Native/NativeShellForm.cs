@@ -167,6 +167,7 @@ internal sealed class NativeShellForm : Form
         _projectsPage = new ProjectsPage(
             _host.Services.GetRequiredService<ProfileStore>(),
             _host.Services.GetRequiredService<Sync.CompatService>(),
+            _host.Services.GetRequiredService<Apifox.ApifoxCli>(),
             _host.Store,
             _host.Jobs);
         _tasksPage = new TasksPage(

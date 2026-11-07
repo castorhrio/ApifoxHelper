@@ -57,16 +57,7 @@ public static class ApifoxRoutes
             if (profile.Apifox.ProjectId is null) throw new UserException("请先选择 Apifox 项目。");
             var result = await cli.GetEndpointAsync(profile.Apifox, profile.Apifox.ProjectId, profile.Apifox.BranchName, endpointId, http.RequestAborted);
             if (!result.Ok || result.Data is not JsonObject data) throw new UserException("读取接口失败：" + result.Describe());
-            return Json(new NewEndpointTemplate
-            {
-                FolderId = RemoteSnapshotService.ReadLong(data["folderId"]),
-                Status = data["status"]?.ToString() ?? "developing",
-                ServerId = data["serverId"]?.ToString(),
-                Auth = data["auth"]?.DeepClone() as JsonObject,
-                SecurityScheme = data["securityScheme"]?.DeepClone() as JsonObject,
-                HeaderParameters = (data["parameters"]?["header"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(h => (JsonObject)h.DeepClone()).ToList(),
-                Tags = (data["tags"] as JsonArray)?.Select(t => t?.ToString()).OfType<string>().ToList() ?? new List<string>(),
-            });
+            return Json(EndpointTemplateReader.Read(data));
         });
 
         app.MapPost("/api/profiles/{id}/write-probe", (string id, WriteProbeRequest request, ProfileStore profiles, CompatService compat, FileStore store, JobRunner jobs) =>
