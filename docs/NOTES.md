@@ -598,6 +598,16 @@
 - **Linux 运行时验证**：链路不触碰 WinForms，/tmp 一次性控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore、Profiles 的 ProjectProfile/ProfileStore、Tasks 的 TaskModels/TaskFiles/TaskStore、Source 的 SourceModels、Desktop/Native/EndpointTrace，镜像 GlobalUsings；不进仓库、已清理），在真实 FileStore/ProfileStore/TaskStore 上创建配置与任务，经服务的真实写路径（TaskStore.Write → JsonDefaults）落盘 evidence.json 夹具（超限接口 + 干净接口），23 项断言全部通过：落盘形状（camelCase 键 coverage/endpointKey/methodsRead/budgetExceeded；**JsonDefaults 转义口径核实——`UnicodeRanges.All` 中文原样、HTML 敏感字符仍按默认规则转义，候选「Map<T>(T)」落盘为 `Map\u003CT\u003E(T)`，回读后原值一致**；脚本首版把「落盘无转义」误设为预期，核对编码器配置后确认为脚本断言误设、服务一行未改）、回读逐字段一致（含嵌套候选列表）、口径在回读数据上的全部段落渲染、干净接口空段省略、旧任务缺 coverage 键按空处理（对话框空态口径）。
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 589 用例全部通过（含令牌接线与 G-D4 机械检查对新增两文件与 ScanResultsDialog 改动的扫描——无禁词、无档外值）。**追踪明细对话框的 Windows 真机观感仍未验证**（G-D5 复核）——Windows 真机需按「扫描一个含通用封装与外部调用的真实项目 → 注释缺口 → 接口追踪明细 → 超限行警示色与「超限」文字 → 选中接口看方法清单与未解析调用 → 点「查看代码证据」→ 清空选中证据按钮禁用」走一遍。纯只读：服务层（扫描/证据/契约/检查/同步）一行未动；本轮未连接或写入 Apifox，未调用任何模型服务。
 
+
+## 原生切片「异步落点守卫：对话框关闭后不再触达界面」（2026-11-08 第四十五轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（558d7f2）的 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误、589 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。缺口对照：按钮态残留（第四十/四十一轮）、状态推导滞留（第四十二/四十三轮）、服务输出可见性（第四十四轮）三族复核完毕，本轮按「UI 线程 await 的落点」逐点排查全部对话框——发现一个真实的同族纪律不统一：**模态对话框的异步操作完成时窗口可能已被用户关闭，九个较早方法在 await 之后无守卫地触达界面（导入结果的按钮恢复也不完整）**。
+- **缺陷机理（具名 pass：harden，纯呈现层）**：模态对话框的异步操作执行期间「关闭」（按钮与 Esc）始终可用；用户关闭后窗体释放（任务页与项目页一律 `using` 持有对话框），await 的续体仍经 WinForms 同步上下文回到 UI 线程继续执行——`SetStatus`、按钮恢复、列表重建都作用在已释放控件上，async void 中的未处理异常按 ThreadException 弹错误对话框。触发路径真实且代价不小：连接检查要调用 node 子进程（秒级），打开探测对话框后立即 Esc 即中招；候选/契约审阅、差异确认与补充保存、模板提取、查找 API 项目与 Apifox 项目/分支读取同理。同族对照：较新的路径——注释回写对话框（LoadPlan/RunApply/ExportPatch）、导入编码助手结果（ImportResult 主体）、手工候选（RunManualAdd）、壳（OnLoad/OnJobCompleted）与同步预览轮询（OnTick）——await 之后都有 `IsDisposed` 守卫，纪律存在但不统一；缺失的九个方法：候选审阅 `RunReview`、契约审阅 `RunReview`、差异确认 `SaveDecision`、补充保存 `SaveCurrent`、连接检查 `CheckAsync`、模板提取 `ExtractAsync`、配置对话框的查找 API 项目/读取项目列表/读取分支三个方法；期间还发现 ImportResult 自己的守卫不完整——三条 catch 路径的 `_importButton.Enabled = true` 恢复是裸的（同方法的状态行输出已守卫）。
+- **修复口径**：全部异步 UI 方法统一为「await 之后触达界面以前先检查 IsDisposed」——两条 catch 与成功续体各一处（沿用 ApplyPlanDialog.RunApply 的既有形态），finally 里的按钮恢复同样守卫（沿用 ScanResultsDialog.RunManualAdd 的 `if (!IsDisposed) …` 形态；ImportResult 三条恢复一并收口）。守卫之后的候选/决策重读是同步代码：检查点与后续触达之间没有消息泵，窗口不可能变为已释放，不重复检查。守卫只影响呈现：保存与审阅在窗口关闭后照常落盘（数据不丢），服务链路一行未动。
+- **测试 589 → 594 用例**：新增 `AsyncDisposeGuardTests`（5）——四个「保存/审阅」方法体切片各断言三处守卫计数与成功续体的相邻锚点；ImportResult 三条守卫恢复计数；CheckAsync/ExtractAsync/三个 ProfileDialog 方法的「await 行 → 守卫行」相邻锚点、finally 守卫恢复与裸恢复禁令；DESIGN.md §8 条款断言。锚点缺失即红（方法体切片不允许断言漂移到空切片）。
+- **变异验证六处实测可红**（各自独立变红、还原以基准副本覆盖并核对 diff 干净）：删候选审阅一条 catch 守卫（1 红）、删补充保存成功续体守卫（1 红）、连接检查 finally 恢复去守卫（1 红）、导入结果一条恢复去守卫（1 红）、删读取分支的 await 后守卫（1 红）、删 DESIGN.md §8 条款行（1 红）。
+- **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 594 用例全部通过（含令牌接线与 G-D4 机械检查对七个改动文件的扫描——无禁词、无档外值）。**「操作执行中关闭对话框不出现错误对话框、作业照常完成」的真机行为仍未验证**（G-D5 复核）——Windows 真机需按「打开连接与写入探测 → 立即 Esc → 无错误对话框弹出」与「契约审阅确认进行中关闭对话框 → 任务数据照常落盘」走一遍。如实记录不动：两处 WinForms Timer 回调（TasksPage.OnTick、CapabilitiesDialog.OnTick）不是 await 续体——定时器在各自 Dispose 中释放、释放后不再触发（SyncPreviewDialog.OnTick 的同名守卫属纵深防御，本轮不扩面）。纯呈现层：服务层与服务调用一行未动，写入安全语义不变；本轮未连接或写入 Apifox，未调用任何模型服务。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

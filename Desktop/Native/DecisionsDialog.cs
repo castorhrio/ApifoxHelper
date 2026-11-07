@@ -566,16 +566,19 @@ internal sealed class DecisionsDialog : Form
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus(ex.Message, UiTokens.WarnText);
             EnableActions(entry);
             return;
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus("保存决策失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
             EnableActions(entry);
             return;
         }
+        if (IsDisposed) return;
         if (!ReloadDecisions(out var error))
         {
             // 写入已成功，重新读取失败时如实说明，不显示成保存失败。

@@ -512,6 +512,7 @@ internal sealed class ProfileDialog : Form
         {
             // ProjectFinder 返回匿名对象；经 JSON 变形读取，避免反射或 dynamic。
             var node = await Task.Run(() => JsonSerializer.SerializeToNode(ProjectFinder.Find(root), JsonDefaults.Compact));
+            if (IsDisposed) return;
             _apiProject.Items.Clear();
             var truncated = node?["truncated"]?.GetValue<bool>() ?? false;
             foreach (var project in node?["projects"] as JsonArray ?? [])
@@ -533,15 +534,17 @@ internal sealed class ProfileDialog : Form
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus(ex.Message, UiTokens.BadText);
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus("查找失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
         }
         finally
         {
-            _findButton.Enabled = true;
+            if (!IsDisposed) _findButton.Enabled = true;
         }
     }
 
@@ -562,6 +565,7 @@ internal sealed class ProfileDialog : Form
         {
             var saved = _profiles.Get(_profile.Id);
             var result = await _cli.ListProjectsAsync(saved.Apifox, CancellationToken.None);
+            if (IsDisposed) return;
             if (!result.Ok)
             {
                 SetStatus(ApifoxPicker.ProjectsFailedPrefix + result.Describe(), UiTokens.BadText);
@@ -573,15 +577,17 @@ internal sealed class ProfileDialog : Form
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus(ex.Message, UiTokens.BadText);
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus(ApifoxPicker.ProjectsFailedPrefix + Redactor.Redact(ex.Message), UiTokens.BadText);
         }
         finally
         {
-            _loadProjectsButton.Enabled = true;
+            if (!IsDisposed) _loadProjectsButton.Enabled = true;
         }
     }
 
@@ -603,6 +609,7 @@ internal sealed class ProfileDialog : Form
         {
             var saved = _profiles.Get(_profile.Id);
             var result = await _cli.ListBranchesAsync(saved.Apifox, _projectId.Text.Trim(), CancellationToken.None);
+            if (IsDisposed) return;
             if (!result.Ok)
             {
                 SetStatus(ApifoxPicker.BranchesFailedPrefix + result.Describe(), UiTokens.BadText);
@@ -614,15 +621,17 @@ internal sealed class ProfileDialog : Form
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus(ex.Message, UiTokens.BadText);
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus(ApifoxPicker.BranchesFailedPrefix + Redactor.Redact(ex.Message), UiTokens.BadText);
         }
         finally
         {
-            _loadBranchesButton.Enabled = true;
+            if (!IsDisposed) _loadBranchesButton.Enabled = true;
         }
     }
 

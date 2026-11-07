@@ -298,16 +298,19 @@ internal sealed class ContractsDialog : Form
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus(ex.Message, UiTokens.WarnText);
             SetButtons(contract);
             return;
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus("保存审阅结果失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
             SetButtons(contract);
             return;
         }
+        if (IsDisposed) return;
         if (!ReloadContracts(out var error))
         {
             // 写入已成功，重新读取失败时如实说明，不显示成审阅失败。

@@ -338,16 +338,19 @@ internal sealed class CandidatesDialog : Form
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus(ex.Message, UiTokens.WarnText);
             SetButtons(candidate);
             return;
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus("保存审阅结果失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
             SetButtons(candidate);
             return;
         }
+        if (IsDisposed) return;
         try
         {
             _store = _drafts.Load(_task.Id);
@@ -403,7 +406,7 @@ internal sealed class CandidatesDialog : Form
         catch (Exception ex)
         {
             if (!IsDisposed) SetStatus("读取结果文件失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
-            _importButton.Enabled = true;
+            if (!IsDisposed) _importButton.Enabled = true;
             return;
         }
         DraftImportResult result;
@@ -414,13 +417,13 @@ internal sealed class CandidatesDialog : Form
         catch (UserException ex)
         {
             if (!IsDisposed) SetStatus(ex.Message, UiTokens.WarnText);
-            _importButton.Enabled = true;
+            if (!IsDisposed) _importButton.Enabled = true;
             return;
         }
         catch (Exception ex)
         {
             if (!IsDisposed) SetStatus("导入结果失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
-            _importButton.Enabled = true;
+            if (!IsDisposed) _importButton.Enabled = true;
             return;
         }
         if (IsDisposed) return;

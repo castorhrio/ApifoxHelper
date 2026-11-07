@@ -176,21 +176,24 @@ internal sealed class CapabilitiesDialog : Form
         try
         {
             var report = await _compat.CapabilitiesAsync(_profile, CancellationToken.None);
+            if (IsDisposed) return;
             ShowReport(report);
             SetStatus(null);
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus("连接检查失败：" + ex.Message);
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus("连接检查失败：" + Redactor.Redact(ex.Message));
         }
         finally
         {
             _checking = false;
-            _recheckButton.Enabled = true;
+            if (!IsDisposed) _recheckButton.Enabled = true;
         }
     }
 

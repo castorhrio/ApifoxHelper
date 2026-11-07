@@ -319,6 +319,7 @@ internal sealed class SupplementsDialog : Form
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus(ex.Message, UiTokens.WarnText);
             _saving = false;
             MarkDirty();
@@ -326,11 +327,13 @@ internal sealed class SupplementsDialog : Form
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus("保存补充失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
             _saving = false;
             MarkDirty();
             return;
         }
+        if (IsDisposed) return;
         _supplement = saved;
         _saving = false;
         ReloadEditors();

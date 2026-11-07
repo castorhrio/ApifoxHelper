@@ -207,6 +207,7 @@ internal sealed class ProfileAdvancedDialog : Form
         {
             var endpointId = long.Parse(endpointIdText, CultureInfo.InvariantCulture);
             var result = await _cli.GetEndpointAsync(_profile.Apifox, _profile.Apifox.ProjectId, _profile.Apifox.BranchName, endpointId, CancellationToken.None);
+            if (IsDisposed) return;
             if (!result.Ok || result.Data is not JsonObject data)
             {
                 SetStatus("读取接口失败：" + result.Describe(), UiTokens.BadText);
@@ -217,15 +218,17 @@ internal sealed class ProfileAdvancedDialog : Form
         }
         catch (UserException ex)
         {
+            if (IsDisposed) return;
             SetStatus(ex.Message, UiTokens.BadText);
         }
         catch (Exception ex)
         {
+            if (IsDisposed) return;
             SetStatus("读取接口失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
         }
         finally
         {
-            _extractButton.Enabled = true;
+            if (!IsDisposed) _extractButton.Enabled = true;
         }
     }
 
