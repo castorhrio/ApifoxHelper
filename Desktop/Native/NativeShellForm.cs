@@ -173,6 +173,7 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<DraftService>(),
             _host.Services.GetRequiredService<CommentPlanService>(),
             _host.Services.GetRequiredService<PropagationService>(),
+            _host.Services.GetRequiredService<Comments.BuildService>(),
             _host.Services.GetRequiredService<ContractReviewService>(),
             _host.Services.GetRequiredService<Sync.CheckService>(),
             _host.Services.GetRequiredService<Sync.DecisionService>(),

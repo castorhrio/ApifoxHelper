@@ -13,6 +13,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）
 /// + 注释候选（规则提取后台作业、逐条审阅接受/搁置/驳回）+ 注释回写 + 生成文档核对（后台作业、只读结果视图）
 /// + 响应契约（扫描时追踪落盘，逐条确认/拒绝/重置）
+/// + 定向构建（用户确认后经既有 BuildService 在工作区执行 dotnet build --no-restore 刷新 XML 文档，
+/// 结果落盘 build.json；「查看构建输出」只读展示命令、退出码、耗时与输出尾部）
 /// + Apifox 差异检查（只读后台作业，需要时先加载冻结 Swagger；离线任务先导入远端 JSON；只读结果视图）
 /// + 差异确认（高风险变化逐项确认、说明冲突选择、模型绑定与共享模型更新确认，经共享 DecisionService 保存并递增任务版本）
 /// + 报告与交接（Markdown 预览 + 原生另存为导出，渲染与字节口径走共享 ReportExportService）
@@ -29,6 +31,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly DraftService _drafts;
     private readonly CommentPlanService _plans;
     private readonly PropagationService _propagation;
+    private readonly BuildService _builds;
     private readonly ContractReviewService _reviews;
     private readonly CheckService _checks;
     private readonly DecisionService _decisionSaves;
@@ -63,6 +66,9 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Label _generatedStatus = Ui.StatusText();
     private readonly Label _generatedNumbers = Ui.Mono();
     private readonly Button _contractButton;
+    private readonly Button _buildButton;
+    private readonly Button _buildLogButton;
+    private readonly Label _buildStatus = Ui.StatusText();
     private readonly Label _contractStatus = Ui.StatusText();
     private readonly Label _remoteStatus = Ui.StatusText();
     private readonly Label _remoteNumbers = Ui.Mono();
@@ -80,7 +86,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private bool _runningShown;
     private bool _splitAdjusted;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, ReportExportService exports, SyncPlanService syncPlans, SyncExecutor syncExecutor)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, BuildService builds, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, ReportExportService exports, SyncPlanService syncPlans, SyncExecutor syncExecutor)
     {
         _tasks = tasks;
         _scan = scan;
@@ -89,6 +95,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _drafts = drafts;
         _plans = plans;
         _propagation = propagation;
+        _builds = builds;
         _reviews = reviews;
         _checks = checks;
         _decisionSaves = decisionSaves;
@@ -135,8 +142,14 @@ internal sealed class TasksPage : UserControl, INativePage
         _checkButton.Click += (_, _) => StartPropagationCheck();
         _viewButton = Ui.Ghost("查看核对结果");
         _viewButton.Click += (_, _) => ShowPropagation();
+        _buildButton = Ui.Ghost("执行定向构建");
+        _buildButton.Click += (_, _) => StartBuild();
+        _buildLogButton = Ui.Ghost("查看构建输出");
+        _buildLogButton.Click += (_, _) => ShowBuildLog();
         _generatedActions.Controls.Add(_checkButton);
         _generatedActions.Controls.Add(_viewButton);
+        _generatedActions.Controls.Add(_buildButton);
+        _generatedActions.Controls.Add(_buildLogButton);
 
         _contractButton = Ui.Ghost("查看响应契约");
         _contractButton.Click += (_, _) => ShowContracts();
@@ -227,7 +240,8 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _generatedStatus);
         AddDetailRow(grid, _generatedNumbers);
         AddDetailRow(grid, _generatedActions);
-        AddDetailRow(grid, Ui.Caption("「核对传播」需要有已接受的注释候选；核对不构建项目，XML 与 Swagger 重新生成后才会更新。定向构建将在后续切片接入。"));
+        AddDetailRow(grid, _buildStatus);
+        AddDetailRow(grid, Ui.Caption("「核对传播」需要有已接受的注释候选；核对不构建项目，XML 与 Swagger 重新生成后才会更新。工具默认不构建、不 restore、不启动服务：需要刷新 XML 文档时，「执行定向构建」确认后在任务的工作区执行 dotnet build --no-restore，结果与输出尾部在「查看构建输出」查看。"));
         AddDetailRow(grid, SectionCaption("响应契约"));
         AddDetailRow(grid, _contractStatus);
         AddDetailRow(grid, _contractButton);
@@ -236,7 +250,7 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
         AddDetailRow(grid, _remoteActions);
-        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。「处理差异确认」在检查完成后可用：高风险变化逐项确认、说明冲突选择与模型绑定，保存后需重新检查才会生效。「同步预览」在检查完成后可用：勾选接口生成冻结计划，查看逐动作写入内容、排除原因与保留设置；执行同步与回读核对将在后续切片接入，离线任务不能同步。"));
+        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。「处理差异确认」在检查完成后可用：高风险变化逐项确认、说明冲突选择与模型绑定，保存后需重新检查才会生效。「同步预览」在检查完成后可用：勾选接口生成冻结计划，查看逐动作写入内容、排除原因与保留设置；「确认同步」在计划待确认且未过期时可用，逐项写入并立即回读核对，失败即停，执行结束后可「重新核对（只读）」；离线任务不能同步。"));
         AddDetailRow(grid, SectionCaption("报告与交接"));
         AddDetailRow(grid, _reportStatus);
         AddDetailRow(grid, _reportButton);
@@ -407,6 +421,7 @@ internal sealed class TasksPage : UserControl, INativePage
             : File.Exists(_tasks.FilePath(task.Id, TaskFiles.Diff)) ? "重新检查" : "开始检查";
 
         RefreshContractSection();
+        RefreshBuildSection();
         RefreshReportSection();
 
         var job = _jobs.Running(task.Id);
@@ -425,6 +440,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _applyButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
         _checkButton.Enabled = scanReady && (_selectedTask?.Stages.Source.Accepted ?? 0) > 0;
         _viewButton.Enabled = scanReady && _selectedTask is { Stages.Generated.CheckedAt: not null };
+        // 定向构建只需要配置快照里的 API 项目路径（与冻结页面一致，不要求先扫描）；构建记录查看需要已有 build.json。
+        _buildButton.Enabled = BuildStatus.CanStart(_selectedTask is not null) && job is null;
+        _buildLogButton.Enabled = _selectedTask is not null && job is null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.BuildLog));
         _contractButton.Enabled = scanReady;
         _importRemoteButton.Enabled = scanReady && (_selectedTask?.OfflineMode ?? false);
         _remoteCheckButton.Enabled = scanReady;
@@ -569,6 +587,59 @@ internal sealed class TasksPage : UserControl, INativePage
     {
         if (_selectedTask is null) return;
         using var dialog = new PropagationDialog(_tasks, _selectedTask);
+        dialog.ShowDialog(FindForm());
+    }
+
+    /// <summary>执行定向构建（需确认）：确认后经既有 BuildService 在工作区执行 dotnet build --no-restore 刷新 XML 文档，结果落盘 build.json。</summary>
+    private void StartBuild()
+    {
+        if (_selectedTask is null) return;
+        var command = "dotnet " + string.Join(" ", BuildService.Arguments(_selectedTask.ProfileSnapshot.ApiProject));
+        var choice = MessageBox.Show(this,
+            BuildStatus.ConfirmText(command) + "\n\n确认执行？",
+            "确认执行定向构建",
+            MessageBoxButtons.OKCancel,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (choice != DialogResult.OK) return;
+        var taskId = _selectedTask.Id;
+        try
+        {
+            _jobs.Start(taskId, "定向构建", async job => await _builds.RunAsync(taskId, job));
+            RefreshDetail();
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("无法开始构建：" + Redactor.Redact(ex.Message));
+        }
+    }
+
+    /// <summary>构建区状态行：任务目录 build.json 的上次构建结果（与「查看构建输出」对话框同一口径）。</summary>
+    private void RefreshBuildSection()
+    {
+        if (_selectedTask is null) return;
+        try
+        {
+            var (text, tone) = BuildStatus.LastText(FileStore.ReadNode(_tasks.FilePath(_selectedTask.Id, TaskFiles.BuildLog)));
+            _buildStatus.Text = text;
+            _buildStatus.ForeColor = ToneColor(tone);
+        }
+        catch (Exception ex)
+        {
+            _buildStatus.Text = "上次构建：记录读取失败：" + Redactor.Redact(ex.Message);
+            _buildStatus.ForeColor = UiTokens.BadText;
+        }
+    }
+
+    /// <summary>打开构建输出（只读）：数据来自任务目录 build.json，无写入动作。</summary>
+    private void ShowBuildLog()
+    {
+        if (_selectedTask is null) return;
+        using var dialog = new BuildLogDialog(_tasks, _selectedTask);
         dialog.ShowDialog(FindForm());
     }
 

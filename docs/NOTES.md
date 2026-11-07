@@ -210,6 +210,19 @@
 - **Linux 运行时验证（本轮新增，超出仅编译验证的口径）**：执行对话框的读取与判定链不触碰 WinForms，在 /tmp 以一次性 net8.0 控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore/Redactor、Profiles 的 ProfileStore/ProjectProfile、Tasks/、Contracts 的 DiffEngine/DocModel、Sync 的 CheckModels/PlanModels、Desktop/Native 的 SyncSelection/SyncExecution/TaskDisplay，镜像 GlobalUsings；不进仓库、已清理），在真实 `FileStore`/`TaskStore` 上创建任务并写入夹具 plan.json，24 项断言全部通过：计划哈希/状态/任务版本/动作字段（写入字段、模型引用、排除原因、范围外影响、保留设置）读回一致；计划新鲜可执行且待确认时重新核对禁用；任务版本前进后按过期规则禁用执行并显示「已过期/计划已过期」；部分完成结果行含已核对 2、未完成 2（失败 1 + 未执行 1）且不含「全部核对」；全部核对通过 ok、无动作通过 bad、中断指向重新核对；停止在写入前计划仍待确认、可重新确认同步。
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 213 用例全部通过。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「确认同步（原生确认）→ 逐动作进度与停止 → 结果呈现」「重新核对（只读）」的对话框交互只在代码与编译层面成立（执行门禁与结果口径已在 Linux 真实执行）；且 SyncExecutor 的写入链路需要本机 Apifox CLI 登录态与已通过写入兼容探测的 CLI 版本，本环境不可能端到端执行，F13 仍为「已实现（待验证）」如实挂账。Windows 真机需按「已检查任务 → 同步预览 → 勾选 → 生成同步预览 → 确认同步 → 观察逐动作进度与停止 → 核对结果行与写入清单逐动作状态 → 重新核对（只读）」走一遍，并核对过期计划与未探测 CLI 版本的拒绝文案。未改写入安全语义（`SyncExecutor`/`SyncPlanService` 未动一行）；本轮未连接或写入 Apifox。
 
+## 原生切片「定向构建」（2026-11-07 第十三轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（b284cc1）的 Linux `dotnet build` 0 警告 0 错误、213 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。
+- **原生交互推进一小步（F06 的定向构建部分接入原生）**：旅程第 4 步「可选执行定向构建（需确认），然后核对注释是否进入 XML 文档和 Swagger」的前半——「生成文档」区的固定说明行从「定向构建将在后续切片接入」换成真实入口；构建是用户确认后才执行的本机动作，工具默认不构建、不 restore、不启动服务。
+  - 任务详情生成文档区新增「执行定向构建」ghost（不需要先扫描：命令只来自配置快照的 API 项目路径，与冻结页面一致）与「查看构建输出」ghost（任务目录已有 build.json 时可用）。点「执行定向构建」先弹**原生确认对话框**（标题与正文和冻结页面同一口径：`BuildStatus.ConfirmText` 给出将执行的命令并如实说明「会生成 bin/obj 输出，不会还原依赖或启动服务」；默认按钮在「取消」防回车误触），确认后经共享 `JobRunner` 调既有 `BuildService.RunAsync`（`dotnet build <API项目> --no-restore -nologo -v:minimal`，工作区根目录执行、15 分钟超时、不重发，结果脱敏后落盘 build.json——服务层一行未改）；进度与取消沿用与扫描共用的固定占位控件（作业名「定向构建」），作业结束后任务页刷新，构建区状态行显示上次构建结果。
+  - 「查看构建输出」只读对话框（`Desktop/Native/BuildLogDialog.cs`）：概要行与任务页构建状态行同一口径（`BuildStatus.LastText`）、命令（等宽）、开始时间在标题栏、最近 60 行脱敏输出尾部（等宽、可横向滚动）；状态表齐备——尚未构建=空态指引、记录读取失败=内联错误与下一步、正常=概要+输出尾部。
+  - 构建区状态行口径：退出码 0=完成（ok）；超时或非零退出码=未完成（bad，如实说明并指向「查看构建输出」，不显示成完成）；记录缺退出码不猜测结果（bad）；没有 build.json=muted「尚未构建」。确认文案、门禁与状态行口径提取为 `Desktop/Native/BuildStatus.cs`（不依赖 WinForms，与测试工程共享编译单一口径；构建边界仍在 `BuildService` 单一口径，本文件不复制构建逻辑）。
+- **顺带修正两处陈旧挂账文案（接续检查发现）**：①「Apifox 差异与同步」区说明行仍写「执行同步与回读核对将在后续切片接入」——第十二轮已接入同步执行但该行漏更新，已换成「确认同步」门控与回读核对的现状说明；②「生成文档」区说明行按新能力改写。界面文案与实际能力的一致性纳入本轮断言（见下）。
+- **测试 213 → 224 用例**：新增 `BuildStatusTests`（11）：CanStart 理论用例、确认文案断言（含命令、bin/obj、不 restore 不启动服务）、状态行五分支（尚未构建/muted、退出码 0=ok 含耗时、退出码 1=bad 不含「退出码 0」、超时=bad、缺退出码=bad 不猜测）、禁词检查。**变异验证实测可红**：禁用 `timedOut` 臂 → 超时用例变红；空记录臂误改坏文案 → 空态用例变红；还原后全绿。（踩坑记录：根目录 `dotnet build` 后直接 `dotnet test --no-build` 一度仍报 213 用例——测试工程未被根构建重编；显式 `dotnet build ApifoxHelper.Tests.csproj` 后恢复。）
+- **Linux 运行时验证（本轮新增，超出仅编译验证的口径）**：构建链路不触碰 WinForms，在 /tmp 以一次性 net8.0 控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore/Redactor、Profiles 的 ProfileStore/ProjectProfile、Tasks/、Desktop/Native 的 BuildStatus，镜像 GlobalUsings；不进仓库、已清理），在真实 `FileStore`/`TaskStore` 上创建任务（配置校验要求 API 项目文件存在，按实创建占位 csproj）并按 `BuildService` 落盘形状写入 build.json，9 项断言全部通过：六字段（command/startedAt/exitCode/timedOut/seconds/outputTail）落盘回读一致且 startedAt 可解析；退出码 0=ok 含耗时；退出码 1=bad 且不含「退出码 0」；超时=bad；整数秒显示「12 秒」无小数尾；缺退出码不猜测；确认文案齐全。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 224 用例全部通过（含令牌接线机械检查对新文件 BuildLogDialog.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「执行定向构建（原生确认）→ 进度 → 状态行与构建输出」的对话框交互只在代码与编译层面成立（确认文案、门禁与状态行口径已在 Linux 真实执行；`BuildService` 是既有 F06 代码，本轮一行未改且未在 GUI 之外触发任何真实构建）。Windows 真机需按「任一任务 → 生成文档区 → 执行定向构建 → 确认 → 观察进度与结果行 → 查看构建输出」走一遍，并核对失败构建（如临时改坏 csproj）的状态行不显示成完成。未改写入安全语义（`BuildService` 未动一行）；本轮未连接或写入 Apifox，未执行任何真实构建。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。
