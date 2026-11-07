@@ -23,8 +23,8 @@ internal sealed class ApplyPlanDialog : Form
 
     private readonly Label _planStatus = Ui.StatusText();
     private readonly Label _counts = Ui.Mono();
-    private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
-    private readonly ListView _skippedList = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, BackColor = UiTokens.Panel };
+    private readonly ListView _list = Ui.List();
+    private readonly ListView _skippedList = Ui.List();
     private readonly Panel _skippedHost;
     private readonly TextBox _diff = new()
     {

@@ -41,7 +41,7 @@ internal sealed class SyncPreviewDialog : Form
         ForeColor = UiTokens.Muted,
         Font = UiTokens.Body.Value,
     };
-    private readonly ListView _selectList = new() { View = View.Details, CheckBoxes = true, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly ListView _selectList = Ui.List(true);
     private readonly Label _selectedCount = Ui.StatusText("尚未勾选接口");
     private readonly Button _selectAllButton;
     private readonly Button _clearButton;
@@ -69,7 +69,7 @@ internal sealed class SyncPreviewDialog : Form
         Margin = new Padding(0),
         Visible = false,
     };
-    private readonly ListView _actionList = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly ListView _actionList = Ui.List();
     private readonly TextBox _payload = new()
     {
         ReadOnly = true,
@@ -79,7 +79,7 @@ internal sealed class SyncPreviewDialog : Form
         BackColor = UiTokens.Panel,
         Font = UiTokens.Mono.Value,
     };
-    private readonly ListView _excludedList = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly ListView _excludedList = Ui.List();
     private readonly Panel _excludedHost;
     private readonly TextBox _notes = new()
     {

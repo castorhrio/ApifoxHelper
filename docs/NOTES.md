@@ -354,6 +354,18 @@
 - **Linux 运行时验证（本轮新增）**：链路中除 WinForms 闪烁调用外的全部逻辑不触碰 WinForms，/tmp 一次性控制台链接纯逻辑源文件（Infrastructure 的 Core/Redactor/JobRunner、Desktop/Native/AttentionCue，镜像 GlobalUsings，Logging.Abstractions 取本机 NuGet 缓存；不进仓库、已清理），在真实 JobRunner 上执行，**20 项断言全部通过**：成功 / 业务失败（UserException 消息透传）/ 未预期异常（错误经 Redactor 脱敏落 Error——既有行为不变）/ 用户取消四类终态各触发一次事件；事件触发时 State 已是终态、FinishedAt 已落、事件参数与 `Get(id)` 同一实例；门控九种组合；同作用域「一个作业」约束保持（409 与文案不变）、取消后同作用域可再次启动。
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 415 用例全部通过（含令牌接线机械检查——曾当场拦下 FLASHW 常量的 0x 十六进制字面量误判为颜色值，改十进制常量后通过）。**任务栏闪烁的 Windows 真机观感与 GUI 真机运行仍未验证**（Linux 无法运行 WinForms GUI）——「作业完成 → 任务栏闪烁 → 激活停止」只在代码与编译层面成立（事件语义与门控口径已在 Linux 真实 JobRunner 上执行）；Windows 真机需按「启动任一长作业（如定向构建）→ 切到别的应用 → 等待完成 → 核对任务栏闪烁 → 点回窗口核对闪烁停止、不弹窗不抢焦点」走一遍。未改写入安全语义（附加只读事件 + 纯提醒）；本轮未连接或写入 Apifox。
 
+## 原生切片「设计基线落实与机械检查扩展：列表行选中态/首屏空态 Title 档/Esc/G-D4」（2026-11-07 第二十三轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（ad2698d）的 Linux `dotnet build` 0 警告 0 错误、415 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。路由面对照确认：冻结页面的全部 REST 能力与方案 2.1 原生工作流要素（菜单/快捷键/文件选择/确认对话框/系统通知/多窗口）至此均已接入，本轮按设计基线（docs/DESIGN.md）与设计验收条款找缺口——找到三个「规格已写、代码未落」的真实缺口：列表行选中态、Title 档使用点、CapabilitiesDialog 的 Esc 键盘习惯，外加 G-D4 机械检查这一验收门槛尚未建立。
+- **列表行选中态（设计基线 §6「不用系统高亮蓝」的落实）**：全部 18 处 ListView 此前都用 WinForms 默认渲染，选中行是系统高亮蓝，与基线「选中行底 `Bg` + 左侧 3px `Accent` 标记」直接相悖（D2「灰阶 + 恰一个强调色」的可见破口）。新共享工厂 `Ui.List`（`Desktop/Native/Ui.cs`）：OwnerDraw 自绘选中态（选中行 Bg 底 + 3px Accent 左标记、未选行 Panel 底、发丝边包裹沿用既有 Ui.Hairline），逐子项显式设置的语义色（Muted/Ok/Warn/Bad）保留——「颜色+文字」双通道不能因自绘丢失（CheckResults 差异风险、ApplyPlan 跳过原因、SyncPreview 排除原因等大量依赖此项）；表头 e.DrawDefault 沿用系统绘制（与既有外观零差异）；同步预览勾选列表（CheckBoxes=true）在自绘模式下系统不再画复选框，由工厂经 CheckBoxRenderer 补画（命中区仍在 ListView 原状态图标布局位置，对位细节挂账真机复核）；HideSelection 统一为 false（此前 17/18 处即此值，同步排除清单等 1 处顺势对齐）。18 处构造全部替换为 `Ui.List()`，机械检查断言列表只能经工厂创建——变异时发现目标类型 `new()` 写法不含 `new ListView` 字样会绕过首版检查，改为「ListView 字段赋值必须以 Ui.List( 开头」的精确断言后堵住。
+- **颜色判定口径收口为单一落点**：`Desktop/Native/ListRows.cs`（不依赖 WinForms、与测试工程共享编译）——`MarkerWidth=3`（与导航选中标记同宽，规格同出 §6）与 `TextColor`（子项显式语义色优先、所在项语义色次之、其余一律正文色；系统回退色一律按正文处理）。绘制在 `Ui.List`，口径不在界面代码里。
+- **首屏空态接 Title 档**：DESIGN.md §3 把 Title 档（28px）的使用点声明为「首屏大标题（如空态引导）」，但代码里从未使用——四档字号存在一个死级别，违反本文「无死级别、每级有使用点」。项目设置/检查任务两处首屏空态标题从 Section 升到 Title 档（新 `Ui.Title` 工厂，文案不动）。「每级有使用点」落成机械检查（四档工厂在界面代码至少各有一处调用），死级别回归当场变红。
+- **CapabilitiesDialog 补 Esc**：D12 键盘习惯条款「对话框 Enter=确认、Esc=取消」——其余对话框全部经 AcceptButton/CancelButton 接线，连接与写入探测对话框是唯一键盘无路可出的对话框。补 ProcessDialogKey（Esc=关闭；与标题栏 × 同语义：探测作业在服务层继续执行、结果按 CLI 版本登记、重开可查）。
+- **G-D4 机械检查建立（TypographyTests）**：方案 §6.2 #11/#12 与设计验收 D10/D11 中源码可判的条款落成断言——禁假斜体（全源码无 Italic）、中文引用只用「」（无弯引号，期间修正 NativeShellForm 注释里一处弯引号）、AI 腔禁词（赋能/闭环/一站式/无缝/智能/极致）、字体栈与 DESIGN.md §3 逐项同序（WorkSwitch 先例的有序回退）、字号下限 12px（档表最小值断言）、四档每级有使用点。行首行尾禁则、正文行长、中英文空隙属渲染期属性，源码判不了，如实挂账随 G-D5 真机复核。
+- **测试 415 → 439 用例**：新增 `ListRowsTests`（10）与 `TypographyTests`（14）。**变异验证实测可红**（九处，各自独立变红、还原后全绿）：语义色项级回退删除（1 红）、OwnerDraw 接线删除（1 红）、选中标记绘制删除（1 红——期间发现原断言只查字符串存在未钉绘制，已加强为断言 FillRectangle(Accent, …, MarkerWidth, …) 本身）、语义色集合丢 WarnText（1 红）、Esc 接线删除（1 红）、工厂绕过（1 红，含 new() 盲区修复后重验）、Title 全无使用点（1 红——只还原一处时 TasksPage 仍在用，档位未死，测试正确地保持绿）、字体栈乱序（1 红）、文案禁词（1 红）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 439 用例全部通过（含既有令牌接线机械检查对 Ui.cs/ListRows.cs 新增代码的扫描——无就地颜色/字体/间距值、无 FromArgb 绕色）。**列表自绘选中态的真机观感、复选框命中区对位、选中行行尾空白区底色仍未验证**（Linux 无法运行 WinForms GUI）——接线与口径已在 Linux 以 24 项新断言钉住；Windows 真机需按「项目设置/检查任务空态看 Title 档标题 → 选中列表行核对 Bg 底 + 左侧 3px 蓝标记（无系统高亮蓝）→ 查看检查结果核对语义色行仍在 → 同步预览勾选列表核对复选框显示与点击 → 连接与写入探测按 Esc 关闭」走一遍。未改写入安全语义（纯呈现层）；本轮未连接或写入 Apifox。
+
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

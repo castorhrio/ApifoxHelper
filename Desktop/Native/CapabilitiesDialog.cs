@@ -40,7 +40,7 @@ internal sealed class CapabilitiesDialog : Form
     private readonly Label _progress = Ui.StatusText();
     private readonly Label _headline = Ui.StatusText();
     private readonly Label _resultHint;
-    private readonly ListView _checks = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
+    private readonly ListView _checks = Ui.List();
 
     private bool _checking;
     private JobInfo? _probeJob;
@@ -137,6 +137,17 @@ internal sealed class CapabilitiesDialog : Form
     }
 
     private readonly System.Windows.Forms.Timer _timer;
+
+    /// <summary>Esc 关闭本对话框（其余对话框由 CancelButton 承担；与标题栏 × 同语义——探测在服务层继续执行，结果按 CLI 版本登记，重开可查）。</summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (keyData == Keys.Escape)
+        {
+            Close();
+            return true;
+        }
+        return base.ProcessDialogKey(keyData);
+    }
 
     protected override void Dispose(bool disposing)
     {

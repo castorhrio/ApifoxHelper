@@ -26,7 +26,7 @@ internal sealed class ScanResultsDialog : Form
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
     private readonly Label _coverage = Ui.Caption();
     private readonly Button _warningsButton;
-    private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly ListView _list = Ui.List();
     private readonly Button _evidenceButton;
     private readonly Button _manualButton;
     private readonly Button _removeStaleButton;

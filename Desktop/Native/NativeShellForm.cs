@@ -319,7 +319,7 @@ internal sealed class NativeShellForm : Form
         if (_shutdownDone) return;
         if (e.CloseReason == CloseReason.WindowsShutDown)
         {
-            // 系统关机时不能阻止退出；未结束的同步会在下次启动时标为“已中断”，等待重新核对。
+            // 系统关机时不能阻止退出；未结束的同步会在下次启动时标为「已中断」，等待重新核对。
             _placement.Save(this);
             return;
         }

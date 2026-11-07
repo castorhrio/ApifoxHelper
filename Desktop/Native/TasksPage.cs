@@ -41,7 +41,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly SyncPlanService _syncPlans;
     private readonly SyncExecutor _syncExecutor;
 
-    private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
+    private readonly ListView _list = Ui.List();
     private readonly Panel _empty;
     private readonly Label _status = Ui.StatusLine();
     private readonly SplitContainer _split = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Line };
@@ -223,7 +223,7 @@ internal sealed class TasksPage : UserControl, INativePage
 
     private Panel BuildEmpty()
     {
-        var title = Ui.Section("还没有检查任务");
+        var title = Ui.Title("还没有检查任务");
         var hint = Ui.Body("先在「项目设置」新建配置，然后点「新建任务」开始源码扫描。", muted: true);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, ColumnCount = 1, RowCount = 4 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));

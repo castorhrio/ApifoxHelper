@@ -1,14 +1,26 @@
 using System.Drawing;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 控件形态的统一出口（docs/DESIGN.md §6）：主按钮/ghost/危险、标签档位、发丝边包裹。
+/// 控件形态的统一出口（docs/DESIGN.md §6）：主按钮/ghost/危险、标签档位、发丝边包裹、列表行形态。
 /// 界面代码从这里取控件形态，不逐处设置颜色与边框。
 /// </summary>
 internal static class Ui
 {
+    // 列表行保留的语义色（颜色+文字双通道）：与 UiTokens 一一对应，交给 ListRows 判定。
+    private static readonly HashSet<Color> SemanticColors =
+    [
+        UiTokens.Muted,
+        UiTokens.OkText,
+        UiTokens.WarnText,
+        UiTokens.BadText,
+    ];
+
+    /// <summary>首屏大标题（Title 档，DESIGN.md §3 声明的使用点：空态引导）。</summary>
+    public static Label Title(string? text = null) => Label(UiTokens.Title.Value, UiTokens.Text, text);
     /// <summary>实心主按钮：Accent 填充 + 白字，hover 只改底色；每屏至多一个。</summary>
     public static Button Primary(string text)
     {
@@ -116,5 +128,99 @@ internal static class Ui
         };
         panel.Controls.Add(inner);
         return panel;
+    }
+
+    /// <summary>
+    /// 列表（DESIGN.md §6「列表行」）：自绘选中态——选中行 Bg 底 + 左侧 3px Accent 标记，
+    /// 不用系统高亮蓝；未选行 Panel 底；逐子项语义色（Muted/Ok/Warn/Bad）保留（ListRows 判定）。
+    /// 表头沿用系统绘制（与既有外观一致）；复选框列由本工厂绘制（自绘模式下系统不再画）。
+    /// </summary>
+    public static ListView List(bool checkBoxes = false)
+    {
+        var list = new ListView
+        {
+            View = View.Details,
+            FullRowSelect = true,
+            MultiSelect = false,
+            HideSelection = false,
+            CheckBoxes = checkBoxes,
+            OwnerDraw = true,
+            BackColor = UiTokens.Panel,
+            ForeColor = UiTokens.Text,
+        };
+        // 自绘逐行重绘需双缓冲，否则闪烁（Control.DoubleBuffered 为 protected）。
+        typeof(Control).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(list, true);
+        list.DrawColumnHeader += (_, e) => e.DrawDefault = true;
+        list.DrawItem += DrawListRow;
+        list.DrawSubItem += DrawListCell;
+        return list;
+    }
+
+    private static void DrawListRow(object? sender, DrawListViewItemEventArgs e)
+    {
+        // 整行底色与选中标记（标记每行画一次，画在行首）。
+        e.Graphics.FillRectangle(e.Item.Selected ? UiBrushes.Bg : UiBrushes.Panel, e.Bounds);
+        if (e.Item.Selected)
+        {
+            e.Graphics.FillRectangle(UiBrushes.Accent, e.Bounds.X, e.Bounds.Y, ListRows.MarkerWidth, e.Bounds.Height);
+        }
+    }
+
+    private static void DrawListCell(object? sender, DrawListViewSubItemEventArgs e)
+    {
+        var list = (ListView)sender!;
+        if (e.Item is null) return;
+        var selected = e.Item.Selected;
+        e.Graphics.FillRectangle(selected ? UiBrushes.Bg : UiBrushes.Panel, e.Bounds);
+
+        var x = e.Bounds.X;
+        if (e.ColumnIndex == 0)
+        {
+            if (selected) x += ListRows.MarkerWidth;
+            if (list.CheckBoxes)
+            {
+                // 自绘模式下系统不再绘制复选框，这里按系统同位绘制（命中区仍在 ListView 布局的原状态图标位置）。
+                var glyph = CheckBoxRenderer.GetGlyphSize(e.Graphics, System.Windows.Forms.VisualStyles.CheckBoxState.UncheckedNormal);
+                var state = e.Item.Checked
+                    ? System.Windows.Forms.VisualStyles.CheckBoxState.CheckedNormal
+                    : System.Windows.Forms.VisualStyles.CheckBoxState.UncheckedNormal;
+                CheckBoxRenderer.DrawCheckBox(
+                    e.Graphics,
+                    new Point(x + UiTokens.Xs, e.Bounds.Y + (e.Bounds.Height - glyph.Height) / 2),
+                    state);
+                x += UiTokens.Xs + glyph.Width + UiTokens.Xs;
+            }
+            else
+            {
+                x += UiTokens.Xs;
+            }
+        }
+        else
+        {
+            x += UiTokens.Xs;
+        }
+
+        var text = e.ColumnIndex == 0 ? e.Item.Text : e.SubItem?.Text ?? "";
+        var color = ListRows.TextColor(
+            e.SubItem?.ForeColor ?? e.Item.ForeColor,
+            e.Item.ForeColor,
+            UiTokens.Text,
+            SemanticColors);
+        TextRenderer.DrawText(
+            e.Graphics,
+            text,
+            e.SubItem?.Font ?? e.Item.Font,
+            new Rectangle(x, e.Bounds.Y, Math.Max(0, e.Bounds.Right - x), e.Bounds.Height),
+            color,
+            TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+    }
+
+    /// <summary>UiTokens 颜色的共享笔刷（进程内复用，句柄与进程同生命周期）。</summary>
+    private static class UiBrushes
+    {
+        public static readonly SolidBrush Bg = new(UiTokens.Bg);
+        public static readonly SolidBrush Panel = new(UiTokens.Panel);
+        public static readonly SolidBrush Accent = new(UiTokens.Accent);
     }
 }

@@ -26,8 +26,8 @@ internal sealed class PropagationDialog : Form
         Margin = new Padding(0),
         Visible = false,
     };
-    private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
-    private readonly ListView _xmlList = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly ListView _list = Ui.List();
+    private readonly ListView _xmlList = Ui.List();
     private readonly TextBox _detail = new()
     {
         ReadOnly = true,

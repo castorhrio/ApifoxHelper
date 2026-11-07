@@ -21,7 +21,7 @@ internal sealed class EvidenceDialog : Form
 
     private readonly Label _locationLabel = Ui.Caption();
     private readonly Label _counts = Ui.Mono();
-    private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly ListView _list = Ui.List();
     private readonly TextBox _snippet = new()
     {
         ReadOnly = true,

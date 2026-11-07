@@ -24,7 +24,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private readonly FileStore _store;
     private readonly JobRunner _jobs;
     private readonly CredentialStore _credentials;
-    private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, Dock = DockStyle.Fill, BackColor = UiTokens.Panel };
+    private readonly ListView _list = Ui.List();
     private readonly Panel _empty;
     private readonly Label _status = Ui.StatusLine();
     private readonly Button _editButton;
@@ -85,7 +85,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
     private Panel BuildEmpty(Control newButton)
     {
-        var title = Ui.Section("还没有项目配置");
+        var title = Ui.Title("还没有项目配置");
         var hint = Ui.Body("先绑定代码仓库与 Apifox 项目，然后才能创建检查任务。", muted: true);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, ColumnCount = 1, RowCount = 5 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));

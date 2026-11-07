@@ -23,7 +23,7 @@ internal sealed class CandidatesDialog : Form
 
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
-    private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly ListView _list = Ui.List();
     private readonly TextBox _detail = new()
     {
         ReadOnly = true,

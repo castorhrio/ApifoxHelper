@@ -43,7 +43,7 @@ internal sealed class SupplementsDialog : Form
     private bool _saving;
 
     private readonly Label _counts = Ui.Mono();
-    private readonly ListView _list = new() { View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false, BackColor = UiTokens.Panel };
+    private readonly ListView _list = Ui.List();
     private readonly Panel _editorsHost = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Lg, UiTokens.Lg, UiTokens.Sm) };
     private readonly Panel _editorsScroll = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, AutoScroll = true };
     private readonly Label _hint = new()
