@@ -87,6 +87,9 @@ internal sealed class NativeShellForm : Form
         Controls.Add(menu);
         MainMenuStrip = menu;
 
+        // 长作业完成提醒：用户在其他窗口时闪烁任务栏唤回（口径见 AttentionCue）。
+        _host.Jobs.JobCompleted += OnJobCompleted;
+
         _placement = new WindowPlacement(Path.Combine(host.Store.Root, "desktop-window-native.json"));
         _placement.Restore(this);
     }
@@ -240,6 +243,76 @@ internal sealed class NativeShellForm : Form
         }
     }
 
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        StopFlash();
+    }
+
+    private void OnJobCompleted(JobInfo job)
+    {
+        if (IsDisposed || Disposing) return;
+        try
+        {
+            BeginInvoke(() =>
+            {
+                if (_shutdownStarted || IsDisposed || Disposing) return;
+                if (!AttentionCue.ShouldFlash(AppHoldsFocus(), job.State, _shutdownStarted)) return;
+                FlashForAttention();
+            });
+        }
+        catch (InvalidOperationException)
+        {
+            // 窗口正在关闭。
+        }
+    }
+
+    /// <summary>应用内任一打开的窗口（含对话框）持有焦点即视为用户在场。</summary>
+    private static bool AppHoldsFocus() => Application.OpenForms.OfType<Form>().Any(f => f.ContainsFocus);
+
+    private void FlashForAttention()
+    {
+        if (!IsHandleCreated || IsDisposed) return;
+        var info = new FLASHWINFO
+        {
+            Size = (uint)Marshal.SizeOf<FLASHWINFO>(),
+            Handle = Handle,
+            Flags = FlashwAll | FlashwTimerNoFg,
+        };
+        FlashWindowEx(ref info);
+    }
+
+    private void StopFlash()
+    {
+        if (!IsHandleCreated || IsDisposed) return;
+        var info = new FLASHWINFO
+        {
+            Size = (uint)Marshal.SizeOf<FLASHWINFO>(),
+            Handle = Handle,
+            Flags = FlashwStop,
+        };
+        FlashWindowEx(ref info);
+    }
+
+    private const uint FlashwStop = 0;
+    private const uint FlashwAll = 3;
+    // 持续闪烁直到窗口来到前台，由系统自行停止。
+    private const uint FlashwTimerNoFg = 12;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FLASHWINFO
+    {
+        public uint Size;
+        public IntPtr Handle;
+        public uint Flags;
+        public uint Count;
+        public uint Timeout;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool FlashWindowEx(ref FLASHWINFO info);
+
     protected override async void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
@@ -283,6 +356,7 @@ internal sealed class NativeShellForm : Form
             _host.Logger.LogError(ex, "退出时停止本地服务失败");
         }
         _shutdownDone = true;
+        _host.Jobs.JobCompleted -= OnJobCompleted;
         Close();
     }
 

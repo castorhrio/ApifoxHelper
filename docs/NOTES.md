@@ -342,6 +342,18 @@
 - **Linux 运行时验证（本轮新增）**：链路不触碰 WinForms，/tmp 一次性控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore、Profiles 的 ProjectProfile/ProfileStore、Desktop/Native/ApifoxPicker，镜像 GlobalUsings；不进仓库、已清理），在真实 FileStore/ProfileStore 上以按 CLI 输出形状构造的夹具执行，**23 项断言全部通过**：项目/分支行解析（team.name 回退、无团队 null、归档过滤剩 2、主分支在列）、列表项文字逐字、门控顺序四条逐字、真实配置新建保存 → 按下拉选择回填（项目 ID/项目名/分支名/分支 ID）→ 落盘重读逐值一致、选主分支后分支名与分支 ID 落盘为 null（「留空表示主分支」的落盘语义）、手填非数字项目 ID 被既有保存校验「Apifox 项目 ID 应为数字。」逐字拒绝、未保存配置 `Get` 被「项目配置不存在。」拒绝（证明「请先保存配置」门控对应真实存储行为）。
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 403 用例全部通过（含令牌接线机械检查对 ProfileDialog 改动的扫描——新增控件只用 Ui.Ghost/Ui.Caption/UiTokens，间距无档外值）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「读取项目列表 → 下拉选择 → 读取分支 → 主分支留空」只在代码与编译层面成立（口径与落盘链路已在 Linux 真实执行）；对真实 Apifox 的列表读取（需已登录的 CLI 与有权限的项目）仍待真机验证，本轮未连接 Apifox。未改写入安全语义（纯只读读取 + 配置对象回填经既有保存校验落盘）。
 
+## 原生切片「长作业完成提醒：任务栏闪烁」（2026-11-07 第二十二轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（4835580）的 Linux `dotnet build` 0 警告 0 错误、403 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。路由面对照确认：冻结页面调用的全部 REST 能力至此已接入原生（`/api/apifox/folders` 与逐接口 coverage 两条路由冻结页面自身也未调用，不构成对等缺口），本轮按方案 2.1 的原生工作流要素清单推进——「系统通知」是其中唯一未落地的一项。
+- **原生交互推进一小步（「系统通知」的会话型落地）**：壳与各对话框对作业完成的感知只存在于轮询界面里——用户在长构建、模型生成或远端检查执行期间切到别的窗口，完成后没有任何唤回信号。方案 2.1 把「系统通知」列为原生工作流要素，2.2 形态边界又裁定本工具无常驻托盘，因此采用 Windows 标准的任务栏闪烁（FlashWindowEx），不引入 NotifyIcon、不弹窗、不抢焦点：
+  - `Infrastructure/JobRunner` 新增 `JobCompleted` 事件：作业到达终态（succeeded/failed/canceled）后在 finally 中触发一次（终态与 FinishedAt 落定之后），线程池线程触发、订阅方自行调度到 UI 线程；页面轮询不依赖该事件，服务层除该附加只读事件外一行未改。
+  - 壳窗口（`NativeShellForm`）订阅事件，经 `BeginInvoke` 到 UI 线程后按共享口径判定：应用内任一打开窗口（含对话框，`Application.OpenForms` 全量检查 `ContainsFocus`）都不持有焦点、退出未开始、且作业终态为 succeeded（结果待审阅）或 failed（需要看失败原因）时闪烁任务栏（FLASHW_ALL | FLASHW_TIMERNOFG，持续到窗口回前台）；窗口 `OnActivated` 时 FLASHW_STOP 显式停止；canceled 不提醒——停止是用户自己的动作，结果符合预期，回任务页可见「已停止」。订阅在窗口关闭完成时解除。
+  - 提醒只闪任务栏，不承载文字；进度与结果的呈现仍在任务页与各对话框的既有状态行（如实报告，不因提醒改变口径）。
+- **切片口径收口为单一落点**：`Desktop/Native/AttentionCue.cs`（不依赖 WinForms、与测试工程共享编译）——`ShouldFlash(appFocused, jobState, shutdownStarted)`，规则一句话：用户离开 + 退出未开始 + 终态为 succeeded/failed 才提醒。对话框只做订阅与闪烁，口径不落在界面代码里。
+- **测试 403 → 415 用例**：新增 `AttentionCueTests`（12）：四类状态 × 在场/离开 × 退出中的组合（succeeded/failed 离开提醒、canceled/running/未知不提醒、在场一律不提醒、退出中一律不提醒）+ 两条接线机械检查（壳订阅事件并调用口径、激活停止闪烁；JobRunner 在终态落定之后才触发事件——口径存在但没人调用等于没有）。**变异验证实测可红**（六处，各自独立变红、还原后全绿）：删 failed 臂（1 红）、canceled 改为提醒（1 红）、删焦点门控（2 红）、删退出门控（2 红）、壳不订阅事件（1 红）、JobRunner 不触发事件（1 红）。
+- **Linux 运行时验证（本轮新增）**：链路中除 WinForms 闪烁调用外的全部逻辑不触碰 WinForms，/tmp 一次性控制台链接纯逻辑源文件（Infrastructure 的 Core/Redactor/JobRunner、Desktop/Native/AttentionCue，镜像 GlobalUsings，Logging.Abstractions 取本机 NuGet 缓存；不进仓库、已清理），在真实 JobRunner 上执行，**20 项断言全部通过**：成功 / 业务失败（UserException 消息透传）/ 未预期异常（错误经 Redactor 脱敏落 Error——既有行为不变）/ 用户取消四类终态各触发一次事件；事件触发时 State 已是终态、FinishedAt 已落、事件参数与 `Get(id)` 同一实例；门控九种组合；同作用域「一个作业」约束保持（409 与文案不变）、取消后同作用域可再次启动。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 415 用例全部通过（含令牌接线机械检查——曾当场拦下 FLASHW 常量的 0x 十六进制字面量误判为颜色值，改十进制常量后通过）。**任务栏闪烁的 Windows 真机观感与 GUI 真机运行仍未验证**（Linux 无法运行 WinForms GUI）——「作业完成 → 任务栏闪烁 → 激活停止」只在代码与编译层面成立（事件语义与门控口径已在 Linux 真实 JobRunner 上执行）；Windows 真机需按「启动任一长作业（如定向构建）→ 切到别的应用 → 等待完成 → 核对任务栏闪烁 → 点回窗口核对闪烁停止、不弹窗不抢焦点」走一遍。未改写入安全语义（附加只读事件 + 纯提醒）；本轮未连接或写入 Apifox。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。

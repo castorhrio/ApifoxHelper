@@ -44,6 +44,12 @@ public sealed class JobRunner(ILogger<JobRunner> logger)
     private readonly ConcurrentDictionary<string, JobInfo> _jobs = new();
     private readonly ConcurrentDictionary<string, string> _running = new();
 
+    /// <summary>
+    /// 作业到达终态（succeeded/failed/canceled）后触发一次。在线程池线程触发，
+    /// 订阅方（原生壳的完成提醒）自行调度到 UI 线程；页面轮询不依赖本事件。
+    /// </summary>
+    public event Action<JobInfo>? JobCompleted;
+
     public JobInfo Start(string scope, string kind, Func<JobContext, Task<object?>> work)
     {
         var job = new JobInfo { Id = Ids.New("job"), Scope = scope, Kind = kind, StartedAt = DateTimeOffset.Now };
@@ -82,6 +88,7 @@ public sealed class JobRunner(ILogger<JobRunner> logger)
                 job.FinishedAt = DateTimeOffset.Now;
                 _running.TryRemove(new KeyValuePair<string, string>(scope, job.Id));
                 Prune();
+                JobCompleted?.Invoke(job);
             }
         });
         return job;

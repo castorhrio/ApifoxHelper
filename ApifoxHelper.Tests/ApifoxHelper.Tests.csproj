@@ -43,6 +43,7 @@
     <Compile Include="..\Desktop\Native\ProfileAnalysis.cs" Link="Shared\ProfileAnalysis.cs" />
     <Compile Include="..\Desktop\Native\ScanOverview.cs" Link="Shared\ScanOverview.cs" />
     <Compile Include="..\Desktop\Native\ApifoxPicker.cs" Link="Shared\ApifoxPicker.cs" />
+    <Compile Include="..\Desktop\Native\AttentionCue.cs" Link="Shared\AttentionCue.cs" />
     <Compile Include="..\Profiles\ProjectProfile.cs" Link="Shared\ProjectProfile.cs" />
     <Compile Include="..\Profiles\ProfileExport.cs" Link="Shared\ProfileExport.cs" />
     <Compile Include="..\Profiles\EndpointTemplateReader.cs" Link="Shared\EndpointTemplateReader.cs" />
