@@ -201,10 +201,14 @@ internal sealed class ProfileDialog : Form
     private readonly TextBox _allowed = new();
     private readonly ComboBox _swaggerType = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox _swaggerLocation = new();
-    private readonly TextBox _projectId = new();
-    private readonly TextBox _branch = new();
+    private readonly ComboBox _projectId = new() { DropDownStyle = ComboBoxStyle.DropDown };
+    private readonly ComboBox _branch = new() { DropDownStyle = ComboBoxStyle.DropDown };
     private readonly Label _status = Ui.StatusLine();
     private readonly Button _findButton;
+    private readonly Button _loadProjectsButton;
+    private readonly Button _loadBranchesButton;
+    private List<ApifoxPicker.ProjectRow> _projectRows = [];
+    private List<ApifoxPicker.BranchRow> _branchRows = [];
 
     public ProfileDialog(ProfileStore profiles, ApifoxCli cli, CredentialStore credentials, ProjectProfile? editing)
     {
@@ -220,7 +224,7 @@ internal sealed class ProfileDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(680, 680);
+        ClientSize = new Size(680, 720);
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -237,6 +241,26 @@ internal sealed class ProfileDialog : Form
         var exportButton = Ui.Ghost("导出配置（不含凭据）");
         exportButton.Enabled = _editing is not null;
         exportButton.Click += (_, _) => ExportProfile();
+        _loadProjectsButton = Ui.Ghost("读取项目列表");
+        _loadProjectsButton.Click += async (_, _) => await LoadApifoxProjectsAsync();
+        _loadBranchesButton = Ui.Ghost("读取分支");
+        _loadBranchesButton.Click += async (_, _) => await LoadApifoxBranchesAsync();
+
+        // 从下拉列表选中一行后回填输入框与配置对象；手动输入不受影响（与冻结页面同一行为）。
+        _projectId.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_projectId.SelectedIndex is not >= 0 || _projectId.SelectedIndex >= _projectRows.Count) return;
+            var row = _projectRows[_projectId.SelectedIndex];
+            _projectId.Text = row.Id;
+            _profile.Apifox.ProjectName = row.Name;
+        };
+        _branch.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_branch.SelectedIndex is not >= 0 || _branch.SelectedIndex >= _branchRows.Count) return;
+            var row = _branchRows[_branch.SelectedIndex];
+            _branch.Text = ApifoxPicker.BranchValue(row);
+            _profile.Apifox.BranchId = row.IsMain ? null : row.Id;
+        };
 
         _swaggerType.Items.AddRange(SwaggerChoices);
         _swaggerType.SelectedIndexChanged += (_, _) => _swaggerLocation.Enabled = _swaggerType.SelectedIndex > 0;
@@ -246,8 +270,6 @@ internal sealed class ProfileDialog : Form
         _allowed.Width = 420;
         _swaggerType.Width = 320;
         _swaggerLocation.Width = 420;
-        _projectId.Width = 220;
-        _branch.Width = 220;
 
         var saveButton = Ui.Primary("保存");
         saveButton.Click += (_, _) => Save();
@@ -260,7 +282,7 @@ internal sealed class ProfileDialog : Form
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddRow(grid, "名称", _name);
-        AddRow(grid, "仓库根目录", Row(_workspace, 300, browseButton, _findButton));
+        AddRow(grid, "仓库根目录", Row(300, _workspace, browseButton, _findButton));
         AddRow(grid, "API 项目", _apiProject);
         AddRow(grid, "允许回写范围", _allowed);
         AddRow(grid, "", Ui.Caption("相对路径前缀，用「;」分隔；留空表示只允许导出补丁。"));
@@ -268,8 +290,9 @@ internal sealed class ProfileDialog : Form
         AddRow(grid, "", Ui.Caption("提交号、构建号或版本描述；为空时报告显示「未绑定代码版本」。"));
         AddRow(grid, "Swagger 来源", _swaggerType);
         AddRow(grid, "Swagger 位置", _swaggerLocation);
-        AddRow(grid, "Apifox 项目 ID", _projectId);
-        AddRow(grid, "分支", _branch);
+        AddRow(grid, "Apifox 项目 ID", Row(220, _projectId, _loadProjectsButton));
+        AddRow(grid, "分支", Row(220, _branch, _loadBranchesButton));
+        AddRow(grid, "", Ui.Caption("与业务系统中的「项目」无关；读取列表需要先保存配置；分支留空表示主分支。"));
         AddRow(grid, "", Ui.Caption("模块范围与接口模板在「模块与模板」中编辑，序列化与分析在「序列化与分析」中编辑，模型服务在「模型服务」中配置；密钥在配置保存后设置。"));
         AddRow(grid, "", advancedButton);
         AddRow(grid, "", analysisButton);
@@ -382,14 +405,12 @@ internal sealed class ProfileDialog : Form
         _profile.Apifox.BranchName = _branch.Text.Trim().Length == 0 ? null : _branch.Text.Trim();
     }
 
-    private static Control Row(Control first, int width, Control second, Control third)
+    private static Control Row(int width, params Control[] controls)
     {
-        first.Width = width;
+        controls[0].Width = width;
         var panel = new Panel { AutoSize = true, Margin = new Padding(0) };
         var flow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-        flow.Controls.Add(first);
-        flow.Controls.Add(second);
-        flow.Controls.Add(third);
+        foreach (var control in controls) flow.Controls.Add(control);
         panel.Controls.Add(flow);
         return panel;
     }
@@ -469,6 +490,93 @@ internal sealed class ProfileDialog : Form
         {
             _findButton.Enabled = true;
         }
+    }
+
+    /// <summary>
+    /// 读取 Apifox 项目列表（只读）：按已保存配置的 CLI 设置调用（与冻结页面路由同一语义），
+    /// 行解析、列表项文字与状态行文案经 ApifoxPicker 单一口径；选择后回填项目 ID 与项目名。
+    /// </summary>
+    private async Task LoadApifoxProjectsAsync()
+    {
+        if (!ApifoxPicker.CanLoad(_editing is not null))
+        {
+            SetStatus(ApifoxPicker.SavedRequired, UiTokens.BadText);
+            return;
+        }
+        _loadProjectsButton.Enabled = false;
+        SetStatus("正在读取项目列表…", UiTokens.Muted);
+        try
+        {
+            var saved = _profiles.Get(_profile.Id);
+            var result = await _cli.ListProjectsAsync(saved.Apifox, CancellationToken.None);
+            if (!result.Ok)
+            {
+                SetStatus(ApifoxPicker.ProjectsFailedPrefix + result.Describe(), UiTokens.BadText);
+                return;
+            }
+            _projectRows = ApifoxPicker.ProjectRows(result.Data as JsonArray);
+            FillCombo(_projectId, _projectRows.Select(ApifoxPicker.ProjectText));
+            SetStatus(ApifoxPicker.ProjectsLoaded(_projectRows.Count), UiTokens.OkText);
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message, UiTokens.BadText);
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ApifoxPicker.ProjectsFailedPrefix + Redactor.Redact(ex.Message), UiTokens.BadText);
+        }
+        finally
+        {
+            _loadProjectsButton.Enabled = true;
+        }
+    }
+
+    /// <summary>
+    /// 读取 Apifox 分支列表（只读）：项目 ID 取当前输入（与冻结页面 loadBranches 同一取值），
+    /// CLI 设置按已保存配置；已归档分支不进列表，选主分支则分支名留空。
+    /// </summary>
+    private async Task LoadApifoxBranchesAsync()
+    {
+        var gate = ApifoxPicker.BranchGate(_editing is not null, _projectId.Text);
+        if (gate is not null)
+        {
+            SetStatus(gate, UiTokens.BadText);
+            return;
+        }
+        _loadBranchesButton.Enabled = false;
+        SetStatus("正在读取分支…", UiTokens.Muted);
+        try
+        {
+            var saved = _profiles.Get(_profile.Id);
+            var result = await _cli.ListBranchesAsync(saved.Apifox, _projectId.Text.Trim(), CancellationToken.None);
+            if (!result.Ok)
+            {
+                SetStatus(ApifoxPicker.BranchesFailedPrefix + result.Describe(), UiTokens.BadText);
+                return;
+            }
+            _branchRows = ApifoxPicker.VisibleBranches(ApifoxPicker.BranchRows(result.Data as JsonArray));
+            FillCombo(_branch, _branchRows.Select(ApifoxPicker.BranchText));
+            SetStatus(ApifoxPicker.BranchesLoaded(_branchRows.Count), UiTokens.OkText);
+        }
+        catch (UserException ex)
+        {
+            SetStatus(ex.Message, UiTokens.BadText);
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ApifoxPicker.BranchesFailedPrefix + Redactor.Redact(ex.Message), UiTokens.BadText);
+        }
+        finally
+        {
+            _loadBranchesButton.Enabled = true;
+        }
+    }
+
+    private static void FillCombo(ComboBox combo, IEnumerable<string> items)
+    {
+        combo.Items.Clear();
+        foreach (var item in items) combo.Items.Add(item);
     }
 
     private void Save()

@@ -329,6 +329,19 @@
 - **Linux 运行时验证（本轮新增）**：链路不触碰 WinForms，/tmp 一次性控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore、Profiles 的 ProjectProfile/ProfileStore、Tasks 的 TaskModels/TaskFiles/TaskStore、Source 的 SourceModels、Desktop/Native/ScanOverview，镜像 GlobalUsings；不进仓库、已清理），在真实 FileStore/ProfileStore/TaskStore 上创建配置与任务、按 SourceScanService 同一写入路径落盘 symbols.json 与 source-manifest.json 夹具，**14 项断言全部通过**：两个文件读回形状一致（Coverage 计数、未解析/外部类型清单、等级/时间/警告）；覆盖率行在真实读回值上的完整文案逐字；降级清单四条与顺序；标题按可见条目计数且仅外部类型不出现「（0）」；缺清单任务读取为 null、覆盖率行如实省略等级与时间段；旧形状 symbols 缺字段反序列化为空清单、无降级条目（入口隐藏）；100% 与零位置的边界显示。期间发现并修正验证脚本自身一处断言预期误设（`Headline(0)` 含「（0）」是字符串函数的全域行为，真实不变量是 0 条目时入口不显示——脚本错误，服务一行未改）；另两处夹具口径（工作区目录与 API 项目文件必须真实存在才通过 ProfileStore 校验）按真实校验补齐。
 - **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 385 用例全部通过（含令牌接线机械检查对 ScanResultsDialog.cs 改动与 ScanOverview.cs 的扫描）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「查看注释缺口 → 覆盖率行 → 分析警告与降级清单」只在代码与编译层面成立（覆盖率与降级口径已在 Linux 真实落盘数据上执行）；Windows 真机需按「任一已扫描任务 → 查看注释缺口 → 核对覆盖率行与分析等级/扫描时间 → 打开分析警告与降级 → 核对清单条目与前缀」走一遍。未改写入安全语义（纯只读展示）；本轮未连接或写入 Apifox。
 
+## 原生切片「Apifox 目标选择：读取项目列表 / 读取分支」（2026-11-07 第二十一轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（cfe4d1c）的 Linux `dotnet build` 0 警告 0 错误、385 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现。
+- **原生交互推进一小步（F01 的目标选择辅助）**：方案 3.1 要求「选择有权限的 Apifox 项目和已有分支」，冻结页面配置表单为此提供「读取项目列表」「读取分支」两个按钮（经 `/api/apifox/projects`、`/api/apifox/branches` 只读路由拉取后在下拉框中选择回填），原生配置对话框的「Apifox 项目 ID」与「分支」此前是纯文本框——用户必须凭记忆手填数字 ID，与冻结页面同一配置能力面出现缺口，本轮补上：
+  - 配置对话框（`Desktop/Native/ProjectsPage.cs` 的 ProfileDialog）两个输入框改为可下拉的 ComboBox（保留手输），行尾新增「读取项目列表」「读取分支」ghost；输入框下方新增说明行「与业务系统中的「项目」无关；读取列表需要先保存配置；分支留空表示主分支」（与冻结页面字段提示同一口径，引用记号按中文排版规则用「」）。
+  - **门控与校验与冻结页面同一顺序同一文案**：未保存（新建）的配置不能读取（「请先保存配置」——列表按已保存配置的 CLI 设置调用，与冻结页面路由按 profileId 从磁盘读取同一语义）；读取分支先要求项目 ID 已填（「请先填写项目 ID」）、再要求为数字（「项目 ID 无效。」，与路由同文案）；项目列表无前置输入要求。
+  - **列表行为与冻结页面同一**：项目下拉项「名称（ID） · 团队名」（无团队不缀后缀），选中回填项目 ID 与项目名（`ProjectName` 随「保存」落盘，与冻结页面把 projectName 写入配置对象同一行为）；分支下拉项「名称（主分支） · ID」，已归档分支不进列表，选中主分支则分支名留空、分支 ID 置 null，其余回填分支名与分支 ID；手动输入不受下拉影响；重新读取覆盖上一次列表；读取期间按钮禁用、状态行显示进行中/完成（含数量）/失败（CLI 失败描述原样），全部在状态行内联不弹窗。
+  - 纯只读：列表读取经既有 `ApifoxCli.ListProjectsAsync/ListBranchesAsync`（与 REST 路由同一链路），选择只改配置对象内存值，落盘仍走既有 `ProfileStore.Save`（含「Apifox 项目 ID 应为数字。」保存校验兜底），不访问 Apifox 写入、不写源码。
+- **切片口径收口为单一落点**：`Desktop/Native/ApifoxPicker.cs`（不依赖 WinForms、与测试工程共享编译）——`ProjectRows/BranchRows`（行解析与路由同一字段：teamName 回退 team.name、isMain/isArchived 缺失按 false、非对象元素跳过）、`VisibleBranches`（归档过滤）、`ProjectText/BranchText`（列表项文字与冻结页面同格式）、`BranchValue`（主分支 → 留空）、`BranchGate`（校验顺序：已保存 → 已填 → 数字）、四条门控/失败文案与两条完成文案。对话框只做读取与回填，口径不落在界面代码里。
+- **测试 385 → 403 用例**：新增 `ApifoxPickerTests`（18）：行解析（id/name/teamName、team.name 回退、缺省空值、非对象跳过、null/空数组）、分支旗标缺省 false、归档过滤保主分支、项目/分支文字逐字、主分支值为空、门控顺序与文案逐字、失败前缀与路由逐字、完成文案含数量与下一步。**变异验证实测可红**（五处，各自独立变红、还原后全绿）：删归档过滤（1 用例红）、主分支值改分支名（1 用例红）、删数字校验（2 用例红）、项目文字删团队名后缀（1 用例红）、删 team.name 回退（1 用例红）。
+- **Linux 运行时验证（本轮新增）**：链路不触碰 WinForms，/tmp 一次性控制台链接纯逻辑源文件（Infrastructure 的 Core/FileStore、Profiles 的 ProjectProfile/ProfileStore、Desktop/Native/ApifoxPicker，镜像 GlobalUsings；不进仓库、已清理），在真实 FileStore/ProfileStore 上以按 CLI 输出形状构造的夹具执行，**23 项断言全部通过**：项目/分支行解析（team.name 回退、无团队 null、归档过滤剩 2、主分支在列）、列表项文字逐字、门控顺序四条逐字、真实配置新建保存 → 按下拉选择回填（项目 ID/项目名/分支名/分支 ID）→ 落盘重读逐值一致、选主分支后分支名与分支 ID 落盘为 null（「留空表示主分支」的落盘语义）、手填非数字项目 ID 被既有保存校验「Apifox 项目 ID 应为数字。」逐字拒绝、未保存配置 `Get` 被「项目配置不存在。」拒绝（证明「请先保存配置」门控对应真实存储行为）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 403 用例全部通过（含令牌接线机械检查对 ProfileDialog 改动的扫描——新增控件只用 Ui.Ghost/Ui.Caption/UiTokens，间距无档外值）。**GUI 真机运行与 100%/200% DPI 截图仍未验证**（Linux 无法运行 WinForms GUI）——「读取项目列表 → 下拉选择 → 读取分支 → 主分支留空」只在代码与编译层面成立（口径与落盘链路已在 Linux 真实执行）；对真实 Apifox 的列表读取（需已登录的 CLI 与有权限的项目）仍待真机验证，本轮未连接 Apifox。未改写入安全语义（纯只读读取 + 配置对象回填经既有保存校验落盘）。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。
