@@ -15,6 +15,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 状态表：尚未检查=空态指引；读取失败=内联错误与下一步（已保存决策读取失败时停用保存，避免覆盖）；
 /// 没有待处理条目=如实说明；筛选下没有条目=提示换筛选且筛选器保持可用（恢复路径本身不禁用）；
 /// 正常=计数行 + 筛选 + 列表 + 详情与动作。保存后需重新检查，决策才会生效。
+/// 条目清单支持点击列头排序（第九十九轮，口径见 <see cref="DecisionSort"/> 与 <see cref="ListSort"/>）：
+/// 同一列再点反向、换一列从升序开始、表头带方向标记；排序状态留在本次打开期间，关闭即忘。
 /// </summary>
 internal sealed class DecisionsDialog : Form
 {
@@ -47,6 +49,15 @@ internal sealed class DecisionsDialog : Form
 
     private DecisionStore _decisions = new();
     private List<Entry> _entries = [];
+
+    // 列排序状态（ListSort 口径，第九十九轮）：未排序时保持条目自身的构造顺序。
+    // 排序状态留在本次打开期间（切筛选、敲关键词、保存后重建都保持），关闭即忘——
+    // 跨启动记忆只有两个常驻页面（第五十五轮那两个页键），
+    // 这一屏每次打开看的是这一次的检查结果，不为它另开一个记忆文件。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
+    private readonly string[] _titles;
 
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
@@ -94,6 +105,9 @@ internal sealed class DecisionsDialog : Form
         _list.Columns.Add("位置", 180);
         _list.Columns.Add("状态", 110);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
+        _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
 
         _confirmButton = Ui.Primary("确认纳入");
         _confirmButton.Click += (_, _) => ConfirmCurrent();
@@ -393,11 +407,17 @@ internal sealed class DecisionsDialog : Form
 
     private void ApplyFilter(Entry? keep = null, int handledIndex = ListAdvance.None)
     {
+        // 筛选先于排序（ListFilter → ListSort，与两个主页面、检查结果、接口追踪明细同一顺序）：
+        // 筛掉的行不参与排序，排序状态与筛选状态各自留在本对话框；
+        // 排序键取 DecisionSort 单一口径（与单元格同源），界面不就地写 switch。
+        var visible = ListSort.Order(
+            _entries.Where(Matches).ToList(),
+            _sortColumn, _sortDescending,
+            (entry, column) => DecisionSort.Key(KindText(entry.Kind), entry.Resource, entry.Location, entry.StateText, column));
         _list.BeginUpdate();
         _list.Items.Clear();
-        foreach (var entry in _entries)
+        foreach (var entry in visible)
         {
-            if (!Matches(entry)) continue;
             var item = new ListViewItem(KindText(entry.Kind)) { Tag = entry, UseItemStyleForSubItems = false };
             item.SubItems.Add(entry.Resource).Font = UiTokens.Mono.Value;
             item.SubItems.Add(entry.Location);
@@ -406,6 +426,7 @@ internal sealed class DecisionsDialog : Form
             _list.Items.Add(item);
         }
         _list.EndUpdate();
+        RefreshSortHeaders();
         if (_list.Items.Count == 0)
         {
             // 筛选下没有条目时，筛选器本身是提示语「换一个筛选再试」所指的恢复路径，必须保持可用——
@@ -438,6 +459,26 @@ internal sealed class DecisionsDialog : Form
             return;
         }
         Ui.SelectItem(_list.Items[0]);
+    }
+
+    /// <summary>
+    /// 点击列头（DESIGN.md §6「列表列排序」，第九十九轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="ApplyFilter"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改检查结果与决策，选中仍按条目自身恢复（重建前记下、重建后找回）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        ApplyFilter(Current());
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _titles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_titles[i], i, _sortColumn, _sortDescending);
+        }
     }
 
     private Entry? Current() => Ui.SelectedItem(_list)?.Tag as Entry;
