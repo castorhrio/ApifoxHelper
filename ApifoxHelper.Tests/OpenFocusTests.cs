@@ -11,16 +11,17 @@ namespace ApifoxHelper.Tests;
 /// 第八十八轮接上五张只读长清单（检查结果、接口追踪明细、生成文档核对、代码证据、任务日志），
 /// 第八十九轮接上差异确认——三个审阅视图里只有它打开时自动选中一行（注释候选与响应契约当时打开时不选中任何一行，
 /// 没有落点可交，故不接）。第九十轮把这两处的落点补上（<c>Ui.SelectFirstOnOpen</c>），它们随之接上同一处交键盘；
-/// 第九十一轮把注释缺口清单的落点补上（它此前是最后一张「有选中动作、打开却不落点」的清单），一并接上，
-/// 至此九张清单打开时都把键盘交给清单。四轮都经 <c>Ui.KeepKeyboardOnQueue</c> 同一处把键盘交给清单，判定仍是
+/// 第九十一轮把注释缺口清单的落点补上（它此前是最后一张「有选中动作、打开却不落点」的清单），一并接上；
+/// 第九十五轮把补充说明的接口清单接上（它打开即选中第一个接口，是最后一张「打开即选中一行、键盘却不在清单上」的清单），
+/// 至此十张清单打开时都把键盘交给清单。五轮都经 <c>Ui.KeepKeyboardOnQueue</c> 同一处把键盘交给清单，判定仍是
 /// <see cref="ListFocus.ShouldHandToQueue"/>（选中行与焦点行是同一行才交），接在 OnShown 而不是 OnLoad。
 /// 真机上打开对话框后方向键是否直接走清单随 G-D5 复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
 public class OpenFocusTests
 {
     /// <summary>
-    /// 打开即选中一行、因而打开时该把键盘交给清单的九张清单
-    /// （五张只读长清单 + 三个审阅视图 + 注释缺口清单）。
+    /// 打开即选中一行、因而打开时该把键盘交给清单的十张清单
+    /// （五张只读长清单 + 三个审阅视图 + 注释缺口清单 + 补充说明的接口清单）。
     /// </summary>
     private static readonly string[] OpenPaths =
     [
@@ -33,6 +34,7 @@ public class OpenFocusTests
         "CandidatesDialog.cs",
         "ContractsDialog.cs",
         "ScanResultsDialog.cs",
+        "SupplementsDialog.cs",
     ];
 
     // ---------- 真执行：打开时那一行是不是键盘该去的那一行 ----------
@@ -68,6 +70,7 @@ public class OpenFocusTests
     [InlineData("CandidatesDialog.cs")]
     [InlineData("ContractsDialog.cs")]
     [InlineData("ScanResultsDialog.cs")]
+    [InlineData("SupplementsDialog.cs")]
     public void OpenPaths_HandTheKeyboardOnShown(string file)
     {
         var body = OnShownBody(file);
@@ -89,6 +92,7 @@ public class OpenFocusTests
     [InlineData("CandidatesDialog.cs")]
     [InlineData("ContractsDialog.cs")]
     [InlineData("ScanResultsDialog.cs")]
+    [InlineData("SupplementsDialog.cs")]
     public void OpenPaths_TouchNothingButTheKeyboard(string file)
     {
         // 选中、滚动、重建各有自己的唯一入口：打开时这一处只交键盘，不顺手写第二套（必然与那一套漂移）。
@@ -104,11 +108,11 @@ public class OpenFocusTests
     }
 
     [Fact]
-    public void OpenPaths_AreExactlyTheNineListsThatSelectARowOnOpen()
+    public void OpenPaths_AreExactlyTheTenListsThatSelectARowOnOpen()
     {
-        // 打开时交键盘的清单恰九张：五张只读长清单（第八十八轮）、差异确认（第八十九轮）、
-        // 注释候选与响应契约（第九十轮补上落点后一并接上）、注释缺口清单（第九十一轮补上落点后一并接上）——
-        // 它们的共同点是「打开即选中一行、详情区已经显示那一行」。
+        // 打开时交键盘的清单恰十张：五张只读长清单（第八十八轮）、差异确认（第八十九轮）、
+        // 注释候选与响应契约（第九十轮补上落点后一并接上）、注释缺口清单（第九十一轮补上落点后一并接上）、
+        // 补充说明的接口清单（第九十五轮）——它们的共同点是「打开即选中一行、详情区已经显示那一行」。
         // 这条机械检查是「打开时交键盘的清单」与「打开即选中一行的清单」两件事不许漂移的钉子：
         // 谁在 OnShown 里交键盘，谁就必须在打开时真的有一行被选中（否则判定会答「不交」，接上去是一句空话）。
         var withOnShown = Repo.NativeSources()
@@ -129,15 +133,14 @@ public class OpenFocusTests
     [Theory]
     [InlineData("ApplyPlanDialog.cs")]
     [InlineData("SyncPreviewDialog.cs")]
-    [InlineData("SupplementsDialog.cs")]
     public void ViewsWithoutARowOnOpen_DoNotTakeTheKeyboardOnOpen(string file)
     {
         // 注释回写的数据在 OnLoad 之后异步到达（打开时清单还是空的，没有落点可交），故它不接「打开时」这一口径——
-        // 它的文件清单在计划首次到达那一次交键盘（第九十三轮，见 ApplyPlanOpenFocusTests）；
-        // 补充说明的编辑位是这一屏的输入。
+        // 它的文件清单在计划首次到达那一次交键盘（第九十三轮，见 ApplyPlanOpenFocusTests）。
         // 同步预览的对话框打开时落在勾选页（那一页的清单没有选中语义），故它也不接「打开时」这一口径——
         // 它的写入清单在预览页由隐藏变可见那一次交键盘（第九十二轮，见 PlanOpenFocusTests）。
         // 注释候选与响应契约第九十轮补上落点后已接此口径，注释缺口清单第九十一轮补上落点后一并接上，
+        // 补充说明的接口清单第九十五轮接上（它打开即选中第一个接口，见 SupplementOpenFocusTests），
         // 故都不在此列（见 OpenPaths）。
         var source = Repo.Source("Desktop", "Native", file);
         Assert.DoesNotContain("OnShown", source, StringComparison.Ordinal);

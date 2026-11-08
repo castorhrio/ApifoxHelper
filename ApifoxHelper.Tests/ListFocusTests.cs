@@ -227,14 +227,15 @@ public class ListFocusTests
     }
 
     [Fact]
-    public void Handoff_IsWiredOnTheThreeReviewPathsTheNineOpenPathsAndTheTwoArrivals()
+    public void Handoff_IsWiredOnTheThreeReviewPathsTheTenOpenPathsAndTheTwoArrivals()
     {
         // 第八十八轮把同一处入口接到五张只读长清单的打开时（OnShown），触达点因此由三处变八处：
         // 三处审阅路径（处理完一条之后交回）与五处只读清单（打开时交给它），判定仍是同一份 ListFocus。
         // 第九十、九十一轮把注释候选、响应契约与注释缺口清单的打开落点补上后一并接上，触达点变九处。
         // 第九十二轮把同步预览的写入清单接上（预览页由隐藏变可见那一次，不是 OnShown——对话框打开时落在勾选页），
         // 触达点变十处。第九十三轮把注释回写的文件清单接上（计划首次到达那一次，也不是 OnShown——
-        // 打开时清单还是空的），触达点变十一处。
+        // 打开时清单还是空的），触达点变十一处。第九十五轮把补充说明的接口清单接上（打开时，OnShown），
+        // 触达点变十二处。
         var callers = Repo.NativeSources()
             .Where(s => s.Contains("Ui.KeepKeyboardOnQueue"))
             .Select(s => s.Name)
@@ -245,7 +246,7 @@ public class ListFocusTests
             {
                 "ApplyPlanDialog.cs", "CandidatesDialog.cs", "CheckResultsDialog.cs", "ContractsDialog.cs",
                 "DecisionsDialog.cs", "EndpointTraceDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs",
-                "PropagationDialog.cs", "ScanResultsDialog.cs", "SyncPreviewDialog.cs",
+                "PropagationDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs", "SyncPreviewDialog.cs",
             },
             callers);
     }
@@ -253,13 +254,12 @@ public class ListFocusTests
     [Theory]
     [InlineData("TasksPage.cs")]
     [InlineData("ProjectsPage.cs")]
-    [InlineData("SupplementsDialog.cs")]
     public void OtherViews_NeverTakeTheKeyboard(string file)
     {
-        // 两个主页面每次刷新与筛选都要重建（第五十一轮在筛选框 Enter 那一条路上才显式取焦点）；
-        // 补充说明（编辑位是这一屏的输入）不接此口径——打开即选中一行的九张清单（含注释缺口，第九十一轮）
-        // 的打开时交键盘见 OpenFocusTests，同步预览的写入清单在预览页出现时交键盘（第九十二轮）见
-        // PlanOpenFocusTests，注释回写的文件清单在计划首次到达时交键盘（第九十三轮）见 ApplyPlanOpenFocusTests。
+        // 两个主页面每次刷新与筛选都要重建（第五十一轮在筛选框 Enter 那一条路上才显式取焦点），故不接此口径。
+        // 打开即选中一行的十张清单（含注释缺口第九十一轮、补充说明第九十五轮）的打开时交键盘见 OpenFocusTests，
+        // 同步预览的写入清单在预览页出现时交键盘（第九十二轮）见 PlanOpenFocusTests，
+        // 注释回写的文件清单在计划首次到达时交键盘（第九十三轮）见 ApplyPlanOpenFocusTests。
         var source = Repo.Source("Desktop", "Native", file);
         Assert.DoesNotContain("KeepKeyboardOnQueue", source, StringComparison.Ordinal);
     }

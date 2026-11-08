@@ -17,6 +17,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 状态表：尚未检查=空态指引；检查结果或已保存补充读取失败=内联错误（补充读取失败时停用保存，
 /// 避免用空补充覆盖既有内容）；没有接口=如实说明；正常=接口清单 + 编辑位 + 保存；
 /// 筛到零行=关键词框留着并说明下一步，计数行仍是整份统计（见 <see cref="PopulateList"/>）。
+/// 打开时把键盘交给接口清单（第九十五轮）：打开即选中第一个接口，键盘留在清单上，方向键与 Ctrl+C 才落在那一行。
 /// </summary>
 internal sealed class SupplementsDialog : Form
 {
@@ -186,6 +187,25 @@ internal sealed class SupplementsDialog : Form
         _keyword.Enabled = ListFilter.KeywordEnabled(true);
         _hint.Visible = false;
         PopulateList();
+    }
+
+    /// <summary>
+    /// 打开时把键盘交给接口清单（第九十五轮）：这一屏打开即选中第一个接口、编辑位已按它填好，
+    /// 而对话框打开时键盘落在框架 tab 序的第一个可聚焦控件上——方向键动的是别的控件、
+    /// Ctrl+C 也复制不到那一行，「打开就有一行被标出来」只成立了一半。
+    /// 另十一张清单在打开时或这一页出现时都把键盘交给清单（第八十八至九十三轮），这一张没有，
+    /// 属同壳不同行为。第八十八轮挂账的理由（「编辑位是这一屏的输入」）在打开这一刻不成立：
+    /// 这一屏自己的状态行写着「选择接口编辑说明补充」，第一步就是选接口，而选接口的地方就是这张清单；
+    /// 编辑位是选中之后的事，打开时还没有任何输入会被抢走。
+    /// 接在 OnShown（窗体首次显示之后）而不是 OnLoad：那时窗体还没显示，Focus 的落点取决于框架
+    /// 在激活时怎么选初始焦点。打开时那一屏是提示或空态（尚未检查、读取失败、没有接口）就没有选中行，
+    /// 判定答「不交」，那一步的下一步在提示与按钮上。只交键盘——不选中、不滚动、不重建清单、不写数据，
+    /// 本对话框不自己写 .Focus()、不自己判「选中行与焦点行是不是同一行」（判定只在 Ui.cs 一处）。
+    /// </summary>
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        Ui.KeepKeyboardOnQueue(_list);
     }
 
     private void ShowHint(string message, Color color)
