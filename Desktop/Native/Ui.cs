@@ -342,6 +342,23 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 审阅完成后把键盘交回清单（唯一触达点）：点「接受」「保存」时焦点落在那个按钮上，
+    /// 而 <see cref="SelectItem"/> 落的 Selected/Focused 与滚动都是清单内部的事——控件没拿到键盘时
+    /// 方向键动的是按钮所在的控件，第三十三轮「方向键从选中项继续」、第五十六轮续接落点、第五十七轮选中即定位
+    /// 在鼠标完成的那条路上都不成立（两页在第五十一轮正是为此先让清单取焦点再选中）。
+    /// 是否交回由 <see cref="ListFocus"/> 判定：选中行与焦点行是同一行才交，否则不动键盘——
+    /// 队列清完（没有落点）时的下一步由各视图既有的空态与提示出口承担。
+    /// 保存被拒的路径不调用这里：用户要改的就是手里那一格（待确认问题的回答、说明冲突的选择），
+    /// 把键盘交走等于把下一步从他手里拿走。
+    /// </summary>
+    public static void KeepKeyboardOnQueue(ListView list)
+    {
+        var selected = list.SelectedIndices.Count > 0 ? list.SelectedIndices[0] : (int?)null;
+        if (!ListFocus.ShouldHandToQueue(selected, list.FocusedItem?.Index)) return;
+        list.Focus();
+    }
+
+    /// <summary>
     /// 列表行激活（唯一入口）：双击只在命中行时回调该行。ListView.DoubleClick 不区分命中行，
     /// 双击空白区（首击已清空选中）同样触发——配置页此前会借这个空选中打开「新建配置」对话框；
     /// 命中哪行就激活哪行，双击空白区不动作。

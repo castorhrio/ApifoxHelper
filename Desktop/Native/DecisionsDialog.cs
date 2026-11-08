@@ -598,6 +598,9 @@ internal sealed class DecisionsDialog : Form
         RefreshStates();
         UpdateCounts();
         ApplyFilter(entry, handledAt);
+        // 与候选、契约两处审阅同一纪律：保存是点按钮完成的，交回键盘之后方向键才接着处理下一条；
+        // 被拒与重新读取失败的路径都在上面返回，不抢用户正在改的那一格。
+        Ui.KeepKeyboardOnQueue(_list);
         SetStatus(changed
             ? "已保存：" + description + "。决策变化已使检查结果与同步计划过期，重新检查后生效。"
             : "决策内容没有变化，未修改任务。", UiTokens.OkText);

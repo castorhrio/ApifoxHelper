@@ -367,6 +367,9 @@ internal sealed class CandidatesDialog : Form
         UpdateCounts();
         ApplyFilter();
         if (!SelectCandidate(candidate.Id)) Ui.AdvanceAfterRemoval(_list, handledAt);
+        // 保存是点按钮完成的，焦点还在那个按钮上：把键盘交回清单，方向键才接着往下走（ListFocus 口径）。
+        // 被拒与重新读取失败的路径都在上面返回——那时用户要改的是回答框里的文字，不抢他的键盘。
+        Ui.KeepKeyboardOnQueue(_list);
         SetStatus(TaskDisplay.ReviewStateText(reviewState) + "。剩余待审阅 " + _store.Candidates.Count(c => c.ReviewState == "pending") + " 条。", UiTokens.OkText);
     }
 

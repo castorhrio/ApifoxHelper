@@ -322,6 +322,9 @@ internal sealed class ContractsDialog : Form
         UpdateCounts();
         ApplyFilter();
         if (!SelectContract(endpointKey)) Ui.AdvanceAfterRemoval(_list, handledAt);
+        // 与候选审阅同一纪律：保存是点按钮完成的，交回键盘之后方向键才接着处理下一条；
+        // 被拒与重新读取失败的路径都在上面返回，不抢用户正在改的那一格。
+        Ui.KeepKeyboardOnQueue(_list);
         SetStatus(TaskDisplay.ContractStateText(reviewState) + "。剩余待确认 " + _contracts.Count(c => c.ReviewState == "pending") + " 个。确认或拒绝后需重新检查 Apifox 差异才会生效。", UiTokens.OkText);
     }
 
