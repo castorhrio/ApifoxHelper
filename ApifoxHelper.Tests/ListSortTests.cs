@@ -182,8 +182,8 @@ public class ListSortTests
         Assert.Matches(@"(?m)^\s*_columnTitles = _list\.Columns\.Cast<ColumnHeader>\(\)\.Select\(column => column\.Text\)\.ToArray\(\);", page);
         Assert.Matches(@"(?m)^\s*_list\.ColumnClick \+= \(_, e\) => SortBy\(e\.Column\);", page);
         Assert.Matches(@"(?m)^\s*\(_sortColumn, _sortDescending\) = ListSort\.Toggle\(_sortColumn, _sortDescending, column\);", page);
-        // 重建走同一口径，表头标记在 EndUpdate 之后、列宽重算之前刷新。
-        Assert.Matches(@"(?m)^\s*var tasks = ListSort\.Order\(_tasks\.List\(\), _sortColumn, _sortDescending, SortKey\);", page);
+        // 重建走同一口径（筛选先于排序，见 ListFilterTests），表头标记在 EndUpdate 之后、列宽重算之前刷新。
+        Assert.Matches(@"(?m)^\s*var tasks = ListSort\.Order\(ListFilter\.Apply\(all, _filter\.Text, FilterFields\), _sortColumn, _sortDescending, SortKey\);", page);
         var load = Slice(page, "private void LoadTasks()", "private void SelectTask(string taskId)");
         Assert.Matches(@"(?m)^\s*_list\.EndUpdate\(\);\s*\n\s*RefreshSortHeaders\(\);\s*\n\s*FitColumns\(\);", load);
         Assert.Matches(@"(?m)^\s*_list\.Columns\[i\]\.Text = ListSort\.Header\(_columnTitles\[i\], i, _sortColumn, _sortDescending\);", page);
@@ -197,7 +197,7 @@ public class ListSortTests
         Assert.Matches(@"(?m)^\s*_columnTitles = _list\.Columns\.Cast<ColumnHeader>\(\)\.Select\(column => column\.Text\)\.ToArray\(\);", page);
         Assert.Matches(@"(?m)^\s*_list\.ColumnClick \+= \(_, e\) => SortBy\(e\.Column\);", page);
         Assert.Matches(@"(?m)^\s*\(_sortColumn, _sortDescending\) = ListSort\.Toggle\(_sortColumn, _sortDescending, column\);", page);
-        Assert.Matches(@"(?m)^\s*var profiles = ListSort\.Order\(_profiles\.List\(\), _sortColumn, _sortDescending, SortKey\);", page);
+        Assert.Matches(@"(?m)^\s*var profiles = ListSort\.Order\(ListFilter\.Apply\(all, _filter\.Text, FilterFields\), _sortColumn, _sortDescending, SortKey\);", page);
         var load = Slice(page, "private void LoadProfiles()", "private void FitColumns()");
         Assert.Matches(@"(?m)^\s*_list\.EndUpdate\(\);\s*\n\s*RefreshSortHeaders\(\);\s*\n\s*FitColumns\(\);", load);
         Assert.Matches(@"(?m)^\s*_list\.Columns\[i\]\.Text = ListSort\.Header\(_columnTitles\[i\], i, _sortColumn, _sortDescending\);", page);

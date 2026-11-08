@@ -51,7 +51,14 @@ internal sealed class TasksPage : UserControl, INativePage
     private const int ListMinWidth = 320;
 
     private readonly ListView _list = Ui.List();
+    // 列表筛选（ListFilter 口径）：输入即筛选、Esc 清空；筛选状态留在本页，重建后按同一关键词呈现。
+    private readonly TextBox _filter = Ui.Input();
     private readonly Panel _empty;
+    // 空态文字按「还没有任务」与「筛到零行」两态切换：筛到零行不说成没有任务，并给出清空筛选的下一步。
+    private const string EmptyTitle = "还没有检查任务";
+    private const string EmptyHint = "先在「项目设置」新建配置，然后点「新建任务」开始源码扫描。";
+    private readonly Label _emptyTitle = Ui.Title(EmptyTitle);
+    private readonly Label _emptyHint = Ui.Body(EmptyHint, muted: true);
     private readonly Label _status = Ui.StatusLine();
     // 详情区固定设计宽（FixedPanel = Panel2）：窗口缩放时详情不变、列表吸收剩余宽度，
     // 与「标识列吸收剩余可视宽度」（ListColumns）同一方向；缺省 None 会让详情区随窗口按比例放大、偏离设计宽。
@@ -108,6 +115,9 @@ internal sealed class TasksPage : UserControl, INativePage
 
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 500 };
     private CheckTask? _selectedTask;
+    // 选中任务 Id：重建前先取局部（Items.Clear 触发选中事件会抹掉字段），
+    // 被筛掉的任务在清空筛选后仍回到选中（与配置页同一口径）。
+    private string? _selectedId;
     private bool _runningShown;
     private bool _splitAdjusted;
     // 列排序状态（ListSort 口径）：未排序时按任务创建时间倒序（TaskStore.List 的顺序）。
@@ -138,6 +148,16 @@ internal sealed class TasksPage : UserControl, INativePage
         newButton.Click += (_, _) => ShowNewTaskDialog();
         var refreshButton = Ui.Ghost("刷新");
         refreshButton.Click += (_, _) => RefreshData();
+        // 筛选框（DESIGN.md §6「列表筛选」）：输入即筛选，Esc 清空回到全部任务；只改呈现，不写任务数据。
+        _filter.Width = 220;
+        _filter.PlaceholderText = ListFilter.TaskPlaceholder;
+        _filter.TextChanged += (_, _) => LoadTasks();
+        _filter.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode != Keys.Escape || _filter.Text.Length == 0) return;
+            _filter.Text = "";
+            e.SuppressKeyPress = true;
+        };
         _list.SelectedIndexChanged += (_, _) => OnSelectedChanged();
         // 标识列（首列）吸收剩余可视宽度：窗口或列表尺寸变化即重算（ListColumns 口径）。
         _list.Resize += (_, _) => FitColumns();
@@ -243,6 +263,9 @@ internal sealed class TasksPage : UserControl, INativePage
         var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), Padding = new Padding(0, 0, UiTokens.Md, 0) };
         buttons.Controls.Add(newButton);
         buttons.Controls.Add(refreshButton);
+        var filterField = Ui.Field(_filter);
+        filterField.Margin = new Padding(UiTokens.Md, 0, 0, 0);
+        buttons.Controls.Add(filterField);
         _status.Dock = DockStyle.Fill;
         toolbar.Controls.Add(buttons, 0, 0);
         toolbar.Controls.Add(_status, 1, 0);
@@ -272,16 +295,14 @@ internal sealed class TasksPage : UserControl, INativePage
 
     private Panel BuildEmpty()
     {
-        var title = Ui.Title("还没有检查任务");
-        var hint = Ui.Body("先在「项目设置」新建配置，然后点「新建任务」开始源码扫描。", muted: true);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, ColumnCount = 1, RowCount = 4 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        layout.Controls.Add(title, 0, 1);
-        layout.Controls.Add(hint, 0, 2);
+        layout.Controls.Add(_emptyTitle, 0, 1);
+        layout.Controls.Add(_emptyHint, 0, 2);
         var panel = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg };
         panel.Controls.Add(layout);
         panel.Visible = false;
@@ -388,10 +409,13 @@ internal sealed class TasksPage : UserControl, INativePage
 
     private void LoadTasks()
     {
-        var selectedId = _selectedTask?.Id;
+        // 先取局部：重建清空列表会触发选中事件把字段抹成 null。
+        var selectedId = _selectedId;
         try
         {
-            var tasks = ListSort.Order(_tasks.List(), _sortColumn, _sortDescending, SortKey);
+            var all = _tasks.List();
+            // 筛选先于排序（ListFilter → ListSort）：筛掉的行不参与排序，排序状态与筛选状态各自留在本页。
+            var tasks = ListSort.Order(ListFilter.Apply(all, _filter.Text, FilterFields), _sortColumn, _sortDescending, SortKey);
             _list.BeginUpdate();
             _list.Items.Clear();
             foreach (var task in tasks)
@@ -414,7 +438,9 @@ internal sealed class TasksPage : UserControl, INativePage
             FitColumns();
             _empty.Visible = tasks.Count == 0;
             _list.Visible = tasks.Count > 0;
-            SetStatus(null);
+            RefreshEmptyState();
+            // 状态行如实给出筛选结果的数量（筛到零行时也是真实数字，不显示成没有任务）。
+            SetStatus(ListFilter.IsActive(_filter.Text) ? $"筛选出 {tasks.Count} 个任务（共 {all.Count} 个）" : null, UiTokens.Muted);
             if (selectedId is not null)
             {
                 SelectTask(selectedId);
@@ -433,6 +459,29 @@ internal sealed class TasksPage : UserControl, INativePage
             SetStatus("读取任务失败：" + Redactor.Redact(ex.Message));
         }
     }
+
+    /// <summary>
+    /// 空态两态（DESIGN.md §7「空态不留白」）：没有任务时给首次使用的下一步，
+    /// 筛到零行时说明是筛选结果并给出清空筛选的下一步——不把筛选结果说成没有任务。
+    /// </summary>
+    private void RefreshEmptyState()
+    {
+        var filtered = ListFilter.IsActive(_filter.Text);
+        _emptyTitle.Text = filtered ? ListFilter.TaskNoMatchTitle : EmptyTitle;
+        _emptyHint.Text = filtered ? ListFilter.TaskNoMatchHint : EmptyHint;
+    }
+
+    /// <summary>
+    /// 筛选字段（与单元格同源）：任务名、配置名、下一步标题、Apifox 状态文字——
+    /// 用户在列表上看到什么就能按什么找，不引入界面上不存在的字段。
+    /// </summary>
+    private static string?[] FilterFields(CheckTask task) =>
+    [
+        task.Name,
+        task.ProfileSnapshot.Name,
+        NextStep.Compute(task).Title,
+        TaskDisplay.RemoteStatusText(task.Stages.Remote.Status),
+    ];
 
     /// <summary>
     /// 标识列（首列「任务」）吸收剩余可视宽度（ListColumns 口径）：列合计对齐可视宽度，
@@ -498,6 +547,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private void OnSelectedChanged()
     {
         _selectedTask = _list.SelectedItems.Count > 0 ? _list.SelectedItems[0].Tag as CheckTask : null;
+        _selectedId = _selectedTask?.Id;
         _runningShown = false;
         RefreshDetail();
     }
