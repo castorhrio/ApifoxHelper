@@ -216,7 +216,6 @@ internal sealed class ContractsDialog : Form
 
     private void ApplyFilter()
     {
-        ShowDetail();
         _list.BeginUpdate();
         _list.Items.Clear();
         foreach (var contract in _contracts)
@@ -241,13 +240,19 @@ internal sealed class ContractsDialog : Form
         }
         _hint.Visible = false;
         _list.Visible = true;
+        // 重建之后再问一次详情：本视图不自动选中任何一行，判在清空之前量到的是上一轮筛选的行数，
+        // 「缺什么」那句话会在该说话的时候沉默（第一次进屏时清单还是空的）。
+        ShowDetail();
     }
 
     private void ShowDetail()
     {
         if (Ui.SelectedItem(_list)?.Tag is not ResponseContract contract)
         {
-            _detail.Text = "";
+            // 有行可选却没选中：缺什么由详情区说；一行都没有时空的是筛选，那一屏归提示出口（口径见 ListSelection）。
+            _detail.Text = ListSelection.ShouldExplainMissingSelection(_list.Items.Count)
+                ? ListSelection.MissingSelectionHint(ListFilter.ContractNoun)
+                : "";
             SetButtons(null);
             return;
         }

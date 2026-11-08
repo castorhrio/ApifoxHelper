@@ -406,7 +406,10 @@ internal sealed class DecisionsDialog : Form
     {
         if (Current() is not { } entry)
         {
-            _detail.Text = "";
+            // 有行可选却没选中：缺什么由详情区说；一行都没有时空的是筛选，那一屏归提示出口（口径见 ListSelection）。
+            _detail.Text = ListSelection.ShouldExplainMissingSelection(_list.Items.Count)
+                ? ListSelection.MissingSelectionHint(ListFilter.DecisionNoun)
+                : "";
             EnableActions(null);
             return;
         }

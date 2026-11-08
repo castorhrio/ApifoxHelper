@@ -246,7 +246,6 @@ internal sealed class CandidatesDialog : Form
 
     private void ApplyFilter()
     {
-        ShowDetail();
         _list.BeginUpdate();
         _list.Items.Clear();
         foreach (var candidate in _store.Candidates)
@@ -270,6 +269,9 @@ internal sealed class CandidatesDialog : Form
         }
         _hint.Visible = false;
         _list.Visible = true;
+        // 重建之后再问一次详情：本视图不自动选中任何一行，判在清空之前量到的是上一轮筛选的行数，
+        // 「缺什么」那句话会在该说话的时候沉默（第一次进屏时清单还是空的）。
+        ShowDetail();
     }
 
     /// <summary>列表里的位置标题：注释位置还在时用其展示名，不在时如实显示符号编号。</summary>
@@ -282,7 +284,10 @@ internal sealed class CandidatesDialog : Form
     {
         if (Ui.SelectedItem(_list)?.Tag is not CommentCandidate candidate)
         {
-            _detail.Text = "";
+            // 有行可选却没选中：缺什么由详情区说；一行都没有时空的是筛选，那一屏归提示出口（口径见 ListSelection）。
+            _detail.Text = ListSelection.ShouldExplainMissingSelection(_list.Items.Count)
+                ? ListSelection.MissingSelectionHint(ListFilter.CandidateNoun)
+                : "";
             _answers.Text = "";
             _answersDirty = false;
             _overwrite.Checked = false;

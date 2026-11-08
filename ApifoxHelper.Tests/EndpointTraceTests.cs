@@ -80,10 +80,15 @@ public class EndpointTraceTests
         Assert.Matches(@"(?m)^\s*private readonly ListView _list = Ui\.List\(\);", source);
         Assert.Matches(@"(?m)^\s*private readonly TextBox _detail = Ui\.Preview\(", source);
         Assert.Matches(@"(?m)^\s*_evidenceButton = Ui\.Ghost\(""查看代码证据""\);", source);
-        // 证据按钮的启用随选中行重新推导：行内门控（证据数 > 0）与空选中禁用，不得残留上一行的状态。
+        // 空选中：详情区不再留白——有行可选却没选中时「缺什么」由这一屏的详情区说（§7「禁用 = 控件禁用 + 一句话说明缺什么」），
+        // 一行都没有可选时留空，那一屏由提示出口说话；证据按钮仍随选中重新推导，不残留上一行的状态。
+        var branch = Regex.Match(source, @"private void ShowDetail\(\)\s*\{(?<body>[^}]*)\}");
+        Assert.True(branch.Success, "接口追踪明细缺少 ShowDetail 的无选中分支。");
         Assert.Matches(
-            @"(?m)^\s*_detail\.Text = """";\n\s*_evidenceButton\.Enabled = false;\n\s*return;",
-            source);
+            @"(?m)^\s*_detail\.Text = ListSelection\.ShouldExplainMissingSelection\(_list\.Items\.Count\)\r?\n" +
+            @"\s*\? ListSelection\.MissingSelectionHint\(ListFilter\.EndpointNoun\)\r?\n" +
+            @"\s*: """";\r?\n\s*_evidenceButton\.Enabled = false;\r?\n\s*return;$",
+            branch.Groups["body"].Value);
         Assert.Matches(@"(?m)^\s*_evidenceButton\.Enabled = coverage\.EvidenceIds\.Count > 0;", source);
         Assert.DoesNotMatch(@"(?m)^\s*_evidenceButton\.Enabled = true;", source);
     }

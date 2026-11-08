@@ -13,6 +13,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 第五十八轮「交回键盘只触达一次」同一做法）。
 /// 列表一律经 <c>Ui.List</c> 工厂出厂且 MultiSelect = false，选中数最多为 1，
 /// 所以「选中集合的第一格」就是「那一行」；不为多选清单猜其余行。
+/// 同一个主题的另一侧也在这里：没有选中那一行时，这一屏说什么（<see cref="MissingSelectionHint"/>）。
+/// 「怎么取那一行」与「取不到时怎么说」讲的是同一格状态，分成两份文件必然各写各的条件。
 /// 不依赖 WinForms，以共享源码编入测试工程在 Linux 断言。
 /// </summary>
 public static class ListSelection
@@ -23,4 +25,23 @@ public static class ListSelection
     /// 第五十六轮「一行不剩则没有落点」同一取舍）。
     /// </summary>
     public static int? FirstPosition(int selectedCount) => selectedCount > 0 ? 0 : null;
+
+    /// <summary>
+    /// 「缺什么」这句话由详情区来说吗：清单里有行可选、却一行都没选中才说。
+    /// 一行都没有时缺的不是「选中」而是筛选或数据本身，那一屏的说话位是提示出口
+    /// （第五十九、六十轮立的形状），详情区这时再讲「选中一行」就是把不存在的行说成还能选——
+    /// 与第四十二轮「禁用不得移除提示所指引的下一步」同侧：指的路得真的走得通。
+    /// 负数按「没有行」处理，与 <see cref="FirstPosition"/> 同一纪律。
+    /// </summary>
+    public static bool ShouldExplainMissingSelection(int displayedRowCount) => displayedRowCount > 0;
+
+    /// <summary>未选中时指名的下一步；说这句话，清单就得真的有行可选（见 <see cref="ShouldExplainMissingSelection"/>）。</summary>
+    public const string MissingSelectionPointer = "在清单里选中一行，它的详情显示在这里，选中动作随之可用。";
+
+    /// <summary>
+    /// 没有选中那一行时详情区给的一句话（DESIGN.md §7「禁用 = 控件禁用 + 一句话说明缺什么」）：
+    /// 前半句说缺什么，后半句是共享的下一步。名词沿用 <see cref="ListFilter"/> 的那五个常量——
+    /// 「这一行的条目叫什么」只有一个词汇表，两处各写一份必然漂移。
+    /// </summary>
+    public static string MissingSelectionHint(string noun) => $"没有选中{noun}。{MissingSelectionPointer}";
 }

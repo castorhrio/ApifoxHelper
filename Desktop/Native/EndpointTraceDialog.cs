@@ -153,7 +153,10 @@ internal sealed class EndpointTraceDialog : Form
     {
         if (Ui.SelectedItem(_list)?.Tag is not EndpointCoverage coverage)
         {
-            _detail.Text = "";
+            // 有行可选却没选中：缺什么由详情区说；一行都没有时空的是整份追踪数据，那一屏归提示出口（口径见 ListSelection）。
+            _detail.Text = ListSelection.ShouldExplainMissingSelection(_list.Items.Count)
+                ? ListSelection.MissingSelectionHint(ListFilter.EndpointNoun)
+                : "";
             _evidenceButton.Enabled = false;
             return;
         }

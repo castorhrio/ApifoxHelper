@@ -229,13 +229,20 @@ public class ListSelectionTests
     [Fact]
     public void EmptySelectionBranch_StillCollapsesThroughTheExistingPath()
     {
-        // 注释缺口的「没有选中怎么收掉」分支（第三十九、四十、六十轮立的收口）动作逐字不变，
-        // 本轮只把它的问法改成入口——不得顺手写第二套收控件。
+        // 注释缺口的「没有选中怎么收掉」分支（第三十九、四十、六十轮立的收口）问法与动作逐字不变，
+        // 本轮只把详情区那一格空白换成共享口径的那句话——三个选中动作的禁用仍在这里，不得写第二套。
         var scan = Repo.Source("Desktop", "Native", "ScanResultsDialog.cs");
         var body = Regex.Match(scan, @"private void ShowDetail\(\)\s*\{(?<body>[^}]*)\}");
         Assert.True(body.Success, "ScanResultsDialog 缺少 ShowDetail 的无选中分支。");
         Assert.Matches(@"(?m)^\s*if \(Ui\.SelectedItem\(_list\) is null\)$", body.Groups["body"].Value);
-        Assert.Matches(@"(?m)^\s*_detail\.Text = """";$", body.Groups["body"].Value);
+        Assert.Matches(
+            @"(?m)^\s*_detail\.Text = ListSelection\.ShouldExplainMissingSelection\(_list\.Items\.Count\)$",
+            body.Groups["body"].Value);
+        Assert.Matches(
+            @"(?m)^\s*\? ListSelection\.MissingSelectionHint\(ListFilter\.SlotNoun\)$",
+            body.Groups["body"].Value);
+        // 一行都没有可选时仍留空：那种空属于筛选或数据本身，说话位是提示出口（第五十九、六十轮）。
+        Assert.Matches(@"(?m)^\s*: """";$", body.Groups["body"].Value);
         Assert.Equal(3, Regex.Matches(body.Groups["body"].Value, @"(?m)^\s*_\w+Button\.Enabled = false;$").Count);
     }
 

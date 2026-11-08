@@ -31,7 +31,7 @@ public static class ListFilter
     /// </summary>
     public const string ClearActionLabel = "清空筛选";
 
-    // 五个带筛选下拉的视图各自清的是什么：名词在这里给一份，句子由 FilteredEmptyHint 组合，界面不就地拼写。
+    // 这五个视图的每一行是什么：名词在这里给一份词汇表，筛到零行那句话与未选中那句话都由它组合，界面不就地拼写。
     public const string CandidateNoun = "候选";
     public const string ContractNoun = "契约";
     public const string EndpointNoun = "接口";
