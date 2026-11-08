@@ -15,6 +15,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// （见 <see cref="PopulateList"/>）。
 /// 三格文字、计数行、说明行、未结束动作那句话、清单标记与关键词匹配字段取 <see cref="JournalEntries"/> 一份
 /// （与测试工程单一口径）。
+/// 记录清单支持点击列头排序（第一百零四轮，口径见 <see cref="JournalSort"/> 与 <see cref="ListSort"/>）：
+/// 同一列再点反向、换一列从升序开始，排序只改呈现顺序——计数行与未结束动作那句话仍按整份日志统计。
 /// </summary>
 internal sealed class JournalDialog : Form
 {
@@ -45,6 +47,13 @@ internal sealed class JournalDialog : Form
     /// <summary>只有意图、没有结果的动作标识：清单标记与关键词匹配共用同一份集合。</summary>
     private HashSet<string> _unfinishedIds = new(StringComparer.Ordinal);
 
+    // 列排序状态（ListSort 口径，第一百零四轮）：未排序时保持日志自身的顺序（按时间追加）。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+
+    /// <summary>建列时的原标题快照：表头方向标记每次按它重算，反复刷新不叠加。</summary>
+    private string[] _titles = [];
+
     public JournalDialog(TaskStore tasks, CheckTask task)
     {
         _tasks = tasks;
@@ -63,6 +72,9 @@ internal sealed class JournalDialog : Form
         _list.Columns.Add("时间", 150);
         _list.Columns.Add("事件", 150);
         _list.Columns.Add("摘要", 640);
+        _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
         _keyword.PlaceholderText = ListFilter.JournalSearchPlaceholder;
         _keyword.TextChanged += (_, _) => PopulateList();
 
@@ -172,7 +184,16 @@ internal sealed class JournalDialog : Form
     private void PopulateList()
     {
         var selectedLine = Ui.SelectedItem(_list)?.Tag as JsonNode;
-        var visible = ListFilter.Apply(_lines, _keyword.Text, line => JournalEntries.KeywordFields(line, _unfinishedIds));
+        // 筛选先于排序（ListFilter → ListSort，与另八处同一顺序）：筛掉的行不参与排序，
+        // 排序键取 JournalSort 单一口径（与三格同源），界面不就地写 switch。
+        var visible = ListSort.Order(
+            ListFilter.Apply(_lines, _keyword.Text, line => JournalEntries.KeywordFields(line, _unfinishedIds)),
+            _sortColumn, _sortDescending,
+            (line, column) => JournalSort.Key(
+                JournalEntries.TimeKey(line),
+                JournalEntries.EventCell(line),
+                JournalEntries.SummaryCell(line, _unfinishedIds),
+                column));
         _list.BeginUpdate();
         _list.Items.Clear();
         foreach (var line in visible)
@@ -186,6 +207,7 @@ internal sealed class JournalDialog : Form
             _list.Items.Add(row);
         }
         _list.EndUpdate();
+        RefreshSortHeaders();
         if (ListFilter.IsFilteredEmpty(_lines.Count, visible.Count))
         {
             _hint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.JournalNoun);
@@ -219,6 +241,27 @@ internal sealed class JournalDialog : Form
         if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
         if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
         return base.ProcessDialogKey(keyData);
+    }
+
+    /// <summary>
+    /// 点击列头（DESIGN.md §6「列表列排序」，第一百零四轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="PopulateList"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改日志内容，选中仍按行载荷（同一个日志节点）恢复：
+    /// 这一屏的重建本来就按节点找回原来那一行，排序后不必另传 keep（与另八处「把当前条目交回去」同一结果）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        PopulateList();
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _titles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_titles[i], i, _sortColumn, _sortDescending);
+        }
     }
 
     private void ShowHint(string message, Color color)

@@ -67,17 +67,25 @@ public static class JournalEntries
         "记录 " + count.ToString(CultureInfo.InvariantCulture) + " 条";
 
     /// <summary>
-    /// 时间格：日志里的 <c>at</c> 是带偏移的时间戳，按本机时区显示到秒。
-    /// 读不出（缺字段、不是时间、进程中断留下的半行）给占位，不拿当前时间顶上——
-    /// 那会把「不知道什么时候」说成「刚刚」。
+    /// 时间格的时间戳（第一百零四轮）：日志里的 <c>at</c> 是带偏移的时间戳，读不出（缺字段、不是时间、
+    /// 进程中断留下的半行）交 null——不拿当前时间顶上，那会把「不知道什么时候」说成「刚刚」。
+    /// 时间格与时间列的排序键取同一份解析结果（<see cref="TimeText"/> 只是把它格式化），
+    /// 两处必然一起漂或一起对：排序按时间戳而不是按显示文字，读不出时间的那几行交 null（视为最小）。
     /// </summary>
-    public static string TimeText(JsonNode? line)
+    public static DateTimeOffset? TimeKey(JsonNode? line)
     {
         var raw = Text(line, "at");
-        return DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+        return DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at) ? at : null;
+    }
+
+    /// <summary>
+    /// 时间格：按本机时区显示到秒；读不出时给占位（<see cref="MissingTimeText"/>）。
+    /// 取值来自 <see cref="TimeKey"/> 那一份解析，不另解析一遍。
+    /// </summary>
+    public static string TimeText(JsonNode? line) =>
+        TimeKey(line) is { } at
             ? at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
             : MissingTimeText;
-    }
 
     /// <summary>
     /// 摘要格：这一行在屏幕之外还能被指代的东西（标识列声明在这一格）。
@@ -106,14 +114,25 @@ public static class JournalEntries
     /// 这一屏要回答的是「做到哪一步」，而「这一步没有结果」正是清单上缺的那一行，标在原处比只在
     /// 上面那句话里数个数更好找（那句话仍给出名字与下一步，两处说的是同一件事）。
     /// </summary>
-    public static string[] Row(JsonNode? line, IReadOnlySet<string>? unfinishedActionIds = null)
+    public static string[] Row(JsonNode? line, IReadOnlySet<string>? unfinishedActionIds = null) =>
+        [TimeText(line), EventCell(line), SummaryCell(line, unfinishedActionIds)];
+
+    /// <summary>
+    /// 事件格（第二格）：这一行的事件名，取 <see cref="EventText"/> 那一份中文映射。
+    /// 清单第二格与事件列的排序键取同一份（第一百零四轮），界面不就地认 <c>kind</c> 字段。
+    /// </summary>
+    public static string EventCell(JsonNode? line) => EventText(Text(line, "kind"));
+
+    /// <summary>
+    /// 摘要格（含「结果未知」标记）：清单第三格、关键词匹配字段与摘要列的排序键取同一份——
+    /// 三处各拼一遍必然有一处先漂（第一百零四轮把这一格提出来，排序键不再另算一套）。
+    /// </summary>
+    public static string SummaryCell(JsonNode? line, IReadOnlySet<string>? unfinishedActionIds = null)
     {
         var summary = SummaryText(line);
-        if (unfinishedActionIds is not null && IsUnfinishedIntent(line, unfinishedActionIds))
-        {
-            summary = Join(summary, UnfinishedMark);
-        }
-        return [TimeText(line), EventText(Text(line, "kind")), summary];
+        return unfinishedActionIds is not null && IsUnfinishedIntent(line, unfinishedActionIds)
+            ? Join(summary, UnfinishedMark)
+            : summary;
     }
 
     /// <summary>
