@@ -52,6 +52,7 @@
     <Compile Include="..\Desktop\Native\ListSort.cs" Link="Shared\ListSort.cs" />
     <Compile Include="..\Desktop\Native\ListFilter.cs" Link="Shared\ListFilter.cs" />
     <Compile Include="..\Desktop\Native\ListKeys.cs" Link="Shared\ListKeys.cs" />
+    <Compile Include="..\Desktop\Native\ListCopy.cs" Link="Shared\ListCopy.cs" />
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />

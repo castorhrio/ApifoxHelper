@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace ApifoxHelper.Desktop.Native;
@@ -262,6 +263,8 @@ internal static class Ui
     /// 列表（DESIGN.md §6「列表行」）：自绘选中态——选中行 Bg 底 + 左侧 3px Accent 标记，
     /// 不用系统高亮蓝；未选行 Panel 底；逐子项语义色（Muted/Ok/Warn/Bad）保留（ListRows 判定）。
     /// 表头沿用系统绘制（与既有外观一致）；复选框列由本工厂绘制（自绘模式下系统不再画）。
+    /// Ctrl+C 复制焦点行的首列（标识列）原文也在这里装上——单元格自绘后文字不可选中，Ctrl+C 是列表里的
+    /// 文字交出去的唯一通路（只读预览框原本就能选中复制），故剪贴板只在本工厂触达一次，页面与对话框不各装一套。
     /// </summary>
     public static ListView List(bool checkBoxes = false)
     {
@@ -282,6 +285,22 @@ internal static class Ui
         list.DrawColumnHeader += (_, e) => e.DrawDefault = true;
         list.DrawItem += DrawListRow;
         list.DrawSubItem += DrawListCell;
+        list.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode != Keys.C || !ListCopy.IsCopyGesture(e.Shift, e.Control, e.Alt)) return;
+            // 以焦点行为准（与 Enter 打开选中行同一纪律）：没指到行、或那一行没被标出来，都不动作。
+            if (list.FocusedItem is not ListViewItem row) return;
+            if (ListCopy.CopyText(row.Text, row.Selected) is not string text) return;
+            e.SuppressKeyPress = true;
+            try
+            {
+                Clipboard.SetText(text);
+            }
+            catch (ExternalException)
+            {
+                // 剪贴板被其他进程占用时本次没有复制：不重试、不弹窗，也不谎称已复制（粘贴即见实际内容）。
+            }
+        };
         return list;
     }
 
