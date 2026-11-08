@@ -11,6 +11,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// （阻断契约不能确认；确认/拒绝只写任务数据并递增任务版本），不写源码、不访问 Apifox。
 /// 确认后的契约在后续 Apifox 检查中替换该接口的 200 响应体，不修改共享封装。
 /// 状态表：读取失败=内联错误与下一步；没有契约=与冻结页面同一口径的说明；正常=计数行 + 筛选 + 列表 + 详情与审阅动作。
+/// 契约清单支持点击列头排序（第一百零一轮，口径见 <see cref="ContractSort"/> 与 <see cref="ListSort"/>）：
+/// 与差异确认、注释候选同一只壳，同一个手势在别处有、在这一处没有属同壳不同行为。
 /// </summary>
 internal sealed class ContractsDialog : Form
 {
@@ -40,6 +42,15 @@ internal sealed class ContractsDialog : Form
 
     private List<ResponseContract> _contracts = [];
 
+    // 列排序状态（ListSort 口径，第一百零一轮）：未排序时保持契约自身的构造顺序。
+    // 排序状态留在本次打开期间（切筛选、敲关键词、保存后重建都保持），关闭即忘——
+    // 跨启动记忆只有两个常驻页面（第五十五轮那两个页键），
+    // 这一屏每次打开看的是这一次的契约，不为它另开一个记忆文件。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
+    private readonly string[] _titles;
+
     public ContractsDialog(TaskStore tasks, CheckTask task, ContractReviewService reviews)
     {
         _tasks = tasks;
@@ -61,6 +72,9 @@ internal sealed class ContractsDialog : Form
         _list.Columns.Add("data 类型", 170);
         _list.Columns.Add("分支", 56);
         _list.Columns.Add("审阅状态", 90);
+        _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
 
         _confirmButton = Ui.Primary("确认");
@@ -249,13 +263,25 @@ internal sealed class ContractsDialog : Form
         return base.ProcessDialogKey(keyData);
     }
 
-    private void ApplyFilter()
+    private void ApplyFilter(ResponseContract? keep = null)
     {
-        _list.BeginUpdate();
-        _list.Items.Clear();
         // 关键词先经共享口径（与两个主页面、另三张长清单同一份匹配规则：词间「且」、字段间「或」、忽略大小写），
         // 审阅状态筛选在其后——两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
-        var visible = ListFilter.Apply(_contracts, _keyword.Text, QueueText.ContractFields).Where(Matches).ToList();
+        // 筛选先于排序（ListFilter → ListSort，与两个主页面、检查结果、接口追踪明细、差异确认、注释候选同一顺序）：
+        // 筛掉的行不参与排序，排序状态与筛选状态各自留在本对话框；
+        // 排序键取 ContractSort 单一口径（与单元格同源），界面不就地写 switch。
+        var visible = ListSort.Order(
+            ListFilter.Apply(_contracts, _keyword.Text, QueueText.ContractFields).Where(Matches).ToList(),
+            _sortColumn, _sortDescending,
+            (contract, column) => ContractSort.Key(
+                contract.EndpointKey,
+                QueueText.ContractWrapper(contract.WrapperType),
+                QueueText.ContractDataType(contract.DataType),
+                contract.Branches.Count,
+                TaskDisplay.ContractStateText(contract.ReviewState),
+                column));
+        _list.BeginUpdate();
+        _list.Items.Clear();
         foreach (var contract in visible)
         {
             var item = new ListViewItem(contract.EndpointKey) { Tag = contract };
@@ -269,6 +295,7 @@ internal sealed class ContractsDialog : Form
             _list.Items.Add(item);
         }
         _list.EndUpdate();
+        RefreshSortHeaders();
         if (ListFilter.IsFilteredEmpty(_contracts.Count, _list.Items.Count))
         {
             // 筛到零行不是「没有契约」：说清这一屏为什么空、下一步就在筛选上，聚合计数留着（口径见 ListFilter）。
@@ -277,6 +304,10 @@ internal sealed class ContractsDialog : Form
         }
         _hint.Visible = false;
         _list.Visible = true;
+        // 排序后重建把当前契约交回去（keep），不落到「选中第一行」——排序不该把选中甩回队首；
+        // 交回去仍经 Ui.SelectItem 唯一入口（选中事件随即问到详情，详情与四个动作跟着那一行走）。
+        // 关键词与筛选的重建路径不传 keep（那一屏的下一步是换关键词或筛选，落点会把详情区从用户正在看的那一条挪走）。
+        if (keep is not null && SelectContract(keep.EndpointKey)) return;
         // 重建之后再问一次详情：重建路径不自动选中任何一行（打开时的落点在 OnLoad 一处，见 Ui.SelectFirstOnOpen），
         // 判在清空之前量到的是上一轮筛选的行数，「缺什么」那句话会在该说话的时候沉默（第一次进屏时清单还是空的）。
         // 重建路径不落点与注释候选同一理由：关键词框每敲一个字都重建一次，落点会把详情区从用户正在看的那一条
@@ -384,6 +415,28 @@ internal sealed class ContractsDialog : Form
         Ui.KeepKeyboardOnQueue(_list);
         SetStatus(TaskDisplay.ContractStateText(reviewState) + "。剩余待确认 " + _contracts.Count(c => c.ReviewState == "pending") + " 个。确认或拒绝后需重新检查 Apifox 差异才会生效。", UiTokens.OkText);
     }
+
+    /// <summary>
+    /// 点击列头（DESIGN.md §6「列表列排序」，第一百零一轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="ApplyFilter"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改审阅状态，选中仍按契约自身恢复（重建前记下、重建后找回）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        ApplyFilter(Current());
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _titles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_titles[i], i, _sortColumn, _sortDescending);
+        }
+    }
+
+    private ResponseContract? Current() => Ui.SelectedItem(_list)?.Tag as ResponseContract;
 
     /// <summary>重建后回到刚审阅的那一条；返回它是否仍在当前筛选的清单上（不在时由调用方续接下一行）。</summary>
     private bool SelectContract(string endpointKey)

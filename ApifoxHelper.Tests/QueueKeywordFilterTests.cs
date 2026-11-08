@@ -181,14 +181,14 @@ public class QueueKeywordFilterTests
 
     [Theory]
     [InlineData("CandidatesDialog.cs", @"ListFilter\.Apply\(_store\.Candidates, _keyword\.Text, c => QueueText\.CandidateFields\(c, _slotsById\.GetValueOrDefault\(c\.SlotId\)\)\)\.Where\(Matches\)\.ToList\(\)", true)]
-    [InlineData("ContractsDialog.cs", @"ListFilter\.Apply\(_contracts, _keyword\.Text, QueueText\.ContractFields\)\.Where\(Matches\)\.ToList\(\)", false)]
+    [InlineData("ContractsDialog.cs", @"ListFilter\.Apply\(_contracts, _keyword\.Text, QueueText\.ContractFields\)\.Where\(Matches\)\.ToList\(\)", true)]
     public void Keyword_AndStatusFilter_AreBothAnd(string file, string chain, bool sorted)
     {
         var source = Repo.Source("Desktop", "Native", file);
         // 关键词先经共享口径（与两个主页面、另三张长清单同一份匹配规则），状态筛选在其后：
         // 两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
-        // 第一百轮起注释候选的清单还接了列排序：同一条筛选链作为 ListSort.Order 的输入（筛选先于排序），
-        // 因此那一处的链以逗号收尾、外面包着 Order；响应契约没有排序，仍是 var visible = 链;
+        // 第一百轮起注释候选的清单还接了列排序、第一百零一轮起响应契约的清单也接了：
+        // 同一条筛选链作为 ListSort.Order 的输入（筛选先于排序），因此两处的链都以逗号收尾、外面包着 Order。
         if (sorted)
         {
             Assert.Matches($@"(?m)^\s*{chain},$", source);
