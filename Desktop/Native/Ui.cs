@@ -312,17 +312,27 @@ internal static class Ui
     /// <summary>
     /// 程序列表选中（唯一入口）：除 Selected 外同时恢复 Focused——列表重建后 FocusedItem 丢失，
     /// 只恢复选中时方向键从列表头部重新开始、详情跳到第一行；恢复焦点标记后键盘导航从选中项继续（Windows 列表惯例）。
+    /// 选中即定位：再把该行滚入可见区——清单重建（刷新、切页、筛选、保存对话框返回、处理完一条续接下一条）
+    /// 会把滚动位置甩回顶部，落在屏外的选中不是定位：详情与按钮跟着那一行走，屏幕上却看不出自己在哪。
+    /// 滚动只在这一处触达（第五十一轮在两页各写一次、第五十六轮挂账的「不滚动到落点所在」由此收口），
+    /// 是否请求滚动由 <see cref="ListReveal"/> 判定：行不在这份清单之内就不动，越界序号在控件那边是先抛异常。
     /// </summary>
     public static void SelectItem(ListViewItem item)
     {
         item.Selected = true;
         item.Focused = true;
+        var list = item.ListView;
+        if (list is null) return;
+        var index = item.Index;
+        if (!ListReveal.ShouldReveal(index, list.Items.Count)) return;
+        list.EnsureVisible(index);
     }
 
     /// <summary>
     /// 队列续接（唯一落点）：刚处理完的那一行已不属于当前筛选、从清单上消失时，把选中落到接替他位置的
     /// 下一行（末行落到上一行，落点由 <see cref="ListAdvance"/> 单一口径给出），仍经 <see cref="SelectItem"/>
-    /// 唯一入口——详情与按钮随选中事件跟上，方向键从该行继续。一行不剩时不动作，交由各视图既有的空态出口呈现。
+    /// 唯一入口——详情与按钮随选中事件跟上，方向键从该行继续，那一行也随本入口一并滚入可见区（本处不另请求滚动）。
+    /// 一行不剩时不动作，交由各视图既有的空态出口呈现。
     /// </summary>
     public static void AdvanceAfterRemoval(ListView list, int handledIndex)
     {

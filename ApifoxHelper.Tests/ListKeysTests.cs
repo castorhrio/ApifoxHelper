@@ -90,8 +90,9 @@ public class ListKeysTests
             Assert.Matches(@"(?m)^\s*if \(ListKeys\.FirstResultIndex\(_list\.Items\.Count\) is not int index\) return;", body);
             Assert.Matches(@"(?m)^\s*var item = _list\.Items\[index\];", body);
             Assert.Matches(@"(?m)^\s*Ui\.SelectItem\(item\);", body);
-            // 选中的行必须在可见位置，否则「焦点交给第一行」这句话不成立。
-            Assert.Matches(@"(?m)^\s*item\.EnsureVisible\(\);", body);
+            // 选中的行必须在可见位置，否则「焦点交给第一行」这句话不成立——第五十七轮把这一步收进
+            // Ui.SelectItem 唯一入口（见 ListRevealTests），页内不再各写一句滚动。
+            Assert.DoesNotContain("EnsureVisible", body, StringComparison.Ordinal);
             // 列表先取焦点再选中：方向键从该行继续（锚点缺失时 IndexOf 为 -1，只比大小会被骗过）。
             var focus = body.IndexOf("_list.Focus();", StringComparison.Ordinal);
             var select = body.IndexOf("Ui.SelectItem(item);", StringComparison.Ordinal);
