@@ -57,6 +57,7 @@
     <Compile Include="..\Desktop\Native\ListAdvance.cs" Link="Shared\ListAdvance.cs" />
     <Compile Include="..\Desktop\Native\ListReveal.cs" Link="Shared\ListReveal.cs" />
     <Compile Include="..\Desktop\Native\ListFocus.cs" Link="Shared\ListFocus.cs" />
+    <Compile Include="..\Desktop\Native\ListSelection.cs" Link="Shared\ListSelection.cs" />
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />

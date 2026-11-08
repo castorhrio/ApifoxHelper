@@ -92,8 +92,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
         _list.SelectedIndexChanged += (_, _) =>
         {
             _selectedId = Selected()?.Id;
-            _editButton.Enabled = _list.SelectedIndices.Count > 0;
-            _probeButton.Enabled = _list.SelectedIndices.Count > 0;
+            _editButton.Enabled = Ui.SelectedIndex(_list) is not null;
+            _probeButton.Enabled = Ui.SelectedIndex(_list) is not null;
         };
         // 打开该行的编辑只经 Ui.ActivateItem 唯一入口（双击命中行、Enter 焦点行，同一条回调）；
         // 双击空白区不动作——ListView.DoubleClick 不区分命中行，曾借清空后的空选中打开「新建配置」对话框。
@@ -160,7 +160,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
         return panel;
     }
 
-    private ProjectProfile? Selected() => _list.SelectedItems.Count > 0 ? _list.SelectedItems[0].Tag as ProjectProfile : null;
+    private ProjectProfile? Selected() => Ui.SelectedItem(_list)?.Tag as ProjectProfile;
 
     public void OnPageShown()
     {

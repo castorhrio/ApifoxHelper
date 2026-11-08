@@ -75,8 +75,10 @@ public class ListActivationTests
         // 按钮与双击共用一份行内门控（证据数 > 0 才打开，与按钮启用条件同值）。
         var candidates = Repo.Source("Desktop", "Native", "CandidatesDialog.cs");
         Assert.Matches(@"(?m)^\s*private void ShowEvidence\(CommentCandidate\? candidate\)", candidates);
+        // 按钮读的是「当前选中的那一行」，经 Ui.SelectedItem 唯一入口：无选中时该发生什么不交给索引器的越界行为
+        // （返回 null 还是抛，本环境无原生运行时、无网络可核对官方源码，两者都不可验证）。
         Assert.Matches(
-            @"(?m)^\s*_evidenceButton\.Click \+= \(_, _\) => ShowEvidence\(_list\.SelectedItems\[0\]\?\.Tag as CommentCandidate\);",
+            @"(?m)^\s*_evidenceButton\.Click \+= \(_, _\) => ShowEvidence\(Ui\.SelectedItem\(_list\)\?\.Tag as CommentCandidate\);",
             candidates);
         Assert.Matches(
             @"(?m)^\s*if \(_slotsById\.GetValueOrDefault\(candidate\.SlotId\) is not \{ EvidenceIds\.Count: > 0 \} slot\) return;",
@@ -87,7 +89,7 @@ public class ListActivationTests
         var scan = Repo.Source("Desktop", "Native", "ScanResultsDialog.cs");
         Assert.Matches(@"(?m)^\s*private void ShowEvidence\(DocSlot\? slot\)", scan);
         Assert.Matches(
-            @"(?m)^\s*_evidenceButton\.Click \+= \(_, _\) => ShowEvidence\(_list\.SelectedItems\[0\]\?\.Tag as DocSlot\);",
+            @"(?m)^\s*_evidenceButton\.Click \+= \(_, _\) => ShowEvidence\(Ui\.SelectedItem\(_list\)\?\.Tag as DocSlot\);",
             scan);
         Assert.Matches(@"(?m)^\s*if \(slot is null \|\| slot\.EvidenceIds\.Count == 0\) return;", scan);
     }

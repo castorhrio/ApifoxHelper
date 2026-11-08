@@ -70,7 +70,7 @@ internal sealed class ScanResultsDialog : Form
         _list.Columns.Add("文件:行", 320);
         _evidenceButton = Ui.Ghost("查看代码证据");
         _evidenceButton.Enabled = false;
-        _evidenceButton.Click += (_, _) => ShowEvidence(_list.SelectedItems[0]?.Tag as DocSlot);
+        _evidenceButton.Click += (_, _) => ShowEvidence(Ui.SelectedItem(_list)?.Tag as DocSlot);
         _manualButton = Ui.Ghost("手工填写说明");
         _manualButton.Enabled = false;
         _manualButton.Click += (_, _) => ShowManualFill();
@@ -294,7 +294,7 @@ internal sealed class ScanResultsDialog : Form
 
     private void ShowDetail()
     {
-        if (_list.SelectedItems.Count == 0)
+        if (Ui.SelectedItem(_list) is null)
         {
             _detail.Text = "";
             _evidenceButton.Enabled = false;
@@ -302,7 +302,7 @@ internal sealed class ScanResultsDialog : Form
             _removeStaleButton.Enabled = false;
             return;
         }
-        if (_list.SelectedItems[0].Tag is not DocSlot slot) return;
+        if (Ui.SelectedItem(_list)?.Tag is not DocSlot slot) return;
         _evidenceButton.Enabled = slot.EvidenceIds.Count > 0;
         // 手工填写对扫描结果中仍存在的位置可用（服务的候选校验按位置执行）；删除失效标签只对失效 param 可用。
         _manualButton.Enabled = true;
@@ -339,7 +339,7 @@ internal sealed class ScanResultsDialog : Form
     /// <summary>手工填写说明：经既有 AddManualAsync 写任务数据成为候选（占位文字等服务校验拒绝原因原样内联），不写源码。</summary>
     private void ShowManualFill()
     {
-        if (_list.SelectedItems[0]?.Tag is not DocSlot slot) return;
+        if (Ui.SelectedItem(_list)?.Tag is not DocSlot slot) return;
         using var dialog = new ManualDraftDialog(_task, slot);
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         RunManualAdd(slot, dialog.Request, _manualButton);
@@ -348,7 +348,7 @@ internal sealed class ScanResultsDialog : Form
     /// <summary>删除失效 param 标签（作为候选）：只对失效位置可用；实际删除在「注释回写」确认后执行。</summary>
     private void AddRemoveStale()
     {
-        if (_list.SelectedItems[0]?.Tag is not DocSlot slot) return;
+        if (Ui.SelectedItem(_list)?.Tag is not DocSlot slot) return;
         RunManualAdd(slot, new ManualCandidateRequest { SlotId = slot.Id, Action = "removeStale" }, _removeStaleButton);
     }
 

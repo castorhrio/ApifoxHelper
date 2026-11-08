@@ -209,7 +209,7 @@ internal sealed class SupplementsDialog : Form
         }
     }
 
-    private EndpointCheck? Current() => _list.SelectedItems.Count > 0 ? _list.SelectedItems[0].Tag as EndpointCheck : null;
+    private EndpointCheck? Current() => Ui.SelectedItem(_list)?.Tag as EndpointCheck;
 
     /// <summary>按选中接口重建编辑位：初始值与勾选来自已保存条目，输入框提示显示现状文字（与冻结页面同一取值）。</summary>
     private void ReloadEditors()

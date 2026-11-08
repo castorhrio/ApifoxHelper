@@ -151,7 +151,7 @@ internal sealed class EndpointTraceDialog : Form
 
     private void ShowDetail()
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not EndpointCoverage coverage)
+        if (Ui.SelectedItem(_list)?.Tag is not EndpointCoverage coverage)
         {
             _detail.Text = "";
             _evidenceButton.Enabled = false;
@@ -173,7 +173,7 @@ internal sealed class EndpointTraceDialog : Form
 
     private void ShowEvidence()
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not EndpointCoverage coverage) return;
+        if (Ui.SelectedItem(_list)?.Tag is not EndpointCoverage coverage) return;
         if (coverage.EvidenceIds.Count == 0) return;
         using var dialog = new EvidenceDialog(_tasks, _task, coverage.EndpointKey, coverage.EndpointKey, coverage.EvidenceIds);
         dialog.ShowDialog(this);

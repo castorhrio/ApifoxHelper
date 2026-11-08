@@ -89,12 +89,13 @@ public class ListAdvanceTests
             var body = Slice(Repo.Source("Desktop", "Native", file),
                 "private async void RunReview(string reviewState)",
                 file == "CandidatesDialog.cs" ? "/// 导入编码助手结果：选择结果 JSON" : $"private bool {selectName}(");
-            // 记住的是被处理那一行在旧清单上的显示序号：取自选中行本身，不另猜焦点行。
-            Assert.Matches(@"(?m)^\s*var handledAt = _list\.SelectedIndices\[0\];$", body);
+            // 记住的是被处理那一行在旧清单上的显示序号：取自选中行本身，不另猜焦点行，
+            // 且经 Ui.SelectedIndex 唯一入口——界面不自己索引选中集合（第六十一轮）。
+            Assert.Matches(@"(?m)^\s*var handledAt = Ui\.SelectedIndex\(_list\) \?\? ListAdvance\.None;$", body);
             // 命中仍回到该条（原行为逐字保留），未命中才续接下一行。
             Assert.Matches(@"(?m)^\s*if \(!" + selectName + @"\(\w+(?:\.Id)?\)\) Ui\.AdvanceAfterRemoval\(_list, handledAt\);$", body);
             // 顺序：先记序号（await 期间用户可能移动选中，之后取的就是别的行的位置）→ 重建清单 → 再判落点。
-            var capture = body.IndexOf("var handledAt = _list.SelectedIndices[0];", StringComparison.Ordinal);
+            var capture = body.IndexOf("var handledAt = Ui.SelectedIndex(_list) ?? ListAdvance.None;", StringComparison.Ordinal);
             var save = Regex.Match(body, awaitPattern).Index;
             Assert.True(capture >= 0 && save > capture, $"{file}:序号必须在保存动作之前取。");
             var rebuild = body.IndexOf("ApplyFilter();", StringComparison.Ordinal);
@@ -131,7 +132,7 @@ public class ListAdvanceTests
         Assert.True(advance >= 0 && firstRow > advance, "DecisionsDialog:未命中分支必须早于「选中第一行」返回。");
         // 保存路径把序号交进去；筛选切换路径不交（那里没有「刚处理的一条」）。
         Assert.Matches(@"(?m)^\s*ApplyFilter\(entry, handledAt\);$", source);
-        Assert.Matches(@"(?m)^\s*var handledAt = _list\.SelectedIndices\[0\];$", source);
+        Assert.Matches(@"(?m)^\s*var handledAt = Ui\.SelectedIndex\(_list\) \?\? ListAdvance\.None;$", source);
         Assert.Matches(@"(?m)^\s*_filter\.SelectedIndexChanged \+= \(_, _\) => ApplyFilter\(Current\(\)\);$", source);
     }
 

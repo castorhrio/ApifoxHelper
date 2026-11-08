@@ -400,7 +400,7 @@ internal sealed class DecisionsDialog : Form
         Ui.SelectItem(_list.Items[0]);
     }
 
-    private Entry? Current() => _list.SelectedItems.Count > 0 ? _list.SelectedItems[0].Tag as Entry : null;
+    private Entry? Current() => Ui.SelectedItem(_list)?.Tag as Entry;
 
     private void ShowDetail()
     {
@@ -567,7 +567,7 @@ internal sealed class DecisionsDialog : Form
     {
         if (Current() is not { } entry) return;
         // 被处理那一行在旧清单上的显示序号：保存后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
-        var handledAt = _list.SelectedIndices[0];
+        var handledAt = Ui.SelectedIndex(_list) ?? ListAdvance.None;
         EnableActions(null);
         var body = CloneStore(_decisions);
         mutate(body);

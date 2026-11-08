@@ -715,7 +715,7 @@ internal sealed class SyncPreviewDialog : Form
     /// <summary>选中动作的写入内容：与 Web 下载同一脱敏口径（Redactor.RedactNode），缩进 JSON。</summary>
     private void ShowPayload()
     {
-        if (_actionList.SelectedItems.Count == 0 || _actionList.SelectedItems[0].Tag is not PlanAction action)
+        if (Ui.SelectedItem(_actionList)?.Tag is not PlanAction action)
         {
             _payload.Text = "";
             return;

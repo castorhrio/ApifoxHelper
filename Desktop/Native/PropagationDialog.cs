@@ -193,7 +193,7 @@ internal sealed class PropagationDialog : Form
 
     private void ShowDetail()
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not PropagationEntry entry)
+        if (Ui.SelectedItem(_list)?.Tag is not PropagationEntry entry)
         {
             _detail.Text = "";
             return;

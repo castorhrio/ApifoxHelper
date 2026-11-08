@@ -612,7 +612,7 @@ internal sealed class TasksPage : UserControl, INativePage
 
     private void OnSelectedChanged()
     {
-        _selectedTask = _list.SelectedItems.Count > 0 ? _list.SelectedItems[0].Tag as CheckTask : null;
+        _selectedTask = Ui.SelectedItem(_list)?.Tag as CheckTask;
         _selectedId = _selectedTask?.Id;
         _runningShown = false;
         RefreshDetail();

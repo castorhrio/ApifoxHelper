@@ -230,7 +230,7 @@ internal sealed class CheckResultsDialog : Form
     private void PopulateList()
     {
         if (_result is null) return;
-        var selectedKey = _list.SelectedItems.Count > 0 ? (_list.SelectedItems[0].Tag as EndpointCheck)?.Key : null;
+        var selectedKey = (Ui.SelectedItem(_list)?.Tag as EndpointCheck)?.Key;
         var status = FilterValues[Math.Max(0, _filter.SelectedIndex)];
         _list.BeginUpdate();
         _list.Items.Clear();
@@ -274,7 +274,7 @@ internal sealed class CheckResultsDialog : Form
 
     private void ShowDetail()
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not EndpointCheck check)
+        if (Ui.SelectedItem(_list)?.Tag is not EndpointCheck check)
         {
             _detail.Text = "";
             return;

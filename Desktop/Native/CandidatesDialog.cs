@@ -69,7 +69,7 @@ internal sealed class CandidatesDialog : Form
         _list.Columns.Add("来源", 90);
         _evidenceButton = Ui.Ghost("查看代码证据");
         _evidenceButton.Enabled = false;
-        _evidenceButton.Click += (_, _) => ShowEvidence(_list.SelectedItems[0]?.Tag as CommentCandidate);
+        _evidenceButton.Click += (_, _) => ShowEvidence(Ui.SelectedItem(_list)?.Tag as CommentCandidate);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
         // 双击=查看证据经共享入口：命中哪行看哪行的证据（行自身 Tag，不借当前选中），双击列头与空白区不动作。
         Ui.ActivateItem(_list, item => ShowEvidence(item.Tag as CommentCandidate));
@@ -280,7 +280,7 @@ internal sealed class CandidatesDialog : Form
 
     private void ShowDetail()
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not CommentCandidate candidate)
+        if (Ui.SelectedItem(_list)?.Tag is not CommentCandidate candidate)
         {
             _detail.Text = "";
             _answers.Text = "";
@@ -338,9 +338,9 @@ internal sealed class CandidatesDialog : Form
 
     private async void RunReview(string reviewState)
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not CommentCandidate candidate) return;
+        if (Ui.SelectedItem(_list)?.Tag is not CommentCandidate candidate) return;
         // 被处理那一行在旧清单上的显示序号：保存后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
-        var handledAt = _list.SelectedIndices[0];
+        var handledAt = Ui.SelectedIndex(_list) ?? ListAdvance.None;
         SetButtons(null);
         try
         {

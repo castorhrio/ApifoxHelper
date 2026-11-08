@@ -103,7 +103,7 @@ public class ListFocusTests
     public void Entry_JudgesBySharedRuleBeforeHandingTheKeyboard()
     {
         var body = KeepBody();
-        Assert.Matches(@"(?m)^\s*var selected = list\.SelectedIndices\.Count > 0 \? list\.SelectedIndices\[0\] : \(int\?\)null;$", body);
+        Assert.Matches(@"(?m)^\s*var selected = SelectedIndex\(list\);$", body);
         Assert.Matches(@"(?m)^\s*if \(!ListFocus\.ShouldHandToQueue\(selected, list\.FocusedItem\?\.Index\)\) return;$", body);
         Assert.Matches(@"(?m)^\s*list\.Focus\(\);$", body);
         // 先判定后交：不满足条件时键盘停在原处。

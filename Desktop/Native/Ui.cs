@@ -310,6 +310,24 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 读当前选中的那一行（唯一入口）：位次先经 <see cref="ListSelection"/> 量过选中数，量不到就没有这一行——
+    /// 索引器因此在无选中时根本不被触发。把「按钮按下去落在哪一行」交给索引器的越界行为是不可交付的：
+    /// 它要么是那一次点击变成未处理异常，要么是第四十轮修过的「按钮残留启用、点击无响应」同一族缺陷，
+    /// 而本环境没有原生运行时、也没有网络可核对官方源码，两者都无法验证（界面上此前有 20 处显式量数、4 处赌返回值）。
+    /// 与 <see cref="SelectItem"/> 是一对：写选中走那一个入口，读选中走这一个。
+    /// </summary>
+    public static ListViewItem? SelectedItem(ListView list) =>
+        ListSelection.FirstPosition(list.SelectedItems.Count) is { } position ? list.SelectedItems[position] : null;
+
+    /// <summary>
+    /// 读当前选中行的显示序号（唯一入口）：与 <see cref="SelectedItem"/> 同一份 <see cref="ListSelection"/> 判定、
+    /// 取的是同一行——序号是选中集合第一格指向的显示序号，不是选中数。没有选中返回 null，
+    /// 调用方按各自口径决定缺省（续接用 <see cref="ListAdvance.None"/>，即「没有刚处理的一条」）。
+    /// </summary>
+    public static int? SelectedIndex(ListView list) =>
+        ListSelection.FirstPosition(list.SelectedIndices.Count) is { } position ? list.SelectedIndices[position] : null;
+
+    /// <summary>
     /// 程序列表选中（唯一入口）：除 Selected 外同时恢复 Focused——列表重建后 FocusedItem 丢失，
     /// 只恢复选中时方向键从列表头部重新开始、详情跳到第一行；恢复焦点标记后键盘导航从选中项继续（Windows 列表惯例）。
     /// 选中即定位：再把该行滚入可见区——清单重建（刷新、切页、筛选、保存对话框返回、处理完一条续接下一条）
@@ -353,7 +371,7 @@ internal static class Ui
     /// </summary>
     public static void KeepKeyboardOnQueue(ListView list)
     {
-        var selected = list.SelectedIndices.Count > 0 ? list.SelectedIndices[0] : (int?)null;
+        var selected = SelectedIndex(list);
         if (!ListFocus.ShouldHandToQueue(selected, list.FocusedItem?.Index)) return;
         list.Focus();
     }

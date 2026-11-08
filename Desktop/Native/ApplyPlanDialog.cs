@@ -243,7 +243,7 @@ internal sealed class ApplyPlanDialog : Form
 
     private void ShowDiff()
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not PlannedFile file)
+        if (Ui.SelectedItem(_list)?.Tag is not PlannedFile file)
         {
             _diff.Text = "";
             return;

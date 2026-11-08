@@ -245,7 +245,7 @@ internal sealed class ContractsDialog : Form
 
     private void ShowDetail()
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not ResponseContract contract)
+        if (Ui.SelectedItem(_list)?.Tag is not ResponseContract contract)
         {
             _detail.Text = "";
             SetButtons(null);
@@ -302,10 +302,10 @@ internal sealed class ContractsDialog : Form
 
     private async void RunReview(string reviewState)
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not ResponseContract contract) return;
+        if (Ui.SelectedItem(_list)?.Tag is not ResponseContract contract) return;
         var endpointKey = contract.EndpointKey;
         // 被处理那一行在旧清单上的显示序号：审阅后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
-        var handledAt = _list.SelectedIndices[0];
+        var handledAt = Ui.SelectedIndex(_list) ?? ListAdvance.None;
         SetButtons(null);
         try
         {
@@ -358,7 +358,7 @@ internal sealed class ContractsDialog : Form
     /// <summary>打开所选契约关联的代码证据（只读）：返回表达式与调用链是 data 类型的依据。</summary>
     private void ShowEvidence()
     {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not ResponseContract contract) return;
+        if (Ui.SelectedItem(_list)?.Tag is not ResponseContract contract) return;
         using var dialog = new EvidenceDialog(_tasks, _task, contract.EndpointKey, contract.EndpointKey, contract.EvidenceIds);
         dialog.ShowDialog(this);
     }
