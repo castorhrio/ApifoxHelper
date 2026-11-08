@@ -210,7 +210,7 @@ public class ListCopyTests
             .Select(s => s.Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
-        Assert.Equal(["DecisionsDialog.cs", "EvidenceDialog.cs", "SyncPreviewDialog.cs"], declared);
+        Assert.Equal(["DecisionsDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs", "SyncPreviewDialog.cs"], declared);
     }
 
     /// <summary>

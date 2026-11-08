@@ -288,7 +288,7 @@ public sealed class CommentPlanService(TaskStore tasks, ProjectLoader loader)
             }
             try
             {
-                FileStore.AppendJsonLine(journal, new { at = DateTimeOffset.Now, kind = "commentApplyIntent", planId = plan.Id, file = file.RelativePath, file.BeforeHash, file.AfterHash });
+                FileStore.AppendJsonLine(journal, JournalLines.CommentApplyIntentLine(DateTimeOffset.Now, plan.Id, file.RelativePath, file.BeforeHash, file.AfterHash));
                 var fullPath = ProfileStore.ResolveInside(root, file.RelativePath) ?? throw new UserException("文件不在工作区内。");
                 var current = TextFiles.Read(fullPath);
                 if (current.Hash != file.BeforeHash)
@@ -325,7 +325,7 @@ public sealed class CommentPlanService(TaskStore tasks, ProjectLoader loader)
             }
             result.At = DateTimeOffset.Now;
             plan.ApplyResults.Add(result);
-            FileStore.AppendJsonLine(journal, new { at = DateTimeOffset.Now, kind = "commentApplyResult", planId = plan.Id, file = file.RelativePath, result.State, result.Message });
+            FileStore.AppendJsonLine(journal, JournalLines.CommentApplyResultLine(DateTimeOffset.Now, plan.Id, file.RelativePath, result.State, result.Message));
         }
 
         using (await KeyedLocks.AcquireAsync("task:" + taskId, CancellationToken.None))

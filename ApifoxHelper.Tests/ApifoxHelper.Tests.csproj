@@ -48,6 +48,8 @@
     <Compile Include="..\Desktop\Native\PropagationEntries.cs" Link="Shared\PropagationEntries.cs" />
     <Compile Include="..\Desktop\Native\ApplyPlanEntries.cs" Link="Shared\ApplyPlanEntries.cs" />
     <Compile Include="..\Desktop\Native\EvidenceEntries.cs" Link="Shared\EvidenceEntries.cs" />
+    <Compile Include="..\Desktop\Native\JournalEntries.cs" Link="Shared\JournalEntries.cs" />
+    <Compile Include="..\Tasks\JournalLines.cs" Link="Shared\JournalLines.cs" />
     <Compile Include="..\Desktop\Native\PlanEntries.cs" Link="Shared\PlanEntries.cs" />
     <Compile Include="..\Desktop\Native\ApifoxPicker.cs" Link="Shared\ApifoxPicker.cs" />
     <Compile Include="..\Desktop\Native\AttentionCue.cs" Link="Shared\AttentionCue.cs" />

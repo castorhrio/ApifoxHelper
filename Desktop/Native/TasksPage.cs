@@ -116,6 +116,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Button _supplementsButton;
     private readonly Button _remoteViewButton;
     private readonly Button _syncButton;
+    private readonly Button _journalButton;
     private readonly Button _reportButton;
     private readonly Label _reportStatus = Ui.StatusText();
 
@@ -262,6 +263,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _remoteViewButton.Click += (_, _) => ShowCheckResults();
         _syncButton = Ui.Ghost("同步预览");
         _syncButton.Click += (_, _) => ShowSyncPreview();
+        // 任务日志（只读）：注释回写与同步执行把每一步追加到 journal.jsonl，这里按时间顺序看「做到哪一步」。
+        _journalButton = Ui.Ghost("查看任务日志");
+        _journalButton.Click += (_, _) => ShowJournal();
         _remoteActions.Controls.Add(_importRemoteButton);
         _remoteActions.Controls.Add(_remoteCheckButton);
         _remoteActions.Controls.Add(_reloadSwaggerButton);
@@ -269,6 +273,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _remoteActions.Controls.Add(_supplementsButton);
         _remoteActions.Controls.Add(_remoteViewButton);
         _remoteActions.Controls.Add(_syncButton);
+        _remoteActions.Controls.Add(_journalButton);
 
         _reportButton = Ui.Ghost("查看报告与导出");
         _reportButton.Click += (_, _) => ShowReports();
@@ -739,6 +744,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _remoteViewButton.Enabled = scanReady && _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
         // 同步预览需要检查结果；离线任务不能同步（对话框内也如实指引，双重保险）。
         _syncButton.Enabled = scanReady && _selectedTask is { OfflineMode: false } && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
+        // 任务日志只要有记录就能看（注释回写与同步执行都会写它，离线任务同样有），与「查看构建输出」同一门控形状。
+        _journalButton.Enabled = _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Journal));
         // 报告随时可看（与冻结页面一致，不要求先扫描）；作业执行中任务文件在被改写，禁用避免读到半份结果。
         _reportButton.Enabled = _selectedTask is not null && job is null;
         if (job is not null)
@@ -1025,6 +1032,14 @@ internal sealed class TasksPage : UserControl, INativePage
             _buildStatus.Text = "上次构建：记录读取失败：" + Redactor.Redact(ex.Message);
             _buildStatus.ForeColor = UiTokens.BadText;
         }
+    }
+
+    /// <summary>打开任务日志（只读）：数据来自任务目录 journal.jsonl，无写入动作、不重发任何动作。</summary>
+    private void ShowJournal()
+    {
+        if (_selectedTask is null) return;
+        using var dialog = new JournalDialog(_tasks, _selectedTask);
+        dialog.ShowDialog(FindForm());
     }
 
     /// <summary>打开构建输出（只读）：数据来自任务目录 build.json，无写入动作。</summary>

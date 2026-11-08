@@ -56,7 +56,7 @@ public sealed class SyncExecutor(TaskStore tasks, FileStore store, ApifoxCli cli
             });
             await tasks.UpdateAsync(taskId, t => t.Stages.Remote.Status = "executing", CancellationToken.None);
             var journal = tasks.FilePath(taskId, TaskFiles.Journal);
-            FileStore.AppendJsonLine(journal, new { at = DateTimeOffset.Now, kind = "planStart", planId = plan.Id, plan.Hash });
+            FileStore.AppendJsonLine(journal, JournalLines.PlanStartLine(DateTimeOffset.Now, plan.Id, plan.Hash));
 
             var created = new Dictionary<string, long>(StringComparer.Ordinal);
             var stop = false;
@@ -81,7 +81,7 @@ public sealed class SyncExecutor(TaskStore tasks, FileStore store, ApifoxCli cli
                     action.Message = ex.Message;
                 }
                 action.FinishedAt = DateTimeOffset.Now;
-                FileStore.AppendJsonLine(journal, new { at = DateTimeOffset.Now, kind = "actionResult", planId = plan.Id, action.ActionId, action.ResourceKey, action.State, action.Message, action.CreatedId });
+                FileStore.AppendJsonLine(journal, JournalLines.ActionResultLine(DateTimeOffset.Now, plan.Id, action.ActionId, action.ResourceKey, action.State, action.Message, action.CreatedId));
                 await UpdatePlanAsync(taskId, p => p.Actions = plan.Actions);
                 if (action.State != "verified") stop = true;
             }
@@ -96,7 +96,7 @@ public sealed class SyncExecutor(TaskStore tasks, FileStore store, ApifoxCli cli
                 p.Status = status;
                 p.FinishedAt = DateTimeOffset.Now;
             });
-            FileStore.AppendJsonLine(journal, new { at = DateTimeOffset.Now, kind = "planEnd", planId = plan.Id, status });
+            FileStore.AppendJsonLine(journal, JournalLines.PlanEndLine(DateTimeOffset.Now, plan.Id, status));
             await tasks.UpdateAsync(taskId, t =>
             {
                 t.Stages.Remote.Status = status;
@@ -154,7 +154,7 @@ public sealed class SyncExecutor(TaskStore tasks, FileStore store, ApifoxCli cli
             }
         }
 
-        FileStore.AppendJsonLine(journal, new { at = DateTimeOffset.Now, kind = "intent", planId = plan.Id, action.ActionId, action.Kind, action.ResourceKey, action.RemoteId, payloadHash = Canonical.Hash(payload) });
+        FileStore.AppendJsonLine(journal, JournalLines.IntentLine(DateTimeOffset.Now, plan.Id, action.ActionId, action.Kind, action.ResourceKey, action.RemoteId, Canonical.Hash(payload)));
         var result = action.Kind switch
         {
             "createModel" => await cli.CreateSchemaAsync(target, plan.ProjectId, plan.Branch, resolvedFile, CancellationToken.None),
