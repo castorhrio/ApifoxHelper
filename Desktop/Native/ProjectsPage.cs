@@ -32,6 +32,11 @@ internal sealed class ProjectsPage : UserControl, INativePage
     // 选中保留：列表在切页、刷新与保存后都会重建，按配置 Id 恢复选中与键盘焦点（与任务页同一口径）。
     private string? _selectedId;
     private const int ProfileNameColumnWidth = 180;
+    // 列排序状态（ListSort 口径，与任务页同一规则）：未排序时按配置名称升序（ProfileStore.List 的顺序）。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
+    private readonly string[] _columnTitles;
 
     public ProjectsPage(ProfileStore profiles, CompatService compat, ApifoxCli cli, FileStore store, JobRunner jobs, CredentialStore credentials)
     {
@@ -68,6 +73,9 @@ internal sealed class ProjectsPage : UserControl, INativePage
         _list.Columns.Add("分支", 100);
         _list.Columns.Add("Swagger", 90);
         _list.Columns.Add("更新时间", 140);
+        _columnTitles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
 
         // 空态的按钮是独立实例：同一控件不能同时挂在工具栏与空态面板上。
         var emptyButton = Ui.Primary("新建配置");
@@ -131,7 +139,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
         var selectedId = _selectedId;
         try
         {
-            var profiles = _profiles.List();
+            var profiles = ListSort.Order(_profiles.List(), _sortColumn, _sortDescending, SortKey);
             _list.BeginUpdate();
             _list.Items.Clear();
             foreach (var profile in profiles)
@@ -145,6 +153,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
                 _list.Items.Add(item);
             }
             _list.EndUpdate();
+            RefreshSortHeaders();
             FitColumns();
             // 重建后先禁用编辑/探测，恢复选中时由选中事件重新启用；原选中项已不存在则保持禁用。
             _editButton.Enabled = false;
@@ -174,6 +183,42 @@ internal sealed class ProjectsPage : UserControl, INativePage
         var widths = _list.Columns.Cast<ColumnHeader>().Select(c => c.Width).ToArray();
         _list.Columns[0].Width = ListColumns.FillWidth(_list.ClientSize.Width, ProfileNameColumnWidth, widths);
     }
+
+    /// <summary>
+    /// 点击列头排序（DESIGN.md §6「列表列排序」）：同一列再点反向，换一列从升序开始；
+    /// 排序状态留在本页，刷新、切页回来与保存后的重建都按同一列同一方向呈现。
+    /// 只改呈现顺序：配置数据一行未动，选中按配置 Id 恢复（<see cref="RestoreSelection"/>）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        LoadProfiles();
+    }
+
+    /// <summary>表头方向标记：排序列追加 ▲/▼，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _columnTitles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_columnTitles[i], i, _sortColumn, _sortDescending);
+        }
+    }
+
+    /// <summary>
+    /// 列排序键（与建列顺序一一对应，取值与单元格文字同源）：名称、API 项目、Apifox 项目、分支与
+    /// Swagger 按文字（占位值「未绑定/主分支/未配置」同按文字参与，同值相邻）；更新时间按完整时间戳，
+    /// 不只看单元格显示到分钟的文字。文字列按当前区域比较，与资源管理器同序。
+    /// </summary>
+    private static IComparable? SortKey(ProjectProfile profile, int column) => column switch
+    {
+        0 => profile.Name,
+        1 => profile.ApiProject,
+        2 => profile.Apifox.ProjectId ?? "未绑定",
+        3 => profile.Apifox.BranchName ?? "主分支",
+        4 => SwaggerText(profile.Swagger.Type),
+        5 => profile.UpdatedAt,
+        _ => null,
+    };
 
     /// <summary>重建后恢复选中与键盘焦点（经 Ui.SelectItem 唯一入口）；原选中项已不存在（如被删除）时不动作。</summary>
     private void RestoreSelection(string? selectedId)

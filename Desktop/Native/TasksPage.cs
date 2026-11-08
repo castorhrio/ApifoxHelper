@@ -110,6 +110,11 @@ internal sealed class TasksPage : UserControl, INativePage
     private CheckTask? _selectedTask;
     private bool _runningShown;
     private bool _splitAdjusted;
+    // 列排序状态（ListSort 口径）：未排序时按任务创建时间倒序（TaskStore.List 的顺序）。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
+    private readonly string[] _columnTitles;
 
     public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, BuildService builds, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, SupplementService supplementSaves, ReportExportService exports, SyncPlanService syncPlans, SyncExecutor syncExecutor)
     {
@@ -143,6 +148,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _list.Columns.Add("注释候选", 76);
         _list.Columns.Add("Apifox", 110);
         _list.Columns.Add("更新时间", 140);
+        _columnTitles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
 
         var nextTag = new Label
         {
@@ -383,7 +391,7 @@ internal sealed class TasksPage : UserControl, INativePage
         var selectedId = _selectedTask?.Id;
         try
         {
-            var tasks = _tasks.List();
+            var tasks = ListSort.Order(_tasks.List(), _sortColumn, _sortDescending, SortKey);
             _list.BeginUpdate();
             _list.Items.Clear();
             foreach (var task in tasks)
@@ -402,6 +410,7 @@ internal sealed class TasksPage : UserControl, INativePage
                 _list.Items.Add(item);
             }
             _list.EndUpdate();
+            RefreshSortHeaders();
             FitColumns();
             _empty.Visible = tasks.Count == 0;
             _list.Visible = tasks.Count > 0;
@@ -435,6 +444,42 @@ internal sealed class TasksPage : UserControl, INativePage
         var widths = _list.Columns.Cast<ColumnHeader>().Select(c => c.Width).ToArray();
         _list.Columns[0].Width = ListColumns.FillWidth(_list.ClientSize.Width, TaskNameColumnWidth, widths);
     }
+
+    /// <summary>
+    /// 点击列头排序（DESIGN.md §6「列表列排序」）：同一列再点反向，换一列从升序开始；
+    /// 排序状态留在本页，刷新、作业结束与切页回来后的重建都按同一列同一方向呈现。
+    /// 只改呈现顺序：任务数据一行未动，选中按任务 Id 恢复（<see cref="SelectTask"/>）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        LoadTasks();
+    }
+
+    /// <summary>表头方向标记：排序列追加 ▲/▼，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _columnTitles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_columnTitles[i], i, _sortColumn, _sortDescending);
+        }
+    }
+
+    /// <summary>
+    /// 列排序键（与建列顺序一一对应）：名称、配置、下一步按文字；接口与注释候选按数量；
+    /// Apifox 按状态文字；更新时间按时间。文字列按当前区域比较，数量与时间列按数值比较。
+    /// </summary>
+    private static IComparable? SortKey(CheckTask task, int column) => column switch
+    {
+        0 => task.Name,
+        1 => task.ProfileSnapshot.Name,
+        2 => NextStep.Compute(task).Title,
+        3 => task.Stages.Source.Endpoints,
+        4 => task.Stages.Source.Candidates,
+        5 => TaskDisplay.RemoteStatusText(task.Stages.Remote.Status),
+        6 => task.UpdatedAt,
+        _ => null,
+    };
 
     private void SelectTask(string taskId)
     {
