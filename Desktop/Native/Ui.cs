@@ -320,6 +320,18 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 队列续接（唯一落点）：刚处理完的那一行已不属于当前筛选、从清单上消失时，把选中落到接替他位置的
+    /// 下一行（末行落到上一行，落点由 <see cref="ListAdvance"/> 单一口径给出），仍经 <see cref="SelectItem"/>
+    /// 唯一入口——详情与按钮随选中事件跟上，方向键从该行继续。一行不剩时不动作，交由各视图既有的空态出口呈现。
+    /// </summary>
+    public static void AdvanceAfterRemoval(ListView list, int handledIndex)
+    {
+        var index = ListAdvance.IndexAfterRemoval(handledIndex, list.Items.Count);
+        if (index < 0) return;
+        SelectItem(list.Items[index]);
+    }
+
+    /// <summary>
     /// 列表行激活（唯一入口）：双击只在命中行时回调该行。ListView.DoubleClick 不区分命中行，
     /// 双击空白区（首击已清空选中）同样触发——配置页此前会借这个空选中打开「新建配置」对话框；
     /// 命中哪行就激活哪行，双击空白区不动作。

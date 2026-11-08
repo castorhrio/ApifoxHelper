@@ -40,7 +40,7 @@ public class AsyncDisposeGuardTests
         Assert.Matches(@"(?m)^\s*if \(IsDisposed\) return;\s*\n\s*try\s*\n\s*\{\s*\n\s*_store = _drafts\.Load\(_task\.Id\);", review);
 
         // 契约审阅：同一形态；成功守卫在按磁盘重读契约之前。
-        var contracts = MethodBody("ContractsDialog.cs", "private async void RunReview(string reviewState)", "private void SelectContract(string endpointKey)");
+        var contracts = MethodBody("ContractsDialog.cs", "private async void RunReview(string reviewState)", "private bool SelectContract(string endpointKey)");
         AssertThreeGuards(contracts, "ContractsDialog.RunReview", @"await _reviews\.ReviewAsync\(_task\.Id, endpointKey, reviewState, CancellationToken\.None\);");
         Assert.Matches(@"(?m)^\s*if \(IsDisposed\) return;\s*\n\s*if \(!ReloadContracts\(out var error\)\)", contracts);
 

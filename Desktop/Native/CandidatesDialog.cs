@@ -325,6 +325,8 @@ internal sealed class CandidatesDialog : Form
     private async void RunReview(string reviewState)
     {
         if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not CommentCandidate candidate) return;
+        // 被处理那一行在旧清单上的显示序号：保存后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
+        var handledAt = _list.SelectedIndices[0];
         SetButtons(null);
         try
         {
@@ -364,20 +366,22 @@ internal sealed class CandidatesDialog : Form
         }
         UpdateCounts();
         ApplyFilter();
-        SelectCandidate(candidate.Id);
+        if (!SelectCandidate(candidate.Id)) Ui.AdvanceAfterRemoval(_list, handledAt);
         SetStatus(TaskDisplay.ReviewStateText(reviewState) + "。剩余待审阅 " + _store.Candidates.Count(c => c.ReviewState == "pending") + " 条。", UiTokens.OkText);
     }
 
-    private void SelectCandidate(string candidateId)
+    /// <summary>重建后回到刚处理的那一条；返回它是否仍在当前筛选的清单上（不在时由调用方续接下一行）。</summary>
+    private bool SelectCandidate(string candidateId)
     {
         foreach (ListViewItem item in _list.Items)
         {
             if (item.Tag is CommentCandidate candidate && candidate.Id == candidateId)
             {
                 Ui.SelectItem(item);
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     /// <summary>打开注释位置的代码证据（只读），先对照证据再做审阅决定；按钮与双击共用这一份行内门控。</summary>

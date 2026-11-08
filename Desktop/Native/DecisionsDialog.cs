@@ -350,7 +350,7 @@ internal sealed class DecisionsDialog : Form
         _ => true,
     };
 
-    private void ApplyFilter(Entry? keep = null)
+    private void ApplyFilter(Entry? keep = null, int handledIndex = ListAdvance.None)
     {
         _list.BeginUpdate();
         _list.Items.Clear();
@@ -388,6 +388,10 @@ internal sealed class DecisionsDialog : Form
                     return;
                 }
             }
+            // 刚处理的那条已不属于当前筛选、从清单上消失：选中续到接替他位置的下一行，
+            // 不回跳队首——在「待处理」筛选下逐条清队列时，回跳等于每保存一条都要重新找位置。
+            Ui.AdvanceAfterRemoval(_list, handledIndex);
+            return;
         }
         Ui.SelectItem(_list.Items[0]);
     }
@@ -558,6 +562,8 @@ internal sealed class DecisionsDialog : Form
     private async void SaveDecision(string description, Action<DecisionStore> mutate)
     {
         if (Current() is not { } entry) return;
+        // 被处理那一行在旧清单上的显示序号：保存后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
+        var handledAt = _list.SelectedIndices[0];
         EnableActions(null);
         var body = CloneStore(_decisions);
         mutate(body);
@@ -591,7 +597,7 @@ internal sealed class DecisionsDialog : Form
         var changed = _tasks.Get(_task.Id).Revision > before;
         RefreshStates();
         UpdateCounts();
-        ApplyFilter(entry);
+        ApplyFilter(entry, handledAt);
         SetStatus(changed
             ? "已保存：" + description + "。决策变化已使检查结果与同步计划过期，重新检查后生效。"
             : "决策内容没有变化，未修改任务。", UiTokens.OkText);

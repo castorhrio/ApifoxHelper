@@ -291,6 +291,8 @@ internal sealed class ContractsDialog : Form
     {
         if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not ResponseContract contract) return;
         var endpointKey = contract.EndpointKey;
+        // 被处理那一行在旧清单上的显示序号：审阅后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
+        var handledAt = _list.SelectedIndices[0];
         SetButtons(null);
         try
         {
@@ -319,20 +321,22 @@ internal sealed class ContractsDialog : Form
         }
         UpdateCounts();
         ApplyFilter();
-        SelectContract(endpointKey);
+        if (!SelectContract(endpointKey)) Ui.AdvanceAfterRemoval(_list, handledAt);
         SetStatus(TaskDisplay.ContractStateText(reviewState) + "。剩余待确认 " + _contracts.Count(c => c.ReviewState == "pending") + " 个。确认或拒绝后需重新检查 Apifox 差异才会生效。", UiTokens.OkText);
     }
 
-    private void SelectContract(string endpointKey)
+    /// <summary>重建后回到刚审阅的那一条；返回它是否仍在当前筛选的清单上（不在时由调用方续接下一行）。</summary>
+    private bool SelectContract(string endpointKey)
     {
         foreach (ListViewItem item in _list.Items)
         {
             if (item.Tag is ResponseContract contract && contract.EndpointKey == endpointKey)
             {
                 Ui.SelectItem(item);
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     /// <summary>打开所选契约关联的代码证据（只读）：返回表达式与调用链是 data 类型的依据。</summary>
