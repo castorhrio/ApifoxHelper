@@ -174,7 +174,9 @@ public class ListFocusTests
     // ---------- 三处审阅路径：落点之后才交，被拒分支不交 ----------
 
     [Theory]
-    [InlineData("CandidatesDialog.cs", "private async void RunReview(string reviewState)", "/// 导入编码助手结果：选择结果 JSON", "Ui.AdvanceAfterRemoval(_list, handledAt);")]
+    // 候选审阅（第一百一十轮起）：五个候选动作共用同一个异步落点 RunCandidateUpdate，
+    // 交回键盘因此只在这一处（RunReview 只剩「构造请求 + 交给落点」，不再有 await）。
+    [InlineData("CandidatesDialog.cs", "private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText)", "private static Color ToneColor(string tone)", "Ui.AdvanceAfterRemoval(_list, handledAt);")]
     [InlineData("ContractsDialog.cs", "private async void RunReview(string reviewState)", "private bool SelectContract(string endpointKey)", "Ui.AdvanceAfterRemoval(_list, handledAt);")]
     [InlineData("DecisionsDialog.cs", "private async void SaveDecision(string description, Action<DecisionStore> mutate)", "private static DecisionStore CloneStore(DecisionStore store)", "ApplyFilter(entry, handledAt);")]
     public void ReviewPaths_HandKeyboardAfterTheLanding(string file, string signature, string endAnchor, string landing)

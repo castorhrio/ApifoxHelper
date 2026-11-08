@@ -63,6 +63,7 @@
     <Compile Include="..\Desktop\Native\EndpointTraceSort.cs" Link="Shared\EndpointTraceSort.cs" />
     <Compile Include="..\Desktop\Native\DecisionSort.cs" Link="Shared\DecisionSort.cs" />
     <Compile Include="..\Desktop\Native\CandidateSort.cs" Link="Shared\CandidateSort.cs" />
+    <Compile Include="..\Desktop\Native\CandidateEdit.cs" Link="Shared\CandidateEdit.cs" />
     <Compile Include="..\Desktop\Native\ContractSort.cs" Link="Shared\ContractSort.cs" />
     <Compile Include="..\Desktop\Native\SlotSort.cs" Link="Shared\SlotSort.cs" />
     <Compile Include="..\Desktop\Native\PropagationSort.cs" Link="Shared\PropagationSort.cs" />

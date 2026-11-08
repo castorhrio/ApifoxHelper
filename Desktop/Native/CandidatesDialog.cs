@@ -14,6 +14,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 状态表：读取失败=内联错误与下一步；没有候选=引导各生成入口（仍可导入）；正常=计数行 + 列表 + 详情与审阅动作。
 /// 候选清单支持点击列头排序（第一百轮，口径见 <see cref="CandidateSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始、表头带方向标记；排序只改呈现顺序，选中仍按候选自身恢复。
+/// 候选文字可改、「保存修改」与「撤销接受」两个动作（第一百一十一轮，口径见 <see cref="CandidateEdit"/>）：
+/// 候选文字正是要写进源码的 /// 注释，生成或导入的文字有错字时在这里改；已接受的候选可退回待审阅。
 /// </summary>
 internal sealed class CandidatesDialog : Form
 {
@@ -28,12 +30,16 @@ internal sealed class CandidatesDialog : Form
     private readonly TextBox _keyword = Ui.Input();
     private readonly ListView _list = Ui.List();
     private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
+    private readonly TextBox _text = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
+    private readonly Label _textCaption = Ui.Caption();
     private readonly TextBox _answers = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _answersCaption = Ui.Caption();
     private readonly CheckBox _overwrite = new() { AutoSize = true, Text = "覆盖该位置已有的有效注释（需要改写时勾选）" };
     private readonly Button _acceptButton;
     private readonly Button _deferButton;
     private readonly Button _rejectButton;
+    private readonly Button _saveTextButton;
+    private readonly Button _undoButton;
     private readonly Button _importButton;
     private readonly Button _evidenceButton;
     private readonly Label _status = Ui.StatusLine();
@@ -70,7 +76,7 @@ internal sealed class CandidatesDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(960, 680);
+        ClientSize = new Size(960, 740);
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -95,6 +101,10 @@ internal sealed class CandidatesDialog : Form
         _deferButton.Click += (_, _) => RunReview("deferred");
         _rejectButton = Ui.Ghost("驳回");
         _rejectButton.Click += (_, _) => RunReview("rejected");
+        _saveTextButton = Ui.Ghost("保存修改");
+        _saveTextButton.Click += (_, _) => SaveText();
+        _undoButton = Ui.Ghost("撤销接受");
+        _undoButton.Click += (_, _) => UndoAccept();
         _importButton = Ui.Ghost("导入编码助手结果");
         _importButton.Click += (_, _) => ImportResult();
 
@@ -124,6 +134,10 @@ internal sealed class CandidatesDialog : Form
         detailGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddCaptionRow(detailGrid, "候选说明");
         AddBoxRow(detailGrid, Ui.Hairline(_detail), 92);
+        // 候选文字是可编辑的那一格（DESIGN.md §6「候选文字编辑」）：候选文字正是要写进源码的 /// 注释，
+        // 生成或导入的文字有错字时在这里改，改完点「保存修改」——写入仍经 DraftService.UpdateAsync 既有校验。
+        AddCaptionRow(detailGrid, _textCaption);
+        AddBoxRow(detailGrid, Ui.Field(_text), 56);
         _answersCaption.Text = "待确认问题的回答";
         _answersCaption.Margin = new Padding(0, UiTokens.Sm, 0, 0);
         AddCaptionRow(detailGrid, _answersCaption);
@@ -131,7 +145,9 @@ internal sealed class CandidatesDialog : Form
         AddCaptionRow(detailGrid, _overwrite);
         AddCaptionRow(detailGrid, _status);
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 7, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 9, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -141,15 +157,19 @@ internal sealed class CandidatesDialog : Form
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _deferButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _rejectButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _saveTextButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _undoButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _importButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         closeButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         actionRow.Controls.Add(_acceptButton, 0, 0);
         actionRow.Controls.Add(_deferButton, 1, 0);
         actionRow.Controls.Add(_rejectButton, 2, 0);
-        actionRow.Controls.Add(_importButton, 3, 0);
-        actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 4, 0);
-        actionRow.Controls.Add(_evidenceButton, 5, 0);
-        actionRow.Controls.Add(closeButton, 6, 0);
+        actionRow.Controls.Add(_saveTextButton, 3, 0);
+        actionRow.Controls.Add(_undoButton, 4, 0);
+        actionRow.Controls.Add(_importButton, 5, 0);
+        actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 6, 0);
+        actionRow.Controls.Add(_evidenceButton, 7, 0);
+        actionRow.Controls.Add(closeButton, 8, 0);
 
         // 停靠按集合倒序生效：筛选行最先停靠（顶部），其次按钮行（最底部）、详情区，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -241,6 +261,11 @@ internal sealed class CandidatesDialog : Form
         SetButtons(null);
         if (!keepAggregate) _counts.Text = "";
         _detail.Text = "";
+        // 候选文字那一格随提示一起收掉：清单已经藏起来、动作已经禁用，留着上一行候选的文字
+        // 等于让用户对着一条看不见的候选改字（改完也没有「保存修改」可按）。
+        _text.Text = "";
+        _text.Enabled = false;
+        _textCaption.Text = CandidateEdit.TextCaptionNoSelection;
     }
 
     /// <summary>计数行按全部候选统计（不随筛选变化），等宽数字不跳宽。</summary>
@@ -375,6 +400,9 @@ internal sealed class CandidatesDialog : Form
             _detail.Text = ListSelection.ShouldExplainMissingSelection(_list.Items.Count)
                 ? ListSelection.MissingSelectionHint(ListFilter.CandidateNoun)
                 : "";
+            _text.Text = "";
+            _text.Enabled = false;
+            _textCaption.Text = CandidateEdit.TextCaptionNoSelection;
             _answers.Text = "";
             _answersDirty = false;
             _overwrite.Checked = false;
@@ -383,10 +411,11 @@ internal sealed class CandidatesDialog : Form
             return;
         }
         var slot = _slotsById.GetValueOrDefault(candidate.SlotId);
+        // 候选文字不再重复写进这块只读摘要：它就在下面那一格可编辑的输入框里（改完点「保存修改」），
+        // 同一段文字摆在两个相邻的框里，用户不知道该改哪一个。
         var lines = new List<string>
         {
             "符号：" + QueueText.CandidateTitle(candidate, slot) + (slot is null ? "（该注释位置已不在本次扫描结果中，请重新扫描后再审阅）" : ""),
-            "候选：" + candidate.Text,
         };
         if (candidate.Warnings.Count > 0) lines.Add("提示：" + string.Join("；", candidate.Warnings));
         if (candidate.OpenQuestions.Count > 0)
@@ -406,6 +435,12 @@ internal sealed class CandidatesDialog : Form
         _detail.SelectionStart = 0;
         _detail.SelectionLength = 0;
 
+        // 候选文字那一格：可编辑的候选（"set"）填当前文字并可改，删除失效标签的候选只读
+        // （那一格讲的是删除动作，没有可改的说明文字，与冻结页面同一口径）。
+        _text.Text = candidate.Text;
+        _text.Enabled = CandidateEdit.CanEditText(candidate);
+        _textCaption.Text = CandidateEdit.TextCaptionFor(candidate);
+
         _answers.Text = candidate.Answers ?? "";
         _answersDirty = false;
         _answers.Enabled = candidate.OpenQuestions.Count > 0;
@@ -419,64 +454,36 @@ internal sealed class CandidatesDialog : Form
         SetButtons(candidate);
     }
 
-    /// <summary>审阅动作只在注释位置仍在扫描结果中时可用（服务的审阅校验按位置执行）。</summary>
+    /// <summary>
+    /// 审阅动作只在注释位置仍在扫描结果中时可用（服务的审阅校验按位置执行）。
+    /// 「保存修改」与「撤销接受」的可用性取 <see cref="CandidateEdit"/> 单一口径：
+    /// 前者要文字可编辑（"set"），后者要当前已接受——不可用的按钮如实禁用，不点了没反应。
+    /// </summary>
     private void SetButtons(CommentCandidate? candidate)
     {
-        var enabled = candidate is not null && _slotsById.ContainsKey(candidate.SlotId);
-        _acceptButton.Enabled = enabled;
-        _deferButton.Enabled = enabled;
-        _rejectButton.Enabled = enabled;
+        var slotExists = candidate is not null && _slotsById.ContainsKey(candidate.SlotId);
+        _acceptButton.Enabled = slotExists;
+        _deferButton.Enabled = slotExists;
+        _rejectButton.Enabled = slotExists;
+        _saveTextButton.Enabled = candidate is not null && CandidateEdit.CanSaveText(candidate, slotExists);
+        _undoButton.Enabled = candidate is not null && CandidateEdit.CanUndoAccept(candidate, slotExists);
     }
 
-    private async void RunReview(string reviewState)
+    /// <summary>
+    /// 三个审阅动作（接受 / 搁置 / 驳回）：请求体经 <see cref="CandidateEdit"/> 单一口径构造后交给
+    /// <see cref="RunCandidateUpdate"/>——写入、重读、重建、续接选中与交回键盘只有那一处，
+    /// 五个动作（三个审阅 + 保存修改 + 撤销接受）不各写一套（两套落点必然漂移）。
+    /// 接受时连候选文字一起提交（用户可能刚在那一格里改过），回答与覆盖勾选只在本次动过时才带上
+    /// （不把没动过的写成空串，与冻结页面同一份）。
+    /// </summary>
+    private void RunReview(string reviewState)
     {
         if (Ui.SelectedItem(_list)?.Tag is not CommentCandidate candidate) return;
-        // 被处理那一行在旧清单上的显示序号：保存后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
-        var handledAt = Ui.SelectedIndex(_list) ?? ListAdvance.None;
-        SetButtons(null);
-        try
-        {
-            var update = new CandidateUpdateRequest { ReviewState = reviewState };
-            if (reviewState == "accepted")
-            {
-                if (_answersDirty) update.Answers = _answers.Text;
-                if (_overwrite.Enabled) update.OverwriteExisting = _overwrite.Checked;
-            }
-            await _drafts.UpdateAsync(_task.Id, candidate.Id, update, CancellationToken.None);
-        }
-        catch (UserException ex)
-        {
-            if (IsDisposed) return;
-            SetStatus(ex.Message, UiTokens.WarnText);
-            SetButtons(candidate);
-            return;
-        }
-        catch (Exception ex)
-        {
-            if (IsDisposed) return;
-            SetStatus("保存审阅结果失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
-            SetButtons(candidate);
-            return;
-        }
-        if (IsDisposed) return;
-        try
-        {
-            _store = _drafts.Load(_task.Id);
-        }
-        catch (Exception ex)
-        {
-            // 写入已成功，重新读取失败时如实说明，不显示成审阅失败。
-            SetStatus("审阅结果已保存，但重新读取候选失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
-            SetButtons(candidate);
-            return;
-        }
-        UpdateCounts();
-        ApplyFilter();
-        if (!SelectCandidate(candidate.Id)) Ui.AdvanceAfterRemoval(_list, handledAt);
-        // 保存是点按钮完成的，焦点还在那个按钮上：把键盘交回清单，方向键才接着往下走（ListFocus 口径）。
-        // 被拒与重新读取失败的路径都在上面返回——那时用户要改的是回答框里的文字，不抢他的键盘。
-        Ui.KeepKeyboardOnQueue(_list);
-        SetStatus(TaskDisplay.ReviewStateText(reviewState) + "。剩余待审阅 " + _store.Candidates.Count(c => c.ReviewState == "pending") + " 条。", UiTokens.OkText);
+        var update = reviewState == "accepted"
+            ? CandidateEdit.AcceptRequest(candidate, _text.Text, _answersDirty ? _answers.Text : null, _overwrite.Enabled ? _overwrite.Checked : null)
+            : new CandidateUpdateRequest { ReviewState = reviewState };
+        RunCandidateUpdate(update, () => TaskDisplay.ReviewStateText(reviewState)
+            + "。剩余待审阅 " + _store.Candidates.Count(c => c.ReviewState == "pending") + " 条。");
     }
 
     /// <summary>重建后回到刚处理的那一条；返回它是否仍在当前筛选的清单上（不在时由调用方续接下一行）。</summary>
@@ -567,6 +574,83 @@ internal sealed class CandidatesDialog : Form
     {
         _status.Text = message;
         _status.ForeColor = color;
+    }
+
+    /// <summary>
+    /// 保存修改（DESIGN.md §6「候选文字编辑」）：把这一格改过的候选文字写回任务数据，
+    /// 请求体由 <see cref="CandidateEdit.SaveTextRequest"/> 单一口径构造（只提交文字、回答与覆盖勾选，
+    /// 不动审阅状态——改文字不该顺手把一条待审阅的候选变成已接受），
+    /// 校验仍全在 DraftService.UpdateAsync（占位文字、超长、注释标记、位置已不存在等拒绝原因原样内联）。
+    /// </summary>
+    private void SaveText()
+    {
+        if (Ui.SelectedItem(_list)?.Tag is not CommentCandidate candidate) return;
+        if (!CandidateEdit.CanSaveText(candidate, _slotsById.ContainsKey(candidate.SlotId))) return;
+        RunCandidateUpdate(
+            CandidateEdit.SaveTextRequest(_text.Text, _answersDirty ? _answers.Text : null, _overwrite.Enabled ? _overwrite.Checked : null),
+            () => CandidateEdit.SaveDoneText);
+    }
+
+    /// <summary>
+    /// 撤销接受（DESIGN.md §6「候选文字编辑」）：把已接受的候选退回待审阅——此前「接受」在原生界面是单向的，
+    /// 已接受的候选只能改成搁置或驳回。请求体由 <see cref="CandidateEdit.UndoAcceptRequest"/> 单一口径构造。
+    /// </summary>
+    private void UndoAccept()
+    {
+        if (Ui.SelectedItem(_list)?.Tag is not CommentCandidate candidate) return;
+        if (!CandidateEdit.CanUndoAccept(candidate, _slotsById.ContainsKey(candidate.SlotId))) return;
+        RunCandidateUpdate(CandidateEdit.UndoAcceptRequest(), () => CandidateEdit.UndoDoneText);
+    }
+
+    /// <summary>
+    /// 保存修改与撤销接受共用的落点（与三个审阅动作同一口径）：写入 → 按磁盘重读候选 → 重建清单 →
+    /// 回到该候选（它已不在当前筛选上时续接下一行，<see cref="ListAdvance"/> 口径）→ 把键盘交回清单。
+    /// 两条被拒分支与重新读取失败分支都在交键盘之前返回——那时用户要改的就是手里那一格
+    /// （候选文字、待确认问题的回答），把键盘交走等于把下一步从他手里拿走（与第五十八轮同一取舍）。
+    /// await 之后触达界面以前先检查 IsDisposed（第四十五轮口径：对话框执行期间「关闭」始终可用）。
+    /// </summary>
+    private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText)
+    {
+        if (Ui.SelectedItem(_list)?.Tag is not CommentCandidate candidate) return;
+        // 被处理那一行在旧清单上的显示序号：保存后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
+        var handledAt = Ui.SelectedIndex(_list) ?? ListAdvance.None;
+        SetButtons(null);
+        try
+        {
+            await _drafts.UpdateAsync(_task.Id, candidate.Id, request, CancellationToken.None);
+        }
+        catch (UserException ex)
+        {
+            if (IsDisposed) return;
+            SetStatus(ex.Message, UiTokens.WarnText);
+            SetButtons(candidate);
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (IsDisposed) return;
+            SetStatus("保存候选失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+            SetButtons(candidate);
+            return;
+        }
+        if (IsDisposed) return;
+        try
+        {
+            _store = _drafts.Load(_task.Id);
+        }
+        catch (Exception ex)
+        {
+            // 写入已成功，重新读取失败时如实说明，不显示成保存失败。
+            SetStatus("已保存，但重新读取候选失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+            SetButtons(candidate);
+            return;
+        }
+        UpdateCounts();
+        ApplyFilter();
+        if (!SelectCandidate(candidate.Id)) Ui.AdvanceAfterRemoval(_list, handledAt);
+        Ui.KeepKeyboardOnQueue(_list);
+        // 完成文案在重读之后才算：审阅动作那句「剩余待审阅 N 条」要的是写入后的计数。
+        SetStatus(doneText(), UiTokens.OkText);
     }
 
     private static Color ToneColor(string tone) => tone switch

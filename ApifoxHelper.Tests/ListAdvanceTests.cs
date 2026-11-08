@@ -80,15 +80,17 @@ public class ListAdvanceTests
     [Fact]
     public void ReviewDialogs_CaptureTheHandledRowBeforeSavingAndAdvanceWhenItIsGone()
     {
-        foreach (var (file, selectName, awaitPattern) in new[]
+        // 候选审阅（第一百一十轮起）：五个候选动作共用同一个异步落点 RunCandidateUpdate，
+        // 记序号、重建与续接因此只在这一处（RunReview 只剩「构造请求 + 交给落点」）。
+        foreach (var (file, selectName, awaitPattern, signature, endAnchor) in new[]
         {
-            ("CandidatesDialog.cs", "SelectCandidate", @"await _drafts\.UpdateAsync\(_task\.Id, candidate\.Id, update, CancellationToken\.None\);"),
-            ("ContractsDialog.cs", "SelectContract", @"await _reviews\.ReviewAsync\(_task\.Id, endpointKey, reviewState, CancellationToken\.None\);"),
+            ("CandidatesDialog.cs", "SelectCandidate", @"await _drafts\.UpdateAsync\(_task\.Id, candidate\.Id, request, CancellationToken\.None\);",
+                "private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText)", "private static Color ToneColor(string tone)"),
+            ("ContractsDialog.cs", "SelectContract", @"await _reviews\.ReviewAsync\(_task\.Id, endpointKey, reviewState, CancellationToken\.None\);",
+                "private async void RunReview(string reviewState)", "private bool SelectContract(string endpointKey)"),
         })
         {
-            var body = Slice(Repo.Source("Desktop", "Native", file),
-                "private async void RunReview(string reviewState)",
-                file == "CandidatesDialog.cs" ? "/// 导入编码助手结果：选择结果 JSON" : $"private bool {selectName}(");
+            var body = Slice(Repo.Source("Desktop", "Native", file), signature, endAnchor);
             // 记住的是被处理那一行在旧清单上的显示序号：取自选中行本身，不另猜焦点行，
             // 且经 Ui.SelectedIndex 唯一入口——界面不自己索引选中集合（第六十一轮）。
             Assert.Matches(@"(?m)^\s*var handledAt = Ui\.SelectedIndex\(_list\) \?\? ListAdvance\.None;$", body);

@@ -35,9 +35,15 @@ public class AsyncDisposeGuardTests
     public void ReviewAndSavePaths_GuardAllContinuations()
     {
         // 候选审阅：两条 catch 与成功续体（重新读取候选之前）各一处守卫。
-        var review = MethodBody("CandidatesDialog.cs", "private async void RunReview(string reviewState)", "/// 导入编码助手结果：选择结果 JSON");
-        AssertThreeGuards(review, "CandidatesDialog.RunReview", @"await _drafts\.UpdateAsync\(_task\.Id, candidate\.Id, update, CancellationToken\.None\);");
+        // 第一百一十一轮起五个候选动作（三个审阅 + 保存修改 + 撤销接受）共用同一个异步落点
+        // RunCandidateUpdate，守卫因此只在这一处（此前 RunReview 与保存路径各写一套，两套必然漂移）；
+        // RunReview 只剩「构造请求 + 交给落点」，不再有 await，故下面另钉它不得自己写 await。
+        var review = MethodBody("CandidatesDialog.cs", "private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText)", "private static Color ToneColor(string tone)");
+        AssertThreeGuards(review, "CandidatesDialog.RunCandidateUpdate", @"await _drafts\.UpdateAsync\(_task\.Id, candidate\.Id, request, CancellationToken\.None\);");
         Assert.Matches(@"(?m)^\s*if \(IsDisposed\) return;\s*\n\s*try\s*\n\s*\{\s*\n\s*_store = _drafts\.Load\(_task\.Id\);", review);
+        var reviewEntry = MethodBody("CandidatesDialog.cs", "private void RunReview(string reviewState)", "/// <summary>重建后回到刚处理的那一条");
+        Assert.DoesNotContain("await ", reviewEntry, StringComparison.Ordinal);
+        Assert.Contains("RunCandidateUpdate(update,", reviewEntry, StringComparison.Ordinal);
 
         // 契约审阅：同一形态；成功守卫在按磁盘重读契约之前。
         var contracts = MethodBody("ContractsDialog.cs", "private async void RunReview(string reviewState)", "private bool SelectContract(string endpointKey)");
