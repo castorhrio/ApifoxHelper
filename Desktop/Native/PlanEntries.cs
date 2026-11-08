@@ -25,6 +25,14 @@ public static class PlanEntries
     }
 
     /// <summary>
+    /// CLI 校验列文字：有校验结果时是结果原文，还没有校验结果时是「—」。
+    /// 单元格与排序键取同一份原始值（<see cref="SyncPlanSort.ActionKey"/> 的校验列参数就是这里的入参），
+    /// 不各写一套——「—」是占位不是值，排序时按「还没有校验结果」处理（交 null，升序排在最前）。
+    /// </summary>
+    public static string ValidationText(string validation) =>
+        string.IsNullOrWhiteSpace(validation) ? "—" : validation;
+
+    /// <summary>
     /// 关键词匹配的字段：那一行在屏幕上被读作的那四格——动作、资源、改动、状态。
     /// 动作序号（第几步）与远端 ID 是数字、不进关键词（与另几张清单的计数列同一取舍）；
     /// CLI 校验那一列几乎全是「通过」，不进；写入内容在下方预览框而不在这一行，不进。

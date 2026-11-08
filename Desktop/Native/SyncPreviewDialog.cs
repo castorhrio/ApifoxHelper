@@ -25,6 +25,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 生成失败/执行被拒=原因与下一步；计划就绪=概要 + 写入清单 + 排除清单 + 影响与保留设置；
 /// 执行或核对结束=逐动作结果 + 按计划状态如实报告（部分完成不显示成全部成功）；
 /// 计划生成后任务内容有变化=过期提示（计划不能再执行，仍如实展示）。
+/// 两张清单都支持点击列头排序（第一百零六轮，口径见 <see cref="SyncPlanSort"/> 与 <see cref="ListSort"/>）：
+/// 同一列再点反向、换一列从升序开始、表头带方向标记，排序只改呈现顺序。
 /// </summary>
 internal sealed class SyncPreviewDialog : Form
 {
@@ -91,6 +93,15 @@ internal sealed class SyncPreviewDialog : Form
     // 写入清单的标识列：首列是动作序号（第几步），认不出这一行写的是哪个接口或模型；
     // 名称格在「资源」列——Ctrl+C 交出去的是它。
     private const int ActionResourceColumn = 2;
+
+    // 列排序状态（ListSort 口径，第一百零六轮）：两张清单各记各的，未排序时保持计划自身的顺序
+    // （写入清单即执行顺序：模型在前、接口在后）。
+    private int _actionSortColumn = ListSort.None;
+    private bool _actionSortDescending;
+    private readonly string[] _actionTitles;
+    private int _excludedSortColumn = ListSort.None;
+    private bool _excludedSortDescending;
+    private readonly string[] _excludedTitles;
 
     private readonly ListView _actionList = Ui.List(identityColumn: ActionResourceColumn);
     // 写入清单的关键词框（第八十轮）：这一屏是整份冻结计划的逐动作写入清单，真实项目几十上百个动作，
@@ -200,12 +211,18 @@ internal sealed class SyncPreviewDialog : Form
         _actionList.Columns.Add("改动", 280);
         _actionList.Columns.Add("CLI 校验", 110);
         _actionList.Columns.Add("状态", 110);
+        _actionTitles = _actionList.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _actionList.ColumnClick += (_, e) => SortActions(e.Column);
         _actionList.SelectedIndexChanged += (_, _) => ShowPayload();
         _actionKeyword.PlaceholderText = ListFilter.PlanActionSearchPlaceholder;
         _actionKeyword.TextChanged += (_, _) => PopulateActions();
 
         _excludedList.Columns.Add("资源", 240);
         _excludedList.Columns.Add("未纳入原因", 620);
+        _excludedTitles = _excludedList.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：与写入清单同一手势、同一份判定，两张清单各记各的列。
+        _excludedList.ColumnClick += (_, e) => SortExcluded(e.Column);
         _excludedKeyword.PlaceholderText = ListFilter.ExclusionSearchPlaceholder;
         _excludedKeyword.TextChanged += (_, _) => PopulateExcluded();
         var excludedInner = Ui.Hairline(_excludedList);
@@ -865,14 +882,27 @@ internal sealed class SyncPreviewDialog : Form
         var plan = _plan;
         if (plan is null) return;
         var selectedId = (Ui.SelectedItem(_actionList)?.Tag as PlanAction)?.ActionId;
-        var visible = ListFilter.Apply(
-            plan.Actions.Select((action, index) => (action, index)),
-            _actionKeyword.Text,
-            row => PlanEntries.KeywordFields(
+        // 筛选先于排序（ListFilter → ListSort，与另十处同一顺序）：筛掉的行不参与排序，
+        // 排序键取 SyncPlanSort 单一口径（与单元格同源），界面不就地写 switch。
+        var visible = ListSort.Order(
+            ListFilter.Apply(
+                plan.Actions.Select((action, index) => (action, index)),
+                _actionKeyword.Text,
+                row => PlanEntries.KeywordFields(
+                    TaskDisplay.PlanActionKindText(row.action.Kind),
+                    row.action.ResourceKey,
+                    PlanEntries.ChangesText(row.action.Changes, row.action.ManagedFields),
+                    TaskDisplay.PlanActionStateText(row.action.State))),
+            _actionSortColumn, _actionSortDescending,
+            (row, column) => SyncPlanSort.ActionKey(
+                row.index + 1,
                 TaskDisplay.PlanActionKindText(row.action.Kind),
                 row.action.ResourceKey,
+                row.action.RemoteId,
                 PlanEntries.ChangesText(row.action.Changes, row.action.ManagedFields),
-                TaskDisplay.PlanActionStateText(row.action.State)));
+                row.action.Validation,
+                TaskDisplay.PlanActionStateText(row.action.State),
+                column));
         _actionList.BeginUpdate();
         try
         {
@@ -889,7 +919,8 @@ internal sealed class SyncPreviewDialog : Form
                 var changes = row.SubItems.Add(PlanEntries.ChangesText(action.Changes, action.ManagedFields));
                 changes.Font = UiTokens.Body.Value;
                 if (action.Notes.Count > 0) row.ToolTipText = string.Join("\n", action.Notes);
-                var validation = row.SubItems.Add(string.IsNullOrWhiteSpace(action.Validation) ? "—" : action.Validation);
+                // 校验格与排序键取同一份原始值（PlanEntries.ValidationText 只决定那一格的占位）。
+                var validation = row.SubItems.Add(PlanEntries.ValidationText(action.Validation));
                 validation.Font = UiTokens.Body.Value;
                 if (action.Validation is { Length: > 0 } and not "通过") validation.ForeColor = UiTokens.BadText;
                 var state = row.SubItems.Add(TaskDisplay.PlanActionStateText(action.State));
@@ -906,6 +937,7 @@ internal sealed class SyncPreviewDialog : Form
         {
             _actionList.EndUpdate();
         }
+        RefreshActionSortHeaders();
         if (ListFilter.IsFilteredEmpty(plan.Actions.Count, visible.Count))
         {
             _actionHint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.ActionNoun);
@@ -930,6 +962,28 @@ internal sealed class SyncPreviewDialog : Form
     }
 
     /// <summary>
+    /// 写入清单的列头点击（DESIGN.md §6「列表列排序」，第一百零六轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="PopulateActions"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改计划与逐动作结果，选中仍按动作标识恢复
+    /// （<see cref="PopulateActions"/> 重建前记下、重建后找回，写入内容随选中事件跟上）。
+    /// 序号列仍是执行顺序里的第几步：按序号升序即回到执行顺序，排序之后仍能按序号核对执行日志。
+    /// </summary>
+    private void SortActions(int column)
+    {
+        (_actionSortColumn, _actionSortDescending) = ListSort.Toggle(_actionSortColumn, _actionSortDescending, column);
+        PopulateActions();
+    }
+
+    /// <summary>写入清单的表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshActionSortHeaders()
+    {
+        for (var i = 0; i < _actionList.Columns.Count && i < _actionTitles.Length; i++)
+        {
+            _actionList.Columns[i].Text = ListSort.Header(_actionTitles[i], i, _actionSortColumn, _actionSortDescending);
+        }
+    }
+
+    /// <summary>
     /// 未纳入清单的关键词框（DESIGN.md §6「列表筛选」，第八十六轮）：输入即筛选，只改可见行——
     /// 计数行按整份计划统计、不随关键词变化（「排除 N」正是要找的那批的凭据，被一屏的空抹掉等于把结果藏起来）。
     /// 筛到零行不是「计划没有未纳入条目」：说清这一屏为什么空，下一步就在那个框上（这一屏没有筛选下拉，
@@ -940,10 +994,15 @@ internal sealed class SyncPreviewDialog : Form
     {
         var plan = _plan;
         if (plan is null) return;
-        var visible = ListFilter.Apply(
-            plan.Excluded,
-            _excludedKeyword.Text,
-            exclusion => ExclusionEntries.KeywordFields(exclusion.ResourceKey, exclusion.Reason));
+        // 筛选先于排序（ListFilter → ListSort，与写入清单同一顺序）：筛掉的行不参与排序，
+        // 排序键取 SyncPlanSort 单一口径（与两格同源）。
+        var visible = ListSort.Order(
+            ListFilter.Apply(
+                plan.Excluded,
+                _excludedKeyword.Text,
+                exclusion => ExclusionEntries.KeywordFields(exclusion.ResourceKey, exclusion.Reason)),
+            _excludedSortColumn, _excludedSortDescending,
+            (exclusion, column) => SyncPlanSort.ExclusionKey(exclusion.ResourceKey, exclusion.Reason, column));
         _excludedList.BeginUpdate();
         try
         {
@@ -960,6 +1019,7 @@ internal sealed class SyncPreviewDialog : Form
         {
             _excludedList.EndUpdate();
         }
+        RefreshExcludedSortHeaders();
         if (ListFilter.IsFilteredEmpty(plan.Excluded.Count, visible.Count))
         {
             _excludedHint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.ExclusionNoun);
@@ -970,6 +1030,26 @@ internal sealed class SyncPreviewDialog : Form
         }
         _excludedHint.Visible = false;
         _excludedList.Visible = true;
+    }
+
+    /// <summary>
+    /// 未纳入清单的列头点击（DESIGN.md §6「列表列排序」，第一百零六轮）：与写入清单同一手势、同一份判定，
+    /// 两张清单各记各的列（排写入清单不会把未纳入清单也排了）。只改呈现顺序——这一张没有选中语义，
+    /// 故不恢复选中、不碰键盘焦点、不自己滚动；计数行仍按整份计划统计、不随排序变化。
+    /// </summary>
+    private void SortExcluded(int column)
+    {
+        (_excludedSortColumn, _excludedSortDescending) = ListSort.Toggle(_excludedSortColumn, _excludedSortDescending, column);
+        PopulateExcluded();
+    }
+
+    /// <summary>未纳入清单的表头方向标记：与写入清单同一份口径，标题取自建列时的快照。</summary>
+    private void RefreshExcludedSortHeaders()
+    {
+        for (var i = 0; i < _excludedList.Columns.Count && i < _excludedTitles.Length; i++)
+        {
+            _excludedList.Columns[i].Text = ListSort.Header(_excludedTitles[i], i, _excludedSortColumn, _excludedSortDescending);
+        }
     }
 
     private void ShowSelectPage()

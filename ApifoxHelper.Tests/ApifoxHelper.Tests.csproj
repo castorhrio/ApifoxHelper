@@ -68,6 +68,7 @@
     <Compile Include="..\Desktop\Native\PropagationSort.cs" Link="Shared\PropagationSort.cs" />
     <Compile Include="..\Desktop\Native\JournalSort.cs" Link="Shared\JournalSort.cs" />
     <Compile Include="..\Desktop\Native\ApplyPlanSort.cs" Link="Shared\ApplyPlanSort.cs" />
+    <Compile Include="..\Desktop\Native\SyncPlanSort.cs" Link="Shared\SyncPlanSort.cs" />
     <Compile Include="..\Desktop\Native\ListSortMemory.cs" Link="Shared\ListSortMemory.cs" />
     <Compile Include="..\Desktop\Native\ListFilter.cs" Link="Shared\ListFilter.cs" />
     <Compile Include="..\Desktop\Native\QueueText.cs" Link="Shared\QueueText.cs" />
