@@ -81,9 +81,11 @@ public class SlotKeywordFilterTests
         Assert.Matches(@"(?m)^\s*\[Name\(slot\), Tag\(slot\), TaskDisplay\.SlotRoleText\(slot\.Role\), Location\(slot\)\];$", source);
         // 状态不在关键词里：那一列的取值由筛选下拉管（缺失/空/已失效/有效/其他问题），不必再敲一遍。
         Assert.DoesNotContain("SlotStatusText(slot.Status)], ", source, StringComparison.Ordinal);
-        // 清单经这份口径接上，不在界面里另拼一套。
+        // 清单经这份口径接上，不在界面里另拼一套（第一百零二轮起这份筛选链是 ListSort.Order 的输入，
+        // 与两个主页面、检查结果、接口追踪明细、差异确认、注释候选、响应契约同一顺序：筛选先于排序）。
         var dialog = Repo.Source("Desktop", "Native", File);
-        Assert.Matches(@"(?m)^\s*var visible = ListFilter\.Apply\(_slots, _keyword\.Text, SlotText\.KeywordFields\)\.Where\(Matches\)\.ToList\(\);$", dialog);
+        Assert.Matches(@"(?m)^\s*var visible = ListSort\.Order\($", dialog);
+        Assert.Matches(@"(?m)^\s*ListFilter\.Apply\(_slots, _keyword\.Text, SlotText\.KeywordFields\)\.Where\(Matches\)\.ToList\(\),$", dialog);
     }
 
     [Fact]
@@ -107,8 +109,9 @@ public class SlotKeywordFilterTests
     {
         var source = Repo.Source("Desktop", "Native", File);
         // 关键词先经共享口径（与两个主页面、另两张长清单同一份匹配规则），状态筛选在其后：
-        // 两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
-        Assert.Matches(@"(?m)^\s*var visible = ListFilter\.Apply\(_slots, _keyword\.Text, SlotText\.KeywordFields\)\.Where\(Matches\)\.ToList\(\);$", source);
+        // 两个条件都是「且」，顺序不影响结果，但匹配规则只有一份；这一份筛选链自第一百零二轮起
+        // 作为 ListSort.Order 的输入（筛选先于排序），两个条件仍都在排序之前生效。
+        Assert.Matches(@"(?m)^\s*ListFilter\.Apply\(_slots, _keyword\.Text, SlotText\.KeywordFields\)\.Where\(Matches\)\.ToList\(\),$", source);
         // 状态下拉的判定仍是原来那一份，不因加了关键词而另写一套。
         Assert.Matches(@"(?m)^\s*private bool Matches\(DocSlot slot\) => _filter\.SelectedIndex switch$", source);
         Assert.Matches(@"(?m)^\s*5 => slot\.Status is ""inheritDoc"" or ""inheritDocUnresolved"" or ""invalidXml"" or ""unsupported"",$", source);
@@ -210,7 +213,7 @@ public class SlotKeywordFilterTests
     public void ThisScreen_StaysReadOnly()
     {
         // 关键词框只改这一屏看得见哪些行：不写任务与配置数据、不改审阅状态、服务层一行未触达。
-        var body = Slice("private void ApplyFilter()", "private void ShowFilteredEmpty()");
+        var body = Slice("private void ApplyFilter(", "private void ShowFilteredEmpty()");
         Assert.DoesNotContain("_tasks.", body, StringComparison.Ordinal);
         Assert.DoesNotContain("_drafts.", body, StringComparison.Ordinal);
         Assert.DoesNotContain("AddManualAsync", body, StringComparison.Ordinal);

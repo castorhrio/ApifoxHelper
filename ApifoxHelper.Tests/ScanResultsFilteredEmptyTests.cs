@@ -208,7 +208,7 @@ public class ScanResultsFilteredEmptyTests
 
     // ---------- 辅助 ----------
 
-    private static string ApplyFilterBody() => Slice("private void ApplyFilter()", "private void ShowFilteredEmpty()");
+    private static string ApplyFilterBody() => Slice("private void ApplyFilter(", "private void ShowFilteredEmpty()");
 
     private static string ShapeBody() => Slice("private void ShowFilteredEmpty()", "private void ShowDetail()");
 
