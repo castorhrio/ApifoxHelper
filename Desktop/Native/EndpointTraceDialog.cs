@@ -140,6 +140,22 @@ internal sealed class EndpointTraceDialog : Form
     }
 
     /// <summary>
+    /// 打开时把键盘交给清单（DESIGN.md §6「列表行」的「只读清单打开时的键盘归属」，第八十八轮）：
+    /// 这一屏打开即选中第一个接口（详情区已经显示那一行），而对话框打开时键盘落在框架 tab 序的第一个可聚焦控件上——
+    /// 方向键动的是别的控件、Ctrl+C 也复制不到那一行，「打开就有一行被标出来」只成立了一半。
+    /// 交键盘只在 <see cref="Ui.KeepKeyboardOnQueue"/> 一处（判定在 <see cref="ListFocus"/>：选中行与焦点行是同一行才交），
+    /// 本对话框不自己写 .Focus()、不选中、不滚动、不重建清单。
+    /// 放在 OnShown 而不是 OnLoad：OnLoad 时窗体尚未显示，Focus() 的落点取决于框架在激活时怎么选初始焦点；
+    /// OnShown 是窗体首次显示之后，是设置初始焦点的常规时机（真机落点随 G-D5 复核）。
+    /// 打开时那一屏是提示或空态（没有选中行）就不动键盘——那一步的下一步在提示与按钮上，不在清单上。
+    /// </summary>
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        Ui.KeepKeyboardOnQueue(_list);
+    }
+
+    /// <summary>
     /// 关键词框（DESIGN.md §6「列表筛选」）：输入即筛选，只改可见行——计数行按整份追踪数据统计、
     /// 不随关键词变化（「超限 N」正是要找的那批的凭据，被一屏的空抹掉等于把结果藏起来）。
     /// 筛到零行不是「没有追踪数据」：说清这一屏为什么空，下一步就在那个框上（这一屏没有筛选下拉，

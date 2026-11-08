@@ -13,7 +13,7 @@ namespace ApifoxHelper.Tests;
 /// 两处交给清单（第五十一轮「筛选框 Enter 到结果第一行」的先取焦点，两页各一处），21 个对话框类一处都没有——
 /// 同一条规矩在两页成立、在队列上不成立。
 /// 现收成一条口径：判定在 <see cref="ListFocus"/>（不依赖 WinForms、与测试工程共享编译），
-/// 触达界面只在 <c>Ui.KeepKeyboardOnQueue</c> 一处，接在三处保存成功路径的落点之后；
+/// 触达界面只在 <c>Ui.KeepKeyboardOnQueue</c> 一处，接在三处保存成功路径的落点之后（第八十八轮又接到五张只读长清单的打开时，见 OpenFocusTests）；
 /// 保存被拒与重新读取失败的路径不交回（用户要改的就是手里那一格），重建清单的路径不交回（用户可能正在筛选框里打字）。
 /// 键盘交回后方向键的实际路由随 G-D5 真机复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
@@ -156,7 +156,7 @@ public class ListFocusTests
         // 续接落点只管「哪一行」；键盘由审阅路径完成后统一交回（命中与续接两条分支都要走到，
         // 写在落点之内只覆盖其中一条，又是一处同壳不同行为）。
         var ui = Repo.Source("Desktop", "Native", "Ui.cs");
-        var body = Slice(ui, "public static void AdvanceAfterRemoval(ListView list, int handledIndex)", "/// 审阅完成后把键盘交回清单");
+        var body = Slice(ui, "public static void AdvanceAfterRemoval(ListView list, int handledIndex)", "/// 把键盘交给清单（唯一触达点）");
         Assert.DoesNotContain(".Focus(", body, StringComparison.Ordinal);
     }
 
@@ -227,27 +227,37 @@ public class ListFocusTests
     }
 
     [Fact]
-    public void Handoff_IsWiredOnlyOnTheThreeReviewPaths()
+    public void Handoff_IsWiredOnTheThreeReviewPathsAndTheFiveReadOnlyOpenPaths()
     {
+        // 第八十八轮把同一处入口接到五张只读长清单的打开时（OnShown），触达点因此由三处变八处：
+        // 三处审阅路径（处理完一条之后交回）与五处只读清单（打开时交给它），判定仍是同一份 ListFocus。
         var callers = Repo.NativeSources()
             .Where(s => s.Contains("Ui.KeepKeyboardOnQueue"))
             .Select(s => s.Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
-        Assert.Equal(new[] { "CandidatesDialog.cs", "ContractsDialog.cs", "DecisionsDialog.cs" }, callers);
+        Assert.Equal(
+            new[]
+            {
+                "CandidatesDialog.cs", "CheckResultsDialog.cs", "ContractsDialog.cs", "DecisionsDialog.cs",
+                "EndpointTraceDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs", "PropagationDialog.cs",
+            },
+            callers);
     }
 
     [Theory]
     [InlineData("TasksPage.cs")]
     [InlineData("ProjectsPage.cs")]
-    [InlineData("CheckResultsDialog.cs")]
     [InlineData("SyncPreviewDialog.cs")]
     [InlineData("SupplementsDialog.cs")]
-    [InlineData("EndpointTraceDialog.cs")]
+    [InlineData("ScanResultsDialog.cs")]
+    [InlineData("ApplyPlanDialog.cs")]
     public void OtherViews_NeverTakeTheKeyboard(string file)
     {
-        // 两个主页面每次刷新与筛选都要重建（第五十一轮在筛选框 Enter 那一条路上才显式取焦点），
-        // 只读清单没有「刚处理的一条」——两边都不接此口径。
+        // 两个主页面每次刷新与筛选都要重建（第五十一轮在筛选框 Enter 那一条路上才显式取焦点）；
+        // 同步预览（两页各一张清单）、补充说明（编辑位是这一屏的输入）、注释缺口（本视图不自动选中任何一行）
+        // 与注释回写（数据在 OnLoad 之后异步到达，打开时清单还是空的）都不接此口径——
+        // 五张只读长清单的打开时交键盘见 OpenFocusTests（第八十八轮）。
         var source = Repo.Source("Desktop", "Native", file);
         Assert.DoesNotContain("KeepKeyboardOnQueue", source, StringComparison.Ordinal);
     }

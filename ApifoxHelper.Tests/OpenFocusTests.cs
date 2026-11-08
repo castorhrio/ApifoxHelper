@@ -1,0 +1,177 @@
+using System.Text.RegularExpressions;
+using ApifoxHelper.Desktop.Native;
+using Xunit;
+
+namespace ApifoxHelper.Tests;
+
+/// <summary>
+/// 只读清单打开时的键盘归属（DESIGN.md §6「列表行」、§8 第八十八轮）：五张只读长清单
+/// （检查结果、接口追踪明细、生成文档核对、代码证据、任务日志）打开即选中一行（第一条，任务日志是最后一条），
+/// 详情区已经显示那一行；而对话框打开时键盘落在框架 tab 序的第一个可聚焦控件上——方向键动的是别的控件、
+/// Ctrl+C 也复制不到那一行，「打开就有一行被标出来」只成立了一半（第五十八轮补的是「处理完一条之后」那一半）。
+/// 现打开时经 <c>Ui.KeepKeyboardOnQueue</c> 同一处把键盘交给清单，判定仍是
+/// <see cref="ListFocus.ShouldHandToQueue"/>（选中行与焦点行是同一行才交），接在 OnShown 而不是 OnLoad。
+/// 真机上打开对话框后方向键是否直接走清单随 G-D5 复核（Linux 无 WinForms GUI 运行时）。
+/// </summary>
+public class OpenFocusTests
+{
+    /// <summary>打开即选中一行、因而打开时该把键盘交给清单的五张只读长清单。</summary>
+    private static readonly string[] OpenPaths =
+    [
+        "CheckResultsDialog.cs",
+        "EndpointTraceDialog.cs",
+        "PropagationDialog.cs",
+        "EvidenceDialog.cs",
+        "JournalDialog.cs",
+    ];
+
+    // ---------- 真执行：打开时那一行是不是键盘该去的那一行 ----------
+
+    [Fact]
+    public void OpenPath_HandsTheKeyboardToTheRowTheDialogSelected()
+    {
+        // 打开路径先经 Ui.SelectItem 选中一行（Selected + Focused 一起落），随后问同一份判定：
+        // 选中行与焦点行是同一行才交——打开时那一行正是这样，故放行。
+        Assert.True(ListFocus.ShouldHandToQueue(0, 0));
+        Assert.True(ListFocus.ShouldHandToQueue(41, 41));
+    }
+
+    [Fact]
+    public void OpenPath_LeavesTheKeyboardAloneWhenTheScreenOpensEmpty()
+    {
+        // 打开时那一屏是提示或空态（读取失败、尚未检查、没有条目）：清单里没有选中行，
+        // 交键盘等于把方向键交给一个没有落点的清单——那一步的下一步在提示与按钮上。
+        Assert.False(ListFocus.ShouldHandToQueue(null, null));
+        Assert.False(ListFocus.ShouldHandToQueue(null, 0));
+        Assert.False(ListFocus.ShouldHandToQueue(0, null));
+    }
+
+    // ---------- 接线：五张只读清单在 OnShown 里经同一处入口交键盘 ----------
+
+    [Theory]
+    [InlineData("CheckResultsDialog.cs")]
+    [InlineData("EndpointTraceDialog.cs")]
+    [InlineData("PropagationDialog.cs")]
+    [InlineData("EvidenceDialog.cs")]
+    [InlineData("JournalDialog.cs")]
+    public void OpenPaths_HandTheKeyboardOnShown(string file)
+    {
+        var body = OnShownBody(file);
+        // 先 base.OnShown：窗体显示之后再交键盘（OnLoad 时窗体还没显示，Focus 的落点取决于框架激活时的选择）。
+        Assert.Matches(@"(?m)^\s*base\.OnShown\(e\);$", body);
+        Assert.Single(Regex.Matches(body, @"(?m)^\s*Ui\.KeepKeyboardOnQueue\(_list\);$"));
+        var baseCall = body.IndexOf("base.OnShown(e);", StringComparison.Ordinal);
+        var hand = body.IndexOf("Ui.KeepKeyboardOnQueue(_list);", StringComparison.Ordinal);
+        Assert.True(baseCall >= 0 && hand > baseCall, $"{file}:应在 base.OnShown 之后交键盘。");
+    }
+
+    [Theory]
+    [InlineData("CheckResultsDialog.cs")]
+    [InlineData("EndpointTraceDialog.cs")]
+    [InlineData("PropagationDialog.cs")]
+    [InlineData("EvidenceDialog.cs")]
+    [InlineData("JournalDialog.cs")]
+    public void OpenPaths_TouchNothingButTheKeyboard(string file)
+    {
+        // 选中、滚动、重建各有自己的唯一入口：打开时这一处只交键盘，不顺手写第二套（必然与那一套漂移）。
+        var body = OnShownBody(file);
+        Assert.DoesNotContain("SelectItem", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Items[0]", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Items[^1]", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnsureVisible", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("PopulateList", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Items.Clear", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Focus(", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OpenPaths_AreExactlyTheFiveReadOnlyLists()
+    {
+        // 触达点清单：五张只读长清单各一处，且都在 OnShown 里（审阅路径的三处见 ListFocusTests）。
+        var callers = Repo.NativeSources()
+            .Where(s => s.Contains("Ui.KeepKeyboardOnQueue"))
+            .Select(s => s.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        foreach (var file in OpenPaths)
+        {
+            Assert.Contains(file, callers);
+            Assert.Single(Regex.Matches(Repo.Source("Desktop", "Native", file), @"Ui\.KeepKeyboardOnQueue\(_list\);"));
+        }
+    }
+
+    [Theory]
+    [InlineData("ScanResultsDialog.cs")]
+    [InlineData("ApplyPlanDialog.cs")]
+    [InlineData("SyncPreviewDialog.cs")]
+    [InlineData("SupplementsDialog.cs")]
+    [InlineData("CandidatesDialog.cs")]
+    [InlineData("ContractsDialog.cs")]
+    [InlineData("DecisionsDialog.cs")]
+    public void ViewsWithoutARowOnOpen_DoNotTakeTheKeyboardOnOpen(string file)
+    {
+        // 注释缺口本视图不自动选中任何一行（打开时没有落点可交）；注释回写的数据在 OnLoad 之后异步到达
+        // （打开时清单还是空的）；同步预览两页各一张清单、补充说明的编辑位是这一屏的输入；
+        // 三个审阅对话框的打开时初始焦点属第五十八轮挂账。这些都不接打开时交键盘。
+        var source = Repo.Source("Desktop", "Native", file);
+        Assert.DoesNotContain("OnShown", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Judgment_StaysInTheSharedRule()
+    {
+        // 判定只有一份：界面侧调用它的地方只有工厂入口，五个对话框不自己补一套序号比较。
+        var callers = Repo.NativeSources()
+            .Where(s => s.Contains("ListFocus.ShouldHandToQueue"))
+            .Select(s => s.Name)
+            .ToList();
+        Assert.Equal(new[] { "Ui.cs" }, callers);
+    }
+
+    // ---------- 设计基线 ----------
+
+    [Fact]
+    public void DesignDoc_RecordsOpenFocus()
+    {
+        var section = Repo.DesignSection(6);
+        Assert.Contains("**只读清单打开时的键盘归属**（`ListFocus` 同一口径，2026-11-08 第八十八轮）", section);
+        Assert.Contains("打开时经 `Ui.KeepKeyboardOnQueue` 同一处把键盘交给清单", section);
+        Assert.Contains("接在 `OnShown`（窗体首次显示之后）而不是 `OnLoad`", section);
+        var ledger = Repo.DesignSection(8);
+        Assert.Matches(@"(?m)^\| 只读清单打开时的键盘归属（§6） \|", ledger);
+        Assert.Contains("第八十八轮", ledger);
+        Assert.Contains("OnShown", ledger);
+    }
+
+    [Fact]
+    public void DesignDoc_DoesNotClaimMoreThanWasDone()
+    {
+        // 本轮没做的事不能被写成做了：注释回写、同步预览、补充说明、三个审阅对话框与注释缺口都不接此口径，
+        // 台账里如实挂账，且不得出现「全部对话框打开时初始焦点已接线」这类话。
+        var ledger = Repo.DesignSection(8);
+        var row = Slice(ledger, "| 只读清单打开时的键盘归属（§6） |", "\n以上每项在达成时回写本文并注明证据。");
+        Assert.Contains("注释回写（数据在 OnLoad 之后异步到达", row);
+        Assert.Contains("同步预览（两页各一张清单）", row);
+        Assert.Contains("补充说明（编辑位是这一屏的输入）", row);
+        Assert.Contains("注释缺口（本视图不自动选中任何一行）不接此口径", row);
+        Assert.DoesNotContain("全部对话框打开时初始焦点已接线", row, StringComparison.Ordinal);
+    }
+
+    /// <summary>OnShown 的方法体（无花括号的线性序列，切片取到方法末尾的右括号为止）。</summary>
+    private static string OnShownBody(string file)
+    {
+        var source = Repo.Source("Desktop", "Native", file);
+        var match = Regex.Match(source, @"protected override void OnShown\(EventArgs e\)\s*\{(?<body>[^}]*)\}");
+        Assert.True(match.Success, $"{file}:缺少 OnShown（打开时把键盘交给清单的唯一时机）。");
+        return match.Groups["body"].Value;
+    }
+
+    private static string Slice(string source, string start, string end)
+    {
+        var from = source.IndexOf(start, StringComparison.Ordinal);
+        Assert.True(from >= 0, $"源码缺少 {start}。");
+        var to = source.IndexOf(end, from + start.Length, StringComparison.Ordinal);
+        Assert.True(to > from, $"源码缺少 {end}。");
+        return source[from..to];
+    }
+}
