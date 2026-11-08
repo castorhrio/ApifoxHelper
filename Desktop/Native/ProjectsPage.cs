@@ -151,6 +151,13 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
     public void RefreshData() => LoadProfiles();
 
+    /// <summary>Ctrl+F：焦点交给筛选框并选中已有关键词（重输即替换，与 Windows 搜索框一致）；只移焦点，不改筛选结果。</summary>
+    public void FocusListFilter()
+    {
+        _filter.Focus();
+        _filter.SelectAll();
+    }
+
     private void LoadProfiles()
     {
         // 先取局部：重建清空列表会触发 SelectedIndexChanged 把字段抹成 null。

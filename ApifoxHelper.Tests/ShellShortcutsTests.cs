@@ -5,17 +5,17 @@ namespace ApifoxHelper.Tests;
 
 /// <summary>
 /// 原生壳键盘快捷键的口径断言（ShellShortcuts，共享源码单一口径）：
-/// 手势只取 Windows 惯例（Ctrl+数字切页、F5 刷新当前页、F1 帮助/关于），
+/// 手势只取 Windows 惯例（Ctrl+数字切页、F5 刷新当前页、F1 帮助/关于、Ctrl+F 聚焦列表筛选框），
 /// 不占用文本框编辑键；「退出」「打开资料目录/日志目录」不发明手势（挂账）。
 /// 壳的菜单接线与页面刷新分发由源码机械检查钉住——口径存在但没人接线等于没有。
 /// </summary>
 public class ShellShortcutsTests
 {
     [Fact]
-    public void All_RegistersFourConventionalEntries()
+    public void All_RegistersFiveConventionalEntries()
     {
-        Assert.Equal(4, ShellShortcuts.All.Count);
-        Assert.Equal(new[] { "projects", "tasks", "refresh", "about" },
+        Assert.Equal(5, ShellShortcuts.All.Count);
+        Assert.Equal(new[] { "projects", "tasks", "refresh", "find", "about" },
             ShellShortcuts.All.Select(entry => entry.Action).ToArray());
         Assert.Equal(ShellShortcuts.All.Select(entry => entry.Action).Distinct(),
             ShellShortcuts.All.Select(entry => entry.Action));
@@ -27,6 +27,7 @@ public class ShellShortcutsTests
         Assert.Equal("Ctrl+1", ShellShortcuts.Projects.Gesture);
         Assert.Equal("Ctrl+2", ShellShortcuts.Tasks.Gesture);
         Assert.Equal("F5", ShellShortcuts.Refresh.Gesture);
+        Assert.Equal("Ctrl+F", ShellShortcuts.Find.Gesture);
         Assert.Equal("F1", ShellShortcuts.About.Gesture);
     }
 
@@ -34,6 +35,7 @@ public class ShellShortcutsTests
     public void GestureOf_ResolvesRegisteredActions_UnknownReturnsNull()
     {
         Assert.Equal("F5", ShellShortcuts.GestureOf("refresh"));
+        Assert.Equal("Ctrl+F", ShellShortcuts.GestureOf("find"));
         Assert.Null(ShellShortcuts.GestureOf("exit"));
     }
 
@@ -55,6 +57,7 @@ public class ShellShortcutsTests
         Assert.Matches(@"(?m)^\s*BoundItem\(""项目设置\(&P\)"", ShellShortcuts\.Projects, ShowProjects\),", shell);
         Assert.Matches(@"(?m)^\s*BoundItem\(""检查任务\(&T\)"", ShellShortcuts\.Tasks, ShowTasks\),", shell);
         Assert.Matches(@"(?m)^\s*BoundItem\(""刷新当前页\(&R\)"", ShellShortcuts\.Refresh, RefreshVisiblePage\),", shell);
+        Assert.Matches(@"(?m)^\s*BoundItem\(""筛选当前列表\(&F\)"", ShellShortcuts\.Find, FocusListFilterOnVisiblePage\),", shell);
         Assert.Matches(@"(?m)^\s*help\.DropDownItems\.Add\(BoundItem\(""关于 Apifox 助手\(&A\)"", ShellShortcuts\.About, ShowAbout\)\);", shell);
     }
 
@@ -85,5 +88,31 @@ public class ShellShortcutsTests
         var tasks = Repo.Source("Desktop", "Native", "TasksPage.cs");
         Assert.Matches(@"(?m)^\s*public void RefreshData\(\) => LoadTasks\(\);", tasks);
         Assert.Matches(@"(?m)^\s*refreshButton\.Click \+= \(_, _\) => RefreshData\(\);", tasks);
+    }
+
+    [Fact]
+    public void Shell_RoutesFindToVisiblePageFilter()
+    {
+        var shell = Repo.Source("Desktop", "Native", "NativeShellForm.cs");
+        // 分发与「刷新当前页」同一纪律：只在页面可见时经页面协议 FocusListFilter 动作。
+        Assert.Matches(@"(?m)^\s*private void FocusListFilterOnVisiblePage\(\)", shell);
+        Assert.Matches(@"(?m)^\s*if \(_projectsPage is \{ Visible: true \}\) _projectsPage\.FocusListFilter\(\);", shell);
+        Assert.Matches(@"(?m)^\s*if \(_tasksPage is \{ Visible: true \}\) _tasksPage\.FocusListFilter\(\);", shell);
+    }
+
+    [Fact]
+    public void Pages_ImplementFocusListFilter()
+    {
+        // 页面协议声明方法，两页各自把焦点交给筛选框并选中关键词（只移焦点，不改筛选结果）。
+        var interfaceText = Repo.Source("Desktop", "Native", "NativeShellForm.cs");
+        Assert.Matches(@"(?m)^\s*void FocusListFilter\(\);", interfaceText);
+
+        foreach (var name in new[] { "ProjectsPage.cs", "TasksPage.cs" })
+        {
+            var page = Repo.Source("Desktop", "Native", name);
+            Assert.Matches(@"(?m)^\s*public void FocusListFilter\(\)", page);
+            Assert.Matches(@"(?m)^\s*_filter\.Focus\(\);", page);
+            Assert.Matches(@"(?m)^\s*_filter\.SelectAll\(\);", page);
+        }
     }
 }

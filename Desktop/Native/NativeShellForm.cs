@@ -158,6 +158,7 @@ internal sealed class NativeShellForm : Form
             BoundItem("检查任务(&T)", ShellShortcuts.Tasks, ShowTasks),
             new ToolStripSeparator(),
             BoundItem("刷新当前页(&R)", ShellShortcuts.Refresh, RefreshVisiblePage),
+            BoundItem("筛选当前列表(&F)", ShellShortcuts.Find, FocusListFilterOnVisiblePage),
         });
         var help = new ToolStripMenuItem("帮助(&H)");
         help.DropDownItems.Add(BoundItem("关于 Apifox 助手(&A)", ShellShortcuts.About, ShowAbout));
@@ -177,6 +178,14 @@ internal sealed class NativeShellForm : Form
         if (_shutdownStarted || IsDisposed || Disposing) return;
         if (_projectsPage is { Visible: true }) _projectsPage.RefreshData();
         if (_tasksPage is { Visible: true }) _tasksPage.RefreshData();
+    }
+
+    /// <summary>Ctrl+F：把焦点交给当前可见页列表的筛选框；页面尚未创建时不动作（与「刷新当前页」同一分发纪律）。</summary>
+    private void FocusListFilterOnVisiblePage()
+    {
+        if (_shutdownStarted || IsDisposed || Disposing) return;
+        if (_projectsPage is { Visible: true }) _projectsPage.FocusListFilter();
+        if (_tasksPage is { Visible: true }) _tasksPage.FocusListFilter();
     }
 
     protected override async void OnLoad(EventArgs e)
@@ -426,4 +435,7 @@ internal interface INativePage
 
     /// <summary>重读本页数据（壳的「刷新当前页」F5 与本页「刷新」按钮共用同一口径）。</summary>
     void RefreshData();
+
+    /// <summary>把键盘焦点交给本页列表的筛选框并选中已有关键词（壳的 Ctrl+F 分发到当前可见页）。</summary>
+    void FocusListFilter();
 }

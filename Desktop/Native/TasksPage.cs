@@ -395,6 +395,13 @@ internal sealed class TasksPage : UserControl, INativePage
 
     public void RefreshData() => LoadTasks();
 
+    /// <summary>Ctrl+F：焦点交给筛选框并选中已有关键词（重输即替换，与 Windows 搜索框一致）；只移焦点，不改筛选结果。</summary>
+    public void FocusListFilter()
+    {
+        _filter.Focus();
+        _filter.SelectAll();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing) _timer.Dispose();

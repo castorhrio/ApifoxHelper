@@ -637,6 +637,15 @@
 - **变异验证八处实测可红**（各自独立变红、还原以基准副本覆盖）：词间「且」改「或」（5 红）、`Apply` 直接返回全部行（2 红）、任务页 `TextChanged` 接线注释掉（1 红）、先排序后筛选（2 红）、选中 Id 局部取值挪到清空列表之后（1 红——首版断言只比 IndexOf 大小，锚点缺失时 -1 会骗过检查，已补两处锚点存在性断言后重做）、删 `RefreshEmptyState` 接线（1 红）、删 DESIGN.md §8 条款行（1 红）、删 csproj 共享编译（测试工程 80 个 CS 错误，编译失败双重可红）。
 - **验证状态**：还原后 Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 641 用例全部通过（含令牌接线与 G-D4 机械检查对新增文件与两页改动的扫描——无禁词、无档外值、无就地颜色/字体/间距值）。**筛选框的 Windows 真机观感仍未验证**（G-D5 复核，Linux 无法运行 WinForms GUI）——真机需按「任务页输入『订单』→ 列表只剩命中行、状态行显示筛选计数 → 按 Esc 清空回到全部 → 选中某任务后筛选到零行再清空，选中回到原任务 → 配置页同法」走一遍；筛选框在工具栏中的位置与占位文字截断属真机项。如实记录两点未扩面取舍：筛选不跨启动记忆（与排序状态同一取舍）、筛选只覆盖两个主页面列表（对话框内列表条目有限，不扩面）。纯呈现层：任务与配置数据、服务链路一行未动；本轮未连接或写入 Apifox，未调用任何模型服务。
 
+## 原生切片「列表筛选键盘入口：Ctrl+F 聚焦当前页筛选框」（2026-11-08 第四十九轮）
+
+- **接续前确认**：上一轮工作树干净，HEAD（cc16572）的 Linux 主工程 `dotnet build` 0 警告 0 错误、641 用例全部通过，基线成立；本轮在其上推进，未回退任何已有实现（第四十八轮的 `ListFilter` 口径、两页筛选框与 Esc 清空接线一行未动，本轮只补键盘入口）。
+- **缺口（具名 pass：clarify，纯呈现层）**：上一轮落地的两页筛选框只有鼠标路径可达——列表变长后每次筛选都要先把手移到工具栏点进框，再输入关键词；筛选是「在列表中查找」这一日常动作，Windows 惯例本就有 Ctrl+F 这一手势，原生壳此前只有 Ctrl+1/Ctrl+2 切页、F5 刷新、F1 关于四个壳级快捷键，没有到筛选框的键盘入口。补的是既有手势的接线，不新增视觉语言、颜色或档位。
+- **实现口径**：手势登记在 `Desktop/Native/ShellShortcuts` 单一口径——新增 `Find`（action `find`、手势 `Ctrl+F`），`All` 由四项增至五项（顺序 projects/tasks/refresh/find/about），`ReservedEditingKeys` 前置校验确认 `Ctrl+F` 不属被保护的编辑键（Ctrl+C/V/X/A/Z/Y）；壳在「视图」菜单新增 `BoundItem("筛选当前列表(&F)", ShellShortcuts.Find, FocusListFilterOnVisiblePage)`，手势由 `KeysConverter` 接 `ShortcutKeys`、绑定与显示同取共享口径值；分发方法 `FocusListFilterOnVisiblePage` 与既有 `RefreshVisiblePage` 同一纪律（退出未开始、壳未释放、只对当前可见页动作、模态对话框期间主菜单不路由），经页面协议 `INativePage` 新增成员 `FocusListFilter()`；两页各自实现把焦点交给本页 `_filter` 并 `SelectAll` 选中已有关键词（重输即替换，与 Windows 搜索框一致）——只移焦点，不改筛选关键词的值、不重建列表、不写任何数据，服务层一行未动。
+- **测试 641 → 643 用例**：`ShellShortcutsTests` 接线扩展——`All_RegistersFiveConventionalEntries`（数量 4→5、动作序含 find、去重不变）、`Gestures_AreWindowsConventions`（补 `Ctrl+F`）、`GestureOf` 解析 `find`、`Shell_BindsMenuItemsFromSharedEntries`（新增「筛选当前列表(&F)」绑定行首正则）、新增 `Shell_RoutesFindToVisiblePageFilter`（分发方法声明 + 两页可见页 `FocusListFilter()` 行首正则）与 `Pages_ImplementFocusListFilter`（协议声明、两页 `FocusListFilter` 方法、`_filter.Focus()` 与 `_filter.SelectAll()` 接线）；`Gestures_AvoidEditingKeys` 前置对全集生效（Ctrl+F 若误占编辑键即红）。
+- **变异验证五处实测可红**（各自独立变红、还原以基准副本覆盖并 grep 核对无残留、还原后 643 全绿）：`Find` 手势 `Ctrl+F` 改 `Ctrl+G`（2 红：Gestures 与 GestureOf）、`Find` 从 `All` 全集删除（2 红：All 数量与 GestureOf find 返回 null）、删壳对任务页的 `FocusListFilter` 分发行（1 红：Shell_RoutesFindToVisiblePageFilter）、注释掉视图菜单「筛选当前列表(&F)」绑定行（1 红：Shell_BindsMenuItemsFromSharedEntries）、注释掉任务页 `_filter.SelectAll();`（1 红：Pages_ImplementFocusListFilter——行首正则证实「被注释也算缺失」）。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build` 均 0 警告 0 错误；`ApifoxHelper.Tests` 643 用例全部通过（含令牌接线与 G-D4 机械检查对改动文件的扫描——无禁词、无档外值、无就地颜色/字体/间距值）。**Ctrl+F 的实际按键路由、聚焦后关键词被选中的观感随 G-D5 真机复核**（Linux 无法运行 WinForms GUI）——真机需按「在检查任务页按 Ctrl+F → 焦点落进筛选框、已有关键词整段选中 → 直接输入替换、列表即时筛选 → 配置页同法」走一遍。如实记录取舍：本轮只补键盘入口，不改筛选口径、不加清空按钮、不跨启动记忆筛选状态（与第四十八轮同一取舍）；纯呈现层，本轮未连接或写入 Apifox，未调用任何模型服务。
+
 ## 实现步骤
 
 1. 骨架：项目文件、隔离用 Directory.Build.props / Directory.Packages.props、基础设施。
