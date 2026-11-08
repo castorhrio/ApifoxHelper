@@ -18,6 +18,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 避免用空补充覆盖既有内容）；没有接口=如实说明；正常=接口清单 + 编辑位 + 保存；
 /// 筛到零行=关键词框留着并说明下一步，计数行仍是整份统计（见 <see cref="PopulateList"/>）。
 /// 打开时把键盘交给接口清单（第九十五轮）：打开即选中第一个接口，键盘留在清单上，方向键与 Ctrl+C 才落在那一行。
+/// 清单支持点击列头排序（第一百零七轮，口径见 <see cref="SupplementSort"/> 与 <see cref="ListSort"/>）：
+/// 同一列再点反向、换一列从升序开始，排序只改呈现顺序——选中仍按接口身份恢复，未保存的输入不因排序而丢。
 /// </summary>
 internal sealed class SupplementsDialog : Form
 {
@@ -39,6 +41,11 @@ internal sealed class SupplementsDialog : Form
     private bool _saving;
     /// <summary>清单重建期间为真：清空与回填会触发选中事件，那一次不是用户切换接口。</summary>
     private bool _rebuilding;
+
+    // 列排序状态（ListSort 口径，第一百零七轮）：未排序时保持检查结果自身的接口顺序。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    private readonly string[] _titles;
 
     private readonly Label _counts = Ui.Mono();
     private readonly ListView _list = Ui.List();
@@ -75,6 +82,9 @@ internal sealed class SupplementsDialog : Form
         _list.Columns.Add("接口", 140);
         _list.Columns.Add("名称", 120);
         _list.Columns.Add("补充", 60);
+        _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
         _list.SelectedIndexChanged += (_, _) =>
         {
             if (_rebuilding) return;
@@ -237,19 +247,29 @@ internal sealed class SupplementsDialog : Form
     {
         var previousKey = Current()?.Key;
         var wasDirty = _dirty;
-        var visible = ListFilter.Apply(_result!.Endpoints, _keyword.Text, SupplementEntries.KeywordFields);
+        // 筛选先于排序（ListFilter → ListSort，与另十一处同一顺序）：筛掉的行不参与排序，
+        // 排序键取 SupplementSort 单一口径（与单元格同源），界面不就地写 switch。
+        var visible = ListSort.Order(
+            ListFilter.Apply(_result!.Endpoints, _keyword.Text, SupplementEntries.KeywordFields),
+            _sortColumn, _sortDescending,
+            (check, column) => SupplementSort.Key(
+                SupplementEntries.EndpointCell(check),
+                SupplementEntries.NameCell(check),
+                SupplementEntries.EndpointEntryCount(_supplement!, check.Key),
+                column));
         _rebuilding = true;
         _list.BeginUpdate();
         _list.Items.Clear();
         foreach (var check in visible)
         {
-            var item = new ListViewItem(check.Method + " " + check.Path) { Tag = check, UseItemStyleForSubItems = false };
+            var item = new ListViewItem(SupplementEntries.EndpointCell(check)) { Tag = check, UseItemStyleForSubItems = false };
             item.SubItems[0].Font = UiTokens.Mono.Value;
-            item.SubItems.Add(check.RemoteName ?? "");
-            item.SubItems.Add(SupplementEntries.EndpointEntryCount(_supplement!, check.Key) + " 处");
+            item.SubItems.Add(SupplementEntries.NameCell(check));
+            item.SubItems.Add(SupplementEntries.EntryCountCell(_supplement!, check.Key));
             _list.Items.Add(item);
         }
         _list.EndUpdate();
+        RefreshSortHeaders();
         if (ListFilter.IsFilteredEmpty(_result.Endpoints.Count, visible.Count))
         {
             _rebuilding = false;
@@ -307,11 +327,32 @@ internal sealed class SupplementsDialog : Form
         return base.ProcessDialogKey(keyData);
     }
 
+    /// <summary>
+    /// 点击列头（DESIGN.md §6「列表列排序」，第一百零七轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="PopulateList"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改检查结果与补充内容，选中仍按接口身份恢复
+    /// （<see cref="PopulateList"/> 重建前记下、重建后找回，编辑位与未保存的输入随选中事件跟上）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        PopulateList();
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _titles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_titles[i], i, _sortColumn, _sortDescending);
+        }
+    }
+
     private void RefreshListCounts()
     {
         foreach (ListViewItem item in _list.Items)
         {
-            if (item.Tag is EndpointCheck check) item.SubItems[2].Text = SupplementEntries.EndpointEntryCount(_supplement!, check.Key) + " 处";
+            if (item.Tag is EndpointCheck check) item.SubItems[2].Text = SupplementEntries.EntryCountCell(_supplement!, check.Key);
         }
     }
 

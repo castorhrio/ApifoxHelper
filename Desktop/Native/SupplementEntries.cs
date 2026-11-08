@@ -55,16 +55,35 @@ public static class SupplementEntries
             && s.Location == editor.Location && s.Field == editor.Field);
 
     /// <summary>
+    /// 接口清单首格文字（方法 + 空格 + 路径）：单元格、关键词匹配与排序键共用这一份，
+    /// 三处各拼一遍必然漂移（第一百零七轮把拼法收进这里）。
+    /// </summary>
+    public static string EndpointCell(EndpointCheck check) => check.Method + " " + check.Path;
+
+    /// <summary>
+    /// 接口清单第二格文字（远端名称，缺失按空串）：单元格、关键词匹配与排序键共用这一份。
+    /// 远端没有这个接口时那一格本来就是空的，排序键也交空串（升序排在最前，与「源里新增的接口」这一屏的读法一致）。
+    /// </summary>
+    public static string NameCell(EndpointCheck check) => check.RemoteName ?? "";
+
+    /// <summary>
     /// 接口清单的关键词匹配字段（DESIGN.md §6「列表筛选」）：那一行在屏幕上被读作的两格——
     /// 接口身份（方法 + 路径，与首列同一份拼法）与远端名称（第二列，缺失按空处理）。
     /// 「补充」那一列是数字（「N 处」），不进关键词（与接口追踪明细的三个计数列同一取舍）。
     /// 与清单单元格同源，不另造一套字段。
     /// </summary>
-    public static string[] KeywordFields(EndpointCheck check) => [check.Method + " " + check.Path, check.RemoteName ?? ""];
+    public static string[] KeywordFields(EndpointCheck check) => [EndpointCell(check), NameCell(check)];
 
     /// <summary>该接口已保存的补充条目数（列表列如实显示；保留现状也算一处）。</summary>
     public static int EndpointEntryCount(SupplementStore store, string resourceKey) =>
         store.Entries.Count(s => s.ResourceKey == resourceKey);
+
+    /// <summary>
+    /// 接口清单第三格文字（「N 处」）：单元格与排序键取同一个数派生，不各写一套
+    /// （排序按数值排，见 <see cref="SupplementSort"/>）。
+    /// </summary>
+    public static string EntryCountCell(SupplementStore store, string resourceKey) =>
+        EndpointEntryCount(store, resourceKey) + " 处";
 
     /// <summary>
     /// 保存本接口的切片：先移除本接口在本次编辑位上的既有条目，再按输入写入（保留现状 → KeepAsIs 且值为空；
