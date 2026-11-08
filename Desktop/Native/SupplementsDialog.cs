@@ -15,7 +15,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// （含示例）原样保留。补充在重新检查后才会进入合并结果与同步计划，对话框不代替重新检查。
 /// 离线任务同样可用（补充是本机任务数据，不访问 Apifox）；示例不在本对话框编辑（与冻结页面一致）。
 /// 状态表：尚未检查=空态指引；检查结果或已保存补充读取失败=内联错误（补充读取失败时停用保存，
-/// 避免用空补充覆盖既有内容）；没有接口=如实说明；正常=接口清单 + 编辑位 + 保存。
+/// 避免用空补充覆盖既有内容）；没有接口=如实说明；正常=接口清单 + 编辑位 + 保存；
+/// 筛到零行=关键词框留着并说明下一步，计数行仍是整份统计（见 <see cref="PopulateList"/>）。
 /// </summary>
 internal sealed class SupplementsDialog : Form
 {
@@ -35,9 +36,12 @@ internal sealed class SupplementsDialog : Form
     private List<EditorBox> _editors = [];
     private bool _dirty;
     private bool _saving;
+    /// <summary>清单重建期间为真：清空与回填会触发选中事件，那一次不是用户切换接口。</summary>
+    private bool _rebuilding;
 
     private readonly Label _counts = Ui.Mono();
     private readonly ListView _list = Ui.List();
+    private readonly TextBox _keyword = Ui.Input();
     private readonly Panel _editorsHost = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Lg, UiTokens.Lg, UiTokens.Sm) };
     private readonly Panel _editorsScroll = Ui.ScrollHost();
     private readonly Label _hint = new()
@@ -70,8 +74,14 @@ internal sealed class SupplementsDialog : Form
         _list.Columns.Add("接口", 140);
         _list.Columns.Add("名称", 120);
         _list.Columns.Add("补充", 60);
-        _list.SelectedIndexChanged += (_, _) => ReloadEditors();
+        _list.SelectedIndexChanged += (_, _) =>
+        {
+            if (_rebuilding) return;
+            ReloadEditors();
+        };
         _list.Dock = DockStyle.Fill;
+        _keyword.PlaceholderText = ListFilter.EndpointSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => PopulateList();
 
         _saveButton = Ui.Primary("保存本接口补充");
         _saveButton.Click += (_, _) => SaveCurrent();
@@ -110,7 +120,11 @@ internal sealed class SupplementsDialog : Form
         sideCaption.Dock = DockStyle.Top;
         sideCaption.TextAlign = ContentAlignment.MiddleLeft;
         sideCaption.Padding = new Padding(0, 0, 0, UiTokens.Xs);
+        // 筛选行形状取工厂（§6「列表筛选」）：这一屏没有筛选下拉，走只有关键词框的那一支；
+        // 计数在底部动作行（「共 N 个接口 · 已保存补充 M 处」），故 counts 传 null。
+        var filterRow = Ui.FilterRow(_keyword, counts: null);
         sidePanel.Controls.Add(_list);
+        sidePanel.Controls.Add(filterRow);
         sidePanel.Controls.Add(sideCaption);
 
         // 编辑区 = 固定说明行 + 可滚动的编辑位列表；说明行交代生效条件与未保存输入的去向，不随选择变化。
@@ -169,8 +183,7 @@ internal sealed class SupplementsDialog : Form
             return;
         }
         _hint.Visible = false;
-        FillList();
-        UpdateCounts();
+        PopulateList();
     }
 
     private void ShowHint(string message, Color color)
@@ -185,11 +198,25 @@ internal sealed class SupplementsDialog : Form
         _counts.Text = "";
     }
 
-    private void FillList()
+    /// <summary>
+    /// 接口清单重建（打开时与关键词框输入时同一入口）：筛选只改可见行——匹配字段取
+    /// <see cref="SupplementEntries.KeywordFields"/>（那一行在屏幕上被读作的两格：接口身份与名称），
+    /// 计数列是数字、不进关键词。
+    /// 选中按接口身份恢复：同一个接口仍在筛选结果里时编辑位原样留着——**未保存的输入不因敲了一个字就丢**
+    /// （与第七十二轮「勾选不因筛选而丢」同一取舍：静默丢输入比筛不到难发现得多）；被筛掉时选中落到
+    /// 新筛选第一条，编辑位按既有的「切换接口丢弃未保存输入」口径重建，并在状态行如实说明这一次丢弃。
+    /// 筛到零行不是「检查结果里没有接口」：说清这一屏为什么空、下一步就在那个框上（这一屏没有筛选下拉），
+    /// 关键词框留着（§7「禁用不得移除下一步」），计数行仍是整份统计。
+    /// </summary>
+    private void PopulateList()
     {
+        var previousKey = Current()?.Key;
+        var wasDirty = _dirty;
+        var visible = ListFilter.Apply(_result!.Endpoints, _keyword.Text, SupplementEntries.KeywordFields);
+        _rebuilding = true;
         _list.BeginUpdate();
         _list.Items.Clear();
-        foreach (var check in _result!.Endpoints)
+        foreach (var check in visible)
         {
             var item = new ListViewItem(check.Method + " " + check.Path) { Tag = check, UseItemStyleForSubItems = false };
             item.SubItems[0].Font = UiTokens.Mono.Value;
@@ -198,7 +225,61 @@ internal sealed class SupplementsDialog : Form
             _list.Items.Add(item);
         }
         _list.EndUpdate();
-        if (_list.Items.Count > 0) Ui.SelectItem(_list.Items[0]);
+        if (ListFilter.IsFilteredEmpty(_result.Endpoints.Count, visible.Count))
+        {
+            _rebuilding = false;
+            ShowFilteredEmpty();
+            return;
+        }
+        _hint.Visible = false;
+        _list.Visible = true;
+        _editorsHost.Visible = true;
+        var target = previousKey is null
+            ? null
+            : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as EndpointCheck)?.Key == previousKey);
+        Ui.SelectItem(target ?? _list.Items[0]);
+        _rebuilding = false;
+        if (target is not null)
+        {
+            // 同一个接口仍在筛选结果里：编辑位与未保存的输入原样留着，只把计数行跟上。
+            UpdateCounts();
+            return;
+        }
+        ReloadEditors();
+        if (wasDirty) SetStatus("已切换到另一个接口，上一个接口的未保存输入已丢弃。", UiTokens.WarnText);
+    }
+
+    /// <summary>
+    /// 筛到零行：这一屏的空属于「有条目、只是当前关键词一条都不命中」，与「检查结果里没有接口」
+    /// 是两种空（下一步不同，第五十九轮同一口径）。关键词框留着（§7「禁用不得移除下一步」），
+    /// 计数行仍是整份统计（「共 N 个接口 · 已保存补充 M 处」讲的是整份检查结果，不因关键词不命中而失效）；
+    /// 编辑位收走、保存与放弃一起禁用——没有选中就没有可保存的那一个接口。
+    /// </summary>
+    private void ShowFilteredEmpty()
+    {
+        _hint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.EndpointNoun);
+        _hint.ForeColor = UiTokens.Muted;
+        _hint.Visible = true;
+        _editorsHost.Visible = false;
+        _dirty = false;
+        _saveButton.Enabled = false;
+        _discardButton.Enabled = false;
+        UpdateCounts();
+    }
+
+    /// <summary>
+    /// 三个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给关键词框并选中已有关键词、
+    /// 框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 退出筛选（清空关键词回到全部接口）。
+    /// 与另七张长清单同一份口径、同一处接线（<see cref="Ui.TryFocusFilter"/>、<see cref="Ui.TryEnterFilter"/>、
+    /// <see cref="Ui.TryEscapeFilter"/>）：本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+    /// 对话框的 Enter=确认、Esc=取消在焦点不在框上时逐字不变（AcceptButton 与 CancelButton 仍是「关闭」）。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
+        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
+        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        return base.ProcessDialogKey(keyData);
     }
 
     private void RefreshListCounts()

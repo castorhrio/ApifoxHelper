@@ -54,6 +54,14 @@ public static class SupplementEntries
         store.Entries.FirstOrDefault(s => s.ResourceKey == resourceKey
             && s.Location == editor.Location && s.Field == editor.Field);
 
+    /// <summary>
+    /// 接口清单的关键词匹配字段（DESIGN.md §6「列表筛选」）：那一行在屏幕上被读作的两格——
+    /// 接口身份（方法 + 路径，与首列同一份拼法）与远端名称（第二列，缺失按空处理）。
+    /// 「补充」那一列是数字（「N 处」），不进关键词（与接口追踪明细的三个计数列同一取舍）。
+    /// 与清单单元格同源，不另造一套字段。
+    /// </summary>
+    public static string[] KeywordFields(EndpointCheck check) => [check.Method + " " + check.Path, check.RemoteName ?? ""];
+
     /// <summary>该接口已保存的补充条目数（列表列如实显示；保留现状也算一处）。</summary>
     public static int EndpointEntryCount(SupplementStore store, string resourceKey) =>
         store.Entries.Count(s => s.ResourceKey == resourceKey);

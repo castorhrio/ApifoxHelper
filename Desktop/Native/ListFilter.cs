@@ -43,7 +43,12 @@ public static class ListFilter
     public const string TaskPlaceholder = "筛选任务（名称、配置、下一步）";
     public const string ProfilePlaceholder = "筛选配置（名称、API 项目、Apifox 目标）";
 
-    /// <summary>检查结果的关键词框：按接口身份与远端名称找（与列表首两列同一批文字）。</summary>
+    /// <summary>
+    /// 检查结果的关键词框：按接口身份与远端名称找（与列表首两列同一批文字）。
+    /// 补充说明的接口清单（第七十六轮）匹配的正是同样两格（接口身份 + 名称，取法在
+    /// <c>SupplementEntries.KeywordFields</c>），故共用这一份文字——同一个动作在两处说同一句话，
+    /// 不为「找接口」另起第二种说法。
+    /// </summary>
     public const string EndpointSearchPlaceholder = "筛选接口（方法、路径、名称）";
 
     /// <summary>差异确认的关键词框：按条目资源、位置与类型找（与列表三列同一批文字）。</summary>
