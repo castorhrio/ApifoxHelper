@@ -192,6 +192,16 @@ public class ListCopyTests
     }
 
     [Fact]
+    public void Evidence_List_CopiesTheSummaryColumn()
+    {
+        var source = Repo.Source("Desktop", "Native", "EvidenceDialog.cs");
+        // 首列是「分类」（路由/校验/守卫…），许多行同值，复制它认不出是哪一条证据；
+        // 「文件:行」是位置而不是名字，这一行在屏幕上被读作的名字是「证据摘要」。
+        Assert.Equal("分类", ColumnTitles(source, "_list")[0]);
+        AssertIdentityColumn(source, "EvidenceSummaryColumn", "_list", "证据摘要");
+    }
+
+    [Fact]
     public void IdentityColumn_IsDeclaredOnlyForListsWithoutANameInTheFirstColumn()
     {
         // 其余列表的名称格就在首列，一律走默认值：新增声明要么改这份清单、要么先说明首列为什么不是名称。
@@ -200,7 +210,7 @@ public class ListCopyTests
             .Select(s => s.Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
-        Assert.Equal(["DecisionsDialog.cs", "SyncPreviewDialog.cs"], declared);
+        Assert.Equal(["DecisionsDialog.cs", "EvidenceDialog.cs", "SyncPreviewDialog.cs"], declared);
     }
 
     /// <summary>
