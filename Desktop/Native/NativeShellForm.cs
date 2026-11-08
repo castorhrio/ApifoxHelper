@@ -431,19 +431,35 @@ internal sealed class NativeShellForm : Form
         Close();
     }
 
+    /// <summary>
+    /// 打开目录失败：经令牌化提示对话框说明原因与路径（DESIGN.md §1.1「禁止以框架默认观感直接交付」）。
+    /// 此前用系统 MessageBox（只有一个「确定」），是全原生界面仅有的两处框架默认观感之一；
+    /// 确认类动作仍用原生确认对话框（§6 例外条款），不经过这里。文字取 NoticeText 一份。
+    /// </summary>
     private void OpenFolder(string path)
     {
-        if (!Browser.TryOpen(path, out var error))
-        {
-            MessageBox.Show(this, $"无法打开目录：{error}\n\n{path}", Title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
+        if (Browser.TryOpen(path, out var error)) return;
+        using var dialog = new NoticeDialog(
+            NoticeText.FolderErrorHeading,
+            error ?? NoticeText.FolderErrorHeading,
+            mono: path,
+            note: NoticeText.FolderErrorNote);
+        dialog.ShowDialog(this);
     }
 
+    /// <summary>
+    /// 关于：版本、资料目录与运行时，经令牌化提示对话框呈现（与其余信息视图同一套令牌与形状）。
+    /// 不再显示本地服务地址——本地 HTTP 服务是过渡壳的实现能力（方案 §2.4），不是用户主产品，
+    /// 把地址摆在「关于」里等于把用户往浏览器引（方案 1.4「不把用户推回浏览器」）。
+    /// </summary>
     private void ShowAbout()
     {
-        MessageBox.Show(this,
-            $"Apifox 助手 {TaskStore.ToolVersion}\n\n本地服务：{_host.Url}\n资料目录：{_host.Store.Root}\n.NET：{RuntimeInformation.FrameworkDescription}",
-            "关于 Apifox 助手", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        using var dialog = new NoticeDialog(
+            NoticeText.AboutHeading,
+            NoticeText.AboutBody(TaskStore.ToolVersion, RuntimeInformation.FrameworkDescription),
+            mono: NoticeText.AboutDataDirLine(_host.Store.Root),
+            note: NoticeText.AboutNote);
+        dialog.ShowDialog(this);
     }
 
     private static Icon? LoadIcon()
