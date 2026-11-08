@@ -70,7 +70,8 @@ public class FieldChromeTests
         foreach (var source in Repo.NativeSources().Where(s => !s.IsUi))
         {
             if (!source.Contains("Ui.Input(")) continue;
-            Assert.True(source.Contains("Ui.Field("),
+            // 包描边的落点：就地 Ui.Field(...)，或交给 Ui.FilterRow(...)（工厂内部经 Field 包，第六十八轮）。
+            Assert.True(source.Contains("Ui.Field(") || source.Contains("Ui.FilterRow("),
                 $"{source.Name}:创建了输入框但没有 Ui.Field() 包 1px 描边——无边框输入框在 Bg 底上不可见（DESIGN.md §6 输入框）。");
         }
     }

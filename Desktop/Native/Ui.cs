@@ -222,6 +222,55 @@ internal static class Ui
         return panel;
     }
 
+    /// <summary>筛选行里关键词框的宽度（唯一落点）：五张长清单的框一样宽，不各写一个数。</summary>
+    public const int FilterKeywordWidth = 220;
+
+    /// <summary>
+    /// 长清单的筛选行（DESIGN.md §6「列表筛选」）：筛选 | 下拉 | 关键词 | 关键词框 | 计数。
+    /// 五张带筛选下拉的清单（检查结果、差异确认、注释缺口、注释候选、响应契约）共用这一份形状——
+    /// 此前四处各拼一遍，第五张（检查结果）拼成了 FlowLayoutPanel + 240 宽 + Sm 间距：同一个筛选行
+    /// 在五张清单上有两种样子（窄窗口下 Flow 把框裁掉，Table 让末列吸收剩余宽度），属同壳不同行为。
+    /// 关键词框经 <see cref="Field"/> 包 1px 发丝边（§6「输入框」：放入界面时必须经 Field 包装），
+    /// 宽度取 <see cref="FilterKeywordWidth"/>；<paramref name="counts"/> 为 null 时（检查结果的计数在表头行）
+    /// 末列留空、由它吸收剩余宽度，行形状仍是同一份。
+    /// </summary>
+    public static TableLayoutPanel FilterRow(ComboBox filter, TextBox keyword, Label? counts)
+    {
+        keyword.Width = FilterKeywordWidth;
+        var row = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            BackColor = UiTokens.Panel,
+            ColumnCount = 5,
+            Padding = new Padding(0, 0, 0, UiTokens.Sm),
+            Margin = new Padding(0),
+        };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        var filterCaption = Body("筛选");
+        filterCaption.Margin = new Padding(0, 0, UiTokens.Xs, 0);
+        filterCaption.TextAlign = ContentAlignment.MiddleLeft;
+        var keywordCaption = Body("关键词");
+        keywordCaption.Margin = new Padding(UiTokens.Lg, 0, UiTokens.Xs, 0);
+        keywordCaption.TextAlign = ContentAlignment.MiddleLeft;
+        row.Controls.Add(filterCaption, 0, 0);
+        row.Controls.Add(filter, 1, 0);
+        row.Controls.Add(keywordCaption, 2, 0);
+        row.Controls.Add(Field(keyword), 3, 0);
+        if (counts is not null)
+        {
+            counts.AutoSize = false;
+            counts.Dock = DockStyle.Fill;
+            counts.TextAlign = ContentAlignment.MiddleRight;
+            row.Controls.Add(counts, 4, 0);
+        }
+        return row;
+    }
+
     /// <summary>
     /// 长内容区的可滚动宿主（DESIGN.md §6「长内容区」）：内容超出可视高度时出滚动条；
     /// 子项多为不接收焦点的标签，点击内容的任意处（含标签上）把焦点交给宿主，滚轮随后可滚动

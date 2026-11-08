@@ -82,7 +82,6 @@ internal sealed class CheckResultsDialog : Form
         _filter.SelectedIndex = 0;
         _filter.SelectedIndexChanged += (_, _) => PopulateList();
 
-        _keyword.Width = 240;
         _keyword.PlaceholderText = ListFilter.EndpointSearchPlaceholder;
         _keyword.TextChanged += (_, _) => PopulateList();
 
@@ -98,15 +97,9 @@ internal sealed class CheckResultsDialog : Form
         headRow.Controls.Add(_stale, 0, 1);
         headRow.SetColumnSpan(_stale, 2);
 
-        var filterCaption = Ui.Body("筛选");
-        filterCaption.Margin = new Padding(0, 0, UiTokens.Sm, 0);
-        var keywordCaption = Ui.Body("关键词");
-        keywordCaption.Margin = new Padding(UiTokens.Lg, 0, UiTokens.Sm, 0);
-        var filterRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, BackColor = UiTokens.Panel, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
-        filterRow.Controls.Add(filterCaption);
-        filterRow.Controls.Add(_filter);
-        filterRow.Controls.Add(keywordCaption);
-        filterRow.Controls.Add(Ui.Field(_keyword));
+        // 筛选行形状取工厂（§6「列表筛选」）：此前这一屏是 FlowLayoutPanel + 240 宽 + Sm 间距，
+        // 与另四张长清单的 TableLayoutPanel + 220 宽 + Xs 间距是两种样子；计数在表头行，故 counts 传 null。
+        var filterRow = Ui.FilterRow(_filter, _keyword, counts: null);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));

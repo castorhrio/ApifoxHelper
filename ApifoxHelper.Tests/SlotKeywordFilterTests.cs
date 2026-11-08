@@ -50,7 +50,8 @@ public class SlotKeywordFilterTests
     {
         var source = Repo.Source("Desktop", "Native", File);
         Assert.Matches(@"(?m)^\s*private readonly TextBox _keyword = Ui\.Input\(\);$", source);
-        Assert.Matches(@"(?m)^\s*_keyword\.Width = 220;$", source);
+        // 宽度取工厂常量（第六十八轮）：五张长清单的框一样宽，界面不各写一个数。
+        Assert.DoesNotContain("_keyword.Width", source, StringComparison.Ordinal);
         Assert.Matches(@"(?m)^\s*_keyword\.TextChanged \+= \(_, _\) => ApplyFilter\(\);$", source);
     }
 
@@ -58,13 +59,13 @@ public class SlotKeywordFilterTests
     public void FilterRow_CarriesBothEntries_AndKeepsTheCoverageRowSpanning()
     {
         var source = Repo.Source("Desktop", "Native", File);
-        // 与另两张长清单同一形状：筛选 | 状态下拉 | 关键词 | 关键词框 | 计数。
-        Assert.Matches(@"(?m)^.*ColumnCount = 5,.*$", source);
-        Assert.Matches(@"(?m)^\s*filterRow\.Controls\.Add\(_filter, 1, 0\);$", source);
-        Assert.Matches(@"(?m)^\s*filterRow\.Controls\.Add\(keywordCaption, 2, 0\);$", source);
-        // 关键词框经 Ui.Field 包 1px 发丝边（§6「输入框」：放入界面时必须经 Field 包装）。
-        Assert.Matches(@"(?m)^\s*filterRow\.Controls\.Add\(Ui\.Field\(_keyword\), 3, 0\);$", source);
-        Assert.Matches(@"(?m)^\s*filterRow\.Controls\.Add\(_counts, 4, 0\);$", source);
+        // 与另四张长清单同一形状：筛选 | 状态下拉 | 关键词 | 关键词框 | 计数——形状取工厂（第六十八轮）。
+        Assert.Matches(@"(?m)^\s*var filterRow = Ui\.FilterRow\(_filter, _keyword, _counts\);$", source);
+        Assert.DoesNotContain("ColumnCount = 5", source, StringComparison.Ordinal);
+        // 行里的三件东西不就地加（覆盖率行仍由本屏自己加在第二行）。
+        Assert.DoesNotContain("filterRow.Controls.Add(_filter", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("filterRow.Controls.Add(Ui.Field(_keyword)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("filterRow.Controls.Add(_counts", source, StringComparison.Ordinal);
         // 覆盖率行原来跨三列，加了关键词框要跟着跨五列——漏改就是覆盖率行只盖住前三格。
         Assert.Matches(@"(?m)^\s*filterRow\.SetColumnSpan\(_coverage, 5\);$", source);
     }

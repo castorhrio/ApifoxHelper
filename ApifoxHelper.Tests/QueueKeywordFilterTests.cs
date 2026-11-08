@@ -60,7 +60,8 @@ public class QueueKeywordFilterTests
     {
         var source = Repo.Source("Desktop", "Native", file);
         Assert.Matches(@"(?m)^\s*private readonly TextBox _keyword = Ui\.Input\(\);$", source);
-        Assert.Matches(@"(?m)^\s*_keyword\.Width = 220;$", source);
+        // 宽度取工厂常量（第六十八轮）：五张长清单的框一样宽，界面不各写一个数。
+        Assert.DoesNotContain("_keyword.Width", source, StringComparison.Ordinal);
         Assert.Matches(@"(?m)^\s*_keyword\.TextChanged \+= \(_, _\) => ApplyFilter\(\);$", source);
     }
 
@@ -70,13 +71,11 @@ public class QueueKeywordFilterTests
     public void FilterRow_CarriesBothEntries(string file)
     {
         var source = Repo.Source("Desktop", "Native", file);
-        // 与另三张长清单同一形状：筛选 | 状态下拉 | 关键词 | 关键词框 | 计数。
-        Assert.Matches(@"(?m)^.*ColumnCount = 5,.*$", source);
-        Assert.Matches(@"(?m)^\s*filterRow\.Controls\.Add\(_filter, 1, 0\);$", source);
-        Assert.Matches(@"(?m)^\s*filterRow\.Controls\.Add\(keywordCaption, 2, 0\);$", source);
-        // 关键词框经 Ui.Field 包 1px 发丝边（§6「输入框」：放入界面时必须经 Field 包装）。
-        Assert.Matches(@"(?m)^\s*filterRow\.Controls\.Add\(Ui\.Field\(_keyword\), 3, 0\);$", source);
-        Assert.Matches(@"(?m)^\s*filterRow\.Controls\.Add\(_counts, 4, 0\);$", source);
+        // 与另三张长清单同一形状：筛选 | 状态下拉 | 关键词 | 关键词框 | 计数——形状取工厂（第六十八轮），
+        // 界面只交三件东西，不各拼一遍（拼一遍就有一处先漂：检查结果那一屏曾拼成 Flow + 240 宽）。
+        Assert.Matches(@"(?m)^\s*var filterRow = Ui\.FilterRow\(_filter, _keyword, _counts\);$", source);
+        Assert.DoesNotContain("ColumnCount = 5", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("filterRow.Controls.Add", source, StringComparison.Ordinal);
     }
 
     // ---------- 匹配的是屏幕上那几格，不另造一套字段 ----------

@@ -95,30 +95,11 @@ internal sealed class CandidatesDialog : Form
         _filter.SelectedIndex = 0;
         _filter.SelectedIndexChanged += (_, _) => ApplyFilter();
 
-        _keyword.Width = 220;
         _keyword.PlaceholderText = ListFilter.CandidateSearchPlaceholder;
         _keyword.TextChanged += (_, _) => ApplyFilter();
 
-        var filterRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 5, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
-        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        var filterCaption = Ui.Body("筛选");
-        filterCaption.Margin = new Padding(0, 0, UiTokens.Xs, 0);
-        filterCaption.TextAlign = ContentAlignment.MiddleLeft;
-        var keywordCaption = Ui.Body("关键词");
-        keywordCaption.Margin = new Padding(UiTokens.Lg, 0, UiTokens.Xs, 0);
-        keywordCaption.TextAlign = ContentAlignment.MiddleLeft;
-        _counts.AutoSize = false;
-        _counts.Dock = DockStyle.Fill;
-        _counts.TextAlign = ContentAlignment.MiddleRight;
-        filterRow.Controls.Add(filterCaption, 0, 0);
-        filterRow.Controls.Add(_filter, 1, 0);
-        filterRow.Controls.Add(keywordCaption, 2, 0);
-        filterRow.Controls.Add(Ui.Field(_keyword), 3, 0);
-        filterRow.Controls.Add(_counts, 4, 0);
+        // 筛选行形状取工厂（§6「列表筛选」）：五张长清单同一份，不各拼一遍。
+        var filterRow = Ui.FilterRow(_filter, _keyword, _counts);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
