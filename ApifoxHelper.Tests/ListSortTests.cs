@@ -146,6 +146,54 @@ public class ListSortTests
         Assert.Equal(["b", "a"], rows.Select(r => r.Text));
     }
 
+    // ---------- 自然序：数字段按数值比较（与资源管理器名称列同序） ----------
+
+    [Fact]
+    public void Order_TextWithEmbeddedNumbers_SortsByValueNotLexicographically()
+    {
+        // 带序号的任务名/接口名/项目 ID 此前按文字排会得到「10 在 2 前」，与资源管理器显示的名称列不一致。
+        var rows = Rows(("报告10", 1, 0), ("报告2", 1, 0), ("报告1", 1, 0), ("报告20", 1, 0));
+        Assert.Equal(["报告1", "报告2", "报告10", "报告20"], ListSort.Order(rows, 0, false, Key).Select(r => r.Text));
+        Assert.Equal(["报告20", "报告10", "报告2", "报告1"], ListSort.Order(rows, 0, true, Key).Select(r => r.Text));
+    }
+
+    [Fact]
+    public void Order_PureNumericIds_SortByValueAndAreOverflowSafe()
+    {
+        // 项目 ID 列可能远超 Int64：按去前导零后的位长与逐位比较，不转整数、不因溢出误判相等。
+        var rows = Rows(("100", 1, 0), ("20", 1, 0), ("3", 1, 0), ("99999999999999999999", 1, 0), ("100000000000000000000", 1, 0));
+        Assert.Equal(["3", "20", "100", "99999999999999999999", "100000000000000000000"],
+            ListSort.Order(rows, 0, false, Key).Select(r => r.Text));
+    }
+
+    [Fact]
+    public void Order_EqualNumericValueWithLeadingZeros_IsDeterministic()
+    {
+        // 去前导零后数值相同：按原始位长定序（7 在 07 前、07 在 007 前），结果稳定、不随数据源顺序浮动。
+        var rows = Rows(("007", 1, 0), ("7", 1, 0), ("07", 1, 0));
+        Assert.Equal(["7", "07", "007"], ListSort.Order(rows, 0, false, Key).Select(r => r.Text));
+    }
+
+    [Fact]
+    public void Order_PureTextColumns_StillUseCurrentCulture()
+    {
+        // 自然序只改数字段：不含数字的名称仍逐字按当前区域比较，与既有 locale 行为一致、无回归。
+        var rows = Rows(("香蕉", 1, 0), ("苹果", 1, 0), ("cherry", 1, 0), ("Apple", 1, 0));
+        var ascending = ListSort.Order(rows, 0, false, Key).Select(r => r.Text).ToList();
+        var expected = rows.Select(r => r.Text).OrderBy(text => text, StringComparer.CurrentCulture).ToList();
+        Assert.Equal(expected, ascending);
+    }
+
+    [Fact]
+    public void Order_MixedDigitAndTextAtBoundary_ComparesByCulture()
+    {
+        // 数字与文字在同一位置相遇时走「按当前区域比较两个字符」分支（区域序里数字在字母前），
+        // 该用例守住这条边界分支既不死循环也不抛异常——否则带「前缀+数字/字母」混合的名称会挂住排序。
+        var rows = Rows(("xA", 1, 0), ("x9", 1, 0));
+        Assert.Equal(["x9", "xA"], ListSort.Order(rows, 0, false, Key).Select(r => r.Text));
+        Assert.Equal(["xA", "x9"], ListSort.Order(rows, 0, true, Key).Select(r => r.Text));
+    }
+
     // ---------- 共享编译与单一落点 ----------
 
     [Fact]
