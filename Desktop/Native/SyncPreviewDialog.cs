@@ -389,7 +389,7 @@ internal sealed class SyncPreviewDialog : Form
         _selectHint.Visible = true;
         _selectList.Visible = false;
         // 整份数据不可得时两个筛选入口一起停：只停一个等于留一个按不动的入口。
-        _keyword.Enabled = false;
+        _keyword.Enabled = ListFilter.KeywordEnabled(false);
         _selectAllButton.Enabled = false;
         _clearButton.Enabled = false;
         _generateButton.Enabled = false;
@@ -531,7 +531,7 @@ internal sealed class SyncPreviewDialog : Form
         _busy = busy;
         _selectAllButton.Enabled = !busy && _diff is not null;
         _clearButton.Enabled = !busy && _diff is not null;
-        _keyword.Enabled = !busy && _diff is not null;
+        _keyword.Enabled = ListFilter.KeywordEnabled(_diff is not null, busy);
         _viewPlanButton.Enabled = !busy && File.Exists(_tasks.FilePath(_taskId, TaskFiles.Plan));
         _backButton.Enabled = !busy;
         _generateButton.Enabled = !busy && _select.CheckedCount > 0;

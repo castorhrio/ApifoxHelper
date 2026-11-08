@@ -94,7 +94,7 @@ public class FilteredEmptyStateTests
     }
 
     [Fact]
-    public void Nouns_AreExactlyTheFiveFilteredViews()
+    public void Nouns_AreExactlyTheSixListsThatFilter()
     {
         var declared = typeof(ListFilter)
             .GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -102,12 +102,14 @@ public class FilteredEmptyStateTests
             .Select(f => (string?)f.GetValue(null) ?? "")
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToList();
-        var expected = new[] { ListFilter.CandidateNoun, ListFilter.ContractNoun, ListFilter.EndpointNoun, ListFilter.DecisionNoun, ListFilter.SlotNoun }
+        var expected = new[] { ListFilter.CandidateNoun, ListFilter.ContractNoun, ListFilter.EndpointNoun, ListFilter.DecisionNoun, ListFilter.SlotNoun, ListFilter.PropagationNoun }
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToList();
         Assert.Equal(expected, declared);
-        // 五个视图清的是五样东西：并成一份就等于把「没有契约」说成「没有候选」。
-        Assert.Equal(5, declared.Distinct().Count());
+        // 六个视图清的是六样东西：并成一份就等于把「没有契约」说成「没有候选」。
+        // 第六个名词（生成文档核对条目，第七十七轮）走的是只有关键词框的那一支，句子取 FilteredEmptyKeywordHint，
+        // 但「这一行的东西叫什么」仍是同一份词汇表——两处各写一份必然漂移。
+        Assert.Equal(6, declared.Distinct().Count());
     }
 
     [Theory]

@@ -83,13 +83,15 @@ public class MissingSelectionTests
     [Fact]
     public void Hint_PointerIsTheSingleSourceForTheNextStep()
     {
-        // 下半句只有一份：五个名词的组合都以同一个 pointer 收尾，改一处就五处一起改。
+        // 下半句只有一份：六个名词的组合都以同一个 pointer 收尾，改一处就六处一起改。
+        // （第六个名词是第七十七轮并入词汇表的「核对条目」——它那一屏没有因未选中而禁用的控件，
+        // 不接这句话，但名词仍取同一份词汇表。）
         foreach (var noun in NounValues())
         {
             Assert.EndsWith(ListSelection.MissingSelectionPointer, ListSelection.MissingSelectionHint(noun), StringComparison.Ordinal);
         }
 
-        Assert.Equal(5, NounValues().Distinct().Count());
+        Assert.Equal(6, NounValues().Distinct().Count());
     }
 
     [Fact]

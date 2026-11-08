@@ -14,7 +14,7 @@ namespace ApifoxHelper.Tests;
 /// <see cref="Ui.TryEnterFilter"/> 一处，对话框不就地拆修饰键、不自己选中或滚动。
 /// 第七十三轮把第六张长清单（同步预览的接口勾选页）接上同一处入口，触达点清单随之由五张变六张；
 /// 第七十五轮把第七张（接口追踪明细的接口清单）接上，清单再变七张；
-/// 第七十六轮把第八张（补充说明的接口清单）接上，清单再变八张。
+/// 第七十六轮把第八张（补充说明的接口清单）接上、第七十七轮把第九张（生成文档核对条目）接上，清单再变九张。
 /// 口径是真执行（ListKeys 与测试工程共享编译），接线以源码切片与行首正则钉住。
 /// Enter 的实际按键路由与选中的真机观感随 G-D5 复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
@@ -30,6 +30,7 @@ public class FilterEnterTests
         "SyncPreviewDialog.cs",
         "EndpointTraceDialog.cs",
         "SupplementsDialog.cs",
+        "PropagationDialog.cs",
     ];
 
     // ---------- 口径真值表（手势判定只有一份，对话框认的就是它） ----------

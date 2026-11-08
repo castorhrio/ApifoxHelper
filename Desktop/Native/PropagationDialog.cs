@@ -9,7 +9,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 生成文档核对结果（只读）：已确认注释是否写入源码、出现在实际生成的 XML 文档、被 Swagger 读取到正确位置。
 /// 数据来自任务目录 propagation.json（核对落盘产物）；核对在任务页发起，本对话框无写入动作。
 /// 旧生成物不算注释已生效：XML 早于源码修改、未启用 XML 生成、Swagger 未刷新都如实显示，不显示成完成。
-/// 状态表：尚未核对=空态指引；读取失败=内联错误与下一步；正常=概要计数 + 条目列表（源码/XML/Swagger 三环状态，颜色 + 文字双通道）+ 条目详情 + XML 文件清单。
+/// 状态表：尚未核对=空态指引；读取失败=内联错误与下一步；正常=概要计数 + 条目列表（源码/XML/Swagger 三环状态，
+/// 颜色 + 文字双通道）+ 条目详情 + XML 文件清单；筛到零行=关键词框留着并说明下一步，计数行仍是整份核对数据的数字
+/// （见 <see cref="PopulateList"/>）。
 /// </summary>
 internal sealed class PropagationDialog : Form
 {
@@ -28,6 +30,7 @@ internal sealed class PropagationDialog : Form
     };
     private readonly ListView _list = Ui.List();
     private readonly ListView _xmlList = Ui.List();
+    private readonly TextBox _keyword = Ui.Input();
     private readonly TextBox _detail = Ui.Preview(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _hint = new()
     {
@@ -36,6 +39,8 @@ internal sealed class PropagationDialog : Form
         ForeColor = UiTokens.Muted,
         Font = UiTokens.Body.Value,
     };
+
+    private List<PropagationEntry> _entries = [];
 
     public PropagationDialog(TaskStore tasks, CheckTask task)
     {
@@ -58,6 +63,8 @@ internal sealed class PropagationDialog : Form
         _list.Columns.Add("XML", 110);
         _list.Columns.Add("Swagger", 130);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
+        _keyword.PlaceholderText = ListFilter.PropagationSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => PopulateList();
 
         _xmlList.Columns.Add("项目", 150);
         _xmlList.Columns.Add("XML 文档文件", 420);
@@ -75,6 +82,10 @@ internal sealed class PropagationDialog : Form
         headRow.Controls.Add(_counts, 1, 0);
         headRow.Controls.Add(_swaggerMessage, 0, 1);
         headRow.SetColumnSpan(_swaggerMessage, 2);
+
+        // 筛选行形状取工厂（§6「列表筛选」）：这一屏没有筛选下拉，走只有关键词框的那一支；
+        // 计数在表头行（与核对时间同排），故 counts 传 null。
+        var filterRow = Ui.FilterRow(_keyword, counts: null);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
@@ -107,11 +118,12 @@ internal sealed class PropagationDialog : Form
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
 
-        // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次 XML 清单、条目详情、标题行，条目列表最后填满剩余空间。
+        // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次 XML 清单、条目详情、筛选行、标题行，条目列表最后填满剩余空间。
         Controls.Add(listHost);
         Controls.Add(detailHost);
         Controls.Add(xmlHost);
         Controls.Add(buttonRow);
+        Controls.Add(filterRow);
         Controls.Add(headRow);
     }
 
@@ -135,32 +147,17 @@ internal sealed class PropagationDialog : Form
         }
         _hint.Visible = false;
         _checkedAt.Text = "核对时间 " + result.CheckedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-        _counts.Text = $"位置 {result.Entries.Count} · 源码 {result.Entries.Count(en => en.SourceState == "written")} · XML {result.Entries.Count(en => en.XmlState == "present")} · Swagger {result.Entries.Count(en => en.SwaggerState == "present")}";
+        _entries = result.Entries;
+        // 计数行按整份核对数据统计，不随关键词变化（「XML 0」正是要找的那批的凭据）。
+        _counts.Text = PropagationEntries.CountsLine(
+            _entries.Count,
+            _entries.Count(en => en.SourceState == "written"),
+            _entries.Count(en => en.XmlState == "present"),
+            _entries.Count(en => en.SwaggerState == "present"));
         if (result.SwaggerMessage is { } message)
         {
             _swaggerMessage.Text = message;
             _swaggerMessage.Visible = true;
-        }
-
-        _list.BeginUpdate();
-        foreach (var entry in result.Entries)
-        {
-            var row = new ListViewItem(entry.Display) { Tag = entry };
-            row.SubItems.Add(entry.Tag == "param" && entry.ParameterName is { } name ? "参数 " + name : TaskDisplay.SlotTagText(entry.Tag));
-            AddState(row, TaskDisplay.PropagationSourceText(entry.SourceState), TaskDisplay.PropagationSourceTone(entry.SourceState));
-            AddState(row, TaskDisplay.PropagationXmlText(entry.XmlState), TaskDisplay.PropagationXmlTone(entry.XmlState));
-            AddState(row, TaskDisplay.PropagationSwaggerText(entry.SwaggerState), TaskDisplay.PropagationSwaggerTone(entry.SwaggerState));
-            _list.Items.Add(row);
-        }
-        _list.EndUpdate();
-        if (_list.Items.Count > 0)
-        {
-            Ui.SelectItem(_list.Items[0]);
-        }
-        else
-        {
-            _hint.Text = "没有核对条目。";
-            _hint.Visible = true;
         }
 
         _xmlList.BeginUpdate();
@@ -177,6 +174,83 @@ internal sealed class PropagationDialog : Form
             _xmlList.Items.Add(row);
         }
         _xmlList.EndUpdate();
+
+        if (_entries.Count == 0)
+        {
+            // 整份数据没有条目：这一屏的空不在筛选上，提示出口说话、清单不显示（与接口追踪明细同一形状）。
+            _hint.Text = "没有核对条目。";
+            _hint.ForeColor = UiTokens.Muted;
+            _hint.Visible = true;
+            _list.Visible = false;
+            // 整份数据没有条目：关键词框一起停（没有可筛的东西，下一步不在这框上）。口径见 ListFilter.KeywordEnabled。
+            _keyword.Enabled = ListFilter.KeywordEnabled(false);
+            return;
+        }
+        // 有数据可筛：关键词框可用（口径见 ListFilter.KeywordEnabled）。
+        _keyword.Enabled = ListFilter.KeywordEnabled(true);
+        PopulateList();
+    }
+
+    /// <summary>
+    /// 关键词框（DESIGN.md §6「列表筛选」）：输入即筛选，只改可见行——计数行按整份核对数据统计、
+    /// 不随关键词变化（「XML 0」正是要找的那批的凭据，被一屏的空抹掉等于把结果藏起来）。
+    /// 筛到零行不是「没有核对条目」：说清这一屏为什么空，下一步就在那个框上（这一屏没有筛选下拉，
+    /// 故不指「换一个筛选」），关键词框留着（§7「禁用不得移除下一步」），详情区经既有的无选中路径
+    /// <see cref="ShowDetail"/> 收口，不在这里另写一套收控件的赋值。
+    /// 选中按位置恢复（筛一下再筛回来仍停在原来那个条目），恢复不到时落在新筛选第一条
+    /// （与两个主页面「重建后按 Id 恢复选中」、第五十六轮「切换筛选落在新筛选第一条」同一口径）。
+    /// </summary>
+    private void PopulateList()
+    {
+        var selectedDisplay = (Ui.SelectedItem(_list)?.Tag as PropagationEntry)?.Display;
+        var visible = ListFilter.Apply(_entries, _keyword.Text, entry => PropagationEntries.KeywordFields(
+            entry.Display,
+            PropagationEntries.TagText(entry.Tag, entry.ParameterName),
+            TaskDisplay.PropagationSourceText(entry.SourceState),
+            TaskDisplay.PropagationXmlText(entry.XmlState),
+            TaskDisplay.PropagationSwaggerText(entry.SwaggerState)));
+        _list.BeginUpdate();
+        _list.Items.Clear();
+        foreach (var entry in visible)
+        {
+            var row = new ListViewItem(entry.Display) { Tag = entry };
+            row.SubItems.Add(PropagationEntries.TagText(entry.Tag, entry.ParameterName));
+            AddState(row, TaskDisplay.PropagationSourceText(entry.SourceState), TaskDisplay.PropagationSourceTone(entry.SourceState));
+            AddState(row, TaskDisplay.PropagationXmlText(entry.XmlState), TaskDisplay.PropagationXmlTone(entry.XmlState));
+            AddState(row, TaskDisplay.PropagationSwaggerText(entry.SwaggerState), TaskDisplay.PropagationSwaggerTone(entry.SwaggerState));
+            _list.Items.Add(row);
+        }
+        _list.EndUpdate();
+        if (ListFilter.IsFilteredEmpty(_entries.Count, visible.Count))
+        {
+            _hint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.PropagationNoun);
+            _hint.ForeColor = UiTokens.Muted;
+            _hint.Visible = true;
+            _list.Visible = false;
+            ShowDetail();
+            return;
+        }
+        _hint.Visible = false;
+        _list.Visible = true;
+        var target = selectedDisplay is null
+            ? null
+            : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as PropagationEntry)?.Display == selectedDisplay);
+        Ui.SelectItem(target ?? _list.Items[0]);
+    }
+
+    /// <summary>
+    /// 三个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给关键词框并选中已有关键词、
+    /// 框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 退出筛选（清空关键词回到全部条目）。
+    /// 与另八张长清单同一份口径、同一处接线（<see cref="Ui.TryFocusFilter"/>、<see cref="Ui.TryEnterFilter"/>、
+    /// <see cref="Ui.TryEscapeFilter"/>）：本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+    /// 对话框的 Enter=确认、Esc=取消在焦点不在框上时逐字不变（AcceptButton 与 CancelButton 仍是「关闭」）。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
+        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
+        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        return base.ProcessDialogKey(keyData);
     }
 
     private void ShowHint(string message, Color color)
@@ -185,6 +259,9 @@ internal sealed class PropagationDialog : Form
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
+        // 整份数据不可得：关键词框一起停（§7「禁用 = 控件禁用 + 一句话说明缺什么」——
+        // 缺什么与下一步由上面那句话给出，框里敲字筛不到任何东西）。口径见 ListFilter.KeywordEnabled。
+        _keyword.Enabled = ListFilter.KeywordEnabled(false);
         _counts.Text = "";
         _checkedAt.Text = "";
         _detail.Text = "";

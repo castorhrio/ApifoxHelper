@@ -294,6 +294,10 @@ internal static class Ui
         var keyName = (keyData & Keys.KeyCode).ToString();
         if (!string.Equals(keyName, ShellShortcuts.FindKey, StringComparison.Ordinal)) return false;
         if (!ShellShortcuts.IsFindGesture((keyData & Keys.Shift) != 0, (keyData & Keys.Control) != 0, (keyData & Keys.Alt) != 0)) return false;
+        // 停用的框不接这一次按键：焦点交不过去（Focus 对停用控件不生效），吞掉按键等于把「什么都没发生」
+        // 说成做了什么（与 ListFilter.EscClears「空框里按 Esc 不接这一次按键」同一纪律）。
+        // 停用的时机见 ListFilter.KeywordEnabled：整份数据不可得、作业运行期间。
+        if (!keyword.Enabled) return false;
         keyword.Focus();
         keyword.SelectAll();
         return true;

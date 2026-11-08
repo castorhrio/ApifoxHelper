@@ -145,10 +145,10 @@ public class FilterRowFactoryTests
         // 工厂内部写的是 `Field(keyword)`（同一个类里不写类名）。
         Assert.DoesNotContain(Repo.NativeSources(), s => s.Contains("Ui.Field(_keyword)"));
         Assert.Contains("Field(keyword)", FactoryBody(), StringComparison.Ordinal);
-        // 工厂的调用点恰为这五张清单加同步预览的接口勾选页（第七十二轮）、接口追踪明细（第七十五轮）
-        // 与补充说明（第七十六轮）——后三处走的是只有关键词框的那一支。
+        // 工厂的调用点恰为这五张清单加同步预览的接口勾选页（第七十二轮）、接口追踪明细（第七十五轮）、
+        // 补充说明（第七十六轮）与生成文档核对条目（第七十七轮）——后四处走的是只有关键词框的那一支。
         var callers = Repo.NativeSources().Where(s => s.Contains("Ui.FilterRow(")).Select(s => s.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
-        Assert.Equal(FiveLists.Append("SyncPreviewDialog.cs").Append("EndpointTraceDialog.cs").Append("SupplementsDialog.cs").OrderBy(n => n, StringComparer.Ordinal).ToList(), callers);
+        Assert.Equal(FiveLists.Append("SyncPreviewDialog.cs").Append("EndpointTraceDialog.cs").Append("SupplementsDialog.cs").Append("PropagationDialog.cs").OrderBy(n => n, StringComparer.Ordinal).ToList(), callers);
     }
 
     [Fact]

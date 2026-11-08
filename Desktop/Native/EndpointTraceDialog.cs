@@ -131,6 +131,8 @@ internal sealed class EndpointTraceDialog : Form
             return;
         }
         _coverages = store.Coverage;
+        // 有数据可筛：关键词框可用（口径见 ListFilter.KeywordEnabled）。
+        _keyword.Enabled = ListFilter.KeywordEnabled(true);
         _hint.Visible = false;
         // 计数行按整份追踪数据统计，不随关键词变化（「超限 N」正是要找的那批的凭据）。
         _counts.Text = $"接口 {_coverages.Count} · 超限 {_coverages.Count(c => c.BudgetExceeded)} · 未解析调用 {_coverages.Sum(c => c.Unresolved.Count)}";
@@ -244,6 +246,9 @@ internal sealed class EndpointTraceDialog : Form
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
+        // 整份数据不可得：关键词框一起停（§7「禁用 = 控件禁用 + 一句话说明缺什么」——
+        // 缺什么与下一步由上面那句话给出，框里敲字筛不到任何东西）。口径见 ListFilter.KeywordEnabled。
+        _keyword.Enabled = ListFilter.KeywordEnabled(false);
         _evidenceButton.Enabled = false;
         _counts.Text = "";
         _detail.Text = "";

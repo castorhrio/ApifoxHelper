@@ -337,9 +337,13 @@ public class SyncSelectTests
     {
         var source = Repo.Source("Desktop", "Native", File);
         // 整份数据不可得时两个筛选入口一起停：只停一个等于留一个按不动的入口。
-        Assert.Single(Regex.Matches(source, @"(?m)^\s*_keyword\.Enabled = false;$").Cast<Match>());
+        // 第七十八轮起「框能不能用」取 ListFilter.KeywordEnabled 单一口径（此前这一页就地写
+        // `!busy && _diff is not null`，另三张只有关键词框的清单则根本没有这一句——同一个状态两种样子）。
+        Assert.Single(Regex.Matches(source, @"(?m)^\s*_keyword\.Enabled = ListFilter\.KeywordEnabled\(false\);$").Cast<Match>());
         // 生成或执行中一并停，结束后按「数据可读」恢复。
-        Assert.Single(Regex.Matches(source, @"(?m)^\s*_keyword\.Enabled = !busy && _diff is not null;$").Cast<Match>());
+        Assert.Single(Regex.Matches(source, @"(?m)^\s*_keyword\.Enabled = ListFilter\.KeywordEnabled\(_diff is not null, busy\);$").Cast<Match>());
+        // 界面不就地拼这条判定（拼一遍就有一处先漂）。
+        Assert.DoesNotContain("_keyword.Enabled = !busy", source, StringComparison.Ordinal);
     }
 
     [Fact]

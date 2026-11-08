@@ -182,6 +182,8 @@ internal sealed class SupplementsDialog : Form
             ShowHint("检查结果中没有接口，没有可补充的位置。", UiTokens.Muted);
             return;
         }
+        // 有数据可筛：关键词框可用（口径见 ListFilter.KeywordEnabled）。
+        _keyword.Enabled = ListFilter.KeywordEnabled(true);
         _hint.Visible = false;
         PopulateList();
     }
@@ -193,6 +195,9 @@ internal sealed class SupplementsDialog : Form
         _hint.Visible = true;
         _editorsHost.Visible = false;
         _list.Visible = false;
+        // 整份数据不可得：关键词框一起停（§7「禁用 = 控件禁用 + 一句话说明缺什么」——
+        // 缺什么与下一步由上面那句话给出，框里敲字筛不到任何东西）。口径见 ListFilter.KeywordEnabled。
+        _keyword.Enabled = ListFilter.KeywordEnabled(false);
         _saveButton.Enabled = false;
         _discardButton.Enabled = false;
         _counts.Text = "";
