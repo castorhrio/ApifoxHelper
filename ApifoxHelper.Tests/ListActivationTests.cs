@@ -17,7 +17,8 @@ public class ListActivationTests
     public void Ui_ActivateItem_GuardsByHitTest()
     {
         var ui = Repo.Source("Desktop", "Native", "Ui.cs");
-        Assert.Matches(@"(?m)^\s*public static void ActivateItem\(ListView list, Action<ListViewItem> activate\)", ui);
+        // Enter 是可选接线（byEnter 默认 false）：不传参的调用点（对话框）保持原语义。
+        Assert.Matches(@"(?m)^\s*public static void ActivateItem\(ListView list, Action<ListViewItem> activate, bool byEnter = false\)", ui);
         Assert.Matches(@"(?m)^\s*list\.MouseDoubleClick \+= \(_, e\) =>", ui);
         // 空白区命中（Item 为 null）必须短路：守卫删除即回归为「不区分命中行」的旧行为。
         Assert.Matches(@"(?m)^\s*if \(list\.HitTest\(e\.Location\)\.Item is not ListViewItem item\) return;", ui);
@@ -25,12 +26,28 @@ public class ListActivationTests
     }
 
     [Fact]
+    public void Ui_ActivateItem_EntersOnlyWhenOptedIn_AndGuardsFocusedRow()
+    {
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        // 不传 byEnter 就不接 Enter：对话框的 Enter 保持「确认」既有语义（§6）。
+        Assert.Matches(@"(?m)^\s*if \(!byEnter\) return;", ui);
+        // Enter 的守卫与双击同纪律：裸 Enter（修饰键判定取共享口径）+ 命中焦点行，缺一不动作。
+        Assert.Matches(@"(?m)^\s*list\.KeyDown \+= \(_, e\) =>", ui);
+        Assert.Matches(@"(?m)^\s*if \(e\.KeyCode != Keys\.Enter \|\| !ListKeys\.IsEnterGesture\(e\.Shift, e\.Control, e\.Alt\)\) return;", ui);
+        Assert.Matches(@"(?m)^\s*if \(list\.FocusedItem is not ListViewItem item\) return;", ui);
+        // 动作前吞按键：Enter 不再落到控件默认行为。
+        Assert.Matches(@"(?m)^\s*e\.SuppressKeyPress = true;", ui);
+        // 键盘入口不得自己发明动作：Enter 与双击调用同一个 activate 回调。
+        Assert.Equal(2, Regex.Matches(ui, @"(?m)^\s*activate\(item\);").Count);
+    }
+
+    [Fact]
     public void ProjectsPage_ActivatesOnlyViaSharedEntry()
     {
         var projects = Repo.Source("Desktop", "Native", "ProjectsPage.cs");
-        // 双击只经工厂入口：命中行的 Tag（该行自身的配置）进入编辑，不再借当前选中。
+        // 双击与 Enter 都只经工厂入口：行自身的 Tag（该行配置）进入编辑，不借当前选中。
         Assert.Matches(
-            @"(?m)^\s*Ui\.ActivateItem\(_list, item => ShowDialog\(item\.Tag as ProjectProfile\)\);",
+            @"(?m)^\s*Ui\.ActivateItem\(_list, item => ShowDialog\(item\.Tag as ProjectProfile\), byEnter: true\);",
             projects);
         // 裸 DoubleClick 不区分命中行，不得回归。
         Assert.DoesNotContain("_list.DoubleClick", projects, StringComparison.Ordinal);
@@ -47,6 +64,8 @@ public class ListActivationTests
                 @"(?m)^\s*Ui\.ActivateItem\(_list, item => ShowEvidence\(item\.Tag as (CommentCandidate|DocSlot)\)\);",
                 source);
             Assert.DoesNotMatch(@"(?m)^\s*_list\.DoubleClick", source);
+            // 对话框不接 Enter：窗体设了 AcceptButton，Enter 的既有语义是「确认/关闭」（§6），本轮不改动。
+            Assert.DoesNotContain("byEnter", source, StringComparison.Ordinal);
         }
     }
 

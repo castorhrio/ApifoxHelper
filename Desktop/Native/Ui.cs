@@ -296,15 +296,28 @@ internal static class Ui
     }
 
     /// <summary>
-    /// 双击行激活（唯一入口）：只在双击命中行时回调该行。ListView.DoubleClick 不区分命中行，
+    /// 列表行激活（唯一入口）：双击只在命中行时回调该行。ListView.DoubleClick 不区分命中行，
     /// 双击空白区（首击已清空选中）同样触发——配置页此前会借这个空选中打开「新建配置」对话框；
     /// 命中哪行就激活哪行，双击空白区不动作。
+    /// byEnter 为真时同一条回调也接列表的裸 Enter（Windows 列表「Enter 打开选中项」惯例）：
+    /// 以焦点行为准、焦点行缺失即不动作，与双击的命中行守卫同一纪律——键盘入口不得借当前选中
+    /// 做出与鼠标不同的事。手势判定取 ListKeys 单一口径，组合 Enter 不吞键。
+    /// Enter 只按需在壳的页面接线、对话框不接：窗体设了 AcceptButton 时 Enter 在控件收到按键
+    /// 之前就被窗体的对话键处理取走（§6「对话框 Enter=确认、Esc=取消」既有语义，本入口不改动它）。
     /// </summary>
-    public static void ActivateItem(ListView list, Action<ListViewItem> activate)
+    public static void ActivateItem(ListView list, Action<ListViewItem> activate, bool byEnter = false)
     {
         list.MouseDoubleClick += (_, e) =>
         {
             if (list.HitTest(e.Location).Item is not ListViewItem item) return;
+            activate(item);
+        };
+        if (!byEnter) return;
+        list.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode != Keys.Enter || !ListKeys.IsEnterGesture(e.Shift, e.Control, e.Alt)) return;
+            if (list.FocusedItem is not ListViewItem item) return;
+            e.SuppressKeyPress = true;
             activate(item);
         };
     }

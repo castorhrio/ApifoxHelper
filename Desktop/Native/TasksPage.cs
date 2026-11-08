@@ -154,12 +154,20 @@ internal sealed class TasksPage : UserControl, INativePage
         newButton.Click += (_, _) => ShowNewTaskDialog();
         var refreshButton = Ui.Ghost("刷新");
         refreshButton.Click += (_, _) => RefreshData();
-        // 筛选框（DESIGN.md §6「列表筛选」）：输入即筛选，Esc 清空回到全部任务；只改呈现，不写任务数据。
+        // 筛选框（DESIGN.md §6「列表筛选」）：输入即筛选，Esc 清空回到全部任务，
+        // Enter 把焦点与选中交给筛选结果第一行；只改呈现与焦点，不写任务数据。
         _filter.Width = 220;
         _filter.PlaceholderText = ListFilter.TaskPlaceholder;
         _filter.TextChanged += (_, _) => LoadTasks();
         _filter.KeyDown += (_, e) =>
         {
+            // Ctrl+F 把焦点交给框、Enter 把选中交给行：筛完不必再用手点进列表。
+            if (e.KeyCode == Keys.Enter && ListKeys.IsEnterGesture(e.Shift, e.Control, e.Alt))
+            {
+                FocusFirstResult();
+                e.SuppressKeyPress = true;
+                return;
+            }
             if (e.KeyCode != Keys.Escape || _filter.Text.Length == 0) return;
             ClearListFilter();
             e.SuppressKeyPress = true;
@@ -414,6 +422,21 @@ internal sealed class TasksPage : UserControl, INativePage
     {
         _filter.Focus();
         _filter.SelectAll();
+    }
+
+    /// <summary>
+    /// 筛选框 Enter 的去向：焦点与选中交给筛选结果的第一行——显示序第一行，即筛选与排序之后的可见顺序。
+    /// 列表先取焦点、再经 Ui.SelectItem 唯一入口选中（选中即出详情，与鼠标点同一行同一条路），
+    /// 并确保该行滚入可见区。筛到零行时不动作：空态的下一步是「清空筛选」按钮，不把焦点丢进空列表。
+    /// 只移焦点与选中，不写任务数据。
+    /// </summary>
+    private void FocusFirstResult()
+    {
+        if (ListKeys.FirstResultIndex(_list.Items.Count) is not int index) return;
+        _list.Focus();
+        var item = _list.Items[index];
+        Ui.SelectItem(item);
+        item.EnsureVisible();
     }
 
     /// <summary>
