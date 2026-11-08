@@ -132,9 +132,10 @@ public class OpenFocusTests
     [InlineData("SupplementsDialog.cs")]
     public void ViewsWithoutARowOnOpen_DoNotTakeTheKeyboardOnOpen(string file)
     {
-        // 注释回写的数据在 OnLoad 之后异步到达（打开时清单还是空的，而到达时用户可能已经在关键词框里打字——
-        // 抢焦点等于把下一步从他手里拿走）；补充说明的编辑位是这一屏的输入。
-        // 同步预览的对话框打开时落在勾选页（那一页的清单没有选中语义），故它不接「打开时」这一口径——
+        // 注释回写的数据在 OnLoad 之后异步到达（打开时清单还是空的，没有落点可交），故它不接「打开时」这一口径——
+        // 它的文件清单在计划首次到达那一次交键盘（第九十三轮，见 ApplyPlanOpenFocusTests）；
+        // 补充说明的编辑位是这一屏的输入。
+        // 同步预览的对话框打开时落在勾选页（那一页的清单没有选中语义），故它也不接「打开时」这一口径——
         // 它的写入清单在预览页由隐藏变可见那一次交键盘（第九十二轮，见 PlanOpenFocusTests）。
         // 注释候选与响应契约第九十轮补上落点后已接此口径，注释缺口清单第九十一轮补上落点后一并接上，
         // 故都不在此列（见 OpenPaths）。

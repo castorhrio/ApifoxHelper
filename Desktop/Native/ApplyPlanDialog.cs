@@ -14,6 +14,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 状态表：生成预览中=状态行 + 主行动禁用；无候选/不可用=空态指引；可回写=计数行 + 文件列表 + 差异；
 /// 回写中=状态行 + 按钮禁用；部分完成/失败/过期=结果列与状态行如实呈现（过期可重新生成计划）；
 /// 筛到零行=关键词框留着并说明下一步，计数行仍是整份计划的数字（见 <see cref="PopulateList"/>）。
+/// 差异预览区带说明行（<see cref="ApplyPlanEntries.DiffCaption"/>，第九十四轮）：这块框是什么、改的是什么、
+/// 与回写的关系，不靠用户先点一行再猜。
 /// </summary>
 internal sealed class ApplyPlanDialog : Form
 {
@@ -29,6 +31,7 @@ internal sealed class ApplyPlanDialog : Form
     private readonly TextBox _keyword = Ui.Input();
     private readonly Panel _skippedHost;
     private readonly TextBox _diff = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
+    private readonly Label _diffCaption;
     private readonly Button _applyButton;
     private readonly Button _patchButton;
     private readonly Button _regenButton;
@@ -115,9 +118,17 @@ internal sealed class ApplyPlanDialog : Form
         listHost.Controls.Add(_hint);
         _hint.Visible = false;
 
-        var diffHost = Ui.Hairline(_diff);
-        diffHost.Dock = DockStyle.Bottom;
-        diffHost.Height = 210;
+        // 差异预览区 = 说明行 + 发丝边只读框（与检查结果、核对传播、代码证据、同步预览的底部预览区同一形状）：
+        // 这一屏的核心是逐文件预览统一 diff，而这块框此前没有标题，用户得先点一行再猜它是什么。
+        // 说明行取 ApplyPlanEntries.DiffCaption 一份（不在这里就地拼字），且不随选中、筛选与提示变化——
+        // 它讲的是这块框是什么，不是这一行是什么。
+        var diffInner = Ui.Hairline(_diff);
+        diffInner.Dock = DockStyle.Fill;
+        var diffHost = new Panel { Dock = DockStyle.Bottom, Height = 210, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
+        _diffCaption = Ui.Caption(ApplyPlanEntries.DiffCaption);
+        _diffCaption.Dock = DockStyle.Top;
+        diffHost.Controls.Add(diffInner);
+        diffHost.Controls.Add(_diffCaption);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, 0) };
         _status.Dock = DockStyle.Fill;
@@ -190,9 +201,20 @@ internal sealed class ApplyPlanDialog : Form
     /// <summary>
     /// 按计划刷新计数行、跳过清单与按钮可用性；文件清单经 <see cref="PopulateList"/> 按关键词呈现
     /// （回写后再次调用会补上逐文件结果列）。
+    /// 计划**首次到达**时把键盘交给文件清单（DESIGN.md §6「列表行」，第九十三轮）：这一屏的清单在计划生成
+    /// 完成之后才出现，出现时已选中第一条、差异已显示，而键盘此前不在清单上——方向键动的是别的控件、
+    /// Ctrl+C 也复制不到那一行，「有一行被标出来」只成立了一半（另十张清单在打开或这一页出现时都交，
+    /// 第八十八至九十二轮）。交键盘经 <see cref="Ui.KeepKeyboardOnQueue"/> 同一处入口，判定仍是
+    /// `ListFocus` 那一份（选中行与焦点行是同一行才交，不猜第一行）。
+    /// **只在首次到达那一次交**（<c>_plan is null</c> 判一次）：重新生成计划、回写后按磁盘计划重读、
+    /// 回写被拒后重读都走本方法，那些是重建路径——那一屏的下一步是看结果或换关键词，交键盘会把
+    /// 用户正在改的那一格抢走（与第五十八轮「保存被拒的路径不交回」、第九十二轮「重建路径不交」同一取舍）。
+    /// 计划没有可写入的文件时清单是空的、也没有选中行，判定答「不交」，那一屏由提示与跳过原因说话。
     /// </summary>
     private void ShowPlan(CommentPlan plan)
     {
+        // 这一屏是不是刚出现：计划首次到达那一次才算（重建路径上 _plan 早已有值）。
+        var opening = _plan is null;
         _plan = plan;
         _hint.Visible = false;
         _planStatus.Text = "计划状态：" + TaskDisplay.PlanStatusText(plan.Status) + (plan.Status == "expired" && plan.Files.Count == 0 ? "" : "（预览后源码再变化则计划过期）");
@@ -233,6 +255,8 @@ internal sealed class ApplyPlanDialog : Form
         _applyButton.Enabled = plan.Status == "ready" && writable > 0;
         _patchButton.Enabled = plan.Files.Count > 0;
         _regenButton.Enabled = plan.Status is "expired" or "failed" or "partial";
+        // 交键盘排在方法末尾：清单、差异与按钮都已就位，此后没有别的赋值会再动焦点。
+        if (opening) Ui.KeepKeyboardOnQueue(_list);
     }
 
     /// <summary>
