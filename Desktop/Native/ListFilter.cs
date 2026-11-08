@@ -3,7 +3,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// <summary>
 /// 主页列表筛选的口径（docs/DESIGN.md §6「列表筛选」）：任务与配置会一直累积，
 /// 固定顺序下要找到「上次那个任务」「某个配置下的任务」只能逐行扫一列；两个主页面列表上方
-/// 各有一个筛选框，输入即按关键词筛选行，Esc 清空回到全部。
+/// 各有一个筛选框，输入即按关键词筛选行，清空回到全部（筛选框聚焦时按 Esc，筛到零行时空态另有
+/// 「清空筛选」按钮——焦点不在框上时 Esc 按不动，提示语指的下一步要真的能点）。
 /// 规则：关键词按空白切成多个词，每个词都要在至少一个字段里出现（词间「且」、字段间「或」），
 /// 按当前区域忽略大小写比较，空关键词即全部行；筛选先于排序（<see cref="Apply"/> → <see cref="ListSort.Order"/>）。
 /// 筛选只改呈现顺序与可见行：不写任务与配置数据，选中按 Id 恢复。
@@ -11,13 +12,19 @@ namespace ApifoxHelper.Desktop.Native;
 /// </summary>
 public static class ListFilter
 {
-    // 文案单一落点：占位文字与「筛到零行」的空态文字都从这里取，界面不就地拼写。
+    // 文案单一落点：占位文字、空态文字与空态行动按钮的文字都从这里取，界面不就地拼写。
     public const string TaskPlaceholder = "筛选任务（名称、配置、下一步）";
     public const string ProfilePlaceholder = "筛选配置（名称、API 项目、Apifox 目标）";
     public const string TaskNoMatchTitle = "没有匹配的任务";
-    public const string TaskNoMatchHint = "换一个关键词，或按 Esc 清空筛选框查看全部任务。";
+    public const string TaskNoMatchHint = "换一个关键词，或点「清空筛选」回到全部任务。";
     public const string ProfileNoMatchTitle = "没有匹配的配置";
-    public const string ProfileNoMatchHint = "换一个关键词，或按 Esc 清空筛选框查看全部配置。";
+    public const string ProfileNoMatchHint = "换一个关键词，或点「清空筛选」回到全部配置。";
+
+    /// <summary>
+    /// 筛到零行时空态给出的唯一行动按钮：提示语指名的入口必须是界面上真实存在的那一个——
+    /// 按 Esc 只在筛选框聚焦时有效，焦点在工具栏、菜单或切页回来后落在别处，提示指的这条路按不动。
+    /// </summary>
+    public const string ClearActionLabel = "清空筛选";
 
     /// <summary>关键词去首尾空白；null 与全空白都视为「没有筛选」。</summary>
     public static string Normalize(string? query) => query?.Trim() ?? "";

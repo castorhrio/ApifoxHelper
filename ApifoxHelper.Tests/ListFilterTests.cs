@@ -120,11 +120,11 @@ public class ListFilterTests
     [Fact]
     public void Copy_PlaceholdersAndEmptyTextsAreDistinct()
     {
-        // 两页的占位文字与「筛到零行」空态文字各自不同，且都指向清空筛选这一恢复路径。
+        // 两页的占位文字与「筛到零行」空态文字各自不同，且都指向空态上真实存在的「清空筛选」按钮。
         Assert.NotEqual(ListFilter.TaskPlaceholder, ListFilter.ProfilePlaceholder);
         Assert.NotEqual(ListFilter.TaskNoMatchTitle, ListFilter.ProfileNoMatchTitle);
-        Assert.Contains("Esc", ListFilter.TaskNoMatchHint);
-        Assert.Contains("Esc", ListFilter.ProfileNoMatchHint);
+        Assert.Contains(ListFilter.ClearActionLabel, ListFilter.TaskNoMatchHint);
+        Assert.Contains(ListFilter.ClearActionLabel, ListFilter.ProfileNoMatchHint);
         Assert.Contains("任务", ListFilter.TaskNoMatchTitle);
         Assert.Contains("配置", ListFilter.ProfileNoMatchTitle);
     }

@@ -51,7 +51,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private const int ListMinWidth = 320;
 
     private readonly ListView _list = Ui.List();
-    // 列表筛选（ListFilter 口径）：输入即筛选、Esc 清空；筛选状态留在本页，重建后按同一关键词呈现。
+    // 列表筛选（ListFilter 口径）：输入即筛选，Esc 或空态的「清空筛选」按钮清空；筛选状态留在本页，重建后按同一关键词呈现。
     private readonly TextBox _filter = Ui.Input();
     private readonly Panel _empty;
     // 空态文字按「还没有任务」与「筛到零行」两态切换：筛到零行不说成没有任务，并给出清空筛选的下一步。
@@ -59,6 +59,12 @@ internal sealed class TasksPage : UserControl, INativePage
     private const string EmptyHint = "先在「项目设置」新建配置，然后点「新建任务」开始源码扫描。";
     private readonly Label _emptyTitle = Ui.Title(EmptyTitle);
     private readonly Label _emptyHint = Ui.Body(EmptyHint, muted: true);
+    // 「新建任务」文字单一落点：工具栏实心主按钮与空态按钮同名同源，不出现第二处字面。
+    private const string NewTaskLabel = "新建任务";
+    // 空态的唯一行动按钮（DESIGN.md §7）：没有任务时指向「新建任务」，筛到零行时指向「清空筛选」——
+    // 同一时刻只显示其中一个，实心主按钮始终只有工具栏那一个。
+    private readonly Button _emptyCreate = Ui.Ghost(NewTaskLabel);
+    private readonly Button _emptyClear = Ui.Ghost(ListFilter.ClearActionLabel);
     private readonly Label _status = Ui.StatusLine();
     // 详情区固定设计宽（FixedPanel = Panel2）：窗口缩放时详情不变、列表吸收剩余宽度，
     // 与「标识列吸收剩余可视宽度」（ListColumns）同一方向；缺省 None 会让详情区随窗口按比例放大、偏离设计宽。
@@ -144,7 +150,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _syncPlans = syncPlans;
         _syncExecutor = syncExecutor;
 
-        var newButton = Ui.Primary("新建任务");
+        var newButton = Ui.Primary(NewTaskLabel);
         newButton.Click += (_, _) => ShowNewTaskDialog();
         var refreshButton = Ui.Ghost("刷新");
         refreshButton.Click += (_, _) => RefreshData();
@@ -155,7 +161,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _filter.KeyDown += (_, e) =>
         {
             if (e.KeyCode != Keys.Escape || _filter.Text.Length == 0) return;
-            _filter.Text = "";
+            ClearListFilter();
             e.SuppressKeyPress = true;
         };
         _list.SelectedIndexChanged += (_, _) => OnSelectedChanged();
@@ -255,7 +261,13 @@ internal sealed class TasksPage : UserControl, INativePage
         _reportButton = Ui.Ghost("查看报告与导出");
         _reportButton.Click += (_, _) => ShowReports();
 
-        _empty = BuildEmpty();
+        // 空态按钮是独立实例：同一控件不能同时挂在工具栏与空态面板上；动作与工具栏同一入口，不复制逻辑。
+        _emptyCreate.Click += (_, _) => ShowNewTaskDialog();
+        _emptyClear.Click += (_, _) => ClearListFilter();
+        var emptyActions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = UiTokens.Bg };
+        emptyActions.Controls.Add(_emptyCreate);
+        emptyActions.Controls.Add(_emptyClear);
+        _empty = BuildEmpty(emptyActions);
 
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Bg, ColumnCount = 2, Margin = new Padding(0) };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -293,16 +305,18 @@ internal sealed class TasksPage : UserControl, INativePage
         _timer.Tick += (_, _) => OnTick();
     }
 
-    private Panel BuildEmpty()
+    private Panel BuildEmpty(Control actions)
     {
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, ColumnCount = 1, RowCount = 4 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, ColumnCount = 1, RowCount = 5 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         layout.Controls.Add(_emptyTitle, 0, 1);
         layout.Controls.Add(_emptyHint, 0, 2);
+        layout.Controls.Add(actions, 0, 3);
         var panel = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg };
         panel.Controls.Add(layout);
         panel.Visible = false;
@@ -402,6 +416,17 @@ internal sealed class TasksPage : UserControl, INativePage
         _filter.SelectAll();
     }
 
+    /// <summary>
+    /// 清空筛选的唯一路径：筛选框聚焦时按 Esc、空态点「清空筛选」都走这里。
+    /// 焦点不在筛选框上时 Esc 到不了框的按键处理，所以筛到零行的下一步由按钮承担；
+    /// 清空经 TextChanged 触发既有重建，被筛掉的行按选中 Id 恢复，不写任务数据。
+    /// </summary>
+    private void ClearListFilter()
+    {
+        _filter.Text = "";
+        _filter.Focus();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing) _timer.Dispose();
@@ -468,14 +493,17 @@ internal sealed class TasksPage : UserControl, INativePage
     }
 
     /// <summary>
-    /// 空态两态（DESIGN.md §7「空态不留白」）：没有任务时给首次使用的下一步，
-    /// 筛到零行时说明是筛选结果并给出清空筛选的下一步——不把筛选结果说成没有任务。
+    /// 空态两态（DESIGN.md §7「空态不留白」「空态=说明现在有什么可做 + 唯一行动按钮」）：
+    /// 没有任务时给首次使用的下一步与「新建任务」，筛到零行时说明是筛选结果并给「清空筛选」——
+    /// 不把筛选结果说成没有任务，也不给筛到零行的用户一个「新建」当作下一步。
     /// </summary>
     private void RefreshEmptyState()
     {
         var filtered = ListFilter.IsActive(_filter.Text);
         _emptyTitle.Text = filtered ? ListFilter.TaskNoMatchTitle : EmptyTitle;
         _emptyHint.Text = filtered ? ListFilter.TaskNoMatchHint : EmptyHint;
+        _emptyCreate.Visible = !filtered;
+        _emptyClear.Visible = filtered;
     }
 
     /// <summary>
