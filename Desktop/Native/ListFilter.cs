@@ -8,8 +8,11 @@ namespace ApifoxHelper.Desktop.Native;
 /// 规则：关键词按空白切成多个词，每个词都要在至少一个字段里出现（词间「且」、字段间「或」），
 /// 按当前区域忽略大小写比较，空关键词即全部行；筛选先于排序（<see cref="Apply"/> → <see cref="ListSort.Order"/>）。
 /// 筛选只改呈现顺序与可见行：不写任务与配置数据，选中按 Id 恢复。
-/// 两个主页面之外，四个带筛选下拉的视图（注释候选、响应契约、差异确认、检查结果）同在册：
+/// 两个主页面之外，五个带筛选下拉的视图（注释候选、响应契约、差异确认、检查结果、注释缺口）同在册：
 /// 筛到零行与整份数据没有条目是两种空，下一步不同、说法也不同（<see cref="IsFilteredEmpty"/>）。
+/// 这句话只讲「列表区这一屏空了」，不规定那一屏还要留下什么——整份数据的聚合入口留在各视图自己手里
+/// （前四处是计数行与筛选器；注释缺口另有覆盖率行与「分析警告与降级」「接口追踪明细」，那些讲的是整份扫描，
+/// 不因当前筛选不命中而失效）。
 /// 不依赖 WinForms，以共享源码编入测试工程在 Linux 断言。
 /// </summary>
 public static class ListFilter
@@ -28,11 +31,14 @@ public static class ListFilter
     /// </summary>
     public const string ClearActionLabel = "清空筛选";
 
-    // 四个带筛选下拉的视图各自清的是什么：名词在这里给一份，句子由 FilteredEmptyHint 组合，界面不就地拼写。
+    // 五个带筛选下拉的视图各自清的是什么：名词在这里给一份，句子由 FilteredEmptyHint 组合，界面不就地拼写。
     public const string CandidateNoun = "候选";
     public const string ContractNoun = "契约";
     public const string EndpointNoun = "接口";
     public const string DecisionNoun = "条目";
+
+    /// <summary>注释缺口清单清的是注释位置（列表首列「位置（说明点）」、筛选项「全部位置」、计数行「位置 N」同一批条目）。</summary>
+    public const string SlotNoun = "注释位置";
 
     /// <summary>筛到零行时提示语指名的下一步；说这句话，筛选器就得真的按得动（第四十二轮）。</summary>
     public const string FilteredEmptyPointer = "换一个筛选再试。";

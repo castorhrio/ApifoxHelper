@@ -13,7 +13,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// DraftService.AddManualAsync 写任务数据成为候选，不写源码、不访问 Apifox；候选在「查看注释候选」审阅）；
 /// 「分析警告与降级」打开只读清单（扫描警告、未解析符号与不可回写的外部类型——降级如实可见）；
 /// 「接口追踪明细」打开逐接口的调用链追踪只读视图（读取方法、未解析调用、外部调用与预算超限）。
-/// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）。
+/// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）；
+/// 筛到零行=列表区一句话与「换一个筛选」这一步，覆盖率行、计数行与两个聚合入口照旧（见 <see cref="ShowFilteredEmpty"/>；
+/// 它与「整份数据不可得」是两种空，后者才随提示把那些入口一起收掉）。
 /// </summary>
 internal sealed class ScanResultsDialog : Form
 {
@@ -262,6 +264,32 @@ internal sealed class ScanResultsDialog : Form
             _list.Items.Add(item);
         }
         _list.EndUpdate();
+        if (ListFilter.IsFilteredEmpty(_slots.Count, _list.Items.Count))
+        {
+            // 筛到零行不是「没有注释位置」：这一屏给共享口径的那句话，整份数据的聚合入口留着（口径见 ListFilter）。
+            ShowFilteredEmpty();
+            return;
+        }
+        _hint.Visible = false;
+        _list.Visible = true;
+    }
+
+    /// <summary>
+    /// 筛到零行的自有形状：只把列表区换成那句话。筛选器不动（保持可用——那句话指名的下一步就是它，第四十二轮），
+    /// 覆盖率行、计数行的聚合数字与「分析警告与降级」「接口追踪明细」两个入口也一概不动：
+    /// 它们讲的是整份扫描，不因当前筛选不命中而失效，收掉它们等于把这一步之后还能看的东西一起删掉
+    /// （§7「禁用不得移除下一步」）。与 <see cref="ShowHint"/> 的分别正在这里——那种空是整份数据不可得，
+    /// 那时这些数字与入口本身也不可得，随提示一起收掉才是如实。
+    /// </summary>
+    private void ShowFilteredEmpty()
+    {
+        _hint.Text = ListFilter.FilteredEmptyHint(ListFilter.SlotNoun);
+        _hint.ForeColor = UiTokens.Muted;
+        _hint.Visible = true;
+        _list.Visible = false;
+        // 详情区与三个选中动作经既有的「无选中」路径收掉，不靠控件在清空时自发的事件：
+        // 清单刚重建，此刻没有选中行，留着上一行的文字与按钮就是把不存在的那一行当成还能操作。
+        ShowDetail();
     }
 
     private void ShowDetail()

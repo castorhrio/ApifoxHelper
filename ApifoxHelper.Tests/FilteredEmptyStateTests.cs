@@ -15,6 +15,8 @@ namespace ApifoxHelper.Tests;
 /// <c>IsFilteredEmpty</c> 分清「整份数据没有条目」与「有条目、只是当前筛选不命中」，
 /// <c>FilteredEmptyHint</c> 给那一屏为什么空与下一步（换一个筛选）；
 /// 提示出口因此不得禁用筛选器（第四十二轮的同一纪律补到另外三处），也不得抹掉聚合计数。
+/// 第五十九轮如实挂账未接的第五张清单（注释缺口）已于第六十轮接上——它不套 <c>keepAggregate</c> 那个出口，
+/// 而是走自己的形状（只换列表区那一屏，覆盖率行与两个聚合入口一概不动），断言见 <c>ScanResultsFilteredEmptyTests</c>。
 /// 真机上「筛到零行的一句话显示出来、聚合数字仍在、换一个筛选立刻按得动」随 G-D5 复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
 public class FilteredEmptyStateTests
@@ -73,6 +75,7 @@ public class FilteredEmptyStateTests
     [InlineData(ListFilter.ContractNoun, "这个筛选下没有契约。换一个筛选再试。")]
     [InlineData(ListFilter.EndpointNoun, "这个筛选下没有接口。换一个筛选再试。")]
     [InlineData(ListFilter.DecisionNoun, "这个筛选下没有条目。换一个筛选再试。")]
+    [InlineData(ListFilter.SlotNoun, "这个筛选下没有注释位置。换一个筛选再试。")]
     public void Hint_NamesWhatIsMissingAndTheNextStep(string noun, string expected)
     {
         Assert.Equal(expected, ListFilter.FilteredEmptyHint(noun));
@@ -84,14 +87,14 @@ public class FilteredEmptyStateTests
         // 检查结果的原文案是「这个状态下没有接口」——控件名叫「筛选」，指的路径也是换一个筛选，
         // 本轮统一到共享文案；下一句「换一个筛选再试。」只有一份（第四十二轮已把它当作恢复路径）。
         Assert.Equal("换一个筛选再试。", ListFilter.FilteredEmptyPointer);
-        foreach (var noun in new[] { ListFilter.CandidateNoun, ListFilter.ContractNoun, ListFilter.EndpointNoun, ListFilter.DecisionNoun })
+        foreach (var noun in new[] { ListFilter.CandidateNoun, ListFilter.ContractNoun, ListFilter.EndpointNoun, ListFilter.DecisionNoun, ListFilter.SlotNoun })
         {
             Assert.EndsWith(ListFilter.FilteredEmptyPointer, ListFilter.FilteredEmptyHint(noun), StringComparison.Ordinal);
         }
     }
 
     [Fact]
-    public void Nouns_AreExactlyTheFourFilteredViews()
+    public void Nouns_AreExactlyTheFiveFilteredViews()
     {
         var declared = typeof(ListFilter)
             .GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -99,12 +102,12 @@ public class FilteredEmptyStateTests
             .Select(f => (string?)f.GetValue(null) ?? "")
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToList();
-        var expected = new[] { ListFilter.CandidateNoun, ListFilter.ContractNoun, ListFilter.EndpointNoun, ListFilter.DecisionNoun }
+        var expected = new[] { ListFilter.CandidateNoun, ListFilter.ContractNoun, ListFilter.EndpointNoun, ListFilter.DecisionNoun, ListFilter.SlotNoun }
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToList();
         Assert.Equal(expected, declared);
-        // 四个视图清的是四样东西：并成一份就等于把「没有契约」说成「没有候选」。
-        Assert.Equal(4, declared.Distinct().Count());
+        // 五个视图清的是五样东西：并成一份就等于把「没有契约」说成「没有候选」。
+        Assert.Equal(5, declared.Distinct().Count());
     }
 
     [Theory]
@@ -120,14 +123,14 @@ public class FilteredEmptyStateTests
     }
 
     [Fact]
-    public void Hint_IsWiredOnExactlyTheFourFilteredViews()
+    public void Hint_IsWiredOnExactlyTheFiveFilteredViews()
     {
         var callers = Repo.NativeSources()
             .Where(s => s.Contains("ListFilter.FilteredEmptyHint"))
             .Select(s => s.Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
-        Assert.Equal(new[] { "CandidatesDialog.cs", "CheckResultsDialog.cs", "ContractsDialog.cs", "DecisionsDialog.cs" }, callers);
+        Assert.Equal(new[] { "CandidatesDialog.cs", "CheckResultsDialog.cs", "ContractsDialog.cs", "DecisionsDialog.cs", "ScanResultsDialog.cs" }, callers);
     }
 
     // ---------- 两个审阅队列：筛到零行不再只留一张空表 ----------
@@ -197,7 +200,7 @@ public class FilteredEmptyStateTests
         // 「范围内没有接口」那句讲的是范围与扫描，不是筛选，本轮逐字不动。
         Assert.Matches(@"(?m)^\s*: ""范围内没有接口。请确认任务的模块与路径前缀范围，或先完成源码扫描。"",$", body);
         // 这一处的提示出口既不碰计数行也不碰筛选器，所以不需要 keepAggregate 参数——它本来就是本轮的形状。
-        Assert.Equal(0, Regex.Matches(body, "keepAggregate").Count);
+        Assert.Empty(Regex.Matches(body, "keepAggregate"));
         Assert.Matches(@"(?m)^\s*_filter\.Enabled = _result\.Endpoints\.Count > 0;$", body);
     }
 
@@ -214,6 +217,8 @@ public class FilteredEmptyStateTests
     [InlineData("ContractsDialog.cs", 1)]
     [InlineData("DecisionsDialog.cs", 1)]
     [InlineData("CheckResultsDialog.cs", 0)]
+    // 注释缺口清单第六十轮接进同一份判定与文案，但不套这个出口——它有自己的形状（见 ScanResultsFilteredEmptyTests）。
+    [InlineData("ScanResultsDialog.cs", 0)]
     public void OnlyTheFilteredEmptyBranch_KeepsAggregate(string file, int expected)
     {
         // 打开期读取失败与「本来就没有条目」保持原形状：聚合数字那时确实不可得或确实为零。
@@ -222,17 +227,8 @@ public class FilteredEmptyStateTests
 
     // ---------- 没做的事不能被写成做了 ----------
 
-    [Fact]
-    public void ScanResults_NotWiredYet_BecauseItsHintHidesAggregateEntries()
-    {
-        // 第五张带筛选下拉的清单（注释缺口）同样没有这一支，但它的提示出口一并藏起注释覆盖率行与
-        // 「分析警告与降级」「接口追踪明细」两个聚合入口——筛到零行时那些仍然成立，直接套同一个出口
-        // 等于把下一步一起删掉（§7「禁用不得移除下一步」）。本轮如实不接，接线前须先给它自己的形状。
-        var source = Repo.Source("Desktop", "Native", "ScanResultsDialog.cs");
-        Assert.DoesNotContain("FilteredEmptyHint", source, StringComparison.Ordinal);
-        Assert.Contains("_warningsButton.Visible = false;", source, StringComparison.Ordinal);
-        Assert.Contains("_coverage.Text = \"\";", source, StringComparison.Ordinal);
-    }
+    // 第五张清单（注释缺口）第六十轮已按自己的形状接上：它不套本文件的提示出口，
+    // 两条出口（筛到零行 / 整份数据不可得）不合并、覆盖率行与两个聚合入口不动等断言在 ScanResultsFilteredEmptyTests。
 
     [Theory]
     [InlineData("TasksPage.cs")]
@@ -263,12 +259,18 @@ public class FilteredEmptyStateTests
     }
 
     [Fact]
-    public void DesignDoc_RecordsWhatStaysUnwired()
+    public void DesignDoc_RecordsTheSupersededDeferralWithItsReason()
     {
+        // 台账留着「当时为什么不接」——那是本轮自有形状的来源；改口成「本来就该接」等于把判断过程抹掉。
         var ledger = Repo.DesignSection(8);
-        var row = Slice(ledger, "| 筛到零行的状态完备（§7） |", "\n| 输入框（§6） |");
-        Assert.Contains("注释缺口对话框不接此口径", row);
-        Assert.DoesNotContain("五处筛选视图全部接线", row, StringComparison.Ordinal);
+        var row = Slice(ledger, "| 筛到零行的状态完备（§7） |", "\n| 注释缺口筛到零行的自有形状（§7） |");
+        Assert.Contains("它的提示出口一并藏起注释覆盖率行", row, StringComparison.Ordinal);
+        Assert.Contains("已于第六十轮收口", row, StringComparison.Ordinal);
+        Assert.DoesNotContain("注释缺口对话框不接此口径", row, StringComparison.Ordinal);
+        // §6 是规范性条款：被取代的挂账句留在正文里，下一轮会照着旧句实现。
+        var section = Repo.DesignSection(6);
+        Assert.DoesNotContain("注释缺口对话框本轮如实不接", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("要先有它自己的形状", section, StringComparison.Ordinal);
     }
 
     // ---------- 辅助 ----------
