@@ -121,7 +121,10 @@ public class FilterRowFactoryTests
             : @"(?m)^\s*var filterRow = Ui\.FilterRow\(_filter, _keyword, _counts\);$";
         Assert.Matches(expected, source);
         // 恰一处：同一屏拼两遍就是两套排布。
-        Assert.Single(Regex.Matches(source, @"Ui\.FilterRow\(").Cast<Match>());
+        // 检查结果是唯一例外（第八十五轮给模型清单补了第二个框）：两行都走同一支重载、形状仍是同一份，
+        // 故这里钉的是「恰为这一屏该有的行数」，不是放宽成「至少一处」。
+        var expectedRows = file == "CheckResultsDialog.cs" ? 2 : 1;
+        Assert.Equal(expectedRows, Regex.Matches(source, @"Ui\.FilterRow\(").Count);
         // 界面不再自己拼这一行：列数、三件东西的加入、关键词框的描边包装都不在界面里。
         Assert.DoesNotContain("ColumnCount = 5", source, StringComparison.Ordinal);
         Assert.DoesNotContain("filterRow.Controls.Add(_filter", source, StringComparison.Ordinal);

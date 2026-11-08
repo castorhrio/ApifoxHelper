@@ -10,7 +10,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 数据来自任务目录 diff.json（检查落盘产物）；检查在任务页发起，本对话框无写入动作。
 /// 差异确认（高风险变化、说明冲突、模型绑定）在任务页「处理差异确认」中进行，同步预览与执行在任务页「同步预览」中进行；本对话框只读。
 /// 状态表：尚未检查=空态指引；读取失败=内联错误与下一步；检查之后任务有变化=过期提示（结果仍如实展示）；
-/// 正常=概要行 + 筛选 + 接口列表 + 选中接口详情（结构差异/说明合并/备注/质量提示/阻断）+ 模型清单 + 问题清单。
+/// 正常=概要行 + 筛选 + 接口列表 + 选中接口详情（结构差异/说明合并/备注/质量提示/阻断）+ 模型清单（含关键词框）+ 问题清单；
+/// 模型清单筛到零行=关键词框留着并说明下一步（见 <see cref="PopulateModels"/>）。
 /// </summary>
 internal sealed class CheckResultsDialog : Form
 {
@@ -37,12 +38,23 @@ internal sealed class CheckResultsDialog : Form
     // （冻结页面的差异视图一直有关键词框）。与两个主页面的筛选框同一形态、同一匹配口径（ListFilter）。
     private readonly TextBox _keyword = Ui.Input();
     private readonly ListView _list = Ui.List();
+    // 模型清单的关键词框（第八十五轮）：同一个对话框里接口清单自第六十五轮起就有关键词框、模型清单没有，
+    // 属同壳不同行为；真实项目的模型清单几十上百个，要找到「还没绑定的那个模型」「有范围外影响的模型」
+    // 只能逐行扫。这一屏没有筛选下拉（模型清单没有状态筛选），故走只有关键词框的那一支。
+    private readonly TextBox _modelKeyword = Ui.Input();
     private readonly ListView _modelList = Ui.List();
     private readonly TextBox _detail = Ui.Preview(multiline: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly TextBox _problems = Ui.Preview(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Panel _problemsHost;
     private readonly Panel _modelsHost;
     private readonly Label _hint = new()
+    {
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = UiTokens.Muted,
+        Font = UiTokens.Body.Value,
+    };
+    private readonly Label _modelsHint = new()
     {
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleCenter,
@@ -84,6 +96,9 @@ internal sealed class CheckResultsDialog : Form
 
         _keyword.PlaceholderText = ListFilter.EndpointSearchPlaceholder;
         _keyword.TextChanged += (_, _) => PopulateList();
+
+        _modelKeyword.PlaceholderText = ListFilter.ModelSearchPlaceholder;
+        _modelKeyword.TextChanged += (_, _) => PopulateModels();
 
         _computedAt.TextAlign = ContentAlignment.MiddleLeft;
         _counts.AutoSize = false;
@@ -128,10 +143,17 @@ internal sealed class CheckResultsDialog : Form
         modelsCaption.Dock = DockStyle.Top;
         var modelsInner = Ui.Hairline(_modelList);
         modelsInner.Dock = DockStyle.Fill;
-        modelsInner.Height = 120;
+        // 清单高度让出筛选行那一行（宿主高度不变：接口清单是这一屏的主内容，不为第二张清单再挤它）。
+        modelsInner.Height = 88;
+        // 筛选行形状取工厂（§6「列表筛选」）：这一屏没有筛选下拉，走只有关键词框的那一支；
+        // 计数在表头行（与「检查时间」同排），故 counts 传 null。
+        var modelsFilterRow = Ui.FilterRow(_modelKeyword, counts: null);
         _modelsHost = new Panel { Dock = DockStyle.Bottom, Height = 148, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
         _modelsHost.Controls.Add(modelsInner);
+        _modelsHost.Controls.Add(_modelsHint);
+        _modelsHost.Controls.Add(modelsFilterRow);
         _modelsHost.Controls.Add(modelsCaption);
+        _modelsHint.Visible = false;
 
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
@@ -163,6 +185,7 @@ internal sealed class CheckResultsDialog : Form
         {
             _filter.Enabled = false;
             _keyword.Enabled = false;
+            _modelKeyword.Enabled = ListFilter.KeywordEnabled(false);
             ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新检查再试。", UiTokens.BadText);
             return;
         }
@@ -170,6 +193,7 @@ internal sealed class CheckResultsDialog : Form
         {
             _filter.Enabled = false;
             _keyword.Enabled = false;
+            _modelKeyword.Enabled = ListFilter.KeywordEnabled(false);
             ShowHint("尚未检查。先在任务页点「开始检查」：读取分支概览与范围内接口、模型详情，与目标比较后在这里展示差异。", UiTokens.Muted);
             return;
         }
@@ -214,19 +238,9 @@ internal sealed class CheckResultsDialog : Form
 
         PopulateList();
 
-        _modelList.BeginUpdate();
-        foreach (var model in result.Models)
-        {
-            var row = new ListViewItem(model.Name) { Tag = model, UseItemStyleForSubItems = false };
-            row.Font = UiTokens.Mono.Value;
-            AddState(row, TaskDisplay.MappingStateText(model.MappingState), TaskDisplay.MappingStateTone(model.MappingState));
-            AddState(row, TaskDisplay.ModelStatusText(model.Status), TaskDisplay.ModelStatusTone(model.Status));
-            AddCount(row, model.UsedBy.Count);
-            var impact = AddCount(row, model.ImpactOutOfScope.Count);
-            if (model.ImpactOutOfScope.Count > 0) impact.ForeColor = UiTokens.WarnText;
-            _modelList.Items.Add(row);
-        }
-        _modelList.EndUpdate();
+        // 模型清单按关键词呈现（第八十五轮）：整份数据没有模型时框一起停（没有可筛的东西，下一步不在这框上）。
+        _modelKeyword.Enabled = ListFilter.KeywordEnabled(result.Models.Count > 0);
+        PopulateModels();
         if (result.Models.Count == 0)
         {
             _modelsHost.Visible = false;
@@ -244,12 +258,17 @@ internal sealed class CheckResultsDialog : Form
     /// （<see cref="Ui.TryFocusFilter"/> 与 <see cref="Ui.TryEnterFilter"/>），对话框不就地拆修饰键、不自己选中或滚动。
     /// 对话框的 Enter=确认（表单字段）不受影响：筛选框不是表单字段，本入口只在关键词框取得焦点时接住这一次按键。
     /// 带修饰键的组合不属这两个判定，照旧交给基类。
+    /// 第八十五轮给模型清单补了第二个关键词框：Enter 与 Esc 两个判定看焦点（一次按键只有一个含义），
+    /// 两个框各接一次；Ctrl+F 只交给本屏主清单（接口清单）的那个框——同一屏两个框都在，
+    /// 一个手势只能有一个落点，模型清单的框经 Tab 或点击进入（不为它发明第二个查找手势）。
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
     {
         if (Ui.TryFocusFilter(keyData, _keyword)) return true;
         if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
+        if (Ui.TryEnterFilter(keyData, _modelKeyword, _modelList)) return true;
         if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        if (Ui.TryEscapeFilter(keyData, _modelKeyword)) return true;
         return base.ProcessDialogKey(keyData);
     }
 
@@ -291,6 +310,46 @@ internal sealed class CheckResultsDialog : Form
         _list.Visible = true;
         var target = selectedKey is null ? null : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as EndpointCheck)?.Key == selectedKey);
         Ui.SelectItem(target ?? _list.Items[0]);
+    }
+
+    /// <summary>
+    /// 按关键词刷新模型清单（第八十五轮）：整份检查结果的模型清单在真实项目上几十上百个，
+    /// 要找到「还没绑定的那个模型」「有范围外影响的模型」只能逐行扫；同一个对话框里接口清单
+    /// 自第六十五轮起就有关键词框、模型清单没有，属同壳不同行为。
+    /// 匹配字段取 <see cref="ModelEntries.KeywordFields"/> 单一口径（与清单前三格同源），
+    /// 「用于接口」「范围外影响」是数字、不进关键词。
+    /// 筛到零行不是「没有模型」：说清这一屏为什么空，下一步就在那个框上（这一屏没有筛选下拉，
+    /// 故不指「换一个筛选」），关键词框留着（§7「禁用不得移除下一步」）。
+    /// 模型清单没有选中语义（这一屏不给模型详情），故不恢复选中、不碰键盘焦点。
+    /// </summary>
+    private void PopulateModels()
+    {
+        if (_result is null) return;
+        var visible = ListFilter.Apply(_result.Models, _modelKeyword.Text, ModelEntries.KeywordFields);
+        _modelList.BeginUpdate();
+        _modelList.Items.Clear();
+        foreach (var model in visible)
+        {
+            var row = new ListViewItem(model.Name) { Tag = model, UseItemStyleForSubItems = false };
+            row.Font = UiTokens.Mono.Value;
+            AddState(row, TaskDisplay.MappingStateText(model.MappingState), TaskDisplay.MappingStateTone(model.MappingState));
+            AddState(row, TaskDisplay.ModelStatusText(model.Status), TaskDisplay.ModelStatusTone(model.Status));
+            AddCount(row, model.UsedBy.Count);
+            var impact = AddCount(row, model.ImpactOutOfScope.Count);
+            if (model.ImpactOutOfScope.Count > 0) impact.ForeColor = UiTokens.WarnText;
+            _modelList.Items.Add(row);
+        }
+        _modelList.EndUpdate();
+        if (ListFilter.IsFilteredEmpty(_result.Models.Count, visible.Count))
+        {
+            _modelsHint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.ModelNoun);
+            _modelsHint.ForeColor = UiTokens.Muted;
+            _modelsHint.Visible = true;
+            _modelList.Visible = false;
+            return;
+        }
+        _modelsHint.Visible = false;
+        _modelList.Visible = true;
     }
 
     private void ShowHint(string message, Color color)
