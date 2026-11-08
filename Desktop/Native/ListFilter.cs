@@ -35,6 +35,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 第七十五至七十七轮把三张只读长清单并入同一册（接口追踪明细、补充说明的接口清单、生成文档核对条目）：
 /// 三处都没有筛选下拉，走工厂里只有关键词框的那一支，状态/预算/三环这类「这一屏唯一能一眼认出的文字」
 /// 因此进关键词（有下拉的那几张里它们由下拉管、不进关键词），筛到零行那句话也只指那个框。
+/// 第七十九轮把第十张长清单并入同一册（注释回写的源码文件清单）：它同样没有筛选下拉
+/// （回写结果是逐文件结果、不是可选状态），走同一支；匹配的是那一行在屏幕上被读作的那三格
+/// （源码文件、回写范围、回写结果，取法在 <c>ApplyPlanEntries</c>），注释处数是数字、不进关键词。
 /// 关键词框不是表单字段：输入即筛选，没有「提交」这一步——框里的裸 Enter 不提交对话框
 /// （五张清单各自在 <c>ProcessDialogKey</c> 里挡下；冻结页面的差异视图关键词框在 Enter 上同样什么都不做），
 /// 带修饰键的组合不属本判定、不吞键。
@@ -85,6 +88,12 @@ public static class ListFilter
     /// 要找到「XML 缺失」的那几条只能逐行扫。
     /// </summary>
     public const string PropagationSearchPlaceholder = "筛选条目（位置、标注、三环状态）";
+
+    /// <summary>
+    /// 注释回写的文件清单关键词框：按源码文件、回写范围与回写结果找（与列表那三格同一批文字）。
+    /// 这一屏也没有筛选下拉（回写结果是逐文件结果、不是可选状态），故走只有关键词框的那一支。
+    /// </summary>
+    public const string ApplyPlanSearchPlaceholder = "筛选文件（路径、回写范围、结果）";
 
     /// <summary>
     /// 注释候选的关键词框：按位置、标注、依据与来源找（与列表那四格同一批文字）。
@@ -143,6 +152,9 @@ public static class ListFilter
     /// 生成文档核对的条目（列表首列「位置」、计数行「位置 N」、筛到零行那句话同一批条目）。
     /// </summary>
     public const string PropagationNoun = "核对条目";
+
+    /// <summary>注释回写的文件清单清的是源码文件（列表首列「源码文件」、计数行「文件 N」同一批条目）。</summary>
+    public const string ApplyPlanNoun = "源码文件";
 
     /// <summary>筛到零行时提示语指名的下一步；说这句话，筛选器就得真的按得动（第四十二轮）。</summary>
     public const string FilteredEmptyPointer = "换一个筛选再试。";

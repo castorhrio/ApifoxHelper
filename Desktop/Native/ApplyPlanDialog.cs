@@ -12,7 +12,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 或把补丁导出为 .patch 文件交由开发处理。计划生成、回写、补丁都走既有 CommentPlanService
 /// （只改 /// 注释行、写入前核对文件与证据指纹、失败即停、部分完成如实记录），本层不加写入逻辑。
 /// 状态表：生成预览中=状态行 + 主行动禁用；无候选/不可用=空态指引；可回写=计数行 + 文件列表 + 差异；
-/// 回写中=状态行 + 按钮禁用；部分完成/失败/过期=结果列与状态行如实呈现（过期可重新生成计划）。
+/// 回写中=状态行 + 按钮禁用；部分完成/失败/过期=结果列与状态行如实呈现（过期可重新生成计划）；
+/// 筛到零行=关键词框留着并说明下一步，计数行仍是整份计划的数字（见 <see cref="PopulateList"/>）。
 /// </summary>
 internal sealed class ApplyPlanDialog : Form
 {
@@ -25,6 +26,7 @@ internal sealed class ApplyPlanDialog : Form
     private readonly Label _counts = Ui.Mono();
     private readonly ListView _list = Ui.List();
     private readonly ListView _skippedList = Ui.List();
+    private readonly TextBox _keyword = Ui.Input();
     private readonly Panel _skippedHost;
     private readonly TextBox _diff = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly Button _applyButton;
@@ -64,6 +66,8 @@ internal sealed class ApplyPlanDialog : Form
         _list.Columns.Add("注释处数", 90);
         _list.Columns.Add("回写结果", 110);
         _list.SelectedIndexChanged += (_, _) => ShowDiff();
+        _keyword.PlaceholderText = ListFilter.ApplyPlanSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => PopulateList();
 
         _skippedList.Columns.Add("跳过的位置", 300);
         _skippedList.Columns.Add("原因", 560);
@@ -102,6 +106,10 @@ internal sealed class ApplyPlanDialog : Form
         headRow.Controls.Add(_planStatus, 0, 0);
         headRow.Controls.Add(_counts, 1, 0);
 
+        // 筛选行形状取工厂（§6「列表筛选」）：这一屏没有筛选下拉，走只有关键词框的那一支；
+        // 计数在表头行（与计划状态同排），故 counts 传 null。
+        var filterRow = Ui.FilterRow(_keyword, counts: null);
+
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
         listHost.Controls.Add(_hint);
@@ -130,12 +138,13 @@ internal sealed class ApplyPlanDialog : Form
         actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 3, 0);
         actionRow.Controls.Add(closeButton, 4, 0);
 
-        // 停靠按集合倒序生效：标题行最先停靠（顶部），其次按钮行（最底部）、状态行、差异框、跳过列表，文件列表最后填满剩余空间。
+        // 停靠按集合倒序生效：标题行最先停靠（顶部），其次筛选行、按钮行（最底部）、状态行、差异框、跳过列表，文件列表最后填满剩余空间。
         Controls.Add(listHost);
         Controls.Add(_skippedHost);
         Controls.Add(diffHost);
         Controls.Add(statusHost);
         Controls.Add(actionRow);
+        Controls.Add(filterRow);
         Controls.Add(headRow);
     }
 
@@ -178,42 +187,18 @@ internal sealed class ApplyPlanDialog : Form
         ShowPlan(plan);
     }
 
-    /// <summary>按计划刷新列表、计数与按钮可用性；回写后再次调用会补上逐文件结果列。</summary>
+    /// <summary>
+    /// 按计划刷新计数行、跳过清单与按钮可用性；文件清单经 <see cref="PopulateList"/> 按关键词呈现
+    /// （回写后再次调用会补上逐文件结果列）。
+    /// </summary>
     private void ShowPlan(CommentPlan plan)
     {
         _plan = plan;
         _hint.Visible = false;
-        _list.Visible = true;
         _planStatus.Text = "计划状态：" + TaskDisplay.PlanStatusText(plan.Status) + (plan.Status == "expired" && plan.Files.Count == 0 ? "" : "（预览后源码再变化则计划过期）");
         _planStatus.ForeColor = ToneColor(TaskDisplay.PlanTone(plan.Status));
-        _counts.Text = $"文件 {plan.Files.Count} · 注释 {plan.Files.Sum(f => f.Edits.Count)} · 跳过 {plan.Skipped.Count}";
-
-        var results = plan.ApplyResults
-            .GroupBy(r => r.RelativePath, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.OrdinalIgnoreCase);
-        _list.BeginUpdate();
-        _list.Items.Clear();
-        foreach (var file in plan.Files)
-        {
-            var item = new ListViewItem(file.RelativePath) { Tag = file };
-            item.UseItemStyleForSubItems = false;
-            var scope = item.SubItems.Add(file.WriteAllowed ? "允许回写" : "只导出补丁");
-            if (!file.WriteAllowed) scope.ForeColor = UiTokens.Muted;
-            item.SubItems.Add(file.Edits.Count.ToString());
-            if (results.GetValueOrDefault(file.RelativePath) is { } result)
-            {
-                var state = item.SubItems.Add(TaskDisplay.FileApplyStateText(result.State));
-                state.ForeColor = ToneColor(TaskDisplay.FileApplyTone(result.State));
-                if (result.Message is { } message) item.ToolTipText = message;
-            }
-            else
-            {
-                item.SubItems.Add("");
-            }
-            _list.Items.Add(item);
-        }
-        _list.EndUpdate();
-        if (_list.Items.Count > 0) Ui.SelectItem(_list.Items[0]);
+        // 计数行按整份计划统计、不随关键词变化（「跳过 N」正是要找的那批的凭据）。
+        _counts.Text = ApplyPlanEntries.CountsLine(plan.Files.Count, plan.Files.Sum(f => f.Edits.Count), plan.Skipped.Count);
 
         _skippedList.BeginUpdate();
         _skippedList.Items.Clear();
@@ -233,12 +218,96 @@ internal sealed class ApplyPlanDialog : Form
             _hint.ForeColor = UiTokens.Muted;
             _hint.Visible = true;
             _list.Visible = false;
+            _diff.Text = "";
+            // 整份数据没有文件：关键词框一起停（没有可筛的东西，下一步不在这框上）。口径见 ListFilter.KeywordEnabled。
+            _keyword.Enabled = ListFilter.KeywordEnabled(false);
+        }
+        else
+        {
+            // 有数据可筛：关键词框可用（口径见 ListFilter.KeywordEnabled）。
+            _keyword.Enabled = ListFilter.KeywordEnabled(true);
+            PopulateList();
         }
 
         var writable = plan.Files.Count(f => f.WriteAllowed);
         _applyButton.Enabled = plan.Status == "ready" && writable > 0;
         _patchButton.Enabled = plan.Files.Count > 0;
         _regenButton.Enabled = plan.Status is "expired" or "failed" or "partial";
+    }
+
+    /// <summary>
+    /// 关键词框（DESIGN.md §6「列表筛选」）：输入即筛选，只改可见行——计数行按整份计划统计、
+    /// 不随关键词变化（「跳过 N」正是要找的那批的凭据，被一屏的空抹掉等于把结果藏起来）。
+    /// 筛到零行不是「没有可回写的文件」：说清这一屏为什么空，下一步就在那个框上（这一屏没有筛选下拉，
+    /// 故不指「换一个筛选」），关键词框留着（§7「禁用不得移除下一步」），差异预览经既有的无选中路径
+    /// <see cref="ShowDiff"/> 收口，不在这里另写一套收控件的赋值。
+    /// 选中按源码文件路径恢复（筛一下再筛回来仍停在原来那个文件），恢复不到时落在新筛选第一条
+    /// （与两个主页面「重建后按 Id 恢复选中」、第五十六轮「切换筛选落在新筛选第一条」同一口径）。
+    /// </summary>
+    private void PopulateList()
+    {
+        var plan = _plan;
+        if (plan is null) return;
+        var selectedPath = (Ui.SelectedItem(_list)?.Tag as PlannedFile)?.RelativePath;
+        var results = plan.ApplyResults
+            .GroupBy(r => r.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.OrdinalIgnoreCase);
+        var visible = ListFilter.Apply(plan.Files, _keyword.Text, file => ApplyPlanEntries.KeywordFields(
+            file.RelativePath,
+            ApplyPlanEntries.ScopeText(file.WriteAllowed),
+            results.GetValueOrDefault(file.RelativePath) is { } result ? TaskDisplay.FileApplyStateText(result.State) : ""));
+        _list.BeginUpdate();
+        _list.Items.Clear();
+        foreach (var file in visible)
+        {
+            var item = new ListViewItem(file.RelativePath) { Tag = file };
+            item.UseItemStyleForSubItems = false;
+            var scope = item.SubItems.Add(ApplyPlanEntries.ScopeText(file.WriteAllowed));
+            if (!file.WriteAllowed) scope.ForeColor = UiTokens.Muted;
+            item.SubItems.Add(file.Edits.Count.ToString());
+            if (results.GetValueOrDefault(file.RelativePath) is { } result)
+            {
+                var state = item.SubItems.Add(TaskDisplay.FileApplyStateText(result.State));
+                state.ForeColor = ToneColor(TaskDisplay.FileApplyTone(result.State));
+                if (result.Message is { } message) item.ToolTipText = message;
+            }
+            else
+            {
+                item.SubItems.Add("");
+            }
+            _list.Items.Add(item);
+        }
+        _list.EndUpdate();
+        if (ListFilter.IsFilteredEmpty(plan.Files.Count, visible.Count))
+        {
+            _hint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.ApplyPlanNoun);
+            _hint.ForeColor = UiTokens.Muted;
+            _hint.Visible = true;
+            _list.Visible = false;
+            ShowDiff();
+            return;
+        }
+        _hint.Visible = false;
+        _list.Visible = true;
+        var target = selectedPath is null
+            ? null
+            : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as PlannedFile)?.RelativePath == selectedPath);
+        Ui.SelectItem(target ?? _list.Items[0]);
+    }
+
+    /// <summary>
+    /// 三个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给关键词框并选中已有关键词、
+    /// 框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 退出筛选（清空关键词回到全部文件）。
+    /// 与另九张长清单同一份口径、同一处接线（<see cref="Ui.TryFocusFilter"/>、<see cref="Ui.TryEnterFilter"/>、
+    /// <see cref="Ui.TryEscapeFilter"/>）：本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+    /// 对话框的 Enter=确认、Esc=取消在焦点不在框上时逐字不变（AcceptButton 与 CancelButton 仍是「关闭」）。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
+        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
+        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        return base.ProcessDialogKey(keyData);
     }
 
     private void ShowDiff()
@@ -357,6 +426,8 @@ internal sealed class ApplyPlanDialog : Form
     private void SetBusy(bool busy)
     {
         _busy = busy;
+        // 作业运行期间清单正在被重建：关键词框一起停（口径见 ListFilter.KeywordEnabled）。
+        _keyword.Enabled = ListFilter.KeywordEnabled(_plan is { Files.Count: > 0 }, busy);
         _applyButton.Enabled = !busy && _plan is { Status: "ready" } && _plan.Files.Any(f => f.WriteAllowed);
         _patchButton.Enabled = !busy && _plan is { Files.Count: > 0 };
         _regenButton.Enabled = !busy;
@@ -368,6 +439,9 @@ internal sealed class ApplyPlanDialog : Form
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
+        // 整份数据不可得：关键词框一起停（§7「禁用 = 控件禁用 + 一句话说明缺什么」——
+        // 缺什么与下一步由上面那句话给出，框里敲字筛不到任何东西）。口径见 ListFilter.KeywordEnabled。
+        _keyword.Enabled = ListFilter.KeywordEnabled(false);
         _counts.Text = "";
         _diff.Text = "";
         _skippedHost.Visible = false;

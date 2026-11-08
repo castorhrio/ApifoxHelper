@@ -20,6 +20,7 @@ public class KeywordAvailabilityTests
         "EndpointTraceDialog.cs",
         "SupplementsDialog.cs",
         "PropagationDialog.cs",
+        "ApplyPlanDialog.cs",
     ];
 
     // ---------- 口径真值表（框能不能用只有一份判定，四张清单认的就是它） ----------
