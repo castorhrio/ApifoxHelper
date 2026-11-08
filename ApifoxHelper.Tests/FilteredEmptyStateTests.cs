@@ -138,7 +138,8 @@ public class FilteredEmptyStateTests
     [Theory]
     // 注释候选与响应契约此前没有这一支：点开一个没有条目的状态、或清完「待审阅」最后一条，
     // 屏幕上只剩表头与一张空表，聚合数字虽在却没人说这一屏为什么空。
-    [InlineData("CandidatesDialog.cs", "private string SlotTitle", "_store.Candidates.Count", "CandidateNoun", "候选")]
+    // 第六十七轮起这两处也有关键词框，下一步因此有两个真实入口（关键词或筛选），话术随之内联判定。
+    [InlineData("CandidatesDialog.cs", "private void ShowDetail", "_store.Candidates.Count", "CandidateNoun", "候选")]
     [InlineData("ContractsDialog.cs", "private void ShowDetail", "_contracts.Count", "ContractNoun", "契约")]
     public void ReviewViews_ExplainTheEmptyFilterBeforeRestoringVisibility(string file, string endAnchor, string total, string nounConst, string noun)
     {
@@ -146,7 +147,7 @@ public class FilteredEmptyStateTests
         var body = Slice(Repo.Source("Desktop", "Native", file), "private void ApplyFilter()", endAnchor);
         Assert.Single(Regex.Matches(body, @"(?m)^\s*if \(ListFilter\.IsFilteredEmpty\("));
         Assert.Matches($@"(?m)^\s*if \(ListFilter\.IsFilteredEmpty\({Regex.Escape(total)}, _list\.Items\.Count\)\)$", body);
-        Assert.Matches($@"(?m)^\s*ShowHint\(ListFilter\.FilteredEmptyHint\(ListFilter\.{nounConst}\), UiTokens\.Muted, keepAggregate: true\);$", body);
+        Assert.Matches($@"(?m)^\s*ShowHint\(ListFilter\.FilteredEmptyHint\(ListFilter\.{nounConst}, ListFilter\.IsActive\(_keyword\.Text\)\), UiTokens\.Muted, keepAggregate: true\);$", body);
         // 分支先返回，回显在后面：写在提示之前等于这句话刚显示就被自己抹掉。
         var hint = body.IndexOf("keepAggregate: true);", StringComparison.Ordinal);
         var restore = body.IndexOf("_hint.Visible = false;", StringComparison.Ordinal);

@@ -56,22 +56,24 @@ public class KeywordFilterTests
         foreach (var noun in new[] { ListFilter.EndpointNoun, ListFilter.DecisionNoun, ListFilter.SlotNoun })
         {
             Assert.EndsWith(ListFilter.FilteredEmptySearchPointer, ListFilter.FilteredEmptyHint(noun, true), StringComparison.Ordinal);
-            // 没有关键词框的两处（注释候选、响应契约）仍只指筛选器：文字不指向界面上不存在的控件（第四十二、四十六轮同一条纪律）。
+            // 不传「框里有字」时只指筛选器：文字不指向界面上按不动的控件（第四十二、四十六轮同一条纪律）。
             Assert.EndsWith(ListFilter.FilteredEmptyPointer, ListFilter.FilteredEmptyHint(noun), StringComparison.Ordinal);
             Assert.EndsWith(ListFilter.FilteredEmptyPointer, ListFilter.FilteredEmptyHint(noun, false), StringComparison.Ordinal);
         }
     }
 
     [Theory]
+    // 第六十七轮起注释候选与响应契约也并入同一册：这两个审阅队列是逐条清队列的两张清单，
+    // 队列里上百条时找「上次那条」只能逐行扫。此前它们只有状态下拉，话术只指筛选器；
+    // 现在有了关键词框，下一步有两个真实入口，话术按「框里有没有字」内联判定。
     [InlineData("CandidatesDialog.cs", "CandidateNoun")]
     [InlineData("ContractsDialog.cs", "ContractNoun")]
-    public void ViewsWithoutKeywordBox_StillPointAtTheFilterOnly(string file, string nounConst)
+    public void TheTwoReviewQueues_JoinedTheKeywordBoxFamily(string file, string nounConst)
     {
-        // 注释缺口清单在第六十六轮并入同一册（它有框了），剩下这两处仍只指筛选器：
-        // 文字不指向界面上不存在的控件。
         var source = Repo.Source("Desktop", "Native", file);
-        Assert.Matches($@"(?m)^\s*(?:ShowHint\(|_hint\.Text = )ListFilter\.FilteredEmptyHint\(ListFilter\.{nounConst}\)", source);
-        Assert.DoesNotContain("_keyword", source, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^\s*private readonly TextBox _keyword = Ui\.Input\(\);$", source);
+        // 筛到零行那句话的下一步因此有两个真实入口（关键词或筛选）：框里有字才指两个，框里没字仍只指筛选器。
+        Assert.Matches($@"(?m)^\s*(?:ShowHint\(|_hint\.Text = )ListFilter\.FilteredEmptyHint\(ListFilter\.{nounConst}, ListFilter\.IsActive\(_keyword\.Text\)\)", source);
     }
 
     [Fact]

@@ -52,6 +52,8 @@
     <Compile Include="..\Desktop\Native\ListSort.cs" Link="Shared\ListSort.cs" />
     <Compile Include="..\Desktop\Native\ListSortMemory.cs" Link="Shared\ListSortMemory.cs" />
     <Compile Include="..\Desktop\Native\ListFilter.cs" Link="Shared\ListFilter.cs" />
+    <Compile Include="..\Desktop\Native\QueueText.cs" Link="Shared\QueueText.cs" />
+    <Compile Include="..\Desktop\Native\SlotText.cs" Link="Shared\SlotText.cs" />
     <Compile Include="..\Desktop\Native\ListKeys.cs" Link="Shared\ListKeys.cs" />
     <Compile Include="..\Desktop\Native\ListCopy.cs" Link="Shared\ListCopy.cs" />
     <Compile Include="..\Desktop\Native\ListAdvance.cs" Link="Shared\ListAdvance.cs" />
@@ -64,6 +66,8 @@
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />
     <Compile Include="..\Desktop\Native\ShellShortcuts.cs" Link="Shared\ShellShortcuts.cs" />
     <Compile Include="..\Tasks\TaskModels.cs" Link="Shared\TaskModels.cs" />
+    <Compile Include="..\Source\SourceModels.cs" Link="Shared\SourceModels.cs" />
+    <Compile Include="..\Comments\DraftModels.cs" Link="Shared\DraftModels.cs" />
     <Compile Include="..\Tasks\TaskStore.cs" Link="Shared\TaskStore.cs" />
     <Compile Include="..\Infrastructure\FileStore.cs" Link="Shared\FileStore.cs" />
     <Compile Include="..\Profiles\ProjectProfile.cs" Link="Shared\ProjectProfile.cs" />

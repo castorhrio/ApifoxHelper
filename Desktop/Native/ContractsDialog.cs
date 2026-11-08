@@ -22,6 +22,7 @@ internal sealed class ContractsDialog : Form
 
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+    private readonly TextBox _keyword = Ui.Input();
     private readonly ListView _list = Ui.List();
     private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
     private readonly Button _confirmButton;
@@ -81,19 +82,30 @@ internal sealed class ContractsDialog : Form
         _filter.SelectedIndex = 0;
         _filter.SelectedIndexChanged += (_, _) => ApplyFilter();
 
-        var filterRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 3, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
+        _keyword.Width = 220;
+        _keyword.PlaceholderText = ListFilter.ContractSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => ApplyFilter();
+
+        var filterRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 5, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
+        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         var filterCaption = Ui.Body("筛选");
         filterCaption.Margin = new Padding(0, 0, UiTokens.Xs, 0);
         filterCaption.TextAlign = ContentAlignment.MiddleLeft;
+        var keywordCaption = Ui.Body("关键词");
+        keywordCaption.Margin = new Padding(UiTokens.Lg, 0, UiTokens.Xs, 0);
+        keywordCaption.TextAlign = ContentAlignment.MiddleLeft;
         _counts.AutoSize = false;
         _counts.Dock = DockStyle.Fill;
         _counts.TextAlign = ContentAlignment.MiddleRight;
         filterRow.Controls.Add(filterCaption, 0, 0);
         filterRow.Controls.Add(_filter, 1, 0);
-        filterRow.Controls.Add(_counts, 2, 0);
+        filterRow.Controls.Add(keywordCaption, 2, 0);
+        filterRow.Controls.Add(Ui.Field(_keyword), 3, 0);
+        filterRow.Controls.Add(_counts, 4, 0);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
@@ -147,6 +159,7 @@ internal sealed class ContractsDialog : Form
         }
         _hint.Visible = false;
         _filter.Enabled = true;
+        _keyword.Enabled = true;
         _list.Visible = true;
         UpdateCounts();
         ApplyFilter();
@@ -170,8 +183,8 @@ internal sealed class ContractsDialog : Form
     }
 
     /// <summary>
-    /// 提示出口。<c>keepAggregate</c> 为真表示「契约还在，只是当前筛选一条都不命中」：筛选器要留着
-    /// （提示语「换一个筛选再试」指的就是它），计数行的聚合数字也要留着（「待确认 0」是清完队列的凭据）。
+    /// 提示出口。<c>keepAggregate</c> 为真表示「契约还在，只是当前筛选一条都不命中」：筛选器与关键词框要留着
+    /// （提示语「换一个关键词或筛选再试」指的就是它们），计数行的聚合数字也要留着（「待确认 0」是清完队列的凭据）。
     /// 缺省为假：打开期读取失败与「没有需要补充的响应契约」仍是原来的形状。
     /// </summary>
     private void ShowHint(string message, Color color, bool keepAggregate = false)
@@ -181,6 +194,7 @@ internal sealed class ContractsDialog : Form
         _hint.Visible = true;
         _list.Visible = false;
         _filter.Enabled = keepAggregate;
+        _keyword.Enabled = keepAggregate;
         SetButtons(null);
         if (!keepAggregate) _counts.Text = "";
         _detail.Text = "";
@@ -214,17 +228,30 @@ internal sealed class ContractsDialog : Form
         _ => true,
     };
 
+    /// <summary>
+    /// 关键词框里的裸 Enter 不提交对话框：对话框的 Enter=确认（§6「菜单/快捷键」）说的是表单字段，
+    /// 而筛选框不是表单字段——输入即筛选，没有「提交」这一步（另三张长清单与冻结页面的关键词框在 Enter 上同样什么都不做）。
+    /// 不挡一下，按 Enter 会把刚筛出来的结果连同对话框一起关掉；带修饰键的组合不属本判定，照旧交给基类。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (keyData == Keys.Enter && _keyword.Focused) return true;
+        return base.ProcessDialogKey(keyData);
+    }
+
     private void ApplyFilter()
     {
         _list.BeginUpdate();
         _list.Items.Clear();
-        foreach (var contract in _contracts)
+        // 关键词先经共享口径（与两个主页面、另三张长清单同一份匹配规则：词间「且」、字段间「或」、忽略大小写），
+        // 审阅状态筛选在其后——两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
+        var visible = ListFilter.Apply(_contracts, _keyword.Text, QueueText.ContractFields).Where(Matches).ToList();
+        foreach (var contract in visible)
         {
-            if (!Matches(contract)) continue;
             var item = new ListViewItem(contract.EndpointKey) { Tag = contract };
-            var wrapper = item.SubItems.Add(contract.WrapperType.Length > 0 ? contract.WrapperType : "（直接返回）");
+            var wrapper = item.SubItems.Add(QueueText.ContractWrapper(contract.WrapperType));
             wrapper.ForeColor = UiTokens.Muted;
-            item.SubItems.Add(contract.DataType ?? "未确定");
+            item.SubItems.Add(QueueText.ContractDataType(contract.DataType));
             item.SubItems.Add(contract.Branches.Count.ToString());
             var review = item.SubItems.Add(TaskDisplay.ContractStateText(contract.ReviewState));
             item.UseItemStyleForSubItems = false;
@@ -235,7 +262,7 @@ internal sealed class ContractsDialog : Form
         if (ListFilter.IsFilteredEmpty(_contracts.Count, _list.Items.Count))
         {
             // 筛到零行不是「没有契约」：说清这一屏为什么空、下一步就在筛选上，聚合计数留着（口径见 ListFilter）。
-            ShowHint(ListFilter.FilteredEmptyHint(ListFilter.ContractNoun), UiTokens.Muted, keepAggregate: true);
+            ShowHint(ListFilter.FilteredEmptyHint(ListFilter.ContractNoun, ListFilter.IsActive(_keyword.Text)), UiTokens.Muted, keepAggregate: true);
             return;
         }
         _hint.Visible = false;
@@ -259,9 +286,9 @@ internal sealed class ContractsDialog : Form
         var lines = new List<string>
         {
             "接口：" + contract.EndpointKey,
-            "封装 " + (contract.WrapperType.Length > 0 ? contract.WrapperType : "（直接返回）")
+            "封装 " + QueueText.ContractWrapper(contract.WrapperType)
                 + " · " + (contract.DataJsonName.Length > 0 ? contract.DataJsonName : "data") + " = "
-                + (contract.DataType ?? "未确定") + (contract.DataNullable ? "（异常分支为空）" : ""),
+                + QueueText.ContractDataType(contract.DataType) + (contract.DataNullable ? "（异常分支为空）" : ""),
         };
         if (contract.UnresolvedPoints.Count > 0)
         {

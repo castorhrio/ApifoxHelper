@@ -21,8 +21,12 @@ namespace ApifoxHelper.Desktop.Native;
 /// 注释缺口清单在第六十六轮并入同一册：它是全应用最长的一张清单（一次扫描的全部注释位置），
 /// 同样只有筛选下拉时找「上次那个位置」只能逐行扫；匹配的是那一行在屏幕上被读作的那四格
 /// （符号、标注、角色、文件位置），状态那一列由下拉管、不另造一套字段。
+/// 两个审阅队列在第六十七轮并入同一册：注释候选与响应契约是逐条清队列的两张清单，
+/// 队列里上百条时找「上次那条」只能逐行扫（审阅状态那一列由下拉管，不进关键词）；
+/// 匹配的是那一行在屏幕上被读作的那几格——候选是位置/标注/依据/来源，契约是接口/封装/data 类型，
+/// 取法在 <c>QueueText</c>（与清单单元格同源，不另造一套字段）。五张带筛选下拉的清单到此都有同一个框。
 /// 关键词框不是表单字段：输入即筛选，没有「提交」这一步——框里的裸 Enter 不提交对话框
-/// （三个对话框各自在 <c>ProcessDialogKey</c> 里挡下；冻结页面的差异视图关键词框在 Enter 上同样什么都不做），
+/// （五张清单各自在 <c>ProcessDialogKey</c> 里挡下；冻结页面的差异视图关键词框在 Enter 上同样什么都不做），
 /// 带修饰键的组合不属本判定、不吞键。
 /// 不依赖 WinForms，以共享源码编入测试工程在 Linux 断言。
 /// </summary>
@@ -43,6 +47,18 @@ public static class ListFilter
     /// 状态不在其中——那一列的取值（缺失/空/已失效/有效/其他问题）由筛选下拉管，不必再敲一遍。
     /// </summary>
     public const string SlotSearchPlaceholder = "筛选位置（符号、标注、角色、文件）";
+
+    /// <summary>
+    /// 注释候选的关键词框：按位置、标注、依据与来源找（与列表那四格同一批文字）。
+    /// 审阅状态不在其中——那一列的取值由筛选下拉管，不必再敲一遍。
+    /// </summary>
+    public const string CandidateSearchPlaceholder = "筛选候选（位置、标注、依据、来源）";
+
+    /// <summary>
+    /// 响应契约的关键词框：按接口、封装与 data 类型找（与列表那三格同一批文字）。
+    /// 审阅状态不在其中——那一列的取值由筛选下拉管，不必再敲一遍。
+    /// </summary>
+    public const string ContractSearchPlaceholder = "筛选契约（接口、封装、类型）";
 
     public const string TaskNoMatchTitle = "没有匹配的任务";
     public const string TaskNoMatchHint = "换一个关键词，或点「清空筛选」回到全部任务。";
@@ -93,9 +109,9 @@ public static class ListFilter
 
     /// <summary>
     /// 筛到零行时给的一句话：说清这一屏为什么是空的，并指名下一步。
-    /// <paramref name="hasKeyword"/> 为真表示这一屏还有关键词框（检查结果、差异确认），
-    /// 下一步因此有两个真实入口；没有关键词框的三处（注释候选、响应契约、注释缺口）仍只指筛选器——
-    /// 文字不指向界面上不存在的控件（第四十二、四十六轮同一条纪律）。
+    /// <paramref name="hasKeyword"/> 为真表示这一屏的关键词框里留着字——此时有两个真实控件能变出条目，
+    /// 只指筛选器等于把关键词框那一半藏起来（用户刚在框里敲了字，最可能挡住行的正是它）；
+    /// 框里没字时下一步只有筛选器，指名它才算说实（文字不指向界面上按不动的控件）。
     /// </summary>
     public static string FilteredEmptyHint(string noun, bool hasKeyword = false) =>
         $"这个筛选下没有{noun}。" + (hasKeyword ? FilteredEmptySearchPointer : FilteredEmptyPointer);
