@@ -39,13 +39,6 @@ internal sealed class DecisionsDialog : Form
         public string StateTone { get; set; } = "normal";
     }
 
-    /// <summary>绑定下拉的选项（值：""=未确认、远端 ID 字符串、"new"）。</summary>
-    private sealed class BindingOption(string value, string text)
-    {
-        public string Value { get; } = value;
-        public override string ToString() => text;
-    }
-
     private static readonly string[] FilterChoices = ["全部", "待处理", "高风险变化", "说明冲突", "模型绑定", "共享模型确认"];
 
     private readonly TaskStore _tasks;
@@ -517,26 +510,27 @@ internal sealed class DecisionsDialog : Form
         }
     }
 
+    /// <summary>
+    /// 绑定下拉的选项与选中项取共享口径 <see cref="BindingChoices"/>：已保存但不在本次候选里的绑定
+    /// 按原值追加一项并注明，不显示成「未确认」（否则同一屏的状态列与下拉对同一件事说两种话，
+    /// 且保存按钮会因「未确认 ≠ 已保存值」亮起，一次点击静默删掉用户没打算改的绑定）。
+    /// </summary>
     private void LoadBindingCombo(Entry entry)
     {
         _bindingCombo.Items.Clear();
-        _bindingCombo.Items.Add(new BindingOption("", "未确认"));
-        foreach (var id in entry.Model?.Candidates ?? []) _bindingCombo.Items.Add(new BindingOption(id.ToString(CultureInfo.InvariantCulture), "绑定远端 " + id));
-        _bindingCombo.Items.Add(new BindingOption("new", "新建模型"));
-        var current = _decisions.ModelBindings.GetValueOrDefault(entry.Model?.Name ?? "") ?? "";
-        var options = _bindingCombo.Items.OfType<BindingOption>().ToList();
-        var index = options.FindIndex(o => o.Value == current);
-        _bindingCombo.SelectedIndex = index < 0 ? 0 : index;
+        var options = BindingChoices.Build(entry.Model?.Candidates ?? [], SavedBinding(entry));
+        foreach (var choice in options.Choices) _bindingCombo.Items.Add(choice);
+        _bindingCombo.SelectedIndex = options.SelectedIndex;
         UpdateBindingSaveEnabled(entry);
     }
 
-    private string? SelectedBindingValue() => _bindingCombo.SelectedItem as BindingOption is { } option ? option.Value : null;
+    private string? SelectedBindingValue() => _bindingCombo.SelectedItem is BindingChoice choice ? choice.Value : null;
 
-    private void UpdateBindingSaveEnabled(Entry entry)
-    {
-        var current = _decisions.ModelBindings.GetValueOrDefault(entry.Model?.Name ?? "") ?? "";
-        _bindingSaveButton.Enabled = SelectedBindingValue() is { } value && value != current;
-    }
+    /// <summary>该模型已保存的绑定值（没有绑定即空串，与 decisions.json 的取值同一口径）。</summary>
+    private string SavedBinding(Entry entry) => _decisions.ModelBindings.GetValueOrDefault(entry.Model?.Name ?? "") ?? "";
+
+    private void UpdateBindingSaveEnabled(Entry entry) =>
+        _bindingSaveButton.Enabled = BindingChoices.CanSave(SelectedBindingValue(), SavedBinding(entry));
 
     private void ConfirmCurrent()
     {
