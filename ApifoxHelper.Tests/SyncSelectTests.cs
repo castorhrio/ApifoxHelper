@@ -223,8 +223,13 @@ public class SyncSelectTests
         {
             Assert.Contains(TaskDisplay.CheckStatusText(status), SyncSelect.SearchFields(Endpoint("GET", "/x", status)));
         }
+        // 第一百零九轮起三格文字收进 SyncSelectSort（排序键与单元格同一份），本文件委托它——
+        // 链条仍是「单元格 → 共享口径 → TaskDisplay」，两处各拼一次必然有一处先漂。
         var source = Repo.Source("Desktop", "Native", "SyncSelect.cs");
-        Assert.Contains("TaskDisplay.CheckStatusText(check.Status)", source, StringComparison.Ordinal);
+        Assert.Contains("SyncSelectSort.StatusCell(check)", source, StringComparison.Ordinal);
+        Assert.Contains("SyncSelectSort.EndpointCell(check)", source, StringComparison.Ordinal);
+        var shared = Repo.Source("Desktop", "Native", "SyncSelectSort.cs");
+        Assert.Contains("TaskDisplay.CheckStatusText(check.Status)", shared, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -321,8 +326,11 @@ public class SyncSelectTests
         var source = Repo.Source("Desktop", "Native", File);
         // 清单重建时每行的勾选从 SyncSelect 恢复——重建不丢勾选，这是本页筛选的前提。
         Assert.Matches(@"(?m)^\s*row\.Checked = _select\.IsChecked\(check\.Key\);$", source);
-        // 可见行取共享口径（与五张长清单同一份匹配规则），不在界面里另拼一套。
-        Assert.Matches(@"(?m)^\s*foreach \(var check in _select\.Visible\(diff\)\)$", source);
+        // 可见行取共享口径（与五张长清单同一份匹配规则），不在界面里另拼一套；
+        // 第一百零九轮起排序接在筛选之后（ListSort.Order 的输入就是 _select.Visible），
+        // 勾选仍按接口键从 SyncSelect 恢复——排序与筛选都不丢勾选。
+        Assert.Matches(@"(?m)^\s*_select\.Visible\(diff\),$", source);
+        Assert.Matches(@"(?m)^\s*foreach \(var check in visible\)$", source);
     }
 
     [Fact]

@@ -25,8 +25,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 生成失败/执行被拒=原因与下一步；计划就绪=概要 + 写入清单 + 排除清单 + 影响与保留设置；
 /// 执行或核对结束=逐动作结果 + 按计划状态如实报告（部分完成不显示成全部成功）；
 /// 计划生成后任务内容有变化=过期提示（计划不能再执行，仍如实展示）。
-/// 两张清单都支持点击列头排序（第一百零六轮，口径见 <see cref="SyncPlanSort"/> 与 <see cref="ListSort"/>）：
-/// 同一列再点反向、换一列从升序开始、表头带方向标记，排序只改呈现顺序。
+/// 三张清单都支持点击列头排序（第一百零六、一百零九轮，口径见 <see cref="SyncPlanSort"/>、
+/// <see cref="SyncSelectSort"/> 与 <see cref="ListSort"/>）：同一列再点反向、换一列从升序开始、
+/// 表头带方向标记，排序只改呈现顺序——勾选页的勾选按接口键记在 SyncSelect，排序不丢勾选。
 /// </summary>
 internal sealed class SyncPreviewDialog : Form
 {
@@ -94,8 +95,13 @@ internal sealed class SyncPreviewDialog : Form
     // 名称格在「资源」列——Ctrl+C 交出去的是它。
     private const int ActionResourceColumn = 2;
 
-    // 列排序状态（ListSort 口径，第一百零六轮）：两张清单各记各的，未排序时保持计划自身的顺序
-    // （写入清单即执行顺序：模型在前、接口在后）。
+    // 列排序状态（ListSort 口径，第一百零六、一百零九轮）：三张清单各记各的，未排序时保持数据源自身的顺序
+    // （勾选页即检查结果的接口顺序，写入清单即执行顺序：模型在前、接口在后）。
+    // 勾选页的清单是复选清单：排序要重建清单，勾选状态按接口键记在 SyncSelect（单一来源），
+    // 重建时从它恢复——排序因此不丢勾选，与筛选同一份前提。
+    private int _selectSortColumn = ListSort.None;
+    private bool _selectSortDescending;
+    private readonly string[] _selectTitles;
     private int _actionSortColumn = ListSort.None;
     private bool _actionSortDescending;
     private readonly string[] _actionTitles;
@@ -163,6 +169,9 @@ internal sealed class SyncPreviewDialog : Form
         _selectList.Columns.Add("名称", 200);
         _selectList.Columns.Add("状态", 96);
         _selectList.Columns.Add("待确认", 72);
+        // 表头标题快照：方向标记每次按原标题重算，反复刷新不叠加（ListSort.Header 那一份）。
+        _selectTitles = _selectList.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        _selectList.ColumnClick += (_, e) => SortSelect(e.Column);
         _keyword.PlaceholderText = ListFilter.SyncSelectSearchPlaceholder;
         _keyword.TextChanged += (_, _) => ApplyFilter();
         _selectList.ItemCheck += (_, e) =>
@@ -506,23 +515,33 @@ internal sealed class SyncPreviewDialog : Form
     private void PopulateSelectList()
     {
         var diff = _diff!;
+        // 筛选先于排序（ListFilter → ListSort，与另十二处同一顺序）：筛掉的行不参与排序，
+        // 排序键取 SyncSelectSort 单一口径（与四格同源），界面不就地写 switch。
+        // 勾选状态按接口键记在 SyncSelect，重建（含排序）从它恢复——排序不丢勾选。
+        var visible = ListSort.Order(
+            _select.Visible(diff),
+            _selectSortColumn, _selectSortDescending,
+            (check, column) => SyncSelectSort.Key(
+                check,
+                SyncSelection.PendingCount(diff, _decisions, check.Key),
+                column));
         _rebuilding = true;
         _selectList.BeginUpdate();
         try
         {
             _selectList.Items.Clear();
-            foreach (var check in _select.Visible(diff))
+            foreach (var check in visible)
             {
-                var row = new ListViewItem(check.Method + " " + check.Path) { Tag = check, UseItemStyleForSubItems = false };
+                var row = new ListViewItem(SyncSelectSort.EndpointCell(check)) { Tag = check, UseItemStyleForSubItems = false };
                 row.Font = UiTokens.Mono.Value;
-                var name = row.SubItems.Add(check.RemoteName ?? (check.InRemote ? "—" : "Apifox 中不存在"));
+                var name = row.SubItems.Add(SyncSelectSort.NameCell(check));
                 name.Font = UiTokens.Body.Value;
                 if (!SyncSelection.Selectable(_task.OfflineMode, check.Status)) row.ForeColor = UiTokens.Muted;
-                var status = row.SubItems.Add(TaskDisplay.CheckStatusText(check.Status));
+                var status = row.SubItems.Add(SyncSelectSort.StatusCell(check));
                 status.Font = UiTokens.Body.Value;
                 status.ForeColor = ToneColor(TaskDisplay.CheckStatusTone(check.Status));
                 var pending = SyncSelection.PendingCount(diff, _decisions, check.Key);
-                var pendingCell = row.SubItems.Add(pending > 0 ? pending.ToString() : "—");
+                var pendingCell = row.SubItems.Add(SyncSelectSort.PendingCell(pending));
                 pendingCell.Font = UiTokens.Mono.Value;
                 if (pending > 0) pendingCell.ForeColor = UiTokens.WarnText;
                 row.Checked = _select.IsChecked(check.Key);
@@ -534,12 +553,35 @@ internal sealed class SyncPreviewDialog : Form
             _selectList.EndUpdate();
             _rebuilding = false;
         }
+        RefreshSelectSortHeaders();
         _selectAllButton.Text = "全选可同步（" + _select.VisibleSyncableCount(diff, _decisions, _task.OfflineMode) + "）";
         _selectAllButton.Enabled = true;
         _clearButton.Enabled = true;
         _visibleCount.Text = "接口 " + diff.Endpoints.Count + " · 可同步 "
             + SyncSelection.SyncableKeys(_task.OfflineMode, diff, _decisions).Count;
         RefreshSelectionCount();
+    }
+
+    /// <summary>
+    /// 勾选页接口清单的列头点击（DESIGN.md §6「列表列排序」，第一百零九轮）：同一列再点反向、
+    /// 换一列从升序开始，排序状态留在本对话框、重建走同一口径（<see cref="PopulateSelectList"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务与配置数据、不改检查结果与勾选：勾选状态按接口键记在 <see cref="SyncSelect"/>，
+    /// 重建时从它恢复，排序不丢勾选（与筛选同一份前提）；「全选可同步」仍只作用于可见行，
+    /// 排序不改可见行集合，故按钮上的数字与按钮实际勾的行仍是同一批。
+    /// </summary>
+    private void SortSelect(int column)
+    {
+        (_selectSortColumn, _selectSortDescending) = ListSort.Toggle(_selectSortColumn, _selectSortDescending, column);
+        PopulateSelectList();
+    }
+
+    /// <summary>勾选页的表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSelectSortHeaders()
+    {
+        for (var i = 0; i < _selectList.Columns.Count && i < _selectTitles.Length; i++)
+        {
+            _selectList.Columns[i].Text = ListSort.Header(_selectTitles[i], i, _selectSortColumn, _selectSortDescending);
+        }
     }
 
     /// <summary>把勾选状态从 <see cref="SyncSelect"/> 回写到可见行（行只是它的呈现，不另存一份）。</summary>

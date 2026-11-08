@@ -54,9 +54,13 @@ public sealed class SyncSelect
     public List<EndpointCheck> Visible(CheckResult diff) =>
         ListFilter.Apply(diff.Endpoints, Query, SearchFields);
 
-    /// <summary>关键词匹配的字段：与清单那三格同源（接口、名称、状态文字）。</summary>
+    /// <summary>
+    /// 关键词匹配的字段：与清单那三格同源（接口、名称、状态文字）——首格与第三格取
+    /// <see cref="SyncSelectSort"/> 那一份（第一百零九轮把三格文字收进排序口径，匹配与显示仍是同一份），
+    /// 名称格取远端名称原文（占位文字「—」「Apifox 中不存在」不进关键词：那是显示用的兜底，不是内容）。
+    /// </summary>
     public static string[] SearchFields(EndpointCheck check) =>
-        [check.Method + " " + check.Path, check.RemoteName ?? "", TaskDisplay.CheckStatusText(check.Status)];
+        [SyncSelectSort.EndpointCell(check), check.RemoteName ?? "", SyncSelectSort.StatusCell(check)];
 
     /// <summary>可见行里可同步的接口数：「全选可同步（N）」的 N 与按钮实际勾的行必须是同一批。</summary>
     public int VisibleSyncableCount(CheckResult diff, DecisionStore decisions, bool offlineMode) =>
