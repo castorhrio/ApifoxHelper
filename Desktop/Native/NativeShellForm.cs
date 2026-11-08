@@ -191,6 +191,30 @@ internal sealed class NativeShellForm : Form
         if (_tasksPage is { Visible: true }) _tasksPage.FocusListFilter();
     }
 
+    /// <summary>
+    /// Esc 退出筛选（DESIGN.md §6「列表筛选」那条全键盘路径的退出一步）：Ctrl+F 聚焦框 → 输入 → Enter 到结果 →
+    /// 方向键逐行看，到这一步想回到全部，人不该再拿鼠标去点框或点「清空筛选」——此前 Esc 只挂在筛选框
+    /// 自己的按键处理上，Enter 把选中交给列表之后焦点已在别处，按它没有反应。
+    /// 这里只在「Esc 且当前可见页的筛选框里真留着关键词」时接住这一次按键（两个条件都在
+    /// <see cref="ListFilter.EscClears"/> 判定，两页与壳都不另写一套），清空仍走各页既有唯一路径；
+    /// 没有关键词时不接、不吞键，其余按键一律交回基类——菜单快捷键与对话框的 Esc=取消都不经过这里
+    /// （模态对话框是另一个窗体，按键只在自己的控件链上冒泡）。
+    /// </summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == Keys.Escape && ClearFilterOnVisiblePage()) return true;
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    /// <summary>问两页要不要接住这一次 Esc：要不要接由页自己答（可见性在它身上、关键词在它框里），壳只分发。</summary>
+    private bool ClearFilterOnVisiblePage()
+    {
+        if (_shutdownStarted || IsDisposed || Disposing) return false;
+        if (_projectsPage is not null && _projectsPage.TryClearListFilter()) return true;
+        if (_tasksPage is not null && _tasksPage.TryClearListFilter()) return true;
+        return false;
+    }
+
     protected override async void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
@@ -443,4 +467,10 @@ internal interface INativePage
 
     /// <summary>把键盘焦点交给本页列表的筛选框并选中已有关键词（壳的 Ctrl+F 分发到当前可见页）。</summary>
     void FocusListFilter();
+
+    /// <summary>
+    /// 本页是不是这一次 Esc 的落点：是（本页可见且筛选框里留着关键词）就清空并把键盘留在框里，返回 true
+    /// 表示按键已被接住；否返回 false，壳据此不再吞键（判定在 ListFilter.EscClears，壳与页都不另写一套）。
+    /// </summary>
+    bool TryClearListFilter();
 }

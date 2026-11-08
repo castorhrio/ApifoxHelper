@@ -67,15 +67,10 @@ public class ListKeysTests
             Assert.Matches(@"(?m)^\s*if \(e\.KeyCode == Keys\.Enter && ListKeys\.IsEnterGesture\(e\.Shift, e\.Control, e\.Alt\)\)$", keys);
             Assert.Matches(@"(?m)^\s*FocusFirstResult\(\);", keys);
             Assert.Matches(@"(?m)^\s*e\.SuppressKeyPress = true;", keys);
-            // 既有 Esc 清空路径不动：Enter 分支不得改写清空。
-            Assert.Matches(@"(?m)^\s*if \(e\.KeyCode != Keys\.Escape \|\| _filter\.Text\.Length == 0\) return;", keys);
-            Assert.Matches(@"(?m)^\s*ClearListFilter\(\);", keys);
-            // Enter 分支必须在 Esc 守卫的短路之前：放在其后就永远走不到。
-            var enter = keys.IndexOf("Keys.Enter", StringComparison.Ordinal);
-            var escape = keys.IndexOf("Keys.Escape", StringComparison.Ordinal);
-            Assert.True(enter >= 0, $"{name}:筛选框没接 Enter。");
-            Assert.True(escape >= 0, $"{name}:筛选框的 Esc 清空丢失。");
-            Assert.True(enter < escape, $"{name}:Enter 分支必须在 Esc 守卫之前。");
+            // 框内只剩 Enter：Esc 的归属已在壳的分发（一个手势一个归属，不在框里再留一份，
+            // 否则「焦点恰好在框上」与「焦点在别处」两种情形走两套判定）。
+            Assert.DoesNotContain("Keys.Escape", keys, StringComparison.Ordinal);
+            Assert.True(keys.Contains("Keys.Enter", StringComparison.Ordinal), $"{name}:筛选框没接 Enter。");
         }
     }
 

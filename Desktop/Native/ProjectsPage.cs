@@ -79,15 +79,13 @@ internal sealed class ProjectsPage : UserControl, INativePage
         _filter.KeyDown += (_, e) =>
         {
             // Ctrl+F 把焦点交给框、Enter 把选中交给行：筛完不必再用手点进列表。
+            // Esc 不在这里接——它归壳分发到可见页（TryClearListFilter），焦点在列表或工具栏上时同样算。
             if (e.KeyCode == Keys.Enter && ListKeys.IsEnterGesture(e.Shift, e.Control, e.Alt))
             {
                 FocusFirstResult();
                 e.SuppressKeyPress = true;
                 return;
             }
-            if (e.KeyCode != Keys.Escape || _filter.Text.Length == 0) return;
-            ClearListFilter();
-            e.SuppressKeyPress = true;
         };
         _list.SelectedIndexChanged += (_, _) =>
         {
@@ -182,6 +180,17 @@ internal sealed class ProjectsPage : UserControl, INativePage
     }
 
     /// <summary>
+    /// Esc 退出筛选（壳的分发落到当前可见页）：这一屏的筛选框里留着关键词才接住这一次按键，
+    /// 要不要接由 ListFilter.EscClears 判定，页内不另写一套；接住就清空并把键盘留在框里（重输即替换）。
+    /// </summary>
+    public bool TryClearListFilter()
+    {
+        if (!ListFilter.EscClears(Visible, ListFilter.IsActive(_filter.Text))) return false;
+        ClearListFilter();
+        return true;
+    }
+
+    /// <summary>
     /// 筛选框 Enter 的去向：焦点与选中交给筛选结果的第一行——显示序第一行，即筛选与排序之后的可见顺序。
     /// 列表先取焦点、再经 Ui.SelectItem 唯一入口选中（选中即出详情、编辑按钮随之启用，与鼠标点同一行同一条路），
     /// 该行随唯一入口一并滚入可见区（滚动只在入口一处触达，页内不各写一套）。筛到零行时不动作：
@@ -197,8 +206,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
     }
 
     /// <summary>
-    /// 清空筛选的唯一路径：筛选框聚焦时按 Esc、空态点「清空筛选」都走这里（与任务页同一口径）。
-    /// 焦点不在筛选框上时 Esc 到不了框的按键处理，所以筛到零行的下一步由按钮承担；
+    /// 清空筛选的唯一路径：Esc（壳分发到本页，焦点在这屏哪个控件上都算——判定在 ListFilter.EscClears）
+    /// 与空态的「清空筛选」按钮都走这里（与任务页同一口径）。
     /// 清空经 TextChanged 触发既有重建，被筛掉的配置按选中 Id 恢复，不写配置数据。
     /// </summary>
     private void ClearListFilter()

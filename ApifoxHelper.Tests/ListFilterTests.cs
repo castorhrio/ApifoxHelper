@@ -164,9 +164,11 @@ public class ListFilterTests
         Assert.Matches(@"(?m)^\s*_filter\.PlaceholderText = ListFilter\.TaskPlaceholder;", page);
         Assert.Matches(@"(?m)^\s*var filterField = Ui\.Field\(_filter\);", page);
         Assert.Matches(@"(?m)^\s*buttons\.Controls\.Add\(filterField\);", page);
-        // 输入即筛选、Esc 清空（有内容才清，空框按 Esc 不吞键）。
+        // 输入即筛选；Esc 归壳分发到本页（判定在共享口径，框内不再留一份），空关键词不接按键。
         Assert.Matches(@"(?m)^\s*_filter\.TextChanged \+= \(_, _\) => LoadTasks\(\);", page);
-        Assert.Matches(@"(?m)^\s*if \(e\.KeyCode != Keys\.Escape \|\| _filter\.Text\.Length == 0\) return;", page);
+        Assert.Matches(@"(?m)^\s*if \(!ListFilter\.EscClears\(Visible, ListFilter\.IsActive\(_filter\.Text\)\)\) return false;", page);
+        // Esc 的归属只在这一处（框内不再留一份）：全仓「代码行里还有几处 Keys.Escape」由
+        // EscapeClearsFilterTests 按代码行数——那里的切法不算注释，这里不再连注释一起扫（第五十二、六十三轮同一教训）。
         Assert.Matches(@"(?m)^\s*_filter\.Text = """";", page);
 
         var load = Slice(page, "private void LoadTasks()", "private void RefreshEmptyState()");
@@ -198,7 +200,9 @@ public class ListFilterTests
         Assert.Matches(@"(?m)^\s*var filterField = Ui\.Field\(_filter\);", page);
         Assert.Matches(@"(?m)^\s*buttons\.Controls\.Add\(filterField\);", page);
         Assert.Matches(@"(?m)^\s*_filter\.TextChanged \+= \(_, _\) => LoadProfiles\(\);", page);
-        Assert.Matches(@"(?m)^\s*if \(e\.KeyCode != Keys\.Escape \|\| _filter\.Text\.Length == 0\) return;", page);
+        Assert.Matches(@"(?m)^\s*if \(!ListFilter\.EscClears\(Visible, ListFilter\.IsActive\(_filter\.Text\)\)\) return false;", page);
+        // Esc 的归属只在这一处（框内不再留一份）：全仓「代码行里还有几处 Keys.Escape」由
+        // EscapeClearsFilterTests 按代码行数——那里的切法不算注释，这里不再连注释一起扫（第五十二、六十三轮同一教训）。
         Assert.Matches(@"(?m)^\s*_filter\.Text = """";", page);
 
         var load = Slice(page, "private void LoadProfiles()", "private void RefreshEmptyState()");

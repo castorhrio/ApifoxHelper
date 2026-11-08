@@ -7,11 +7,12 @@ namespace ApifoxHelper.Tests;
 /// <summary>
 /// 主页面空态唯一行动按钮断言（DESIGN.md §7「空态=说明现在有什么可做 + 唯一行动按钮」、§6「列表筛选」）：
 /// 空态此前只有文字——任务页连动作都没有，配置页恒给一个实心「新建配置」（工具栏已有同一个主按钮，
-/// 同屏两个实心主按钮；筛到零行时把「新建」当作下一步也是误导）。更要紧的是提示语指「按 Esc 清空筛选框」，
+/// 同屏两个实心主按钮；筛到零行时把「新建」当作下一步也是误导）。更要紧的是提示语当时写着「按 Esc 清空筛选框」，
 /// 而 Esc 只挂在筛选框的按键处理上：焦点在工具栏、菜单或切页回来后落在别处时按它没有任何反应，
 /// 提示所指引的恢复路径不可达（与第四十二轮「禁用不得移除下一步」、第四十六轮「文字不指向不存在的按钮」同族）。
 /// 现在空态行动按筛选状态切换：没有数据=「新建任务/新建配置」（ghost，动作与工具栏同一入口），
-/// 筛到零行=「清空筛选」（ghost，与筛选框聚焦时的 Esc 共用 ClearListFilter 同一路径）。
+/// 筛到零行=「清空筛选」（ghost）。Esc 的归属在第六十四轮单独收口（壳分发到可见页，焦点在屏内哪个控件上都算），
+/// 与这里的按钮汇到同一条 ClearListFilter；提示语仍只指屏上那一个按钮——一句话给一个下一步。
 /// 口径单一落点在 <see cref="ListFilter"/>；两页接线由行首正则与源码切片机械检查钉住；
 /// 空态按钮的实际观感与键盘导航随 G-D5 真机复核。
 /// </summary>
@@ -34,7 +35,7 @@ public class EmptyStateActionTests
         Assert.Contains(ListFilter.ClearActionLabel, ListFilter.TaskNoMatchHint);
         Assert.Contains(ListFilter.ClearActionLabel, ListFilter.ProfileNoMatchHint);
         Assert.NotEqual(ListFilter.TaskNoMatchHint, ListFilter.ProfileNoMatchHint);
-        // 不再把「按 Esc」当作筛到零行的下一步——焦点不在筛选框上时它按不动。
+        // 提示语只指屏上真实存在的那个按钮：两种入口不并列写进同一句话（Esc 也已按得动，第六十四轮）。
         Assert.DoesNotContain("Esc", ListFilter.TaskNoMatchHint);
         Assert.DoesNotContain("Esc", ListFilter.ProfileNoMatchHint);
     }
@@ -110,7 +111,7 @@ public class EmptyStateActionTests
     [Fact]
     public void ClearFilter_HasSinglePathForEscAndButton()
     {
-        // Esc（筛选框聚焦时）与空态按钮都走 ClearListFilter：清空后焦点回框，接着输入不用先点回去。
+        // Esc（壳分发到可见页）与空态按钮都走 ClearListFilter：清空后焦点回框，接着输入不用先点回去。
         foreach (var (page, load, _) in PageAnchors)
         {
             var source = Repo.Source("Desktop", "Native", page);
@@ -119,9 +120,14 @@ public class EmptyStateActionTests
             Assert.Matches(@"(?m)^\s*_filter\.Focus\(\);", clear);
             // Esc 分支不再自己赋空值：两条入口必须汇到同一方法。
             Assert.DoesNotMatch(@"_filter\.Text = """";\s*\r?\n\s*e\.SuppressKeyPress", source);
-            var esc = Slice(source, "_filter.KeyDown += (_, e) =>", "_list.SelectedIndexChanged");
-            Assert.Matches(@"(?m)^\s*if \(e\.KeyCode != Keys\.Escape \|\| _filter\.Text\.Length == 0\) return;", esc);
-            Assert.Matches(@"(?m)^\s*ClearListFilter\(\);", esc);
+            // 页侧的 Esc 落点也汇到同一条路：判定交共享口径，清空交唯一路径。
+            var escEntry = Slice(source, "public bool TryClearListFilter()", "private void FocusFirstResult()");
+            Assert.Matches(@"(?m)^\s*if \(!ListFilter\.EscClears\(Visible, ListFilter\.IsActive\(_filter\.Text\)\)\) return false;", escEntry);
+            Assert.Matches(@"(?m)^\s*ClearListFilter\(\);", escEntry);
+            // 一个手势一个归属：筛选框自己的按键处理里不再留一份 Esc（框内只剩 Enter 交给第一行）。
+            var boxKeys = Slice(source, "_filter.KeyDown += (_, e) =>", "_list.SelectedIndexChanged");
+            Assert.DoesNotContain("Keys.Escape", boxKeys, StringComparison.Ordinal);
+            Assert.Matches(@"(?m)^\s*if \(e\.KeyCode == Keys\.Enter && ListKeys\.IsEnterGesture\(e\.Shift, e\.Control, e\.Alt\)\)$", boxKeys);
         }
     }
 
