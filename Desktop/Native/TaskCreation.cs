@@ -1,3 +1,5 @@
+using ApifoxHelper.Profiles;
+
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
@@ -28,4 +30,15 @@ public static class TaskCreation
         var value = (text ?? "").Trim();
         return value.Length == 0 ? null : value;
     }
+
+    /// <summary>
+    /// 模块清单的一行文字：「模块名（前缀1、前缀2）」。没有前缀的模块只给名称——只有名称的模块
+    /// 是合法配置（<c>ProfileAdvanced.ParseModules</c> 认没有等号的行），此前这类模块在清单上显示成
+    /// 「订单（）」：一格空括号既不是信息也不是缺省。勾选交出去的仍是模块名本身（行载荷的 Name），
+    /// 这一格只讲屏幕上看到什么。
+    /// </summary>
+    public static string ModuleRowText(ModuleScope module) =>
+        module.PathPrefixes.Count == 0
+            ? module.Name
+            : module.Name + "（" + string.Join("、", module.PathPrefixes) + "）";
 }

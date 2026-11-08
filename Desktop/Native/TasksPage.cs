@@ -1251,13 +1251,12 @@ internal sealed class NewTaskDialog : Form
     private readonly ProfileStore _profiles;
     private readonly ComboBox _profile = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox _name = Ui.Input();
-    private readonly CheckedListBox _modules = new() { CheckOnClick = true, Height = 96, BorderStyle = BorderStyle.FixedSingle };
+    private readonly ListView _modules = Ui.List(checkBoxes: true);
     private readonly TextBox _prefixes = Ui.Input();
     private readonly TextBox _keys = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly TextBox _note = Ui.Input();
     private readonly CheckBox _offline = new() { Text = "离线模式（本次任务不访问 Apifox，仅源码阶段）", AutoSize = true };
     private readonly Label _status = Ui.StatusLine();
-    private List<ModuleScope> _currentModules = [];
 
     /// <summary>对话框确认后的创建请求；StartScan 表示创建后立即开始扫描。</summary>
     public CreateTaskRequest Request { get; private set; } = new();
@@ -1295,6 +1294,8 @@ internal sealed class NewTaskDialog : Form
 
         // 指定接口为多行输入：内层文本框定高，Ui.Field 的尺寸双向同步会带着描边面板一起变高。
         _keys.Height = 62;
+        // 列宽留在 AddRow 的字段下限（380）之内：多出来的宽度是整行勾选的可点面，不逼出横向滚动条。
+        _modules.Columns.Add("模块", 360);
 
         // 网格十二行（模块清单、指定接口、版本备注与提示）高于可视高度：放入可滚动宿主，离线模式行可达（DESIGN.md §6 长内容区）。
         var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
@@ -1303,7 +1304,9 @@ internal sealed class NewTaskDialog : Form
         AddRow(grid, "项目配置", _profile);
         AddRow(grid, "任务名称", Ui.Field(_name));
         AddRow(grid, "", Ui.Caption("留空则用「配置名 月-日 时:分」。"));
-        AddRow(grid, "模块", _modules);
+        var moduleHost = Ui.Hairline(_modules);
+        moduleHost.Height = 96;
+        AddRow(grid, "模块", moduleHost);
         AddRow(grid, "", Ui.Caption("勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。"));
         AddRow(grid, "路径前缀", Ui.Field(_prefixes));
         AddRow(grid, "", Ui.Caption("补充接口路径前缀，用「,」「;」分隔；可与模块并用。"));
@@ -1340,14 +1343,16 @@ internal sealed class NewTaskDialog : Form
 
     private void LoadModules()
     {
+        _modules.BeginUpdate();
         _modules.Items.Clear();
-        _currentModules = [];
-        if (_profile.SelectedItem is not ProfileItem item) return;
-        _currentModules = item.Profile.Modules;
-        foreach (var module in item.Profile.Modules)
+        if (_profile.SelectedItem is ProfileItem item)
         {
-            _modules.Items.Add(module.Name + "（" + string.Join("、", module.PathPrefixes) + "）");
+            foreach (var module in item.Profile.Modules)
+            {
+                _modules.Items.Add(new ListViewItem(TaskCreation.ModuleRowText(module)) { Tag = module });
+            }
         }
+        _modules.EndUpdate();
     }
 
     private void AddRow(TableLayoutPanel grid, string label, Control field)
@@ -1377,7 +1382,10 @@ internal sealed class NewTaskDialog : Form
             SetStatus("请选择项目配置。");
             return;
         }
-        var moduleNames = _modules.CheckedIndices.Cast<int>().Select(i => _currentModules[i].Name).ToList();
+        var moduleNames = _modules.Items.OfType<ListViewItem>()
+            .Where(i => i.Checked && i.Tag is ModuleScope)
+            .Select(i => ((ModuleScope)i.Tag!).Name)
+            .ToList();
         var prefixes = _prefixes.Text.Split([',', ';', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
         Request = new CreateTaskRequest
         {

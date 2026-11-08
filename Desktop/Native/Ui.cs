@@ -262,7 +262,8 @@ internal static class Ui
     /// <summary>
     /// 列表（DESIGN.md §6「列表行」）：自绘选中态——选中行 Bg 底 + 左侧 3px Accent 标记，
     /// 不用系统高亮蓝；未选行 Panel 底；逐子项语义色（Muted/Ok/Warn/Bad）保留（ListRows 判定）。
-    /// 表头沿用系统绘制（与既有外观一致）；复选框列由本工厂绘制（自绘模式下系统不再画）。
+    /// 表头沿用系统绘制（与既有外观一致）；复选框列由本工厂绘制（自绘模式下系统不再画），
+    /// 勾选目标也由本工厂放大到整行（点行的任意处即勾选，落点判定在 ListChecks——系统自己会翻的那一格让开）。
     /// Ctrl+C 复制焦点行的标识列原文也在这里装上——单元格自绘后文字不可选中，Ctrl+C 是列表里的
     /// 文字交出去的唯一通路（只读预览框原本就能选中复制），故剪贴板只在本工厂触达一次，页面与对话框不各装一套。
     /// 标识列默认首列（与 ListColumns 的「标识列（首列）」同一约定，绝大多数列表的名称格就在首列）；
@@ -306,6 +307,19 @@ internal static class Ui
                 // 剪贴板被其他进程占用时本次没有复制：不重试、不弹窗，也不谎称已复制（粘贴即见实际内容）。
             }
         };
+        if (checkBoxes)
+        {
+            // 整行点击即勾选：自绘之后系统只认状态图标那一小格命中区，而勾选框是这个工厂画出来的——
+            // 不接这一步，「勾选」的目标就从整行缩成十几像素。判定在 ListChecks，本工厂不自己认落点；
+            // 系统会翻的那一格让开，一次点击因此只翻一次。
+            list.MouseDown += (_, e) =>
+            {
+                var hit = list.HitTest(e.Location);
+                if (hit.Item is not ListViewItem row) return;
+                if (!ListChecks.ShouldToggle(e.Button == MouseButtons.Left, true, hit.Location == ListViewHitTestLocations.StateImage)) return;
+                row.Checked = !row.Checked;
+            };
+        }
         return list;
     }
 
