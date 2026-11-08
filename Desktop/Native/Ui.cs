@@ -504,6 +504,23 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 「接受并下一条」的落点（唯一触达点，第一百一十一轮）：接受一条候选之后选中交给<b>下一条</b>——
+    /// 即使这一条仍在当前筛选里（停在「全部候选」上时它不会消失），也不留在原处。
+    /// 落点由 <see cref="ListAdvance.NextAfterAccept"/> 单一口径给出（还在清单上就落到它的下一行、
+    /// 本来在末行则留在末行；已不在当前筛选上则落到接替他位置的那一行），
+    /// 选中仍经 <see cref="SelectItem"/> 唯一入口——详情与按钮随选中事件跟上，方向键从该行继续，
+    /// 那一行也随本入口一并滚入可见区（本处不另请求滚动）。
+    /// <paramref name="newIndex"/> 是这一条在重建后清单里的显示序号，已不在清单上时传 <see cref="ListAdvance.None"/>。
+    /// 一行不剩时不动作，交由各视图既有的空态出口呈现。
+    /// </summary>
+    public static void AdvanceAfterAccept(ListView list, int handledIndex, int newIndex)
+    {
+        var index = ListAdvance.NextAfterAccept(handledIndex, newIndex, list.Items.Count);
+        if (index < 0) return;
+        SelectItem(list.Items[index]);
+    }
+
+    /// <summary>
     /// 打开这一屏时的落点（唯一入口，第九十轮）：清单里有行就选中第一条，一行都没有就不动作——
     /// 落点由 <see cref="ListSelection.FirstRowOnOpen"/> 判定（有行才落，不索引不存在的第一行），
     /// 选中仍经 <see cref="SelectItem"/> 唯一入口（Selected + Focused + 滚入可见区，与鼠标点同一行同一条路，

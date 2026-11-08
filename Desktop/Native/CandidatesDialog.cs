@@ -16,6 +16,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 同一列再点反向、换一列从升序开始、表头带方向标记；排序只改呈现顺序，选中仍按候选自身恢复。
 /// 候选文字可改、「保存修改」与「撤销接受」两个动作（第一百一十一轮，口径见 <see cref="CandidateEdit"/>）：
 /// 候选文字正是要写进源码的 /// 注释，生成或导入的文字有错字时在这里改；已接受的候选可退回待审阅。
+/// 接受是「接受并下一条」（第一百一十一轮，落点见 <see cref="ListAdvance.NextAfterAccept"/>）：
+/// 逐条清队列时选中交给下一条，搁置 / 驳回 / 保存修改 / 撤销接受仍留在原处。
 /// </summary>
 internal sealed class CandidatesDialog : Form
 {
@@ -95,7 +97,7 @@ internal sealed class CandidatesDialog : Form
         // 双击=查看证据经共享入口：命中哪行看哪行的证据（行自身 Tag，不借当前选中），双击列头与空白区不动作。
         Ui.ActivateItem(_list, item => ShowEvidence(item.Tag as CommentCandidate));
 
-        _acceptButton = Ui.Primary("接受");
+        _acceptButton = Ui.Primary("接受并下一条");
         _acceptButton.Click += (_, _) => RunReview("accepted");
         _deferButton = Ui.Ghost("搁置");
         _deferButton.Click += (_, _) => RunReview("deferred");
@@ -482,8 +484,11 @@ internal sealed class CandidatesDialog : Form
         var update = reviewState == "accepted"
             ? CandidateEdit.AcceptRequest(candidate, _text.Text, _answersDirty ? _answers.Text : null, _overwrite.Enabled ? _overwrite.Checked : null)
             : new CandidateUpdateRequest { ReviewState = reviewState };
+        // 接受是「接受并下一条」（与冻结页面候选卡片同一句）：逐条清队列时选中交给下一条；
+        // 搁置 / 驳回留在原处——那两步的下一步是看这一条的结果，不是下一条。
         RunCandidateUpdate(update, () => TaskDisplay.ReviewStateText(reviewState)
-            + "。剩余待审阅 " + _store.Candidates.Count(c => c.ReviewState == "pending") + " 条。");
+            + "。剩余待审阅 " + _store.Candidates.Count(c => c.ReviewState == "pending") + " 条。",
+            advanceToNext: reviewState == "accepted");
     }
 
     /// <summary>重建后回到刚处理的那一条；返回它是否仍在当前筛选的清单上（不在时由调用方续接下一行）。</summary>
@@ -609,7 +614,7 @@ internal sealed class CandidatesDialog : Form
     /// （候选文字、待确认问题的回答），把键盘交走等于把下一步从他手里拿走（与第五十八轮同一取舍）。
     /// await 之后触达界面以前先检查 IsDisposed（第四十五轮口径：对话框执行期间「关闭」始终可用）。
     /// </summary>
-    private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText)
+    private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText, bool advanceToNext = false)
     {
         if (Ui.SelectedItem(_list)?.Tag is not CommentCandidate candidate) return;
         // 被处理那一行在旧清单上的显示序号：保存后它可能不再属于当前筛选而消失，续接选中要用（ListAdvance 口径）。
@@ -647,7 +652,20 @@ internal sealed class CandidatesDialog : Form
         }
         UpdateCounts();
         ApplyFilter();
-        if (!SelectCandidate(candidate.Id)) Ui.AdvanceAfterRemoval(_list, handledAt);
+        var kept = SelectCandidate(candidate.Id);
+        // 这一条在重建后清单里的显示序号（还在当前筛选里时有值，已消失时为 null）：
+        // 「接受并下一条」要用它算下一行，其余动作只在它消失时续接。
+        var landedAt = kept ? Ui.SelectedIndex(_list) : null;
+        if (advanceToNext)
+        {
+            // 「接受并下一条」：这一条还在清单上（停在「全部候选」上时它不会消失）就落到它的下一行，
+            // 已不在当前筛选上就落到接替他位置的那一行——落点数学在 ListAdvance.NextAfterAccept 一处。
+            Ui.AdvanceAfterAccept(_list, handledAt, landedAt ?? ListAdvance.None);
+        }
+        else if (!kept)
+        {
+            Ui.AdvanceAfterRemoval(_list, handledAt);
+        }
         Ui.KeepKeyboardOnQueue(_list);
         // 完成文案在重读之后才算：审阅动作那句「剩余待审阅 N 条」要的是写入后的计数。
         SetStatus(doneText(), UiTokens.OkText);

@@ -38,7 +38,7 @@ public class AsyncDisposeGuardTests
         // 第一百一十一轮起五个候选动作（三个审阅 + 保存修改 + 撤销接受）共用同一个异步落点
         // RunCandidateUpdate，守卫因此只在这一处（此前 RunReview 与保存路径各写一套，两套必然漂移）；
         // RunReview 只剩「构造请求 + 交给落点」，不再有 await，故下面另钉它不得自己写 await。
-        var review = MethodBody("CandidatesDialog.cs", "private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText)", "private static Color ToneColor(string tone)");
+        var review = MethodBody("CandidatesDialog.cs", "private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText, bool advanceToNext = false)", "private static Color ToneColor(string tone)");
         AssertThreeGuards(review, "CandidatesDialog.RunCandidateUpdate", @"await _drafts\.UpdateAsync\(_task\.Id, candidate\.Id, request, CancellationToken\.None\);");
         Assert.Matches(@"(?m)^\s*if \(IsDisposed\) return;\s*\n\s*try\s*\n\s*\{\s*\n\s*_store = _drafts\.Load\(_task\.Id\);", review);
         var reviewEntry = MethodBody("CandidatesDialog.cs", "private void RunReview(string reviewState)", "/// <summary>重建后回到刚处理的那一条");

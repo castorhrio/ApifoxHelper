@@ -27,4 +27,26 @@ public static class ListAdvance
         if (handledIndex < 0) return 0;
         return Math.Min(handledIndex, displayedCount - 1);
     }
+
+    /// <summary>
+    /// 「接受并下一条」的落点（DESIGN.md §6「候选文字编辑」的「接受并下一条」条款）：
+    /// 接受一条候选之后，选中交给<b>下一条</b>——即使这一条仍在当前筛选里（例如停在「全部候选」上），
+    /// 也不留在原处。冻结页面的候选卡片写的就是「接受并下一条」：逐条清队列时每接受一条都要再点一次下一行，
+    /// 等于把「下一条」这一步从用户手里拿走；而「搁置 / 驳回 / 保存修改 / 撤销接受」仍留在原处
+    /// （那几步的下一步是看这一条的结果，不是下一条）。
+    /// <para>
+    /// <paramref name="newIndex"/> 是这一条在重建后清单里的显示序号（还在当前筛选里时 ≥ 0）：
+    /// 还在时落到它的下一行，它本来就在末行时留在末行（不借第一行、不越界）；
+    /// 已不在当前筛选里（<see cref="None"/>）时落到接替他位置的那一行——与 <see cref="IndexAfterRemoval"/>
+    /// 同一落点，因为那一行就是「下一条」。重建后一行不剩时返回 <see cref="None"/>。
+    /// </para>
+    /// 只算落点，不碰数据：不改审阅状态、不写任务数据、不重建清单。
+    /// 不依赖 WinForms，以共享源码编入测试工程在 Linux 断言。
+    /// </summary>
+    public static int NextAfterAccept(int handledIndex, int newIndex, int displayedCount)
+    {
+        if (displayedCount <= 0) return None;
+        if (newIndex >= 0) return Math.Min(newIndex + 1, displayedCount - 1);
+        return Math.Min(handledIndex < 0 ? 0 : handledIndex, displayedCount - 1);
+    }
 }

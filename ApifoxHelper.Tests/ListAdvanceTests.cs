@@ -82,12 +82,14 @@ public class ListAdvanceTests
     {
         // 候选审阅（第一百一十轮起）：五个候选动作共用同一个异步落点 RunCandidateUpdate，
         // 记序号、重建与续接因此只在这一处（RunReview 只剩「构造请求 + 交给落点」）。
-        foreach (var (file, selectName, awaitPattern, signature, endAnchor) in new[]
+        foreach (var (file, selectName, awaitPattern, signature, endAnchor, keptPattern) in new[]
         {
             ("CandidatesDialog.cs", "SelectCandidate", @"await _drafts\.UpdateAsync\(_task\.Id, candidate\.Id, request, CancellationToken\.None\);",
-                "private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText)", "private static Color ToneColor(string tone)"),
+                "private async void RunCandidateUpdate(CandidateUpdateRequest request, Func<string> doneText, bool advanceToNext = false)", "private static Color ToneColor(string tone)",
+                @"(?m)^\s*var kept = SelectCandidate\(candidate\.Id\);$"),
             ("ContractsDialog.cs", "SelectContract", @"await _reviews\.ReviewAsync\(_task\.Id, endpointKey, reviewState, CancellationToken\.None\);",
-                "private async void RunReview(string reviewState)", "private bool SelectContract(string endpointKey)"),
+                "private async void RunReview(string reviewState)", "private bool SelectContract(string endpointKey)",
+                @"(?m)^\s*if \(!SelectContract\(endpointKey\)\) Ui\.AdvanceAfterRemoval\(_list, handledAt\);$"),
         })
         {
             var body = Slice(Repo.Source("Desktop", "Native", file), signature, endAnchor);
@@ -95,7 +97,7 @@ public class ListAdvanceTests
             // 且经 Ui.SelectedIndex 唯一入口——界面不自己索引选中集合（第六十一轮）。
             Assert.Matches(@"(?m)^\s*var handledAt = Ui\.SelectedIndex\(_list\) \?\? ListAdvance\.None;$", body);
             // 命中仍回到该条（原行为逐字保留），未命中才续接下一行。
-            Assert.Matches(@"(?m)^\s*if \(!" + selectName + @"\(\w+(?:\.Id)?\)\) Ui\.AdvanceAfterRemoval\(_list, handledAt\);$", body);
+            Assert.Matches(keptPattern, body);
             // 顺序：先记序号（await 期间用户可能移动选中，之后取的就是别的行的位置）→ 重建清单 → 再判落点。
             var capture = body.IndexOf("var handledAt = Ui.SelectedIndex(_list) ?? ListAdvance.None;", StringComparison.Ordinal);
             var save = Regex.Match(body, awaitPattern).Index;
