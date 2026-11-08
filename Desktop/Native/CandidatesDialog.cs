@@ -12,6 +12,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 审阅经 DraftService.UpdateAsync 走既有校验（占位文字、覆盖确认、待确认问题需先回答），
 /// 只写任务数据，不写源码、不访问 Apifox；源码回写在「注释回写」进行。
 /// 状态表：读取失败=内联错误与下一步；没有候选=引导各生成入口（仍可导入）；正常=计数行 + 列表 + 详情与审阅动作。
+/// 候选清单支持点击列头排序（第一百轮，口径见 <see cref="CandidateSort"/> 与 <see cref="ListSort"/>）：
+/// 同一列再点反向、换一列从升序开始、表头带方向标记；排序只改呈现顺序，选中仍按候选自身恢复。
 /// </summary>
 internal sealed class CandidatesDialog : Form
 {
@@ -47,6 +49,15 @@ internal sealed class CandidatesDialog : Form
     private Dictionary<string, DocSlot> _slotsById = new(StringComparer.Ordinal);
     private bool _answersDirty;
 
+    // 列排序状态（ListSort 口径，第一百轮）：未排序时保持候选自身的构造顺序。
+    // 排序状态留在本次打开期间（切筛选、敲关键词、保存后重建都保持），关闭即忘——
+    // 跨启动记忆只有两个常驻页面（第五十五轮那两个页键），
+    // 这一屏每次打开看的是这一次的候选，不为它另开一个记忆文件。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
+    private readonly string[] _titles;
+
     public CandidatesDialog(DraftService drafts, TaskStore tasks, CheckTask task)
     {
         _drafts = drafts;
@@ -68,6 +79,9 @@ internal sealed class CandidatesDialog : Form
         _list.Columns.Add("依据", 110);
         _list.Columns.Add("审阅状态", 110);
         _list.Columns.Add("来源", 90);
+        _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
         _evidenceButton = Ui.Ghost("查看代码证据");
         _evidenceButton.Enabled = false;
         _evidenceButton.Click += (_, _) => ShowEvidence(Ui.SelectedItem(_list)?.Tag as CommentCandidate);
@@ -279,13 +293,25 @@ internal sealed class CandidatesDialog : Form
         return base.ProcessDialogKey(keyData);
     }
 
-    private void ApplyFilter()
+    private void ApplyFilter(CommentCandidate? keep = null)
     {
-        _list.BeginUpdate();
-        _list.Items.Clear();
         // 关键词先经共享口径（与两个主页面、另三张长清单同一份匹配规则：词间「且」、字段间「或」、忽略大小写），
         // 审阅状态筛选在其后——两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
-        var visible = ListFilter.Apply(_store.Candidates, _keyword.Text, c => QueueText.CandidateFields(c, _slotsById.GetValueOrDefault(c.SlotId))).Where(Matches).ToList();
+        // 筛选先于排序（ListFilter → ListSort，与两个主页面、检查结果、接口追踪明细、差异确认同一顺序）：
+        // 筛掉的行不参与排序，排序状态与筛选状态各自留在本对话框；
+        // 排序键取 CandidateSort 单一口径（与单元格同源），界面不就地写 switch。
+        var visible = ListSort.Order(
+            ListFilter.Apply(_store.Candidates, _keyword.Text, c => QueueText.CandidateFields(c, _slotsById.GetValueOrDefault(c.SlotId))).Where(Matches).ToList(),
+            _sortColumn, _sortDescending,
+            (candidate, column) => CandidateSort.Key(
+                QueueText.CandidateTitle(candidate, _slotsById.GetValueOrDefault(candidate.SlotId)),
+                QueueText.CandidateTag(candidate),
+                TaskDisplay.CandidateBasisText(candidate.Basis),
+                TaskDisplay.ReviewStateText(candidate.ReviewState),
+                TaskDisplay.CandidateSourceText(candidate.Source),
+                column));
+        _list.BeginUpdate();
+        _list.Items.Clear();
         foreach (var candidate in visible)
         {
             var slot = _slotsById.GetValueOrDefault(candidate.SlotId);
@@ -299,6 +325,7 @@ internal sealed class CandidatesDialog : Form
             _list.Items.Add(item);
         }
         _list.EndUpdate();
+        RefreshSortHeaders();
         if (ListFilter.IsFilteredEmpty(_store.Candidates.Count, _list.Items.Count))
         {
             // 筛到零行不是「没有候选」：说清这一屏为什么空、下一步就在筛选上，聚合计数留着（口径见 ListFilter）。
@@ -307,12 +334,38 @@ internal sealed class CandidatesDialog : Form
         }
         _hint.Visible = false;
         _list.Visible = true;
+        // 排序后重建把当前候选交回去（keep），不落到「选中第一行」——排序不该把选中甩回队首；
+        // 交回去仍经 Ui.SelectItem 唯一入口（选中事件随即问到详情，详情与三个审阅动作跟着那一行走）。
+        // 关键词与筛选的重建路径不传 keep（那一屏的下一步是换关键词或筛选，落点会把回答框里刚打的字重置掉）。
+        if (keep is not null && SelectCandidate(keep.Id)) return;
         // 重建之后再问一次详情：重建路径不自动选中任何一行（打开时的落点在 OnLoad 一处，见 Ui.SelectFirstOnOpen），
         // 判在清空之前量到的是上一轮筛选的行数，「缺什么」那句话会在该说话的时候沉默（第一次进屏时清单还是空的）。
         // 重建路径不落点是有理由的：关键词框每敲一个字都重建一次，落点会把回答框里刚打的字重置掉
         // （ShowDetail 按选中行重填回答框），等于把用户正在改的那一格从他手里拿走（与第五十八轮同一取舍）。
         ShowDetail();
     }
+
+    /// <summary>
+    /// 点击列头（DESIGN.md §6「列表列排序」，第一百轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="ApplyFilter"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改审阅状态，选中仍按候选自身恢复（重建前记下、重建后找回）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        ApplyFilter(Current());
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _titles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_titles[i], i, _sortColumn, _sortDescending);
+        }
+    }
+
+    private CommentCandidate? Current() => Ui.SelectedItem(_list)?.Tag as CommentCandidate;
 
     private void ShowDetail()
     {

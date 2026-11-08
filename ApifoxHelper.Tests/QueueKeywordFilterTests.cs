@@ -180,14 +180,24 @@ public class QueueKeywordFilterTests
     // ---------- 关键词与状态下拉都是「且」 ----------
 
     [Theory]
-    [InlineData("CandidatesDialog.cs", @"ListFilter\.Apply\(_store\.Candidates, _keyword\.Text, c => QueueText\.CandidateFields\(c, _slotsById\.GetValueOrDefault\(c\.SlotId\)\)\)\.Where\(Matches\)\.ToList\(\)")]
-    [InlineData("ContractsDialog.cs", @"ListFilter\.Apply\(_contracts, _keyword\.Text, QueueText\.ContractFields\)\.Where\(Matches\)\.ToList\(\)")]
-    public void Keyword_AndStatusFilter_AreBothAnd(string file, string chain)
+    [InlineData("CandidatesDialog.cs", @"ListFilter\.Apply\(_store\.Candidates, _keyword\.Text, c => QueueText\.CandidateFields\(c, _slotsById\.GetValueOrDefault\(c\.SlotId\)\)\)\.Where\(Matches\)\.ToList\(\)", true)]
+    [InlineData("ContractsDialog.cs", @"ListFilter\.Apply\(_contracts, _keyword\.Text, QueueText\.ContractFields\)\.Where\(Matches\)\.ToList\(\)", false)]
+    public void Keyword_AndStatusFilter_AreBothAnd(string file, string chain, bool sorted)
     {
         var source = Repo.Source("Desktop", "Native", file);
         // 关键词先经共享口径（与两个主页面、另三张长清单同一份匹配规则），状态筛选在其后：
         // 两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
-        Assert.Matches($@"(?m)^\s*var visible = {chain};$", source);
+        // 第一百轮起注释候选的清单还接了列排序：同一条筛选链作为 ListSort.Order 的输入（筛选先于排序），
+        // 因此那一处的链以逗号收尾、外面包着 Order；响应契约没有排序，仍是 var visible = 链;
+        if (sorted)
+        {
+            Assert.Matches($@"(?m)^\s*{chain},$", source);
+            Assert.Matches(@"(?m)^\s*var visible = ListSort\.Order\($", source);
+        }
+        else
+        {
+            Assert.Matches($@"(?m)^\s*var visible = {chain};$", source);
+        }
         // 状态下拉的判定仍是原来那一份，不因加了关键词而另写一套。
         Assert.Matches(@"(?m)^\s*private bool Matches\((CommentCandidate|ResponseContract) \w+\) => _filter\.SelectedIndex switch$", source);
     }
@@ -336,7 +346,7 @@ public class QueueKeywordFilterTests
     public void ThisScreen_StaysReadOnly(string file)
     {
         // 关键词框只改这一屏看得见哪些行：不写任务与配置数据、不改审阅状态、服务层一行未触达。
-        var body = Slice(Repo.Source("Desktop", "Native", file), "private void ApplyFilter()", "private void ShowDetail()");
+        var body = Slice(Repo.Source("Desktop", "Native", file), "private void ApplyFilter(", "private void ShowDetail()");
         Assert.DoesNotContain("_tasks.", body, StringComparison.Ordinal);
         Assert.DoesNotContain("_drafts.", body, StringComparison.Ordinal);
         Assert.DoesNotContain("_reviews.", body, StringComparison.Ordinal);

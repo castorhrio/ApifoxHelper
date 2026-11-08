@@ -215,7 +215,7 @@ public class ListFocusTests
     }
 
     [Theory]
-    [InlineData("CandidatesDialog.cs", "private void ApplyFilter()", "private void ShowDetail()")]
+    [InlineData("CandidatesDialog.cs", "private void ApplyFilter(CommentCandidate? keep = null)", "private void ShowDetail()")]
     [InlineData("ContractsDialog.cs", "private void ApplyFilter()", "private void ShowDetail()")]
     [InlineData("DecisionsDialog.cs", "private void ApplyFilter(Entry? keep = null, int handledIndex = ListAdvance.None)", "private Entry? Current()")]
     public void RebuildingTheList_DoesNotTakeTheKeyboard(string file, string signature, string endAnchor)

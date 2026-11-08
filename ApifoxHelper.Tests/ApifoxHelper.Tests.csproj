@@ -62,6 +62,7 @@
     <Compile Include="..\Desktop\Native\CheckResultSort.cs" Link="Shared\CheckResultSort.cs" />
     <Compile Include="..\Desktop\Native\EndpointTraceSort.cs" Link="Shared\EndpointTraceSort.cs" />
     <Compile Include="..\Desktop\Native\DecisionSort.cs" Link="Shared\DecisionSort.cs" />
+    <Compile Include="..\Desktop\Native\CandidateSort.cs" Link="Shared\CandidateSort.cs" />
     <Compile Include="..\Desktop\Native\ListSortMemory.cs" Link="Shared\ListSortMemory.cs" />
     <Compile Include="..\Desktop\Native\ListFilter.cs" Link="Shared\ListFilter.cs" />
     <Compile Include="..\Desktop\Native\QueueText.cs" Link="Shared\QueueText.cs" />

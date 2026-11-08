@@ -149,7 +149,9 @@ public class FilteredEmptyStateTests
     public void ReviewViews_ExplainTheEmptyFilterBeforeRestoringVisibility(string file, string endAnchor, string total, string nounConst, string noun)
     {
         Assert.Equal(noun, NounValue(nounConst));
-        var body = Slice(Repo.Source("Desktop", "Native", file), "private void ApplyFilter()", endAnchor);
+        // 切片锚点取方法名前缀：注释候选的 ApplyFilter 自第一百轮起带 keep 参数（排序后把当前候选交回去），
+        // 响应契约仍是无参形状——两处切的是同一个方法，不因签名不同而各写一套锚点。
+        var body = Slice(Repo.Source("Desktop", "Native", file), "private void ApplyFilter(", endAnchor);
         Assert.Single(Regex.Matches(body, @"(?m)^\s*if \(ListFilter\.IsFilteredEmpty\("));
         Assert.Matches($@"(?m)^\s*if \(ListFilter\.IsFilteredEmpty\({Regex.Escape(total)}, _list\.Items\.Count\)\)$", body);
         Assert.Matches($@"(?m)^\s*ShowHint\(ListFilter\.FilteredEmptyHint\(ListFilter\.{nounConst}, ListFilter\.IsActive\(_keyword\.Text\)\), UiTokens\.Muted, keepAggregate: true\);$", body);
