@@ -182,6 +182,26 @@ internal sealed class CandidatesDialog : Form
         _list.Visible = true;
         UpdateCounts();
         ApplyFilter();
+        // 打开即选中第一条（第九十轮）：这一屏是逐条清队列的，打开时详情区与三个审阅动作就该对着第一条，
+        // 与差异确认、五张只读长清单同一行为。落点经 Ui.SelectFirstOnOpen 唯一入口（有行才落，空态不索引）；
+        // 只落选中、不取键盘——键盘在 OnShown 交给清单。
+        Ui.SelectFirstOnOpen(_list);
+    }
+
+    /// <summary>
+    /// 打开时把键盘交给清单（DESIGN.md §6「列表行」的「审阅队列打开即选中第一条」，第九十轮）：
+    /// 这一屏打开即选中第一条候选（详情区已经显示那一行），而对话框打开时键盘落在框架 tab 序的第一个可聚焦控件上——
+    /// 方向键动的是别的控件、Ctrl+C 也复制不到那一行，「打开就有一行被标出来」只成立了一半。
+    /// 交键盘只在 <see cref="Ui.KeepKeyboardOnQueue"/> 一处（判定在 <see cref="ListFocus"/>：选中行与焦点行是同一行才交），
+    /// 本对话框不自己写 .Focus()、不选中、不滚动、不重建清单。
+    /// 放在 OnShown 而不是 OnLoad：OnLoad 时窗体尚未显示，Focus() 的落点取决于框架在激活时怎么选初始焦点。
+    /// 打开时那一屏是提示或空态（读取失败、没有候选、筛到零行）就没有选中行，不动键盘——
+    /// 那一步的下一步在提示与按钮上，不在清单上。
+    /// </summary>
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        Ui.KeepKeyboardOnQueue(_list);
     }
 
     private void LoadSlots()
@@ -287,8 +307,10 @@ internal sealed class CandidatesDialog : Form
         }
         _hint.Visible = false;
         _list.Visible = true;
-        // 重建之后再问一次详情：本视图不自动选中任何一行，判在清空之前量到的是上一轮筛选的行数，
-        // 「缺什么」那句话会在该说话的时候沉默（第一次进屏时清单还是空的）。
+        // 重建之后再问一次详情：重建路径不自动选中任何一行（打开时的落点在 OnLoad 一处，见 Ui.SelectFirstOnOpen），
+        // 判在清空之前量到的是上一轮筛选的行数，「缺什么」那句话会在该说话的时候沉默（第一次进屏时清单还是空的）。
+        // 重建路径不落点是有理由的：关键词框每敲一个字都重建一次，落点会把回答框里刚打的字重置掉
+        // （ShowDetail 按选中行重填回答框），等于把用户正在改的那一格从他手里拿走（与第五十八轮同一取舍）。
         ShowDetail();
     }
 

@@ -13,8 +13,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 第五十八轮「交回键盘只触达一次」同一做法）。
 /// 列表一律经 <c>Ui.List</c> 工厂出厂且 MultiSelect = false，选中数最多为 1，
 /// 所以「选中集合的第一格」就是「那一行」；不为多选清单猜其余行。
-/// 同一个主题的另一侧也在这里：没有选中那一行时，这一屏说什么（<see cref="MissingSelectionHint"/>）。
-/// 「怎么取那一行」与「取不到时怎么说」讲的是同一格状态，分成两份文件必然各写各的条件。
+/// 同一个主题的另一侧也在这里：没有选中那一行时，这一屏说什么（<see cref="MissingSelectionHint"/>），
+/// 以及打开这一屏时该落在哪一行（<see cref="FirstRowOnOpen"/>）。
+/// 「怎么取那一行」「取不到时怎么说」「打开时落在哪一行」讲的是同一格状态，分成几份文件必然各写各的条件。
 /// 不依赖 WinForms，以共享源码编入测试工程在 Linux 断言。
 /// </summary>
 public static class ListSelection
@@ -34,6 +35,17 @@ public static class ListSelection
     /// 负数按「没有行」处理，与 <see cref="FirstPosition"/> 同一纪律。
     /// </summary>
     public static bool ShouldExplainMissingSelection(int displayedRowCount) => displayedRowCount > 0;
+
+    /// <summary>
+    /// 打开这一屏时该落在哪一行（DESIGN.md §6「列表行」的「审阅队列打开即选中第一条」，第九十轮）：
+    /// 清单里有行就落在第一条（位次 0），一行都没有就没有落点（null）——不索引不存在的第一行，
+    /// 那一屏的下一步在提示与按钮上（与第五十六轮「一行不剩则没有落点」、第五十三轮「宁可复制不到」同一取舍）。
+    /// 与 <see cref="ShouldExplainMissingSelection"/> 是同一件事的两面：有行才落，落不到时那一屏由提示出口说话；
+    /// 用户自己取消选中之后，缺什么仍由详情区那句话交代。
+    /// 只回答「落在哪一行」，不回答「要不要把键盘也交给它」——那是 <see cref="ListFocus"/> 的事，
+    /// 打开时交键盘接在窗体首次显示之后（OnShown），落点接在数据读进来之后（OnLoad），两件事各有各的时机。
+    /// </summary>
+    public static int? FirstRowOnOpen(int displayedRowCount) => displayedRowCount > 0 ? 0 : null;
 
     /// <summary>未选中时指名的下一步；说这句话，清单就得真的有行可选（见 <see cref="ShouldExplainMissingSelection"/>）。</summary>
     public const string MissingSelectionPointer = "在清单里选中一行，它的详情显示在这里，选中动作随之可用。";

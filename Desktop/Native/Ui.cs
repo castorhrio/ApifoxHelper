@@ -504,6 +504,21 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 打开这一屏时的落点（唯一入口，第九十轮）：清单里有行就选中第一条，一行都没有就不动作——
+    /// 落点由 <see cref="ListSelection.FirstRowOnOpen"/> 判定（有行才落，不索引不存在的第一行），
+    /// 选中仍经 <see cref="SelectItem"/> 唯一入口（Selected + Focused + 滚入可见区，与鼠标点同一行同一条路，
+    /// 详情与审阅按钮随选中事件跟上）。
+    /// 只落选中、不取键盘：打开时把键盘交给清单是另一件事，接在窗体首次显示之后（<see cref="KeepKeyboardOnQueue"/>），
+    /// 那时窗体还没显示、Focus 的落点取决于框架在激活时怎么选初始焦点（第八十八、八十九轮同一划界）。
+    /// 也不重建清单、不写数据——调用方在数据读进来、清单重建之后调一次。
+    /// </summary>
+    public static void SelectFirstOnOpen(ListView list)
+    {
+        if (ListSelection.FirstRowOnOpen(list.Items.Count) is not int index) return;
+        SelectItem(list.Items[index]);
+    }
+
+    /// <summary>
     /// 把键盘交给清单（唯一触达点），两个时刻共用这一处：
     /// <list type="bullet">
     /// <item>审阅完成后交回（第五十八轮）：点「接受」「保存」时焦点落在那个按钮上，
