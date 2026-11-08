@@ -282,9 +282,36 @@ internal sealed class NativeShellForm : Form
         }
         SelectNav(nav);
         PositionMarker(nav);
-        if (page is INativePage shown) shown.OnPageShown();
+        if (page is INativePage shown)
+        {
+            shown.OnPageShown();
+            // 这一页出现时把键盘交给它的列表（第九十六轮）：切页后键盘此前落在导航按钮上
+            // （点导航按钮时焦点就在那个按钮上），而这一页的列表已经有一行被标出来、详情区已经显示那一行——
+            // 方向键动的是别的控件、复制手势也落不到那一行。只交键盘，判定与触达都在页与 Ui 的共享入口。
+            shown.KeepKeyboardOnQueue();
+        }
         // 记住本次使用的页面，下次启动回到这里；保存失败不影响切换。
         _lastPage.Save(ReferenceEquals(nav, _navTasks) ? LastPageKeys.Tasks : LastPageKeys.Projects);
+    }
+
+    /// <summary>
+    /// 启动时那一屏的键盘归属（第九十六轮）：<see cref="ShowPage"/> 在 OnLoad 里跑，而 OnLoad 是 async void——
+    /// 本地服务启动若真的异步完成，页面是在窗体显示之后才建起来的（ShowPage 那一处即生效）；
+    /// 若同步完成，页面在窗体显示之前就建好，那时控件还不可见、Focus 不生效（与第八十八轮「接在 OnShown
+    /// 而不是 OnLoad」同一取舍），故在窗体首次显示之后再交一次。两处都经同一处入口与同一份判定，重复调用幂等。
+    /// </summary>
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        KeepKeyboardOnVisiblePage();
+    }
+
+    /// <summary>把键盘交给当前可见页的列表（与「刷新当前页」「Ctrl+F」同一分发纪律：页面未创建不动作）。</summary>
+    private void KeepKeyboardOnVisiblePage()
+    {
+        if (_shutdownStarted || IsDisposed || Disposing) return;
+        if (_projectsPage is { Visible: true }) _projectsPage.KeepKeyboardOnQueue();
+        if (_tasksPage is { Visible: true }) _tasksPage.KeepKeyboardOnQueue();
     }
 
     /// <summary>导航选中项左侧的 3px 强调色标记。</summary>
@@ -483,6 +510,14 @@ internal interface INativePage
 
     /// <summary>把键盘焦点交给本页列表的筛选框并选中已有关键词（壳的 Ctrl+F 分发到当前可见页）。</summary>
     void FocusListFilter();
+
+    /// <summary>
+    /// 把键盘交给本页列表（壳在「这一页出现」时调用：切页与启动，第九十六轮）。
+    /// 判定仍是 <see cref="ListFocus"/> 那一份（选中行与焦点行是同一行才交），
+    /// 触达界面只在 Ui 那一处入口；本页不自己写 <c>.Focus()</c>、
+    /// 不自己判「选中行与焦点行是不是同一行」、不顺手选中或滚动（那些各有自己的唯一入口）。
+    /// </summary>
+    void KeepKeyboardOnQueue();
 
     /// <summary>
     /// 本页是不是这一次 Esc 的落点：是（本页可见且筛选框里留着关键词）就清空并把键盘留在框里，返回 true

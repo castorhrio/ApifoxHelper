@@ -227,7 +227,7 @@ public class ListFocusTests
     }
 
     [Fact]
-    public void Handoff_IsWiredOnTheThreeReviewPathsTheTenOpenPathsAndTheTwoArrivals()
+    public void Handoff_IsWiredOnTheThreeReviewPathsTheTenOpenPathsTheTwoArrivalsAndTheTwoPages()
     {
         // 第八十八轮把同一处入口接到五张只读长清单的打开时（OnShown），触达点因此由三处变八处：
         // 三处审阅路径（处理完一条之后交回）与五处只读清单（打开时交给它），判定仍是同一份 ListFocus。
@@ -246,7 +246,8 @@ public class ListFocusTests
             {
                 "ApplyPlanDialog.cs", "CandidatesDialog.cs", "CheckResultsDialog.cs", "ContractsDialog.cs",
                 "DecisionsDialog.cs", "EndpointTraceDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs",
-                "PropagationDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs", "SyncPreviewDialog.cs",
+                "ProjectsPage.cs", "PropagationDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs",
+                "SyncPreviewDialog.cs", "TasksPage.cs",
             },
             callers);
     }
@@ -254,14 +255,13 @@ public class ListFocusTests
     [Theory]
     [InlineData("TasksPage.cs")]
     [InlineData("ProjectsPage.cs")]
-    public void OtherViews_NeverTakeTheKeyboard(string file)
+    public void Pages_TakeTheKeyboardOnlyThroughTheSharedEntry(string file)
     {
-        // 两个主页面每次刷新与筛选都要重建（第五十一轮在筛选框 Enter 那一条路上才显式取焦点），故不接此口径。
-        // 打开即选中一行的十张清单（含注释缺口第九十一轮、补充说明第九十五轮）的打开时交键盘见 OpenFocusTests，
-        // 同步预览的写入清单在预览页出现时交键盘（第九十二轮）见 PlanOpenFocusTests，
-        // 注释回写的文件清单在计划首次到达时交键盘（第九十三轮）见 ApplyPlanOpenFocusTests。
+        // 两个主页面在「这一页出现」时把键盘交给列表（第九十六轮，见 PageOpenFocusTests）：
+        // 交键盘只在页的 KeepKeyboardOnQueue 一处、经共享入口，重建路径（刷新、筛选、作业结束）不交。
         var source = Repo.Source("Desktop", "Native", file);
-        Assert.DoesNotContain("KeepKeyboardOnQueue", source, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(source, @"(?m)^\s*public void KeepKeyboardOnQueue\(\) => Ui\.KeepKeyboardOnQueue\(_list\);$"));
+        Assert.Single(Regex.Matches(source, @"Ui\.KeepKeyboardOnQueue\(_list\);"));
     }
 
     [Fact]

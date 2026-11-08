@@ -172,6 +172,15 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
     public void RefreshData() => LoadProfiles();
 
+    /// <summary>
+    /// 把键盘交给配置列表（壳在「这一页出现」时调用：切页与启动，第九十六轮）。
+    /// 这一页的列表在重建后恢复选中（第三十四轮），详情与「编辑」「连接与写入探测」随选中启用——
+    /// 而切页后键盘落在导航按钮上，方向键动的是别的控件、Ctrl+C 也复制不到那一行。
+    /// 只交键盘：不选中、不滚动、不重建清单、不写数据；判定与触达都在共享入口（<see cref="Ui.KeepKeyboardOnQueue"/>）。
+    /// 重建路径（刷新、筛选、保存返回）不交——那一屏的下一步是换关键词或改配置，交键盘会把用户正在改的那一格抢走。
+    /// </summary>
+    public void KeepKeyboardOnQueue() => Ui.KeepKeyboardOnQueue(_list);
+
     /// <summary>Ctrl+F：焦点交给筛选框并选中已有关键词（重输即替换，与 Windows 搜索框一致）；只移焦点，不改筛选结果。</summary>
     public void FocusListFilter()
     {

@@ -115,9 +115,12 @@ public class OpenFocusTests
         // 补充说明的接口清单（第九十五轮）——它们的共同点是「打开即选中一行、详情区已经显示那一行」。
         // 这条机械检查是「打开时交键盘的清单」与「打开即选中一行的清单」两件事不许漂移的钉子：
         // 谁在 OnShown 里交键盘，谁就必须在打开时真的有一行被选中（否则判定会答「不交」，接上去是一句空话）。
+        // 壳的 OnShown（第九十六轮）是启动时把键盘交给当前页列表：它交的是页的方法，
+        // 不是自己写 Ui.KeepKeyboardOnQueue(_list)，故不在这一族里（见 PageOpenFocusTests）。
         var withOnShown = Repo.NativeSources()
             .Where(s => s.Contains("protected override void OnShown"))
             .Select(s => s.Name)
+            .Where(name => name != "NativeShellForm.cs")
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
         Assert.Equal(OpenPaths.OrderBy(name => name, StringComparer.Ordinal), withOnShown);
