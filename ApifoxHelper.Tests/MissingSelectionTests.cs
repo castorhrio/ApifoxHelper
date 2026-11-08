@@ -227,13 +227,28 @@ public class MissingSelectionTests
 
     [Theory]
     // 另两处在重建后自己选中一行（选中事件随即问到详情），本轮不为它们加第二次询问。
-    [InlineData("EndpointTraceDialog.cs", "protected override void OnLoad")]
     [InlineData("DecisionsDialog.cs", "private void ApplyFilter")]
     public void ViewsWithAutoSelection_DoNotAskTwice(string file, string start)
     {
         var body = MethodSlice(Repo.Source("Desktop", "Native", file), start);
         Assert.DoesNotMatch(@"(?m)^\s*ShowDetail\(\);$", body);
         Assert.True(Regex.IsMatch(body, @"Ui\.SelectItem\(_list\.Items\[0\]\);|Ui\.SelectItem\(item\);"), $"{file}:重建后应有一处把选中交回清单。");
+    }
+
+    [Fact]
+    public void TraceDialog_AsksOnlyInTheFilteredEmptyBranch()
+    {
+        // 接口追踪明细在第七十五轮把清单重建搬进 PopulateList（关键词框输入即筛选），锚点随真实形状走：
+        // 重建后自己选中一行（选中事件随即问到详情），故非空路径不第二次询问；唯一那次 ShowDetail 在
+        // 筛到零行那一支——清单已空，详情区与证据入口按既有的无选中路径收口，不另写一套收控件的赋值。
+        var body = MethodSlice(Repo.Source("Desktop", "Native", "EndpointTraceDialog.cs"), "private void PopulateList");
+        Assert.Single(Regex.Matches(body, @"(?m)^\s*ShowDetail\(\);$"));
+        var branch = body.IndexOf("IsFilteredEmpty(", StringComparison.Ordinal);
+        var asked = body.IndexOf("ShowDetail();", StringComparison.Ordinal);
+        var restore = body.IndexOf("_hint.Visible = false;", StringComparison.Ordinal);
+        Assert.True(branch >= 0 && asked > branch, "询问详情要落在筛到零行那一支里。");
+        Assert.True(restore > asked, "筛到零行的分支要排在列表回显之前（回显在后，那句话才不被自己抹掉）。");
+        Assert.Matches(@"(?m)^\s*Ui\.SelectItem\(target \?\? _list\.Items\[0\]\);$", body);
     }
 
     // ---------- 口径自身的形状 ----------

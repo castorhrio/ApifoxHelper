@@ -14,9 +14,21 @@ public static class EndpointTrace
     /// <summary>列表单元格文字：计数为零显示「—」（没有可看的内容），其余为数字（列表行本身等宽）。</summary>
     public static string CountText(int count) => count > 0 ? count.ToString(CultureInfo.InvariantCulture) : "—";
 
+    /// <summary>预算列超限时的文字：单元格与关键词匹配共用这一份（另写一份必然漂移）。</summary>
+    public const string BudgetExceededText = "超限";
+
     /// <summary>预算列文字与色调：超限用警示文字色（颜色 + 文字双通道），正常显示「—」。</summary>
     public static (string Text, string Tone) BudgetCell(bool exceeded) =>
-        exceeded ? ("超限", "warn") : ("—", "muted");
+        exceeded ? (BudgetExceededText, "warn") : ("—", "muted");
+
+    /// <summary>
+    /// 关键词匹配的字段：那一行在屏幕上被读作的那两格——接口身份（方法 + 路径）与预算列文字。
+    /// 预算列只在超限时进关键词（「超限」是这一屏唯一能一眼认出的状态文字，这一屏存在的理由正是
+    /// 让预算超限与调用未解析可见）；正常行的「—」是占位不是内容，不进关键词（与计数列的「—」同一取舍）。
+    /// 三个计数列是数字、不进关键词；未解析调用的表达式在详情区而不在这一行，也不进。
+    /// </summary>
+    public static string?[] KeywordFields(string endpointKey, bool budgetExceeded) =>
+        [endpointKey, budgetExceeded ? BudgetExceededText : null];
 
     /// <summary>
     /// 选中接口的追踪明细：方法清单、逐条未解析调用（表达式 — 原因，重载候选一并如实列出）、

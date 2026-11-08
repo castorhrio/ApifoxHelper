@@ -12,7 +12,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 数据来自任务目录 evidence.json 的 Coverage（扫描落盘产物）；证据经 EvidenceDialog 只读对照；
 /// 本对话框无写入动作。文字与结构口径经 EndpointTrace 单一口径。
 /// 状态表：读取失败=内联错误与下一步；没有追踪数据（旧任务缺 Coverage）=如实说明；
-/// 正常=接口列表 + 选中接口的追踪明细与证据入口。
+/// 正常=接口列表 + 选中接口的追踪明细与证据入口；筛到零行=关键词框留着并说明下一步，
+/// 计数行仍是整份追踪数据的数字（见 <see cref="PopulateList"/>）。
 /// </summary>
 internal sealed class EndpointTraceDialog : Form
 {
@@ -20,6 +21,7 @@ internal sealed class EndpointTraceDialog : Form
     private readonly CheckTask _task;
 
     private readonly ListView _list = Ui.List();
+    private readonly TextBox _keyword = Ui.Input();
     private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
     private readonly Button _evidenceButton;
     private readonly Label _counts = Ui.Mono();
@@ -54,6 +56,8 @@ internal sealed class EndpointTraceDialog : Form
         _list.Columns.Add("外部调用", 88);
         _list.Columns.Add("预算", 64);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
+        _keyword.PlaceholderText = ListFilter.TraceSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => PopulateList();
 
         _evidenceButton = Ui.Ghost("查看代码证据");
         _evidenceButton.Enabled = false;
@@ -75,6 +79,10 @@ internal sealed class EndpointTraceDialog : Form
         headRow.Controls.Add(hintCaption, 0, 0);
         headRow.Controls.Add(_counts, 1, 0);
 
+        // 筛选行形状取工厂（§6「列表筛选」）：这一屏没有筛选下拉，走只有关键词框的那一支；
+        // 计数在表头行（与「调用链追踪按方法预算收手」的说明同排），故 counts 传 null。
+        var filterRow = Ui.FilterRow(_keyword, counts: null);
+
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
         listHost.Controls.Add(_hint);
@@ -95,10 +103,11 @@ internal sealed class EndpointTraceDialog : Form
         actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 1, 0);
         actionRow.Controls.Add(closeButton, 2, 0);
 
-        // 停靠按集合倒序生效：标题行最先停靠（顶部），其次按钮行（最底部）、详情区，列表最后填满剩余空间。
+        // 停靠按集合倒序生效：标题行、筛选行最先停靠（顶部），其次按钮行（最底部）、详情区，列表最后填满剩余空间。
         Controls.Add(listHost);
         Controls.Add(detailGrid);
         Controls.Add(actionRow);
+        Controls.Add(filterRow);
         Controls.Add(headRow);
     }
 
@@ -123,9 +132,27 @@ internal sealed class EndpointTraceDialog : Form
         }
         _coverages = store.Coverage;
         _hint.Visible = false;
+        // 计数行按整份追踪数据统计，不随关键词变化（「超限 N」正是要找的那批的凭据）。
         _counts.Text = $"接口 {_coverages.Count} · 超限 {_coverages.Count(c => c.BudgetExceeded)} · 未解析调用 {_coverages.Sum(c => c.Unresolved.Count)}";
+        PopulateList();
+    }
+
+    /// <summary>
+    /// 关键词框（DESIGN.md §6「列表筛选」）：输入即筛选，只改可见行——计数行按整份追踪数据统计、
+    /// 不随关键词变化（「超限 N」正是要找的那批的凭据，被一屏的空抹掉等于把结果藏起来）。
+    /// 筛到零行不是「没有追踪数据」：说清这一屏为什么空，下一步就在那个框上（这一屏没有筛选下拉，
+    /// 故不指「换一个筛选」），关键词框留着（§7「禁用不得移除下一步」），详情区与证据入口经既有的
+    /// 无选中路径 <see cref="ShowDetail"/> 收口，不在这里另写一套收控件的赋值。
+    /// 选中按接口身份恢复（筛一下再筛回来仍停在原来那个接口），恢复不到时落在新筛选第一条
+    /// （与两个主页面「重建后按 Id 恢复选中」、第五十六轮「切换筛选落在新筛选第一条」同一口径）。
+    /// </summary>
+    private void PopulateList()
+    {
+        var selectedKey = (Ui.SelectedItem(_list)?.Tag as EndpointCoverage)?.EndpointKey;
+        var visible = ListFilter.Apply(_coverages, _keyword.Text, c => EndpointTrace.KeywordFields(c.EndpointKey, c.BudgetExceeded));
         _list.BeginUpdate();
-        foreach (var coverage in _coverages)
+        _list.Items.Clear();
+        foreach (var coverage in visible)
         {
             var row = new ListViewItem(coverage.EndpointKey) { Tag = coverage, UseItemStyleForSubItems = false };
             row.Font = UiTokens.Mono.Value;
@@ -146,7 +173,36 @@ internal sealed class EndpointTraceDialog : Form
             _list.Items.Add(row);
         }
         _list.EndUpdate();
-        if (_list.Items.Count > 0) Ui.SelectItem(_list.Items[0]);
+        if (ListFilter.IsFilteredEmpty(_coverages.Count, visible.Count))
+        {
+            _hint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.EndpointNoun);
+            _hint.ForeColor = UiTokens.Muted;
+            _hint.Visible = true;
+            _list.Visible = false;
+            ShowDetail();
+            return;
+        }
+        _hint.Visible = false;
+        _list.Visible = true;
+        var target = selectedKey is null
+            ? null
+            : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as EndpointCoverage)?.EndpointKey == selectedKey);
+        Ui.SelectItem(target ?? _list.Items[0]);
+    }
+
+    /// <summary>
+    /// 三个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给关键词框并选中已有关键词、
+    /// 框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 退出筛选（清空关键词回到全部接口）。
+    /// 与另六张长清单同一份口径、同一处接线（<see cref="Ui.TryFocusFilter"/>、<see cref="Ui.TryEnterFilter"/>、
+    /// <see cref="Ui.TryEscapeFilter"/>）：本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+    /// 对话框的 Enter=确认、Esc=取消在焦点不在框上时逐字不变（AcceptButton 与 CancelButton 仍是「关闭」）。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
+        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
+        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        return base.ProcessDialogKey(keyData);
     }
 
     private void ShowDetail()
