@@ -115,7 +115,7 @@ public class EscapeClearsFilterTests
     {
         foreach (var page in Pages)
         {
-            var body = Slice(Repo.Source(page), "public bool TryClearListFilter()", "private void FocusFirstResult()");
+            var body = Slice(Repo.Source(page), "public bool TryClearListFilter()", "private void ClearListFilter()");
             Assert.Matches(@"(?m)^\s*if \(!ListFilter\.EscClears\(Visible, ListFilter\.IsActive\(_filter\.Text\)\)\) return false;$", body);
             Assert.Matches(@"(?m)^\s*ClearListFilter\(\);", body);
             Assert.Matches(@"(?m)^\s*return true;$", body);
@@ -131,7 +131,7 @@ public class EscapeClearsFilterTests
     {
         foreach (var page in Pages)
         {
-            var body = Slice(Repo.Source(page), "public bool TryClearListFilter()", "private void FocusFirstResult()");
+            var body = Slice(Repo.Source(page), "public bool TryClearListFilter()", "private void ClearListFilter()");
             // 焦点在不在框上不在判定之内；「框里有没有关键词」也不另量一次。
             Assert.DoesNotContain("_filter.Text.Length", body, StringComparison.Ordinal);
             Assert.DoesNotContain("Focused", body, StringComparison.Ordinal);

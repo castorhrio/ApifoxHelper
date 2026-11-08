@@ -168,7 +168,7 @@ internal sealed class TasksPage : UserControl, INativePage
             // Esc 不在这里接——它归壳分发到可见页（TryClearListFilter），焦点在列表或工具栏上时同样算。
             if (e.KeyCode == Keys.Enter && ListKeys.IsEnterGesture(e.Shift, e.Control, e.Alt))
             {
-                FocusFirstResult();
+                Ui.FocusFirstResult(_list);
                 e.SuppressKeyPress = true;
                 return;
             }
@@ -437,21 +437,6 @@ internal sealed class TasksPage : UserControl, INativePage
         if (!ListFilter.EscClears(Visible, ListFilter.IsActive(_filter.Text))) return false;
         ClearListFilter();
         return true;
-    }
-
-    /// <summary>
-    /// 筛选框 Enter 的去向：焦点与选中交给筛选结果的第一行——显示序第一行，即筛选与排序之后的可见顺序。
-    /// 列表先取焦点、再经 Ui.SelectItem 唯一入口选中（选中即出详情，与鼠标点同一行同一条路），
-    /// 该行随唯一入口一并滚入可见区（滚动只在入口一处触达，页内不各写一套）。筛到零行时不动作：
-    /// 空态的下一步是「清空筛选」按钮，不把焦点丢进空列表。
-    /// 只移焦点与选中，不写任务数据。
-    /// </summary>
-    private void FocusFirstResult()
-    {
-        if (ListKeys.FirstResultIndex(_list.Items.Count) is not int index) return;
-        _list.Focus();
-        var item = _list.Items[index];
-        Ui.SelectItem(item);
     }
 
     /// <summary>

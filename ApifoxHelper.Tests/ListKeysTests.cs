@@ -65,7 +65,8 @@ public class ListKeysTests
             var name = page[^1];
             var keys = Slice(Repo.Source(page), "_filter.KeyDown += (_, e) =>", "_list.SelectedIndexChanged");
             Assert.Matches(@"(?m)^\s*if \(e\.KeyCode == Keys\.Enter && ListKeys\.IsEnterGesture\(e\.Shift, e\.Control, e\.Alt\)\)$", keys);
-            Assert.Matches(@"(?m)^\s*FocusFirstResult\(\);", keys);
+            // 第六十九轮起这一步收进 Ui.FocusFirstResult（两页与五张长清单同一份），页内只剩一次调用。
+            Assert.Matches(@"(?m)^\s*Ui\.FocusFirstResult\(_list\);$", keys);
             Assert.Matches(@"(?m)^\s*e\.SuppressKeyPress = true;", keys);
             // 框内只剩 Enter：Esc 的归属已在壳的分发（一个手势一个归属，不在框里再留一份，
             // 否则「焦点恰好在框上」与「焦点在别处」两种情形走两套判定）。
@@ -77,27 +78,37 @@ public class ListKeysTests
     [Fact]
     public void Pages_FocusFirstResult_MovesFocusAndSelectionWithoutNewPaths()
     {
+        // 第六十九轮起「Enter 到结果第一行」整段收进 Ui.FocusFirstResult（两页与五张长清单同一份）：
+        // 页内只剩一次调用，纪律（目标行取共享口径、先取焦点再选中、选中经唯一入口、不自己滚动）钉在入口上。
         foreach (var page in Pages)
         {
             var name = page[^1];
-            var body = Slice(Repo.Source(page), "private void FocusFirstResult()", "private void ClearListFilter()");
-            // 目标行取共享口径，不在页内就地写 0；选中经 Ui.SelectItem 唯一入口（与鼠标点行、重建恢复同一条路）。
-            Assert.Matches(@"(?m)^\s*if \(ListKeys\.FirstResultIndex\(_list\.Items\.Count\) is not int index\) return;", body);
-            Assert.Matches(@"(?m)^\s*var item = _list\.Items\[index\];", body);
-            Assert.Matches(@"(?m)^\s*Ui\.SelectItem\(item\);", body);
-            // 选中的行必须在可见位置，否则「焦点交给第一行」这句话不成立——第五十七轮把这一步收进
-            // Ui.SelectItem 唯一入口（见 ListRevealTests），页内不再各写一句滚动。
-            Assert.DoesNotContain("EnsureVisible", body, StringComparison.Ordinal);
-            // 列表先取焦点再选中：方向键从该行继续（锚点缺失时 IndexOf 为 -1，只比大小会被骗过）。
-            var focus = body.IndexOf("_list.Focus();", StringComparison.Ordinal);
-            var select = body.IndexOf("Ui.SelectItem(item);", StringComparison.Ordinal);
-            Assert.True(focus >= 0, $"{name}:FocusFirstResult 未把焦点交给列表。");
-            Assert.True(select >= 0, $"{name}:FocusFirstResult 未经 Ui.SelectItem 选中。");
-            Assert.True(focus < select, $"{name}:应先让列表取得焦点再选中行。");
+            var source = Repo.Source(page);
+            var keys = Slice(source, "_filter.KeyDown += (_, e) =>", "_list.SelectedIndexChanged");
+            Assert.Matches(@"(?m)^\s*Ui\.FocusFirstResult\(_list\);$", keys);
+            // 页内不再留第二份：私有副本与就地滚动都不许回来。
+            Assert.DoesNotContain("private void FocusFirstResult()", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("EnsureVisible", source, StringComparison.Ordinal);
             // 只移焦点与选中：不自己改筛选关键词、不重建列表、不写数据。
-            Assert.DoesNotMatch(@"(?m)^\s*_filter\.Text =", body);
-            Assert.DoesNotMatch(@"(?m)^\s*Load(Tasks|Profiles)\(\);", body);
+            Assert.DoesNotMatch(@"(?m)^\s*_filter\.Text =", keys);
+            Assert.DoesNotMatch(@"(?m)^\s*Load(Tasks|Profiles)\(\);", keys);
+            Assert.True(keys.Contains("Keys.Enter", StringComparison.Ordinal), $"{name}:筛选框没接 Enter。");
         }
+
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        var body = Slice(ui, "public static void FocusFirstResult(ListView list)", "/// <summary>");
+        // 目标行取共享口径，不在入口里就地写 0；选中经 Ui.SelectItem 唯一入口（与鼠标点行、重建恢复同一条路）。
+        Assert.Matches(@"(?m)^\s*if \(ListKeys\.FirstResultIndex\(list\.Items\.Count\) is not int index\) return;", body);
+        Assert.Matches(@"(?m)^\s*SelectItem\(list\.Items\[index\]\);", body);
+        // 列表先取焦点再选中：方向键从该行继续（锚点缺失时 IndexOf 为 -1，只比大小会被骗过）。
+        var focus = body.IndexOf("list.Focus();", StringComparison.Ordinal);
+        var select = body.IndexOf("SelectItem(list.Items[index]);", StringComparison.Ordinal);
+        Assert.True(focus >= 0, "Ui.FocusFirstResult 未把焦点交给列表。");
+        Assert.True(select >= 0, "Ui.FocusFirstResult 未经 Ui.SelectItem 选中。");
+        Assert.True(focus < select, "应先让列表取得焦点再选中行。");
+        // 选中的行必须在可见位置，否则「焦点交给第一行」这句话不成立——第五十七轮把这一步收进
+        // Ui.SelectItem 唯一入口（见 ListRevealTests），入口不再各写一句滚动。
+        Assert.DoesNotContain("EnsureVisible", body, StringComparison.Ordinal);
     }
 
     [Fact]

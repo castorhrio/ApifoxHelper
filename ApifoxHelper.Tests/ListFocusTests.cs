@@ -128,8 +128,15 @@ public class ListFocusTests
     [Fact]
     public void KeyboardHandoff_IsTouchedOnce()
     {
+        // Ui.cs 里把键盘交给清单的入口恰两个、各一处：本轮的「处理完一条交回队列」（KeepKeyboardOnQueue）
+        // 与第六十九轮的「筛选框 Enter 到结果第一行」（FocusFirstResult，两页与五张长清单共用）。
+        // 两处都是「只交键盘」的入口，谁也不在别处再写一句 list.Focus()。
         var ui = Repo.Source("Desktop", "Native", "Ui.cs");
-        Assert.Single(Regex.Matches(ui, @"(?m)^\s*list\.Focus\(\);$"));
+        Assert.Equal(2, Regex.Matches(ui, @"(?m)^\s*list\.Focus\(\);$").Count);
+        Assert.Single(Regex.Matches(KeepBody(), @"(?m)^\s*list\.Focus\(\);$"));
+        var find = Regex.Match(ui, @"public static void FocusFirstResult\(ListView list\)\s*\{(?<body>[^}]*)\}");
+        Assert.True(find.Success, "Ui 缺少 FocusFirstResult 口径。");
+        Assert.Single(Regex.Matches(find.Groups["body"].Value, @"(?m)^\s*list\.Focus\(\);$"));
     }
 
     [Fact]

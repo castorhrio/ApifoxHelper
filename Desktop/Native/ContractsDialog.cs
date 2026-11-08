@@ -210,13 +210,21 @@ internal sealed class ContractsDialog : Form
     };
 
     /// <summary>
-    /// 关键词框里的裸 Enter 不提交对话框：对话框的 Enter=确认（§6「菜单/快捷键」）说的是表单字段，
-    /// 而筛选框不是表单字段——输入即筛选，没有「提交」这一步（另三张长清单与冻结页面的关键词框在 Enter 上同样什么都不做）。
-    /// 不挡一下，按 Enter 会把刚筛出来的结果连同对话框一起关掉；带修饰键的组合不属本判定，照旧交给基类。
+    /// 对话框里的两个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给本屏关键词框并选中已有关键词，
+    /// 与两个主页面同一手势——模态对话框打开期间壳的菜单不路由，这个手势只能由对话框自己接；手势的字母与修饰键判定
+    /// 都取 <see cref="ShellShortcuts.FindKey"/> 与 <see cref="ShellShortcuts.IsFindGesture"/> 单一口径，
+    /// 界面不就地写 Keys.F、也不就地拆修饰键（另写一份必然漂移：对话框里按 Ctrl+F 没反应正是这一族）。
+    /// 关键词框里的裸 Enter 与两个主页面同一手势：把焦点与选中交给筛选结果第一行（目标行与选中走
+    /// <see cref="Ui.FocusFirstResult"/> 一处，第六十九轮收口、本轮接线），键盘随后在清单上逐行看——此前这一步在对话框里
+    /// 什么都不做，焦点留在框里、方向键动的是光标，要看某一行只能回鼠标点清单。两条判定都只经 Ui 一处
+    /// （<see cref="Ui.TryFocusFilter"/> 与 <see cref="Ui.TryEnterFilter"/>），对话框不就地拆修饰键、不自己选中或滚动。
+    /// 对话框的 Enter=确认（表单字段）不受影响：筛选框不是表单字段，本入口只在关键词框取得焦点时接住这一次按键。
+    /// 带修饰键的组合不属这两个判定，照旧交给基类。
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
     {
-        if (keyData == Keys.Enter && _keyword.Focused) return true;
+        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
+        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
         return base.ProcessDialogKey(keyData);
     }
 

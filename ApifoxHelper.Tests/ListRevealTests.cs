@@ -137,10 +137,13 @@ public class ListRevealTests
     [InlineData("ProjectsPage.cs")]
     public void Pages_NoLongerScrollByHand(string file)
     {
-        // 筛选框 Enter 到结果第一行仍经唯一入口选中，只是不再在页内补一句滚动。
-        var body = Slice(Repo.Source("Desktop", "Native", file), "private void FocusFirstResult()", "private void ClearListFilter()");
-        Assert.Matches(@"(?m)^\s*Ui\.SelectItem\(item\);$", body);
-        Assert.DoesNotContain("EnsureVisible", body, StringComparison.Ordinal);
+        // 筛选框 Enter 到结果第一行仍经唯一入口选中，只是不再在页内补一句滚动：
+        // 第六十九轮起这一步整段收进 Ui.FocusFirstResult（两页与五张长清单同一份），页内只剩一次调用。
+        var source = Repo.Source("Desktop", "Native", file);
+        var body = Slice(source, "_filter.KeyDown += (_, e) =>", "_list.SelectedIndexChanged");
+        Assert.Matches(@"(?m)^\s*Ui\.FocusFirstResult\(_list\);$", body);
+        Assert.DoesNotContain("EnsureVisible", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("private void FocusFirstResult()", source, StringComparison.Ordinal);
     }
 
     [Fact]

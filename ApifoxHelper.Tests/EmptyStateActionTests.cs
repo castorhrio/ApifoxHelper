@@ -121,7 +121,7 @@ public class EmptyStateActionTests
             // Esc 分支不再自己赋空值：两条入口必须汇到同一方法。
             Assert.DoesNotMatch(@"_filter\.Text = """";\s*\r?\n\s*e\.SuppressKeyPress", source);
             // 页侧的 Esc 落点也汇到同一条路：判定交共享口径，清空交唯一路径。
-            var escEntry = Slice(source, "public bool TryClearListFilter()", "private void FocusFirstResult()");
+            var escEntry = Slice(source, "public bool TryClearListFilter()", "private void ClearListFilter()");
             Assert.Matches(@"(?m)^\s*if \(!ListFilter\.EscClears\(Visible, ListFilter\.IsActive\(_filter\.Text\)\)\) return false;", escEntry);
             Assert.Matches(@"(?m)^\s*ClearListFilter\(\);", escEntry);
             // 一个手势一个归属：筛选框自己的按键处理里不再留一份 Esc（框内只剩 Enter 交给第一行）。

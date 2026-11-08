@@ -272,6 +272,54 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 对话框里的「在列表中查找」（DESIGN.md §6「菜单/快捷键」）：Ctrl+F 把焦点交给本屏关键词框并选中已有关键词，
+    /// 与两个主页面同一手势——手势只有一份登记（<see cref="ShellShortcuts.FindKey"/> 与
+    /// <see cref="ShellShortcuts.IsFindGesture"/>），菜单显示、壳绑定与对话框判定同源，这里不再写一个 Keys.F。
+    /// 只移焦点：不改筛选结果、不重建列表、不写数据；不是本手势的按键一律不接（返回 false，交回基类）。
+    /// </summary>
+    public static bool TryFocusFilter(Keys keyData, TextBox keyword)
+    {
+        var keyName = (keyData & Keys.KeyCode).ToString();
+        if (!string.Equals(keyName, ShellShortcuts.FindKey, StringComparison.Ordinal)) return false;
+        if (!ShellShortcuts.IsFindGesture((keyData & Keys.Shift) != 0, (keyData & Keys.Control) != 0, (keyData & Keys.Alt) != 0)) return false;
+        keyword.Focus();
+        keyword.SelectAll();
+        return true;
+    }
+
+    /// <summary>
+    /// 对话框筛选框里的裸 Enter（DESIGN.md §6「列表筛选」）：与两个主页面同一手势——输入完按 Enter 把焦点与选中
+    /// 交给筛选结果第一行，键盘随后在清单上逐行看（此前对话框里这一步什么都不做：焦点留在框里，方向键动的是光标，
+    /// 要看某一行只能回鼠标点清单；同一个手势在主页有、在对话框没有，属同壳不同行为）。
+    /// 手势判定取 <see cref="ListKeys.IsEnterGesture"/> 单一口径（带 Ctrl/Alt/Shift 的组合不吞键、交回基类），
+    /// 目标行与选中仍走 <see cref="FocusFirstResult"/> 一处——对话框不各写一套，也不自己滚动。
+    /// 只移焦点与选中：不改筛选关键词、不重建清单、不写数据；不是本手势的按键返回 false。
+    /// 对话框的 Enter=确认（表单字段）不受影响：本入口只在关键词框取得焦点时接住这一次按键，而筛选框不是表单字段。
+    /// </summary>
+    public static bool TryEnterFilter(Keys keyData, TextBox keyword, ListView list)
+    {
+        if (!keyword.Focused) return false;
+        if ((keyData & Keys.KeyCode) != Keys.Enter) return false;
+        if (!ListKeys.IsEnterGesture((keyData & Keys.Shift) != 0, (keyData & Keys.Control) != 0, (keyData & Keys.Alt) != 0)) return false;
+        FocusFirstResult(list);
+        return true;
+    }
+
+    /// <summary>
+    /// 筛选框 Enter 的去向（DESIGN.md §6「列表筛选」）：焦点与选中交给筛选结果第一行——显示序第一行，
+    /// 即筛选与排序之后的可见顺序；零行不动作（那一步的下一步是空态的「清空筛选」按钮，不把焦点丢进空列表）。
+    /// 目标行判定在 <see cref="ListKeys.FirstResultIndex"/>，选中仍经 <see cref="SelectItem"/> 唯一入口
+    /// （与鼠标点行、重建恢复同一条路，滚动也随该入口一并触达）。两个主页面与五张长清单对话框共用这一份，
+    /// 不各写一套——此前两页各有一份同样的四行，对话框再各写一份就是七份。
+    /// </summary>
+    public static void FocusFirstResult(ListView list)
+    {
+        if (ListKeys.FirstResultIndex(list.Items.Count) is not int index) return;
+        list.Focus();
+        SelectItem(list.Items[index]);
+    }
+
+    /// <summary>
     /// 长内容区的可滚动宿主（DESIGN.md §6「长内容区」）：内容超出可视高度时出滚动条；
     /// 子项多为不接收焦点的标签，点击内容的任意处（含标签上）把焦点交给宿主，滚轮随后可滚动
     /// （任务详情、补充说明编辑区共用）。不是 Tab 停靠点，不改变 Tab 序。
