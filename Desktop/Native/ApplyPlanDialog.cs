@@ -16,7 +16,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 筛到零行=关键词框留着并说明下一步，计数行仍是整份计划的数字（见 <see cref="PopulateList"/>）。
 /// 差异预览区带说明行（<see cref="ApplyPlanEntries.DiffCaption"/>，第九十四轮）：这块框是什么、改的是什么、
 /// 与回写的关系，不靠用户先点一行再猜。
-/// 清单支持点击列头排序（第一百零五轮，口径见 <see cref="ApplyPlanSort"/> 与 <see cref="ListSort"/>）：
+/// 两张清单都支持点击列头排序（文件清单第一百零五轮、跳过清单第一百零八轮，
+/// 口径见 <see cref="ApplyPlanSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始、表头带方向标记，排序只改呈现顺序。
 /// </summary>
 internal sealed class ApplyPlanDialog : Form
@@ -54,6 +55,12 @@ internal sealed class ApplyPlanDialog : Form
     private bool _sortDescending;
     private readonly string[] _titles;
 
+    // 跳过清单的列排序状态（ListSort 口径，第一百零八轮）：两张清单各记各的列与方向，
+    // 排文件清单不会把跳过清单也排了；未排序时保持计划自身的跳过顺序。
+    private int _skippedSortColumn = ListSort.None;
+    private bool _skippedSortDescending;
+    private readonly string[] _skippedTitles;
+
     public ApplyPlanDialog(CommentPlanService plans, TaskStore tasks, CheckTask task)
     {
         _plans = plans;
@@ -84,6 +91,9 @@ internal sealed class ApplyPlanDialog : Form
 
         _skippedList.Columns.Add("跳过的位置", 300);
         _skippedList.Columns.Add("原因", 560);
+        _skippedTitles = _skippedList.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径，第一百零八轮）：同一列再点反向，换一列从升序开始；只改呈现顺序。
+        _skippedList.ColumnClick += (_, e) => SortSkipped(e.Column);
         _skippedHost = new Panel { Dock = DockStyle.Bottom, Height = 150, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
         var skippedCaption = Ui.Caption("跳过的位置（原因如下；处理后重新生成计划）");
         skippedCaption.Dock = DockStyle.Top;
@@ -232,16 +242,7 @@ internal sealed class ApplyPlanDialog : Form
         // 计数行按整份计划统计、不随关键词变化（「跳过 N」正是要找的那批的凭据）。
         _counts.Text = ApplyPlanEntries.CountsLine(plan.Files.Count, plan.Files.Sum(f => f.Edits.Count), plan.Skipped.Count);
 
-        _skippedList.BeginUpdate();
-        _skippedList.Items.Clear();
-        foreach (var skip in plan.Skipped)
-        {
-            var item = new ListViewItem(skip.Display);
-            item.SubItems.Add(skip.Reason);
-            _skippedList.Items.Add(item);
-        }
-        _skippedList.EndUpdate();
-        _skippedHost.Visible = plan.Skipped.Count > 0;
+        PopulateSkipped(plan);
 
         if (plan.Files.Count == 0)
         {
@@ -335,6 +336,55 @@ internal sealed class ApplyPlanDialog : Form
             ? null
             : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as PlannedFile)?.RelativePath == selectedPath);
         Ui.SelectItem(target ?? _list.Items[0]);
+    }
+
+    /// <summary>
+    /// 跳过清单（DESIGN.md §6「列表列排序」，第一百零八轮）：整份计划里没能生成修改的注释位置，
+    /// 每个被跳过的候选一行（位置 + 原因）。这一屏的说明行写着「跳过的位置（原因如下；处理后重新生成计划）」，
+    /// 要按原因处理就得先把同一原因的集中看——排序键取 <see cref="ApplyPlanSort.SkippedKey"/> 单一口径
+    /// （与两格同源），界面不就地写 switch。
+    /// 跳过清单没有选中语义（没有详情区、没有动作挂在它上面），故排序只改呈现顺序：
+    /// 不恢复选中、不碰键盘焦点、不写数据；计数行仍按整份计划统计、不随排序变化
+    /// （「跳过 N」正是这一屏的凭据）。重建路径（重新生成计划、回写后按磁盘计划重读）走同一口径，
+    /// 排序状态因此留在本次打开期间。
+    /// </summary>
+    private void PopulateSkipped(CommentPlan plan)
+    {
+        var visible = ListSort.Order(
+            plan.Skipped,
+            _skippedSortColumn,
+            _skippedSortDescending,
+            (skip, column) => ApplyPlanSort.SkippedKey(skip.Display, skip.Reason, column));
+        _skippedList.BeginUpdate();
+        _skippedList.Items.Clear();
+        foreach (var skip in visible)
+        {
+            var item = new ListViewItem(skip.Display);
+            item.SubItems.Add(skip.Reason);
+            _skippedList.Items.Add(item);
+        }
+        _skippedList.EndUpdate();
+        RefreshSkippedHeaders();
+        _skippedHost.Visible = plan.Skipped.Count > 0;
+    }
+
+    /// <summary>
+    /// 跳过清单的点击列头（第一百零八轮）：同一列再点反向、换一列从升序开始，
+    /// 方向翻转只在 <see cref="ListSort.Toggle"/> 一处。只改呈现顺序——不选中、不滚动、不写数据。
+    /// </summary>
+    private void SortSkipped(int column)
+    {
+        (_skippedSortColumn, _skippedSortDescending) = ListSort.Toggle(_skippedSortColumn, _skippedSortDescending, column);
+        if (_plan is { } plan) PopulateSkipped(plan);
+    }
+
+    /// <summary>跳过清单的表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSkippedHeaders()
+    {
+        for (var i = 0; i < _skippedList.Columns.Count && i < _skippedTitles.Length; i++)
+        {
+            _skippedList.Columns[i].Text = ListSort.Header(_skippedTitles[i], i, _skippedSortColumn, _skippedSortDescending);
+        }
     }
 
     /// <summary>
