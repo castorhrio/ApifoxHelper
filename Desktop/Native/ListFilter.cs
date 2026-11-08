@@ -25,6 +25,13 @@ namespace ApifoxHelper.Desktop.Native;
 /// 队列里上百条时找「上次那条」只能逐行扫（审阅状态那一列由下拉管，不进关键词）；
 /// 匹配的是那一行在屏幕上被读作的那几格——候选是位置/标注/依据/来源，契约是接口/封装/data 类型，
 /// 取法在 <c>QueueText</c>（与清单单元格同源，不另造一套字段）。五张带筛选下拉的清单到此都有同一个框。
+/// 第六张清单在第七十二轮并入同一册：同步预览的接口勾选页（生成计划前选哪些接口）此前没有框——
+/// 它是整份检查结果的接口清单，真实项目几十上百个（方案 §4.2 记录千级接口分支），要找到「上次那个接口」
+/// 只能逐行扫；这一页与那五张有一处不同：**勾选状态挂在行上**，筛选要重建清单，重建就把勾选丢了，
+/// 故勾选状态搬到 <c>SyncSelect</c> 按接口键记（单一来源），筛选只改可见行、不改勾选。
+/// 它也是唯一没有筛选下拉的一张：状态那一列的文字因此进关键词（那五张里状态由下拉管、不进关键词，
+/// 这里没有下拉可管，不进关键词就等于筛不到），筛到零行那句话也只指那个框
+/// （<see cref="FilteredEmptyKeywordHint"/>：文字不指向界面上按不动的控件）。
 /// 关键词框不是表单字段：输入即筛选，没有「提交」这一步——框里的裸 Enter 不提交对话框
 /// （五张清单各自在 <c>ProcessDialogKey</c> 里挡下；冻结页面的差异视图关键词框在 Enter 上同样什么都不做），
 /// 带修饰键的组合不属本判定、不吞键。
@@ -47,6 +54,13 @@ public static class ListFilter
     /// 状态不在其中——那一列的取值（缺失/空/已失效/有效/其他问题）由筛选下拉管，不必再敲一遍。
     /// </summary>
     public const string SlotSearchPlaceholder = "筛选位置（符号、标注、角色、文件）";
+
+    /// <summary>
+    /// 同步预览接口勾选页的关键词框：按接口身份、远端名称与状态文字找（与列表那三格同一批文字）。
+    /// 这一页没有筛选下拉，状态那一列的文字因此进关键词——五张带下拉的清单里它由下拉管、不进关键词，
+    /// 这里没有下拉可管，不进关键词就等于筛不到（「待确认」那一列是数字，不进关键词）。
+    /// </summary>
+    public const string SyncSelectSearchPlaceholder = "筛选接口（方法、路径、名称、状态）";
 
     /// <summary>
     /// 注释候选的关键词框：按位置、标注、依据与来源找（与列表那四格同一批文字）。
@@ -111,6 +125,13 @@ public static class ListFilter
     public const string FilteredEmptySearchPointer = "换一个关键词或筛选再试。";
 
     /// <summary>
+    /// 只有关键词框、没有筛选下拉的清单（同步预览的接口勾选页）筛到零行时的下一步：
+    /// 这一屏能变出条目的控件只有那个框，指名「筛选」等于指向界面上不存在的控件
+    /// （第四十六轮「文字不指向界面上不存在的按钮」同一条纪律）。
+    /// </summary>
+    public const string FilteredEmptyKeywordPointer = "换一个关键词再试。";
+
+    /// <summary>
     /// 这一屏的空属于哪一种：整份数据就没有条目，还是有条目、只是当前筛选一条都不命中。
     /// 两者的下一步不同——前者不在筛选上（各视图另有说明原因与出路的提示，筛选器也随之停用），
     /// 后者正是换一个筛选，而且聚合计数仍然可信，不能因为这一屏空了就把它抹掉：
@@ -126,6 +147,13 @@ public static class ListFilter
     /// </summary>
     public static string FilteredEmptyHint(string noun, bool hasKeyword = false) =>
         $"这个筛选下没有{noun}。" + (hasKeyword ? FilteredEmptySearchPointer : FilteredEmptyPointer);
+
+    /// <summary>
+    /// 只有关键词框的清单筛到零行时给的一句话：与 <see cref="FilteredEmptyHint"/> 同一句式，
+    /// 但下一步只指名那个框——这一屏没有筛选下拉，说「换一个筛选」就是指向按不动的控件。
+    /// </summary>
+    public static string FilteredEmptyKeywordHint(string noun) =>
+        $"这个关键词下没有{noun}。" + FilteredEmptyKeywordPointer;
 
     /// <summary>关键词去首尾空白；null 与全空白都视为「没有筛选」。</summary>
     public static string Normalize(string? query) => query?.Trim() ?? "";

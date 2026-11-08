@@ -42,6 +42,17 @@ internal sealed class SyncPreviewDialog : Form
         Font = UiTokens.Body.Value,
     };
     private readonly ListView _selectList = Ui.List(true);
+    // 关键词框（DESIGN.md §6「列表筛选」）：这一页是整份检查结果的接口清单，真实项目几十上百个
+    // （方案 §4.2 记录千级接口分支），要找到「上次那个接口」只能逐行扫；占位文字取共享常量。
+    private readonly TextBox _keyword = Ui.Input();
+    // 计数格：整份检查结果的聚合数字（接口总数与可同步数），不随关键词变化——
+    // 与五张长清单「计数行按全部条目统计」同一口径（第五十九轮）。
+    private readonly Label _visibleCount = Ui.Mono();
+    // 勾选状态的唯一来源（按接口键记）：筛选要重建清单，重建就把行上的勾选丢了，
+    // 勾了 12 个、筛一下再筛回来只剩 3 个，点「生成同步计划」写出去的就是 3 个。
+    private readonly SyncSelect _select = new();
+    // 重建清单期间不把行上的勾选回写进 SyncSelect（回写是幂等的，但每行都刷一次计数是 O(n²)）。
+    private bool _rebuilding;
     private readonly Label _selectedCount = Ui.StatusText("尚未勾选接口");
     private readonly Button _selectAllButton;
     private readonly Button _clearButton;
@@ -111,6 +122,8 @@ internal sealed class SyncPreviewDialog : Form
         _selectList.Columns.Add("名称", 200);
         _selectList.Columns.Add("状态", 96);
         _selectList.Columns.Add("待确认", 72);
+        _keyword.PlaceholderText = ListFilter.SyncSelectSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => ApplyFilter();
         _selectList.ItemCheck += (_, e) =>
         {
             // 不可同步的接口（无变化/阻断/仅源码/离线）勾选立即弹回；口径见 SyncSelection。
@@ -121,14 +134,20 @@ internal sealed class SyncPreviewDialog : Form
                 e.NewValue = CheckState.Unchecked;
             }
         };
-        _selectList.ItemChecked += (_, _) => RefreshSelectionCount();
+        _selectList.ItemChecked += (_, e) =>
+        {
+            // 勾选状态的唯一写入口：界面只在 ItemChecked 里调它，不自己维护第二份。
+            if (_rebuilding) return;
+            if (e.Item.Tag is EndpointCheck check) _select.Set(check.Key, e.Item.Checked);
+            RefreshSelectionCount();
+        };
 
         _selectAllButton = Ui.Ghost("全选可同步");
         _selectAllButton.Enabled = false;
         _selectAllButton.Click += (_, _) => SelectAllSyncable();
         _clearButton = Ui.Ghost("清空");
         _clearButton.Enabled = false;
-        _clearButton.Click += (_, _) => SetAllChecked(false);
+        _clearButton.Click += (_, _) => ClearSelection();
         _viewPlanButton = Ui.Ghost("查看已有计划");
         _viewPlanButton.Enabled = false;
         _viewPlanButton.Click += (_, _) => ViewExistingPlan();
@@ -219,11 +238,19 @@ internal sealed class SyncPreviewDialog : Form
         var caption = Ui.Caption("勾选要纳入同步的接口（无变化、阻断与仅源码不可同步）；生成计划只读远端、不写入。");
         caption.Dock = DockStyle.Top;
         caption.Padding = new Padding(UiTokens.Lg, UiTokens.Md, UiTokens.Lg, UiTokens.Sm);
+        // 筛选行取工厂（第六十八轮立的形状）：这一页只有关键词框、没有筛选下拉，故走 counts 可缺省的那一支，
+        // 前两列留空、关键词框仍在第 4 列、末列吸收剩余宽度——不为它另起一种排布。
+        // 底色随本页（Bg）：工厂给的是对话框的 Panel 底，这一页是页面底。
+        var filterRow = Ui.FilterRow(_keyword, _visibleCount);
+        filterRow.BackColor = UiTokens.Bg;
+        filterRow.Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm);
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_selectList));
         listHost.Controls.Add(_selectHint);
         _selectHint.Visible = false;
+        // 停靠按集合倒序生效：说明行最先停靠（顶部），筛选行其次，清单填满剩余空间。
         page.Controls.Add(listHost);
+        page.Controls.Add(filterRow);
         page.Controls.Add(caption);
         return page;
     }
@@ -323,7 +350,7 @@ internal sealed class SyncPreviewDialog : Form
             DisableSelect("离线检查不能同步。同步预览只对在线任务开放。", UiTokens.Muted);
             return;
         }
-        PopulateSelectList();
+        ApplyFilter();
         _viewPlanButton.Enabled = File.Exists(_tasks.FilePath(_taskId, TaskFiles.Plan));
     }
 
@@ -339,61 +366,116 @@ internal sealed class SyncPreviewDialog : Form
         _selectHint.ForeColor = color;
         _selectHint.Visible = true;
         _selectList.Visible = false;
+        // 整份数据不可得时两个筛选入口一起停：只停一个等于留一个按不动的入口。
+        _keyword.Enabled = false;
         _selectAllButton.Enabled = false;
         _clearButton.Enabled = false;
         _generateButton.Enabled = false;
     }
 
+    /// <summary>
+    /// 关键词框（DESIGN.md §6「列表筛选」）：输入即筛选，只改可见行、不改勾选——勾选状态按接口键记在
+    /// <see cref="SyncSelect"/>（单一来源），清单重建时从它恢复。筛到零行不是「没有接口可同步」：
+    /// 说清这一屏为什么空，下一步就在那个框上（这一页没有筛选下拉，故不指「换一个筛选」），
+    /// 关键词框与两个批量按钮都留着（§7「禁用不得移除下一步」）。
+    /// </summary>
+    private void ApplyFilter()
+    {
+        if (_diff is null) return;
+        _select.Query = _keyword.Text;
+        PopulateSelectList();
+        if (ListFilter.IsFilteredEmpty(_diff.Endpoints.Count, _selectList.Items.Count))
+        {
+            _selectHint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.EndpointNoun);
+            _selectHint.ForeColor = UiTokens.Muted;
+            _selectHint.Visible = true;
+            _selectList.Visible = false;
+            return;
+        }
+        _selectHint.Visible = false;
+        _selectList.Visible = true;
+    }
+
+    /// <summary>
+    /// 按当前关键词重建清单：可见行取 <see cref="SyncSelect.Visible"/>（与五张长清单同一份匹配规则），
+    /// 每行的勾选从 <see cref="SyncSelect"/> 恢复——重建不丢勾选，这是本页筛选的前提。
+    /// 计数格按整份检查结果统计（不随关键词变化），按钮上的数字是可见行里的可同步数（与按钮实际勾的行同一批）。
+    /// </summary>
     private void PopulateSelectList()
     {
         var diff = _diff!;
+        _rebuilding = true;
         _selectList.BeginUpdate();
-        foreach (var check in diff.Endpoints)
+        try
         {
-            var row = new ListViewItem(check.Method + " " + check.Path) { Tag = check, UseItemStyleForSubItems = false };
-            row.Font = UiTokens.Mono.Value;
-            var name = row.SubItems.Add(check.RemoteName ?? (check.InRemote ? "—" : "Apifox 中不存在"));
-            name.Font = UiTokens.Body.Value;
-            if (!SyncSelection.Selectable(_task.OfflineMode, check.Status)) row.ForeColor = UiTokens.Muted;
-            var status = row.SubItems.Add(TaskDisplay.CheckStatusText(check.Status));
-            status.Font = UiTokens.Body.Value;
-            status.ForeColor = ToneColor(TaskDisplay.CheckStatusTone(check.Status));
-            var pending = SyncSelection.PendingCount(diff, _decisions, check.Key);
-            var pendingCell = row.SubItems.Add(pending > 0 ? pending.ToString() : "—");
-            pendingCell.Font = UiTokens.Mono.Value;
-            if (pending > 0) pendingCell.ForeColor = UiTokens.WarnText;
-            _selectList.Items.Add(row);
+            _selectList.Items.Clear();
+            foreach (var check in _select.Visible(diff))
+            {
+                var row = new ListViewItem(check.Method + " " + check.Path) { Tag = check, UseItemStyleForSubItems = false };
+                row.Font = UiTokens.Mono.Value;
+                var name = row.SubItems.Add(check.RemoteName ?? (check.InRemote ? "—" : "Apifox 中不存在"));
+                name.Font = UiTokens.Body.Value;
+                if (!SyncSelection.Selectable(_task.OfflineMode, check.Status)) row.ForeColor = UiTokens.Muted;
+                var status = row.SubItems.Add(TaskDisplay.CheckStatusText(check.Status));
+                status.Font = UiTokens.Body.Value;
+                status.ForeColor = ToneColor(TaskDisplay.CheckStatusTone(check.Status));
+                var pending = SyncSelection.PendingCount(diff, _decisions, check.Key);
+                var pendingCell = row.SubItems.Add(pending > 0 ? pending.ToString() : "—");
+                pendingCell.Font = UiTokens.Mono.Value;
+                if (pending > 0) pendingCell.ForeColor = UiTokens.WarnText;
+                row.Checked = _select.IsChecked(check.Key);
+                _selectList.Items.Add(row);
+            }
         }
-        _selectList.EndUpdate();
-        _selectAllButton.Text = "全选可同步（" + SyncSelection.SyncableKeys(_task.OfflineMode, diff, _decisions).Count + "）";
+        finally
+        {
+            _selectList.EndUpdate();
+            _rebuilding = false;
+        }
+        _selectAllButton.Text = "全选可同步（" + _select.VisibleSyncableCount(diff, _decisions, _task.OfflineMode) + "）";
         _selectAllButton.Enabled = true;
         _clearButton.Enabled = true;
+        _visibleCount.Text = "接口 " + diff.Endpoints.Count + " · 可同步 "
+            + SyncSelection.SyncableKeys(_task.OfflineMode, diff, _decisions).Count;
         RefreshSelectionCount();
     }
 
-    private void SetAllChecked(bool checkAll)
+    /// <summary>把勾选状态从 <see cref="SyncSelect"/> 回写到可见行（行只是它的呈现，不另存一份）。</summary>
+    private void ApplyChecks()
     {
-        foreach (ListViewItem item in _selectList.Items)
+        _rebuilding = true;
+        try
         {
-            item.Checked = checkAll && item.Tag is EndpointCheck check && SyncSelection.Selectable(_task.OfflineMode, check.Status);
+            foreach (ListViewItem item in _selectList.Items)
+            {
+                if (item.Tag is EndpointCheck check) item.Checked = _select.IsChecked(check.Key);
+            }
         }
+        finally
+        {
+            _rebuilding = false;
+        }
+        RefreshSelectionCount();
     }
 
+    /// <summary>「清空」：按全部清（按钮说的是清空，不是清空可见——留着看不见的勾选，点完清空计数还显示已选择）。</summary>
+    private void ClearSelection()
+    {
+        _select.Clear();
+        ApplyChecks();
+    }
+
+    /// <summary>「全选可同步」：只作用于可见行（屏幕上只有 3 行时点「全选」却勾上 40 个，用户看不见自己勾了什么）。</summary>
     private void SelectAllSyncable()
     {
         if (_diff is null) return;
-        var keys = SyncSelection.SyncableKeys(_task.OfflineMode, _diff, _decisions).ToHashSet(StringComparer.Ordinal);
-        foreach (ListViewItem item in _selectList.Items)
-        {
-            item.Checked = item.Tag is EndpointCheck check && keys.Contains(check.Key);
-        }
+        _select.SelectAllSyncable(_diff, _decisions, _task.OfflineMode);
+        ApplyChecks();
     }
-
-    private int CheckedCount() => _selectList.Items.OfType<ListViewItem>().Count(i => i.Checked);
 
     private void RefreshSelectionCount()
     {
-        var count = CheckedCount();
+        var count = _select.CheckedCount;
         _selectedCount.Text = count > 0 ? "已选择 " + count + " 个接口" : "尚未勾选接口";
         if (!_busy) _generateButton.Enabled = count > 0;
     }
@@ -401,10 +483,8 @@ internal sealed class SyncPreviewDialog : Form
     private void Generate()
     {
         if (_diff is null || _busy) return;
-        var keys = _selectList.Items.OfType<ListViewItem>()
-            .Where(i => i.Checked && i.Tag is EndpointCheck)
-            .Select(i => ((EndpointCheck)i.Tag!).Key)
-            .ToList();
+        // 交出去的是 SyncSelect 里那一批（含被关键词筛掉的行）：筛选只改可见行，不改勾选。
+        var keys = _select.CheckedKeys(_diff);
         if (keys.Count == 0) return;
         try
         {
@@ -429,9 +509,10 @@ internal sealed class SyncPreviewDialog : Form
         _busy = busy;
         _selectAllButton.Enabled = !busy && _diff is not null;
         _clearButton.Enabled = !busy && _diff is not null;
+        _keyword.Enabled = !busy && _diff is not null;
         _viewPlanButton.Enabled = !busy && File.Exists(_tasks.FilePath(_taskId, TaskFiles.Plan));
         _backButton.Enabled = !busy;
-        _generateButton.Enabled = !busy && CheckedCount() > 0;
+        _generateButton.Enabled = !busy && _select.CheckedCount > 0;
         RefreshPlanActionButtons();
         _stopButton.Visible = busy;
     }

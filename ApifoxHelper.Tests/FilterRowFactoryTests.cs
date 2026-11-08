@@ -11,6 +11,8 @@ namespace ApifoxHelper.Tests;
 /// 属同壳不同行为，故收成 <c>Ui.FilterRow(筛选下拉, 关键词框, 计数标签)</c> 一处工厂。
 /// 本文件钉住三件事：工厂的形状（五列、宽度常量、关键词框经 <c>Ui.Field</c> 包发丝边、计数可缺省）、
 /// 五张清单都从工厂取（不各拼一遍）、以及「本轮没做的事不能被写成做了」。
+/// 第七十二轮起第六张清单（同步预览的接口勾选页）也走同一份形状：它只有关键词框、没有筛选下拉，
+/// 故走 counts 可缺省的那一支（<c>Ui.FilterRow(关键词框, 计数)</c> 重载），前两列留空、行形状仍是同一份。
 /// 工厂本身是 WinForms 控件触达，本环境不可执行，全部以源码切片与行首正则钉住，不冒充跑过；
 /// 真机上五列筛选行的排布与窄窗口下的表现随 G-D5 复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
@@ -141,9 +143,24 @@ public class FilterRowFactoryTests
         // 工厂内部写的是 `Field(keyword)`（同一个类里不写类名）。
         Assert.DoesNotContain(Repo.NativeSources(), s => s.Contains("Ui.Field(_keyword)"));
         Assert.Contains("Field(keyword)", FactoryBody(), StringComparison.Ordinal);
-        // 工厂的调用点恰为这五张清单。
+        // 工厂的调用点恰为这五张清单加同步预览的接口勾选页（第七十二轮：只有关键词框的那一支）。
         var callers = Repo.NativeSources().Where(s => s.Contains("Ui.FilterRow(")).Select(s => s.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
-        Assert.Equal(FiveLists.OrderBy(n => n, StringComparer.Ordinal).ToList(), callers);
+        Assert.Equal(FiveLists.Append("SyncPreviewDialog.cs").OrderBy(n => n, StringComparer.Ordinal).ToList(), callers);
+    }
+
+    [Fact]
+    public void KeywordOnlyList_TakesTheRowFromTheSameFactory()
+    {
+        // 同步预览的接口勾选页没有筛选下拉：走 counts 可缺省的那一支重载，前两列留空、行形状仍是同一份五列。
+        var source = Repo.Source("Desktop", "Native", "SyncPreviewDialog.cs");
+        Assert.Matches(@"(?m)^\s*var filterRow = Ui\.FilterRow\(_keyword, _visibleCount\);$", source);
+        Assert.Single(Regex.Matches(source, @"Ui\.FilterRow\(").Cast<Match>());
+        // 界面不自己拼这一行，也不自己量关键词框的宽度。
+        Assert.DoesNotContain("ColumnCount = 5", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("filterRow.Controls.Add(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_keyword.Width", source, StringComparison.Ordinal);
+        // 重载只是同一份形状的入口：它把筛选下拉传 null，不另起一种排布。
+        Assert.Contains("public static TableLayoutPanel FilterRow(TextBox keyword, Label? counts) => FilterRow(null, keyword, counts);", FactoryOverload());
     }
 
     [Fact]
@@ -203,6 +220,17 @@ public class FilterRowFactoryTests
     }
 
     // ---------- 基建 ----------
+
+    /// <summary>只有关键词框的那一支重载（第七十二轮）：一行表达式，转调同一份形状。</summary>
+    private static string FactoryOverload()
+    {
+        var source = Repo.Source("Desktop", "Native", "Ui.cs");
+        var start = source.IndexOf("public static TableLayoutPanel FilterRow(TextBox keyword, Label? counts)", StringComparison.Ordinal);
+        Assert.True(start >= 0, "Ui.cs 缺少只有关键词框的那一支重载。");
+        var end = source.IndexOf(';', start);
+        Assert.True(end > start, "重载缺少表达式体。");
+        return source[start..(end + 1)];
+    }
 
     /// <summary>Ui.FilterRow 的方法体（签名行到 return row; 为止）。</summary>
     private static string FactoryBody()

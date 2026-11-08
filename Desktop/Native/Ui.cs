@@ -234,7 +234,7 @@ internal static class Ui
     /// 宽度取 <see cref="FilterKeywordWidth"/>；<paramref name="counts"/> 为 null 时（检查结果的计数在表头行）
     /// 末列留空、由它吸收剩余宽度，行形状仍是同一份。
     /// </summary>
-    public static TableLayoutPanel FilterRow(ComboBox filter, TextBox keyword, Label? counts)
+    public static TableLayoutPanel FilterRow(ComboBox? filter, TextBox keyword, Label? counts)
     {
         keyword.Width = FilterKeywordWidth;
         var row = new TableLayoutPanel
@@ -251,14 +251,19 @@ internal static class Ui
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        var filterCaption = Body("筛选");
-        filterCaption.Margin = new Padding(0, 0, UiTokens.Xs, 0);
-        filterCaption.TextAlign = ContentAlignment.MiddleLeft;
+        // 没有筛选下拉的清单（同步预览的接口勾选页）传 null：前两列留空，关键词框仍在第 4 列、
+        // 末列仍吸收剩余宽度——行形状仍是同一份，不为它另起一种排布。
+        if (filter is not null)
+        {
+            var filterCaption = Body("筛选");
+            filterCaption.Margin = new Padding(0, 0, UiTokens.Xs, 0);
+            filterCaption.TextAlign = ContentAlignment.MiddleLeft;
+            row.Controls.Add(filterCaption, 0, 0);
+            row.Controls.Add(filter, 1, 0);
+        }
         var keywordCaption = Body("关键词");
         keywordCaption.Margin = new Padding(UiTokens.Lg, 0, UiTokens.Xs, 0);
         keywordCaption.TextAlign = ContentAlignment.MiddleLeft;
-        row.Controls.Add(filterCaption, 0, 0);
-        row.Controls.Add(filter, 1, 0);
         row.Controls.Add(keywordCaption, 2, 0);
         row.Controls.Add(Field(keyword), 3, 0);
         if (counts is not null)
@@ -270,6 +275,13 @@ internal static class Ui
         }
         return row;
     }
+
+    /// <summary>
+    /// 只有关键词框、没有筛选下拉的清单（同步预览的接口勾选页）：同一个五列形状，前两列留空，
+    /// 关键词框仍在第 4 列、末列仍吸收剩余宽度——不为它另起一种排布（第六十八轮那条纪律：
+    /// 形状只在工厂里组装，界面交的是三件东西，不各拼一遍）。
+    /// </summary>
+    public static TableLayoutPanel FilterRow(TextBox keyword, Label? counts) => FilterRow(null, keyword, counts);
 
     /// <summary>
     /// 对话框里的「在列表中查找」（DESIGN.md §6「菜单/快捷键」）：Ctrl+F 把焦点交给本屏关键词框并选中已有关键词，
