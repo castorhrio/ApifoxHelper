@@ -16,6 +16,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 筛到零行=关键词框留着并说明下一步，计数行仍是整份计划的数字（见 <see cref="PopulateList"/>）。
 /// 差异预览区带说明行（<see cref="ApplyPlanEntries.DiffCaption"/>，第九十四轮）：这块框是什么、改的是什么、
 /// 与回写的关系，不靠用户先点一行再猜。
+/// 清单支持点击列头排序（第一百零五轮，口径见 <see cref="ApplyPlanSort"/> 与 <see cref="ListSort"/>）：
+/// 同一列再点反向、换一列从升序开始、表头带方向标记，排序只改呈现顺序。
 /// </summary>
 internal sealed class ApplyPlanDialog : Form
 {
@@ -47,6 +49,11 @@ internal sealed class ApplyPlanDialog : Form
     private CommentPlan? _plan;
     private bool _busy;
 
+    // 列排序状态（ListSort 口径，第一百零五轮）：未排序时保持计划自身的文件顺序。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    private readonly string[] _titles;
+
     public ApplyPlanDialog(CommentPlanService plans, TaskStore tasks, CheckTask task)
     {
         _plans = plans;
@@ -68,6 +75,9 @@ internal sealed class ApplyPlanDialog : Form
         _list.Columns.Add("回写范围", 170);
         _list.Columns.Add("注释处数", 90);
         _list.Columns.Add("回写结果", 110);
+        _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
         _list.SelectedIndexChanged += (_, _) => ShowDiff();
         _keyword.PlaceholderText = ListFilter.ApplyPlanSearchPlaceholder;
         _keyword.TextChanged += (_, _) => PopulateList();
@@ -276,10 +286,20 @@ internal sealed class ApplyPlanDialog : Form
         var results = plan.ApplyResults
             .GroupBy(r => r.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Last(), StringComparer.OrdinalIgnoreCase);
-        var visible = ListFilter.Apply(plan.Files, _keyword.Text, file => ApplyPlanEntries.KeywordFields(
-            file.RelativePath,
-            ApplyPlanEntries.ScopeText(file.WriteAllowed),
-            results.GetValueOrDefault(file.RelativePath) is { } result ? TaskDisplay.FileApplyStateText(result.State) : ""));
+        // 筛选先于排序（ListFilter → ListSort，与另九处同一顺序）：筛掉的行不参与排序，
+        // 排序键取 ApplyPlanSort 单一口径（与单元格同源），界面不就地写 switch。
+        var visible = ListSort.Order(
+            ListFilter.Apply(plan.Files, _keyword.Text, file => ApplyPlanEntries.KeywordFields(
+                file.RelativePath,
+                ApplyPlanEntries.ScopeText(file.WriteAllowed),
+                ResultText(results, file))),
+            _sortColumn, _sortDescending,
+            (file, column) => ApplyPlanSort.Key(
+                file.RelativePath,
+                ApplyPlanEntries.ScopeText(file.WriteAllowed),
+                file.Edits.Count,
+                ResultText(results, file),
+                column));
         _list.BeginUpdate();
         _list.Items.Clear();
         foreach (var file in visible)
@@ -289,19 +309,17 @@ internal sealed class ApplyPlanDialog : Form
             var scope = item.SubItems.Add(ApplyPlanEntries.ScopeText(file.WriteAllowed));
             if (!file.WriteAllowed) scope.ForeColor = UiTokens.Muted;
             item.SubItems.Add(file.Edits.Count.ToString());
+            // 回写结果格与排序键取同一份文字（ResultText），不各写一套。
+            var state = item.SubItems.Add(ResultText(results, file));
             if (results.GetValueOrDefault(file.RelativePath) is { } result)
             {
-                var state = item.SubItems.Add(TaskDisplay.FileApplyStateText(result.State));
                 state.ForeColor = ToneColor(TaskDisplay.FileApplyTone(result.State));
                 if (result.Message is { } message) item.ToolTipText = message;
-            }
-            else
-            {
-                item.SubItems.Add("");
             }
             _list.Items.Add(item);
         }
         _list.EndUpdate();
+        RefreshSortHeaders();
         if (ListFilter.IsFilteredEmpty(plan.Files.Count, visible.Count))
         {
             _hint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.ApplyPlanNoun);
@@ -318,6 +336,34 @@ internal sealed class ApplyPlanDialog : Form
             : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as PlannedFile)?.RelativePath == selectedPath);
         Ui.SelectItem(target ?? _list.Items[0]);
     }
+
+    /// <summary>
+    /// 点击列头（DESIGN.md §6「列表列排序」，第一百零五轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="PopulateList"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改计划与回写结果，选中仍按源码文件路径恢复
+    /// （<see cref="PopulateList"/> 重建前记下、重建后找回，差异预览随选中事件跟上）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        PopulateList();
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _titles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_titles[i], i, _sortColumn, _sortDescending);
+        }
+    }
+
+    /// <summary>
+    /// 回写结果列的文字：有逐文件结果时取 <see cref="TaskDisplay.FileApplyStateText"/> 的中文映射，
+    /// 还没有结果时是空串（那一格本来就是空的）。单元格与排序键取同一份，不各写一套。
+    /// </summary>
+    private static string ResultText(Dictionary<string, FileApplyResult> results, PlannedFile file) =>
+        results.GetValueOrDefault(file.RelativePath) is { } result ? TaskDisplay.FileApplyStateText(result.State) : "";
 
     /// <summary>
     /// 三个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给关键词框并选中已有关键词、
