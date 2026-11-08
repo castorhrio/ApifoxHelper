@@ -94,7 +94,7 @@ public class FilteredEmptyStateTests
     }
 
     [Fact]
-    public void Nouns_AreExactlyTheSevenListsThatFilter()
+    public void Nouns_AreExactlyTheEightListsThatFilter()
     {
         var declared = typeof(ListFilter)
             .GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -102,15 +102,15 @@ public class FilteredEmptyStateTests
             .Select(f => (string?)f.GetValue(null) ?? "")
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToList();
-        var expected = new[] { ListFilter.CandidateNoun, ListFilter.ContractNoun, ListFilter.EndpointNoun, ListFilter.DecisionNoun, ListFilter.SlotNoun, ListFilter.PropagationNoun, ListFilter.ApplyPlanNoun }
+        var expected = new[] { ListFilter.CandidateNoun, ListFilter.ContractNoun, ListFilter.EndpointNoun, ListFilter.DecisionNoun, ListFilter.SlotNoun, ListFilter.PropagationNoun, ListFilter.ApplyPlanNoun, ListFilter.ActionNoun }
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToList();
         Assert.Equal(expected, declared);
-        // 七个视图清的是七样东西：并成一份就等于把「没有契约」说成「没有候选」。
-        // 第六个名词（生成文档核对条目，第七十七轮）与第七个（注释回写的源码文件清单，第七十九轮）走的是
-        // 只有关键词框的那一支，句子取 FilteredEmptyKeywordHint，但「这一行的东西叫什么」仍是同一份词汇表——
-        // 两处各写一份必然漂移。
-        Assert.Equal(7, declared.Distinct().Count());
+        // 八个视图清的是八样东西：并成一份就等于把「没有契约」说成「没有候选」。
+        // 第六个名词（生成文档核对条目，第七十七轮）、第七个（注释回写的源码文件清单，第七十九轮）与
+        // 第八个（同步预览的写入清单，第八十轮）走的是只有关键词框的那一支，句子取 FilteredEmptyKeywordHint，
+        // 但「这一行的东西叫什么」仍是同一份词汇表——两处各写一份必然漂移。
+        Assert.Equal(8, declared.Distinct().Count());
     }
 
     [Theory]

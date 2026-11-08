@@ -13,8 +13,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 首个失败即停止、取消只在动作之间生效、部分完成如实记录、不自动回滚），两者都走共享 JobRunner，可停止。
 /// 「确认同步」按设计基线用原生确认对话框（默认按钮在「取消」）；「重新核对（只读）」复用 VerifyAsync，不写入。
 /// 选中动作显示写入内容（脱敏后，与执行时写入的 JSON 一致）。
-/// 勾选页的键盘路径与另六张长清单同一份（Ctrl+F 到关键词框 → 输入 → Enter 到结果第一行 → 方向键逐行看 →
-/// Esc 退出筛选），关键词框只在勾选页上，预览页不接这三个手势。
+/// 两页各有一个关键词框、各接同一份键盘路径（Ctrl+F 到关键词框 → 输入 → Enter 到结果第一行 →
+/// 方向键逐行看 → Esc 退出筛选）：勾选页筛接口（第七十二、七十三轮），预览页筛写入清单（第八十轮）。
+/// 两个框各管自己那一页——一次按键只有一个含义，预览页的 Esc 不会去清勾选页的关键词，反之亦然。
 /// 状态表：未检查/读取失败/离线=空态指引并禁用全部动作；生成或执行中=状态行进度 + 停止；
 /// 生成失败/执行被拒=原因与下一步；计划就绪=概要 + 写入清单 + 排除清单 + 影响与保留设置；
 /// 执行或核对结束=逐动作结果 + 按计划状态如实报告（部分完成不显示成全部成功）；
@@ -87,6 +88,17 @@ internal sealed class SyncPreviewDialog : Form
     private const int ActionResourceColumn = 2;
 
     private readonly ListView _actionList = Ui.List(identityColumn: ActionResourceColumn);
+    // 写入清单的关键词框（第八十轮）：这一屏是整份冻结计划的逐动作写入清单，真实项目几十上百个动作，
+    // 确认同步之前要逐条看过，要找到「失败的那几条」只能逐行扫；占位文字取共享常量。
+    private readonly TextBox _actionKeyword = Ui.Input();
+    // 筛到零行时说话的那一格（与另十张长清单同一形状：清单与提示互斥地填满同一块）。
+    private readonly Label _actionHint = new()
+    {
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = UiTokens.Muted,
+        Font = UiTokens.Body.Value,
+    };
     private readonly TextBox _payload = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly ListView _excludedList = Ui.List();
     private readonly Panel _excludedHost;
@@ -173,6 +185,8 @@ internal sealed class SyncPreviewDialog : Form
         _actionList.Columns.Add("CLI 校验", 110);
         _actionList.Columns.Add("状态", 110);
         _actionList.SelectedIndexChanged += (_, _) => ShowPayload();
+        _actionKeyword.PlaceholderText = ListFilter.PlanActionSearchPlaceholder;
+        _actionKeyword.TextChanged += (_, _) => PopulateActions();
 
         _excludedList.Columns.Add("资源", 240);
         _excludedList.Columns.Add("未纳入原因", 620);
@@ -298,7 +312,14 @@ internal sealed class SyncPreviewDialog : Form
         actionCaption.Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, 0);
         var actionHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         actionHost.Controls.Add(Ui.Hairline(_actionList));
+        actionHost.Controls.Add(_actionHint);
+        _actionHint.Visible = false;
         actionHost.Controls.Add(actionCaption);
+        // 筛选行取工厂（第六十八轮立的形状）：这一屏只有关键词框、没有筛选下拉，计数在表头行，故 counts 传 null。
+        // 底色随本页（Bg）：工厂给的是对话框的 Panel 底，这一页是页面底。
+        var actionFilterRow = Ui.FilterRow(_actionKeyword, counts: null);
+        actionFilterRow.BackColor = UiTokens.Bg;
+        actionFilterRow.Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm);
 
         var payloadInner = Ui.Hairline(_payload);
         payloadInner.Dock = DockStyle.Fill;
@@ -309,11 +330,13 @@ internal sealed class SyncPreviewDialog : Form
         notesInner.Height = 100;
         var notesHost = BuildBottomHost(notesInner, "共享模型对范围外接口的影响、计划提示与保留设置", 130);
 
-        // 停靠按集合倒序生效：标题区最先停靠（顶部），写入内容、说明区、排除清单自下而上，写入清单填满剩余空间。
+        // 停靠按集合倒序生效：标题区最先停靠（顶部）、筛选行紧随其后，写入内容、说明区、排除清单自下而上，
+        // 写入清单填满剩余空间。
         page.Controls.Add(actionHost);
         page.Controls.Add(_excludedHost);
         page.Controls.Add(notesHost);
         page.Controls.Add(payloadHost);
+        page.Controls.Add(actionFilterRow);
         page.Controls.Add(head);
         return page;
     }
@@ -363,12 +386,13 @@ internal sealed class SyncPreviewDialog : Form
     }
 
     /// <summary>
-    /// 勾选页的三个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给关键词框并选中已有关键词、
-    /// 框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 退出筛选（清空关键词回到全部接口）。
-    /// 与另六张长清单同一份口径、同一处接线（<see cref="Ui.TryFocusFilter"/>、<see cref="Ui.TryEnterFilter"/>、
+    /// 两页各自的三个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给这一页的关键词框并选中
+    /// 已有关键词、框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 退出筛选（清空关键词回到全部行）。
+    /// 与另十张长清单同一份口径、同一处接线（<see cref="Ui.TryFocusFilter"/>、<see cref="Ui.TryEnterFilter"/>、
     /// <see cref="Ui.TryEscapeFilter"/>）：本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
-    /// 这一页与那六张有一处不同——关键词框只在勾选页上：预览页（计划生成后）没有这个框，三个手势一概不接，
-    /// Ctrl+F 不吞键、Esc 仍是取消对话框（一次按键只有一个含义，不把按键说成做了什么）。
+    /// 这一屏与那十张有一处不同——**两页各有一个关键词框**（勾选页筛接口、预览页筛写入清单，第八十轮）：
+    /// 门控按当前可见页走，一次按键只有一个含义——预览页的 Esc 不会去清勾选页的关键词（反之亦然），
+    /// 两页都不在时（构造期）一概不接，Ctrl+F 不吞键、Esc 仍是取消对话框。
     /// 勾选状态按接口键记在 <see cref="SyncSelect"/>，Esc 清空关键词触发的重建从它恢复，勾选不因退出筛选而丢。
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
@@ -378,6 +402,12 @@ internal sealed class SyncPreviewDialog : Form
             if (Ui.TryFocusFilter(keyData, _keyword)) return true;
             if (Ui.TryEnterFilter(keyData, _keyword, _selectList)) return true;
             if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        }
+        else if (_page2.Visible)
+        {
+            if (Ui.TryFocusFilter(keyData, _actionKeyword)) return true;
+            if (Ui.TryEnterFilter(keyData, _actionKeyword, _actionList)) return true;
+            if (Ui.TryEscapeFilter(keyData, _actionKeyword)) return true;
         }
         return base.ProcessDialogKey(keyData);
     }
@@ -532,6 +562,7 @@ internal sealed class SyncPreviewDialog : Form
         _selectAllButton.Enabled = !busy && _diff is not null;
         _clearButton.Enabled = !busy && _diff is not null;
         _keyword.Enabled = ListFilter.KeywordEnabled(_diff is not null, busy);
+        _actionKeyword.Enabled = ListFilter.KeywordEnabled(_plan is { Actions.Count: > 0 }, busy);
         _viewPlanButton.Enabled = !busy && File.Exists(_tasks.FilePath(_taskId, TaskFiles.Plan));
         _backButton.Enabled = !busy;
         _generateButton.Enabled = !busy && _select.CheckedCount > 0;
@@ -737,7 +768,8 @@ internal sealed class SyncPreviewDialog : Form
         _planStatus.ForeColor = ToneColor(TaskDisplay.SyncPlanTone(display));
         var endpoints = plan.Actions.Count(a => a.Kind.EndsWith("Endpoint", StringComparison.Ordinal));
         _applyButton.Text = "确认同步 " + endpoints + " 个接口、" + (plan.Actions.Count - endpoints) + " 个模型";
-        _planCounts.Text = $"接口 {endpoints} · 模型 {plan.Actions.Count - endpoints} · 排除 {plan.Excluded.Count}";
+        // 计数行按整份计划统计、不随关键词变化（「排除 N」正是要找的那批的凭据）。
+        _planCounts.Text = PlanEntries.CountsLine(endpoints, plan.Actions.Count - endpoints, plan.Excluded.Count);
         _planMeta.Text = "目标：" + (plan.ProjectName ?? "") + " 项目 " + plan.ProjectId + " / 分支 " + (plan.Branch ?? "main")
             + " · CLI " + plan.CliVersion + " · 计划指纹 " + (plan.Hash.Length > 12 ? plan.Hash[..12] : plan.Hash)
             + " · 生成于 " + plan.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
@@ -746,37 +778,9 @@ internal sealed class SyncPreviewDialog : Form
         _planMessage.Visible = plan.Message is not null;
         if (plan.Message is { } message) _planMessage.Text = message;
 
-        _actionList.BeginUpdate();
-        _actionList.Items.Clear();
-        for (var i = 0; i < plan.Actions.Count; i++)
-        {
-            var action = plan.Actions[i];
-            var row = new ListViewItem((i + 1).ToString()) { Tag = action, UseItemStyleForSubItems = false };
-            var kind = row.SubItems.Add(TaskDisplay.PlanActionKindText(action.Kind));
-            kind.Font = UiTokens.Body.Value;
-            var resource = row.SubItems.Add(action.ResourceKey);
-            resource.Font = UiTokens.Mono.Value;
-            var remoteId = row.SubItems.Add(action.RemoteId?.ToString() ?? "—");
-            remoteId.Font = UiTokens.Mono.Value;
-            var changes = row.SubItems.Add(action.Changes.Count > 0
-                ? string.Join("；", action.Changes)
-                : action.ManagedFields.Count > 0 ? "写入字段：" + string.Join(", ", action.ManagedFields) : "—");
-            changes.Font = UiTokens.Body.Value;
-            if (action.Notes.Count > 0) row.ToolTipText = string.Join("\n", action.Notes);
-            var validation = row.SubItems.Add(string.IsNullOrWhiteSpace(action.Validation) ? "—" : action.Validation);
-            validation.Font = UiTokens.Body.Value;
-            if (action.Validation is { Length: > 0 } and not "通过") validation.ForeColor = UiTokens.BadText;
-            var state = row.SubItems.Add(TaskDisplay.PlanActionStateText(action.State));
-            state.Font = UiTokens.Body.Value;
-            state.ForeColor = ToneColor(TaskDisplay.PlanActionStateTone(action.State));
-            if (action.Message is { } actionMessage)
-            {
-                row.ToolTipText = action.Notes.Count > 0 ? actionMessage + "\n" + string.Join("\n", action.Notes) : actionMessage;
-            }
-            _actionList.Items.Add(row);
-        }
-        _actionList.EndUpdate();
-        if (_actionList.Items.Count > 0) Ui.SelectItem(_actionList.Items[0]);
+        // 写入清单按关键词呈现（第八十轮）：整份数据没有动作时框一起停（没有可筛的东西，下一步不在这框上）。
+        _actionKeyword.Enabled = ListFilter.KeywordEnabled(plan.Actions.Count > 0);
+        PopulateActions();
 
         _excludedList.BeginUpdate();
         _excludedList.Items.Clear();
@@ -803,6 +807,87 @@ internal sealed class SyncPreviewDialog : Form
         _notes.SelectionStart = 0;
         _notes.SelectionLength = 0;
         RefreshPlanActionButtons();
+    }
+
+    /// <summary>
+    /// 写入清单的关键词框（DESIGN.md §6「列表筛选」）：输入即筛选，只改可见行——计数行按整份计划统计、
+    /// 不随关键词变化（「排除 N」正是要找的那批的凭据，被一屏的空抹掉等于把结果藏起来）。
+    /// 序号列仍是执行顺序里的第几步（不是可见行的第几行）：筛掉几条之后「第 7 步」还是第 7 步，
+    /// 否则按序号核对执行日志就对不上了。
+    /// 筛到零行不是「计划没有动作」：说清这一屏为什么空，下一步就在那个框上（这一屏没有筛选下拉，
+    /// 故不指「换一个筛选」），关键词框留着（§7「禁用不得移除下一步」），写入内容预览经既有的无选中路径
+    /// <see cref="ShowPayload"/> 收口，不在这里另写一套收控件的赋值。
+    /// 选中按动作标识（<c>ActionId</c>）恢复：筛一下再筛回来仍停在原来那个动作，执行或核对后按磁盘计划重读
+    /// 也仍停在原来那个动作（计划被重读成新对象，按对象引用恢复会落空）；恢复不到时落在新筛选第一条
+    /// （与另十张长清单同一口径，仍经 <see cref="Ui.SelectItem"/> 唯一入口）。
+    /// </summary>
+    private void PopulateActions()
+    {
+        var plan = _plan;
+        if (plan is null) return;
+        var selectedId = (Ui.SelectedItem(_actionList)?.Tag as PlanAction)?.ActionId;
+        var visible = ListFilter.Apply(
+            plan.Actions.Select((action, index) => (action, index)),
+            _actionKeyword.Text,
+            row => PlanEntries.KeywordFields(
+                TaskDisplay.PlanActionKindText(row.action.Kind),
+                row.action.ResourceKey,
+                PlanEntries.ChangesText(row.action.Changes, row.action.ManagedFields),
+                TaskDisplay.PlanActionStateText(row.action.State)));
+        _actionList.BeginUpdate();
+        try
+        {
+            _actionList.Items.Clear();
+            foreach (var (action, index) in visible)
+            {
+                var row = new ListViewItem((index + 1).ToString()) { Tag = action, UseItemStyleForSubItems = false };
+                var kind = row.SubItems.Add(TaskDisplay.PlanActionKindText(action.Kind));
+                kind.Font = UiTokens.Body.Value;
+                var resource = row.SubItems.Add(action.ResourceKey);
+                resource.Font = UiTokens.Mono.Value;
+                var remoteId = row.SubItems.Add(action.RemoteId?.ToString() ?? "—");
+                remoteId.Font = UiTokens.Mono.Value;
+                var changes = row.SubItems.Add(PlanEntries.ChangesText(action.Changes, action.ManagedFields));
+                changes.Font = UiTokens.Body.Value;
+                if (action.Notes.Count > 0) row.ToolTipText = string.Join("\n", action.Notes);
+                var validation = row.SubItems.Add(string.IsNullOrWhiteSpace(action.Validation) ? "—" : action.Validation);
+                validation.Font = UiTokens.Body.Value;
+                if (action.Validation is { Length: > 0 } and not "通过") validation.ForeColor = UiTokens.BadText;
+                var state = row.SubItems.Add(TaskDisplay.PlanActionStateText(action.State));
+                state.Font = UiTokens.Body.Value;
+                state.ForeColor = ToneColor(TaskDisplay.PlanActionStateTone(action.State));
+                if (action.Message is { } actionMessage)
+                {
+                    row.ToolTipText = action.Notes.Count > 0 ? actionMessage + "\n" + string.Join("\n", action.Notes) : actionMessage;
+                }
+                _actionList.Items.Add(row);
+            }
+        }
+        finally
+        {
+            _actionList.EndUpdate();
+        }
+        if (ListFilter.IsFilteredEmpty(plan.Actions.Count, visible.Count))
+        {
+            _actionHint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.ActionNoun);
+            _actionHint.ForeColor = UiTokens.Muted;
+            _actionHint.Visible = true;
+            _actionList.Visible = false;
+            ShowPayload();
+            return;
+        }
+        _actionHint.Visible = false;
+        _actionList.Visible = true;
+        if (_actionList.Items.Count == 0)
+        {
+            // 整份计划没有动作：这一屏由表头与排除清单说话，不在这里另造一句话（也不索引不存在的第一行）。
+            ShowPayload();
+            return;
+        }
+        var target = selectedId is null
+            ? null
+            : _actionList.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as PlanAction)?.ActionId == selectedId);
+        Ui.SelectItem(target ?? _actionList.Items[0]);
     }
 
     private void ShowSelectPage()

@@ -122,10 +122,11 @@ public class SyncSelectGestureTests
     }
 
     [Fact]
-    public void Dialog_KeepsTheGesturesInsideTheSelectPageGate()
+    public void Dialog_KeepsEachPagesGesturesInsideItsOwnGate()
     {
-        // 形状锁：关键词框只在勾选页上，三个手势必须在 _page1.Visible 之内——预览页没有这个框，
-        // 门控之外接住按键等于在预览页上吞掉 Ctrl+F、把 Esc 从「取消」手里拿走。
+        // 形状锁：两页各有一个关键词框（勾选页筛接口、预览页筛写入清单，第八十轮），
+        // 三个手势各在**自己那一页**的门控之内——门控之外接住按键等于在另一页上吞掉 Ctrl+F、
+        // 把 Esc 从「取消」手里拿走；两页都不在时（构造期）一概不接。
         var source = Repo.Source("Desktop", "Native", File);
         var expected = string.Join('\n',
         [
@@ -137,6 +138,12 @@ public class SyncSelectGestureTests
             "            if (Ui.TryEnterFilter(keyData, _keyword, _selectList)) return true;",
             "            if (Ui.TryEscapeFilter(keyData, _keyword)) return true;",
             "        }",
+            "        else if (_page2.Visible)",
+            "        {",
+            "            if (Ui.TryFocusFilter(keyData, _actionKeyword)) return true;",
+            "            if (Ui.TryEnterFilter(keyData, _actionKeyword, _actionList)) return true;",
+            "            if (Ui.TryEscapeFilter(keyData, _actionKeyword)) return true;",
+            "        }",
             "        return base.ProcessDialogKey(keyData);",
             "    }",
         ]);
@@ -144,21 +151,31 @@ public class SyncSelectGestureTests
     }
 
     [Fact]
-    public void Dialog_GatesOnTheSelectPageInExactlyOnePlace()
+    public void Dialog_GatesEachPageInExactlyOnePlace()
     {
         var source = Repo.Source("Desktop", "Native", File);
         var body = Slice(source, "protected override bool ProcessDialogKey(Keys keyData)", "return base.ProcessDialogKey(keyData);");
-        // 门控只有一处，且排在三个手势之前（先判这一页有没有那个框，再认键）。
+        // 两页各一处门控（第八十轮起预览页也有框），且各排在自家三个手势之前（先判这一页有没有那个框，再认键）。
         Assert.Single(Regex.Matches(body, @"_page1\.Visible"));
-        var gate = body.IndexOf("if (_page1.Visible)", StringComparison.Ordinal);
-        var find = body.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
-        var enter = body.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
-        var escape = body.IndexOf("Ui.TryEscapeFilter", StringComparison.Ordinal);
-        Assert.True(gate >= 0 && find > gate && enter > find && escape > enter,
+        Assert.Single(Regex.Matches(body, @"_page2\.Visible"));
+        var gate1 = body.IndexOf("if (_page1.Visible)", StringComparison.Ordinal);
+        var gate2 = body.IndexOf("else if (_page2.Visible)", StringComparison.Ordinal);
+        Assert.True(gate1 >= 0 && gate2 > gate1, "两处门控要按「勾选页 → 预览页」排，且预览页那一支是 else if（一次按键只有一个含义）。");
+        var page1 = body[..gate2];
+        var page2 = body[gate2..];
+        var find1 = page1.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
+        var enter1 = page1.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
+        var escape1 = page1.IndexOf("Ui.TryEscapeFilter", StringComparison.Ordinal);
+        Assert.True(find1 > gate1 && enter1 > find1 && escape1 > enter1,
             "顺序应为「勾选页可见 → Ctrl+F → Enter → Esc」。");
-        // 不另写反向判定（「预览页可见时……」）：一次按键只有一个含义，门控只有这一处。
+        var find2 = page2.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
+        var enter2 = page2.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
+        var escape2 = page2.IndexOf("Ui.TryEscapeFilter", StringComparison.Ordinal);
+        Assert.True(find2 > 0 && enter2 > find2 && escape2 > enter2,
+            "顺序应为「预览页可见 → Ctrl+F → Enter → Esc」。");
+        // 不另写反向判定（「预览页不可见时……」）：一次按键只有一个含义，门控只有这两处。
         Assert.DoesNotContain("!_page1.Visible", body, StringComparison.Ordinal);
-        Assert.DoesNotContain("_page2.Visible", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("!_page2.Visible", body, StringComparison.Ordinal);
     }
 
     [Fact]
