@@ -1,13 +1,15 @@
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 主页列表筛选的口径（docs/DESIGN.md §6「列表筛选」）：任务与配置会一直累积，
+/// 列表筛选的口径（docs/DESIGN.md §6「列表筛选」）：任务与配置会一直累积，
 /// 固定顺序下要找到「上次那个任务」「某个配置下的任务」只能逐行扫一列；两个主页面列表上方
 /// 各有一个筛选框，输入即按关键词筛选行，清空回到全部（筛选框聚焦时按 Esc，筛到零行时空态另有
 /// 「清空筛选」按钮——焦点不在框上时 Esc 按不动，提示语指的下一步要真的能点）。
 /// 规则：关键词按空白切成多个词，每个词都要在至少一个字段里出现（词间「且」、字段间「或」），
 /// 按当前区域忽略大小写比较，空关键词即全部行；筛选先于排序（<see cref="Apply"/> → <see cref="ListSort.Order"/>）。
 /// 筛选只改呈现顺序与可见行：不写任务与配置数据，选中按 Id 恢复。
+/// 两个主页面之外，四个带筛选下拉的视图（注释候选、响应契约、差异确认、检查结果）同在册：
+/// 筛到零行与整份数据没有条目是两种空，下一步不同、说法也不同（<see cref="IsFilteredEmpty"/>）。
 /// 不依赖 WinForms，以共享源码编入测试工程在 Linux 断言。
 /// </summary>
 public static class ListFilter
@@ -25,6 +27,26 @@ public static class ListFilter
     /// 按 Esc 只在筛选框聚焦时有效，焦点在工具栏、菜单或切页回来后落在别处，提示指的这条路按不动。
     /// </summary>
     public const string ClearActionLabel = "清空筛选";
+
+    // 四个带筛选下拉的视图各自清的是什么：名词在这里给一份，句子由 FilteredEmptyHint 组合，界面不就地拼写。
+    public const string CandidateNoun = "候选";
+    public const string ContractNoun = "契约";
+    public const string EndpointNoun = "接口";
+    public const string DecisionNoun = "条目";
+
+    /// <summary>筛到零行时提示语指名的下一步；说这句话，筛选器就得真的按得动（第四十二轮）。</summary>
+    public const string FilteredEmptyPointer = "换一个筛选再试。";
+
+    /// <summary>
+    /// 这一屏的空属于哪一种：整份数据就没有条目，还是有条目、只是当前筛选一条都不命中。
+    /// 两者的下一步不同——前者不在筛选上（各视图另有说明原因与出路的提示，筛选器也随之停用），
+    /// 后者正是换一个筛选，而且聚合计数仍然可信，不能因为这一屏空了就把它抹掉：
+    /// 逐条清队列的人要看到「待审阅 0」「待处理 0」才算清完，与两页「筛选出 0 个任务（共 42 个）」同一口径。
+    /// </summary>
+    public static bool IsFilteredEmpty(int totalEntries, int visibleEntries) => totalEntries > 0 && visibleEntries == 0;
+
+    /// <summary>筛到零行时给的一句话：说清这一屏为什么是空的，并指名下一步。</summary>
+    public static string FilteredEmptyHint(string noun) => $"这个筛选下没有{noun}。{FilteredEmptyPointer}";
 
     /// <summary>关键词去首尾空白；null 与全空白都视为「没有筛选」。</summary>
     public static string Normalize(string? query) => query?.Trim() ?? "";

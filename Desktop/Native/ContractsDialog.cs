@@ -169,15 +169,20 @@ internal sealed class ContractsDialog : Form
         }
     }
 
-    private void ShowHint(string message, Color color)
+    /// <summary>
+    /// 提示出口。<c>keepAggregate</c> 为真表示「契约还在，只是当前筛选一条都不命中」：筛选器要留着
+    /// （提示语「换一个筛选再试」指的就是它），计数行的聚合数字也要留着（「待确认 0」是清完队列的凭据）。
+    /// 缺省为假：打开期读取失败与「没有需要补充的响应契约」仍是原来的形状。
+    /// </summary>
+    private void ShowHint(string message, Color color, bool keepAggregate = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
-        _filter.Enabled = false;
+        _filter.Enabled = keepAggregate;
         SetButtons(null);
-        _counts.Text = "";
+        if (!keepAggregate) _counts.Text = "";
         _detail.Text = "";
     }
 
@@ -228,6 +233,14 @@ internal sealed class ContractsDialog : Form
             _list.Items.Add(item);
         }
         _list.EndUpdate();
+        if (ListFilter.IsFilteredEmpty(_contracts.Count, _list.Items.Count))
+        {
+            // 筛到零行不是「没有契约」：说清这一屏为什么空、下一步就在筛选上，聚合计数留着（口径见 ListFilter）。
+            ShowHint(ListFilter.FilteredEmptyHint(ListFilter.ContractNoun), UiTokens.Muted, keepAggregate: true);
+            return;
+        }
+        _hint.Visible = false;
+        _list.Visible = true;
     }
 
     private void ShowDetail()

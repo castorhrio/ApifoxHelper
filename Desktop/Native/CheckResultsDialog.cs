@@ -250,9 +250,10 @@ internal sealed class CheckResultsDialog : Form
         _filter.Enabled = _result.Endpoints.Count > 0;
         if (endpoints.Count == 0)
         {
-            ShowHint(_result.Endpoints.Count == 0
-                ? "范围内没有接口。请确认任务的模块与路径前缀范围，或先完成源码扫描。"
-                : "这个状态下没有接口。换一个筛选再试。",
+            // 两种空的说法不同：范围内本来就没有接口，还是换一个筛选就有——提示语指名的是筛选。
+            ShowHint(ListFilter.IsFilteredEmpty(_result.Endpoints.Count, endpoints.Count)
+                ? ListFilter.FilteredEmptyHint(ListFilter.EndpointNoun)
+                : "范围内没有接口。请确认任务的模块与路径前缀范围，或先完成源码扫描。",
                 UiTokens.Muted);
             return;
         }

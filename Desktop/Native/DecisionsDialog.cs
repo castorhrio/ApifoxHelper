@@ -318,15 +318,17 @@ internal sealed class DecisionsDialog : Form
     };
 
     /// <summary>提示态的共享出口：隐藏列表并停用动作，不触碰筛选器——筛选器启停由调用方按状态决定
-    /// （打开期无数据时先禁用再提示；运行期筛选为空时必须保持可用，见 ApplyFilter）。</summary>
-    private void ShowHint(string message, Color color)
+    /// （打开期无数据时先禁用再提示；运行期筛选为空时必须保持可用，见 ApplyFilter）。
+    /// <c>keepAggregate</c> 为真表示「条目还在，只是当前筛选一条都不命中」：计数行的聚合数字留着——
+    /// 「共 5 项 · 待处理 0」正是清完队列的凭据，与两页「筛选出 0 个任务（共 42 个）」同一如实口径。</summary>
+    private void ShowHint(string message, Color color, bool keepAggregate = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
         EnableActions(null);
-        _counts.Text = "";
+        if (!keepAggregate) _counts.Text = "";
         _detail.Text = "";
     }
 
@@ -369,11 +371,13 @@ internal sealed class DecisionsDialog : Form
         {
             // 筛选下没有条目时，筛选器本身是提示语「换一个筛选再试」所指的恢复路径，必须保持可用——
             // 此前随共享提示出口一并禁用，点开一个空分类或确认完「待处理」最后一条后对话框锁死在本状态，只能关闭重开。
+            var filteredEmpty = ListFilter.IsFilteredEmpty(_entries.Count, _list.Items.Count);
             _filter.Enabled = true;
-            ShowHint(_entries.Count == 0
-                ? "没有需要处理的差异确认。"
-                : "这个筛选下没有条目。换一个筛选再试。",
-                UiTokens.Muted);
+            ShowHint(filteredEmpty
+                ? ListFilter.FilteredEmptyHint(ListFilter.DecisionNoun)
+                : "没有需要处理的差异确认。",
+                UiTokens.Muted,
+                keepAggregate: filteredEmpty);
             return;
         }
         _hint.Visible = false;

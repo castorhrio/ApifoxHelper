@@ -17,13 +17,21 @@ public class DecisionsFilterStateTests
     public void EmptyFilter_KeepsFilterEnabledAsRecoveryPath()
     {
         var source = Repo.Source("Desktop", "Native", "DecisionsDialog.cs");
-        // 空筛选分支：先显式保持筛选可用，再提示「换一个筛选再试」——提示所指引的恢复路径必须可达。
+        // 空清单分支：先分清是「整份数据没有条目」还是「当前筛选不命中」（第五十九轮接进共享口径），
+        // 再显式保持筛选可用，最后提示——提示所指引的恢复路径必须可达。
         // （正则允许语句前有注释行；语句本身被注释掉时行首是 //，仍然算删除。）
         Assert.Matches(
-            @"(?m)^\s*if \(_list\.Items\.Count == 0\)\s*\n\s*\{\s*\n(?:\s*//[^\n]*\n)*\s*_filter\.Enabled = true;\s*\n\s*ShowHint\(_entries\.Count == 0",
+            @"(?m)^\s*if \(_list\.Items\.Count == 0\)\s*\n\s*\{\s*\n(?:\s*//[^\n]*\n)*\s*var filteredEmpty = ListFilter\.IsFilteredEmpty\(_entries\.Count, _list\.Items\.Count\);\s*\n\s*_filter\.Enabled = true;\s*\n\s*ShowHint\(filteredEmpty",
             source);
-        Assert.Matches(@"(?m)^\s*\? ""没有需要处理的差异确认。""", source);
-        Assert.Matches(@"(?m)^\s*: ""这个筛选下没有条目。换一个筛选再试。"",", source);
+        Assert.Matches(@"(?m)^\s*\? ListFilter\.FilteredEmptyHint\(ListFilter\.DecisionNoun\)$", source);
+        Assert.Matches(@"(?m)^\s*: ""没有需要处理的差异确认。"",$", source);
+        Assert.Matches(@"(?m)^\s*keepAggregate: filteredEmpty\);$", source);
+        // 判定先于两处触达：筛选器启停与提示文案都取同一个判定结果，不各判一次。
+        // 比较只在这个空清单分支之内做——OnLoad 里也有一句 _filter.Enabled = true，全文件第一次不算数。
+        var branch = source.IndexOf("if (_list.Items.Count == 0)", StringComparison.Ordinal);
+        var judged = source.IndexOf("var filteredEmpty = ListFilter.IsFilteredEmpty", StringComparison.Ordinal);
+        var touched = source.IndexOf("_filter.Enabled = true;", branch, StringComparison.Ordinal);
+        Assert.True(branch >= 0 && judged >= 0 && judged < touched, "应先判定是哪一种空，再动筛选器。");
     }
 
     [Fact]

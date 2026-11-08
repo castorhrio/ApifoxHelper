@@ -196,15 +196,21 @@ internal sealed class CandidatesDialog : Form
         _slotsById = scan?.Slots.ToDictionary(s => s.Id, StringComparer.Ordinal) ?? [];
     }
 
-    private void ShowHint(string message, Color color)
+    /// <summary>
+    /// 提示出口。<c>keepAggregate</c> 为真表示「候选还在，只是当前筛选一条都不命中」：筛选器要留着
+    /// （提示语「换一个筛选再试」指的就是它，见第四十二轮对差异确认的同一纠正），计数行的聚合数字也要留着
+    /// （「候选 128 · 待审阅 0」正是清完队列的凭据，与两页「筛选出 0 个任务（共 42 个）」同一如实口径）。
+    /// 缺省为假：打开期读取失败与「没有候选」仍是原来的形状。
+    /// </summary>
+    private void ShowHint(string message, Color color, bool keepAggregate = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
-        _filter.Enabled = false;
+        _filter.Enabled = keepAggregate;
         SetButtons(null);
-        _counts.Text = "";
+        if (!keepAggregate) _counts.Text = "";
         _detail.Text = "";
     }
 
@@ -256,6 +262,14 @@ internal sealed class CandidatesDialog : Form
             _list.Items.Add(item);
         }
         _list.EndUpdate();
+        if (ListFilter.IsFilteredEmpty(_store.Candidates.Count, _list.Items.Count))
+        {
+            // 筛到零行不是「没有候选」：说清这一屏为什么空、下一步就在筛选上，聚合计数留着（口径见 ListFilter）。
+            ShowHint(ListFilter.FilteredEmptyHint(ListFilter.CandidateNoun), UiTokens.Muted, keepAggregate: true);
+            return;
+        }
+        _hint.Visible = false;
+        _list.Visible = true;
     }
 
     /// <summary>列表里的位置标题：注释位置还在时用其展示名，不在时如实显示符号编号。</summary>
