@@ -69,7 +69,11 @@ internal sealed class SyncPreviewDialog : Form
         Margin = new Padding(0),
         Visible = false,
     };
-    private readonly ListView _actionList = Ui.List();
+    // 写入清单的标识列：首列是动作序号（第几步），认不出这一行写的是哪个接口或模型；
+    // 名称格在「资源」列——Ctrl+C 交出去的是它。
+    private const int ActionResourceColumn = 2;
+
+    private readonly ListView _actionList = Ui.List(identityColumn: ActionResourceColumn);
     private readonly TextBox _payload = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly ListView _excludedList = Ui.List();
     private readonly Panel _excludedHost;

@@ -7,12 +7,15 @@ namespace ApifoxHelper.Tests;
 /// <summary>
 /// 列表 Ctrl+C 复制断言（DESIGN.md §6「列表行」复制条款、§8 本轮条款）：列表单元格自绘后文字不可选中，
 /// 而原生界面此前没有任何把文字交给用户的通路——没有剪贴板入口、没有右键菜单，只有只读预览框能选。
-/// 「GET /路径」这类接口身份只出现在检查结果、补充说明、同步预览与契约/追踪清单的首列，新建任务的
-/// 「指定接口」又要逐行敲同样的文字，中间这一跳只能靠肉眼抄。补的是资源管理器本就有的手势：
-/// Ctrl+C 复制选中项的名称列——这里即首列（标识列），不是整行拼接。
+/// 「GET /路径」这类接口身份出现在各清单的名称列，新建任务的「指定接口」又要逐行敲同样的文字，
+/// 中间这一跳只能靠肉眼抄。补的是资源管理器本就有的手势：Ctrl+C 复制选中项的名称列——即本行的
+/// 标识列，不是整行拼接。标识列默认首列（与 §6「标识列（首列）」同一约定，绝大多数列表的名称格就在首列）；
+/// 首列不是名称的两个列表（同步预览写入清单首列是动作序号、差异确认首列是「接口/模型」分类）在出厂处
+/// 声明真正的名称格，声明的列必须落在该行实际格数之内（<see cref="ListCopy.IdentityColumn"/>）——
+/// 列序被改而声明没跟上时宁可复制不到，也不把邻列的文字当成名称抄出去。
 /// 口径单一落点在 <see cref="ListCopy"/>（不依赖 WinForms，与测试工程共享编译），接线只装在
 /// <see cref="Ui"/> 的列表工厂一处（剪贴板在整个原生界面触达一次）：以焦点行为准、未选中不动作、
-/// 首列无文字不动作（不把用户先前复制的内容抹掉），组合 Ctrl+C 不吞键，剪贴板被占用不谎称已复制。
+/// 标识列无文字不动作（不把用户先前复制的内容抹掉），组合 Ctrl+C 不吞键，剪贴板被占用不谎称已复制。
 /// 实际按键路由与剪贴板内容的粘贴验证随 G-D5 真机复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
 public class ListCopyTests
@@ -39,7 +42,7 @@ public class ListCopyTests
     [InlineData("  前后有空格的一格  ")]
     public void CopyText_ReturnsTheIdentityCellVerbatim(string text)
     {
-        // 复制的是首列原文：不裁剪、不补空白、不改大小写——粘贴出去的就是看到的那一格。
+        // 复制的是标识列原文：不裁剪、不补空白、不改大小写——粘贴出去的就是看到的那一格。
         Assert.Equal(text, ListCopy.CopyText(text, true));
     }
 
@@ -57,7 +60,7 @@ public class ListCopyTests
     [InlineData("   ")]
     public void CopyText_IsNull_WhenIdentityCellIsBlank(string text)
     {
-        // 首列没有文字就没有可交出去的东西：返回 null，不动剪贴板——空复制会把用户先前复制的内容抹掉。
+        // 标识列没有文字就没有可交出去的东西：返回 null，不动剪贴板——空复制会把用户先前复制的内容抹掉。
         Assert.Null(ListCopy.CopyText(text, true));
     }
 
@@ -67,22 +70,50 @@ public class ListCopyTests
         Assert.Null(ListCopy.CopyText(null, true));
     }
 
+    [Theory]
+    [InlineData(7, 0, 0)] // 默认首列：绝大多数列表的名称格就在首列。
+    [InlineData(7, 2, 2)] // 写入清单声明「资源」列。
+    [InlineData(7, 6, 6)] // 末列同样在范围内。
+    [InlineData(1, 0, 0)] // 单列列表的首列。
+    [InlineData(7, 7, null)] // 列被删掉而声明没跟上：没有可交出去的一格。
+    [InlineData(3, 4, null)]
+    [InlineData(0, 0, null)] // 一行还没有任何格。
+    [InlineData(7, -1, null)] // 负列号不是任何一格。
+    public void IdentityColumn_ResolvesOnlyDeclaredColumns(int cellCount, int declared, int? expected)
+    {
+        // 认不出名称时宁可不动作，也不把邻列的文字当成名称抄出去——粘贴到「指定接口」里的错东西更难发现。
+        Assert.Equal(expected, ListCopy.IdentityColumn(cellCount, declared));
+    }
+
+    [Fact]
+    public void IdentityColumn_DefaultsToTheFirstColumn()
+    {
+        // 默认值只有一份：工厂参数与口径常量同源，两页与对话框不各写一个 0。
+        Assert.Equal(0, ListCopy.DefaultIdentityColumn);
+    }
+
     // ---------- 接线机械检查：口径存在但没装到列表上等于没有 ----------
 
     [Fact]
     public void Ui_ListFactory_InstallsCopyOnEveryList()
     {
         var slice = ListFactorySlice();
-        // 修饰键与目标文字都取共享口径，不在工厂里就地判定。
+        // 修饰键、标识列与目标文字都取共享口径，不在工厂里就地判定或就地取格。
         Assert.Matches(@"(?m)^\s*if \(e\.KeyCode != Keys\.C \|\| !ListCopy\.IsCopyGesture\(e\.Shift, e\.Control, e\.Alt\)\) return;", slice);
         Assert.Matches(@"(?m)^\s*if \(list\.FocusedItem is not ListViewItem row\) return;", slice);
-        Assert.Matches(@"(?m)^\s*if \(ListCopy\.CopyText\(row\.Text, row\.Selected\) is not string text\) return;", slice);
+        Assert.Matches(@"(?m)^\s*if \(ListCopy\.IdentityColumn\(row\.SubItems\.Count, identityColumn\) is not int column\) return;", slice);
+        Assert.Matches(@"(?m)^\s*if \(ListCopy\.CopyText\(row\.SubItems\[column\]\.Text, row\.Selected\) is not string text\) return;", slice);
         // 动作前吞键，且写在剪贴板之前：与 Enter 激活同一纪律。
         Assert.Matches(@"(?m)^\s*e\.SuppressKeyPress = true;", slice);
         Assert.Matches(@"(?m)^\s*Clipboard\.SetText\(text\);", slice);
         var suppress = slice.IndexOf("e.SuppressKeyPress = true;", StringComparison.Ordinal);
         var set = slice.IndexOf("Clipboard.SetText(text);", StringComparison.Ordinal);
         Assert.True(suppress < set, "应先吞键再写剪贴板。");
+        // 列先解出来再取文字：列不在格数之内时不取任何一格，也不写剪贴板。
+        Assert.True(
+            slice.IndexOf("ListCopy.IdentityColumn", StringComparison.Ordinal)
+            < slice.IndexOf("ListCopy.CopyText", StringComparison.Ordinal),
+            "应先解析标识列再取文字。");
         // 剪贴板可能被其他进程占用：不冒到 UI 线程的异常处理里，也不把它显示成已复制。
         Assert.Matches(@"(?m)^\s*catch \(ExternalException\)", slice);
     }
@@ -91,8 +122,12 @@ public class ListCopyTests
     public void Ui_ListFactory_CopiesOnlyTheIdentityColumn()
     {
         var slice = ListFactorySlice();
-        // 复制首列原文（row.Text），不遍历其余列、不拼整行——与资源管理器「复制名称列」一致。
-        Assert.DoesNotContain("SubItems", slice, StringComparison.Ordinal);
+        // 复制的是「一行一格」：整段工厂里只取一次单元格文字，不拼整行、不把多格接在一起。
+        Assert.Equal(1, Regex.Matches(slice, @"row\.SubItems\[").Count);
+        Assert.DoesNotContain("string.Join", slice, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Text +", slice, StringComparison.Ordinal);
+        // 默认标识列取口径常量，工厂不自己写死一个 0（声明处与默认值同源）。
+        Assert.Contains("int identityColumn = ListCopy.DefaultIdentityColumn", slice, StringComparison.Ordinal);
         // 就地判定修饰键（不经 ListCopy）是第二套口径，不允许出现。
         Assert.DoesNotContain("e.Control &&", slice, StringComparison.Ordinal);
     }
@@ -136,6 +171,62 @@ public class ListCopyTests
         Assert.DoesNotContain("Ctrl+C", Repo.Source("Desktop", "Native", "NativeShellForm.cs"), StringComparison.Ordinal);
     }
 
+    // ---------- 标识列声明：只有首列不是名称的列表才声明 ----------
+
+    [Fact]
+    public void SyncPreview_ActionList_CopiesTheResourceColumn()
+    {
+        var source = Repo.Source("Desktop", "Native", "SyncPreviewDialog.cs");
+        // 首列是动作序号（第几步），复制它等于没交出任何东西。
+        Assert.Equal("#", ColumnTitles(source, "_actionList")[0]);
+        AssertIdentityColumn(source, "ActionResourceColumn", "_actionList", "资源");
+    }
+
+    [Fact]
+    public void Decisions_List_CopiesTheResourceColumn()
+    {
+        var source = Repo.Source("Desktop", "Native", "DecisionsDialog.cs");
+        // 首列是「接口/模型」分类，许多行同值，认不出是哪一条。
+        Assert.Equal("类型", ColumnTitles(source, "_list")[0]);
+        AssertIdentityColumn(source, "ResourceColumn", "_list", "资源");
+    }
+
+    [Fact]
+    public void IdentityColumn_IsDeclaredOnlyForListsWithoutANameInTheFirstColumn()
+    {
+        // 其余列表的名称格就在首列，一律走默认值：新增声明要么改这份清单、要么先说明首列为什么不是名称。
+        var declared = Repo.NativeSources()
+            .Where(s => !s.IsUi && s.Text.Contains("identityColumn:", StringComparison.Ordinal))
+            .Select(s => s.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal(["DecisionsDialog.cs", "SyncPreviewDialog.cs"], declared);
+    }
+
+    /// <summary>
+    /// 声明与列序一一对应：常量值必须等于该列表里 <paramref name="title"/> 列的实际位次，
+    /// 且列表字段确实把这个常量交给工厂（列序被改而声明没跟上、或声明换了别的数字，都会红）。
+    /// </summary>
+    private static void AssertIdentityColumn(string source, string constName, string field, string title)
+    {
+        var declared = Regex.Match(source, @"const int " + Regex.Escape(constName) + @" = (\d+);");
+        Assert.True(declared.Success, $"源码缺少常量 {constName}（标识列声明）。");
+        var columns = ColumnTitles(source, field);
+        var actual = columns.IndexOf(title);
+        Assert.True(actual >= 0, $"列表 {field} 没有「{title}」列。");
+        Assert.Equal(actual, int.Parse(declared.Groups[1].Value));
+        Assert.Matches(
+            @"(?m)^\s*private readonly ListView " + Regex.Escape(field) + @"\s*=\s*Ui\.List\(identityColumn: "
+            + Regex.Escape(constName) + @"\);",
+            source);
+    }
+
+    /// <summary>一个列表的列标题顺序（按 Columns.Add 的出场顺序，即屏幕上的左右顺序）。</summary>
+    private static List<string> ColumnTitles(string source, string field) =>
+        Regex.Matches(source, @"(?m)^\s*" + Regex.Escape(field) + @"\.Columns\.Add\(""([^""]*)""")
+            .Select(match => match.Groups[1].Value)
+            .ToList();
+
     [Fact]
     public void SharedCompile_IncludesListCopy()
     {
@@ -150,9 +241,15 @@ public class ListCopyTests
         var section = Repo.DesignSection(6);
         Assert.Contains("Ctrl+C", section);
         Assert.Contains("ListCopy", section);
+        // 本轮口径：复制的是标识列（默认首列，首列非名称者声明），且声明越界时不动作。
+        Assert.Contains("标识列", section);
+        Assert.Contains("identityColumn", section);
+        Assert.Contains("ListCopy.IdentityColumn", section);
         var ledger = Repo.DesignSection(8);
         Assert.Contains("列表复制", ledger);
         Assert.Contains("ListCopy", ledger);
+        Assert.Contains("列表标识列", ledger);
+        Assert.Contains("IdentityColumn", ledger);
     }
 
     /// <summary>Ui.List 工厂的方法体切片（从构造到 SelectItem 之前），复制接线必须在这一段内。</summary>

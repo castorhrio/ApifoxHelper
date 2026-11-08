@@ -57,7 +57,10 @@ internal sealed class DecisionsDialog : Form
 
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
-    private readonly ListView _list = Ui.List();
+    // 标识列：首列是「类型」（接口/模型），许多行同值、认不出是哪一条；名称格在「资源」列——Ctrl+C 交出去的是它。
+    private const int ResourceColumn = 1;
+
+    private readonly ListView _list = Ui.List(identityColumn: ResourceColumn);
     private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
     private readonly Button _confirmButton;
     private readonly Button _useTargetButton;
