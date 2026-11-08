@@ -104,7 +104,10 @@ public class ApplyPlanFilterTests
         var source = Repo.Source("Desktop", "Native", "ApplyPlanDialog.cs");
         // 这一屏没有筛选下拉：走 counts 可缺省的那一支（计数在表头行）。
         Assert.Matches(@"(?m)^\s*var filterRow = Ui\.FilterRow\(_keyword, counts: null\);$", source);
-        Assert.Single(Regex.Matches(source, @"Ui\.FilterRow\(").Cast<Match>());
+        // 恰为这一屏该有的行数（第一百一十二轮给跳过清单补了第二个框）：两行都走同一支重载、
+        // 形状仍是同一份，故这里钉的是「两张清单各一行」，不是放宽成「至少一处」。
+        Assert.Equal(2, Regex.Matches(source, @"Ui\.FilterRow\(").Count);
+        Assert.Matches(@"(?m)^\s*var skippedFilterRow = Ui\.FilterRow\(_skippedKeyword, counts: null\);$", source);
         // 界面不自己拼这一行，也不自己量关键词框的宽度。
         // （`ColumnCount = 5` 不能当锚点——本对话框的按钮行也是五列，与筛选行无关。）
         Assert.DoesNotContain("filterRow.Controls.Add(", source, StringComparison.Ordinal);

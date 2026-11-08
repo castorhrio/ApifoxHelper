@@ -19,6 +19,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 两张清单都支持点击列头排序（文件清单第一百零五轮、跳过清单第一百零八轮，
 /// 口径见 <see cref="ApplyPlanSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始、表头带方向标记，排序只改呈现顺序。
+/// 两张清单各有一个关键词框（文件清单第七十九轮、跳过清单第一百一十二轮，口径见 <see cref="ListFilter"/>）：
+/// 输入即筛选、只改可见行，计数行仍按整份计划统计；同一页两个框，Enter 与 Esc 看焦点各接一次，
+/// Ctrl+F 只交给文件清单那个框（与同步预览两页各一个框同一取舍）。
 /// </summary>
 internal sealed class ApplyPlanDialog : Form
 {
@@ -32,7 +35,15 @@ internal sealed class ApplyPlanDialog : Form
     private readonly ListView _list = Ui.List();
     private readonly ListView _skippedList = Ui.List();
     private readonly TextBox _keyword = Ui.Input();
+    private readonly TextBox _skippedKeyword = Ui.Input();
     private readonly Panel _skippedHost;
+    private readonly Label _skippedHint = new()
+    {
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = UiTokens.Muted,
+        Font = UiTokens.Body.Value,
+    };
     private readonly TextBox _diff = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly Label _diffCaption;
     private readonly Button _applyButton;
@@ -94,14 +105,30 @@ internal sealed class ApplyPlanDialog : Form
         _skippedTitles = _skippedList.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
         // 点击列头排序（ListSort 口径，第一百零八轮）：同一列再点反向，换一列从升序开始；只改呈现顺序。
         _skippedList.ColumnClick += (_, e) => SortSkipped(e.Column);
-        _skippedHost = new Panel { Dock = DockStyle.Bottom, Height = 150, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
+        // 跳过清单的关键词框（DESIGN.md §6「列表筛选」，第一百一十二轮）：同一个对话框里文件清单自第七十九轮起
+        // 就有关键词框、跳过清单没有，而这一张是整份计划里没能生成修改的注释位置（真实项目几十条），
+        // 要按原因处理就得先把同一原因的集中看——属同壳不同行为。
+        _skippedKeyword.PlaceholderText = ListFilter.SkippedSearchPlaceholder;
+        _skippedKeyword.TextChanged += (_, _) =>
+        {
+            if (_plan is { } plan) PopulateSkipped(plan);
+        };
+        _skippedHost = new Panel { Dock = DockStyle.Bottom, Height = 180, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
         var skippedCaption = Ui.Caption("跳过的位置（原因如下；处理后重新生成计划）");
         skippedCaption.Dock = DockStyle.Top;
         var skippedInner = Ui.Hairline(_skippedList);
         skippedInner.Dock = DockStyle.Fill;
         skippedInner.Height = 110;
+        // 筛选行取工厂（第六十八轮立的形状）：这一屏只有关键词框、没有筛选下拉，计数在表头行，故 counts 传 null。
+        // 底色随本区（Bg）：工厂给的是对话框的 Panel 底，这一块是页面底。
+        var skippedFilterRow = Ui.FilterRow(_skippedKeyword, counts: null);
+        skippedFilterRow.BackColor = UiTokens.Bg;
+        skippedFilterRow.Padding = new Padding(0, 0, 0, UiTokens.Sm);
         _skippedHost.Controls.Add(skippedInner);
+        _skippedHost.Controls.Add(_skippedHint);
+        _skippedHost.Controls.Add(skippedFilterRow);
         _skippedHost.Controls.Add(skippedCaption);
+        _skippedHint.Visible = false;
         _skippedHost.Visible = false;
 
         _applyButton = Ui.Primary("确认回写");
@@ -242,6 +269,9 @@ internal sealed class ApplyPlanDialog : Form
         // 计数行按整份计划统计、不随关键词变化（「跳过 N」正是要找的那批的凭据）。
         _counts.Text = ApplyPlanEntries.CountsLine(plan.Files.Count, plan.Files.Sum(f => f.Edits.Count), plan.Skipped.Count);
 
+        // 跳过清单的关键词框：整份计划没有跳过位置时停用（没有可筛的东西，下一步不在这框上），
+        // 有数据可筛时恢复可用。口径见 ListFilter.KeywordEnabled。
+        _skippedKeyword.Enabled = ListFilter.KeywordEnabled(plan.Skipped.Count > 0);
         PopulateSkipped(plan);
 
         if (plan.Files.Count == 0)
@@ -350,8 +380,13 @@ internal sealed class ApplyPlanDialog : Form
     /// </summary>
     private void PopulateSkipped(CommentPlan plan)
     {
+        // 筛选先于排序（ListFilter → ListSort，与文件清单同一顺序）：筛掉的行不参与排序，
+        // 匹配字段与排序键都取共享口径（与两格同源），界面不就地写 switch。
         var visible = ListSort.Order(
-            plan.Skipped,
+            ListFilter.Apply(
+                plan.Skipped,
+                _skippedKeyword.Text,
+                skip => ApplyPlanEntries.SkippedKeywordFields(skip.Display, skip.Reason)),
             _skippedSortColumn,
             _skippedSortDescending,
             (skip, column) => ApplyPlanSort.SkippedKey(skip.Display, skip.Reason, column));
@@ -366,6 +401,18 @@ internal sealed class ApplyPlanDialog : Form
         _skippedList.EndUpdate();
         RefreshSkippedHeaders();
         _skippedHost.Visible = plan.Skipped.Count > 0;
+        if (ListFilter.IsFilteredEmpty(plan.Skipped.Count, visible.Count))
+        {
+            // 筛到零行不是「计划没有跳过位置」：说清这一屏为什么空，下一步就在那个框上
+            // （这一屏没有筛选下拉，故不指「换一个筛选」），关键词框留着（§7「禁用不得移除下一步」）。
+            _skippedHint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.SkippedNoun);
+            _skippedHint.ForeColor = UiTokens.Muted;
+            _skippedHint.Visible = true;
+            _skippedList.Visible = false;
+            return;
+        }
+        _skippedHint.Visible = false;
+        _skippedList.Visible = true;
     }
 
     /// <summary>
@@ -420,13 +467,18 @@ internal sealed class ApplyPlanDialog : Form
     /// 框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 退出筛选（清空关键词回到全部文件）。
     /// 与另九张长清单同一份口径、同一处接线（<see cref="Ui.TryFocusFilter"/>、<see cref="Ui.TryEnterFilter"/>、
     /// <see cref="Ui.TryEscapeFilter"/>）：本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+    /// 同一页两个框（文件清单与跳过清单，第一百一十二轮）：Enter 与 Esc 看焦点各接一次——一次按键只有一个含义，
+    /// 跳过清单的 Esc 不会去清文件清单的关键词，反之亦然；Ctrl+F 只交给文件清单那个框
+    /// （与同步预览两页各一个框同一取舍：查找手势落在这一屏的主清单上）。
     /// 对话框的 Enter=确认、Esc=取消在焦点不在框上时逐字不变（AcceptButton 与 CancelButton 仍是「关闭」）。
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
     {
         if (Ui.TryFocusFilter(keyData, _keyword)) return true;
         if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
+        if (Ui.TryEnterFilter(keyData, _skippedKeyword, _skippedList)) return true;
         if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        if (Ui.TryEscapeFilter(keyData, _skippedKeyword)) return true;
         return base.ProcessDialogKey(keyData);
     }
 
@@ -548,6 +600,7 @@ internal sealed class ApplyPlanDialog : Form
         _busy = busy;
         // 作业运行期间清单正在被重建：关键词框一起停（口径见 ListFilter.KeywordEnabled）。
         _keyword.Enabled = ListFilter.KeywordEnabled(_plan is { Files.Count: > 0 }, busy);
+        _skippedKeyword.Enabled = ListFilter.KeywordEnabled(_plan is { Skipped.Count: > 0 }, busy);
         _applyButton.Enabled = !busy && _plan is { Status: "ready" } && _plan.Files.Any(f => f.WriteAllowed);
         _patchButton.Enabled = !busy && _plan is { Files.Count: > 0 };
         _regenButton.Enabled = !busy;
@@ -562,6 +615,7 @@ internal sealed class ApplyPlanDialog : Form
         // 整份数据不可得：关键词框一起停（§7「禁用 = 控件禁用 + 一句话说明缺什么」——
         // 缺什么与下一步由上面那句话给出，框里敲字筛不到任何东西）。口径见 ListFilter.KeywordEnabled。
         _keyword.Enabled = ListFilter.KeywordEnabled(false);
+        _skippedKeyword.Enabled = ListFilter.KeywordEnabled(false);
         _counts.Text = "";
         _diff.Text = "";
         _skippedHost.Visible = false;

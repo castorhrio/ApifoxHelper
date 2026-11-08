@@ -86,14 +86,14 @@ public class MissingSelectionTests
         // 下半句只有一份：每个名词的组合都以同一个 pointer 收尾，改一处就全部一起改。
         // （第六个名词是第七十七轮并入词汇表的「核对条目」、第七个是第七十九轮的「源码文件」、
         // 第八个是第八十轮的「动作」、第九个是第八十四轮的「记录」、第十个是第八十五轮的「模型」、
-        // 第十一个是第八十六轮的「未纳入条目」——那六屏没有因未选中而禁用的控件，
-        // 不接这句话，但名词仍取同一份词汇表。）
+        // 第十一个是第八十六轮的「未纳入条目」、第十二个是第一百一十二轮的「跳过位置」——
+        // 那七屏没有因未选中而禁用的控件，不接这句话，但名词仍取同一份词汇表。）
         foreach (var noun in NounValues())
         {
             Assert.EndsWith(ListSelection.MissingSelectionPointer, ListSelection.MissingSelectionHint(noun), StringComparison.Ordinal);
         }
 
-        Assert.Equal(11, NounValues().Distinct().Count());
+        Assert.Equal(12, NounValues().Distinct().Count());
     }
 
     [Fact]

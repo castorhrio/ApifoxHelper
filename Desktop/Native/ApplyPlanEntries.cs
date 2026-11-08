@@ -10,6 +10,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 这一屏的清单是整份计划的源码文件（真实项目一个模块几十个文件），要找到「上次那个文件」只能逐行扫；
 /// 另九张长清单在第六十五至七十八轮都有关键词框，同一个动作在别处有、在这一处没有，属同壳不同行为。
 /// 这一屏没有筛选下拉（回写结果是逐文件结果、不是可选状态），故走只有关键词框的那一支。
+/// 第一百一十二轮把同一个对话框的跳过清单并入同一册（<see cref="SkippedKeywordFields"/>）：
+/// 那一张是整份计划里没能生成修改的注释位置，要按原因处理就得先把同一原因的集中看。
 /// </summary>
 public static class ApplyPlanEntries
 {
@@ -25,6 +27,15 @@ public static class ApplyPlanEntries
     /// </summary>
     public static string?[] KeywordFields(string relativePath, string scopeText, string resultText) =>
         [relativePath, scopeText, resultText];
+
+    /// <summary>
+    /// 跳过清单的关键词匹配字段（DESIGN.md §6「列表筛选」，第一百一十二轮）：那一行在屏幕上被读作的那两格——
+    /// 跳过的位置与原因。顺序与清单两列一致（跳过的位置 | 原因），界面不另造一套字段。
+    /// 原因进关键词是这一屏的要害：用户问的正是「为什么这个位置没被处理」，而答案就在这一格里
+    /// （「文件不是 UTF-8 编码」「扫描后源码或证据文件已变化」「无法定位声明」…）。
+    /// 同一个对话框里文件清单自第七十九轮起就有关键词框、跳过清单没有，属同壳不同行为。
+    /// </summary>
+    public static string?[] SkippedKeywordFields(string display, string reason) => [display, reason];
 
     /// <summary>
     /// 差异预览区的说明行（DESIGN.md §6「列表行」，第九十四轮）：这一屏的核心是逐文件预览统一 diff，
