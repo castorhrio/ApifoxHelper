@@ -196,7 +196,8 @@ public class FilteredEmptyStateTests
     {
         var body = Slice(Repo.Source("Desktop", "Native", "CheckResultsDialog.cs"), "private void PopulateList(", "private void ShowHint");
         Assert.Matches(@"(?m)^\s*ShowHint\(ListFilter\.IsFilteredEmpty\(_result\.Endpoints\.Count, endpoints\.Count\)$", body);
-        Assert.Matches(@"(?m)^\s*\? ListFilter\.FilteredEmptyHint\(ListFilter\.EndpointNoun\)$", body);
+        // 第六十五轮起这一屏还有关键词框：那句话的下一步因此有两个真实入口（关键词或筛选）。
+        Assert.Matches(@"(?m)^\s*\? ListFilter\.FilteredEmptyHint\(ListFilter\.EndpointNoun, ListFilter\.IsActive\(keyword\)\)$", body);
         // 「范围内没有接口」那句讲的是范围与扫描，不是筛选，本轮逐字不动。
         Assert.Matches(@"(?m)^\s*: ""范围内没有接口。请确认任务的模块与路径前缀范围，或先完成源码扫描。"",$", body);
         // 这一处的提示出口既不碰计数行也不碰筛选器，所以不需要 keepAggregate 参数——它本来就是本轮的形状。

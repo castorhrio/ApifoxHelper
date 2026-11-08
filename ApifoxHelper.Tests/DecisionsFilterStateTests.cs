@@ -21,9 +21,10 @@ public class DecisionsFilterStateTests
         // 再显式保持筛选可用，最后提示——提示所指引的恢复路径必须可达。
         // （正则允许语句前有注释行；语句本身被注释掉时行首是 //，仍然算删除。）
         Assert.Matches(
-            @"(?m)^\s*if \(_list\.Items\.Count == 0\)\s*\n\s*\{\s*\n(?:\s*//[^\n]*\n)*\s*var filteredEmpty = ListFilter\.IsFilteredEmpty\(_entries\.Count, _list\.Items\.Count\);\s*\n\s*_filter\.Enabled = true;\s*\n\s*ShowHint\(filteredEmpty",
+            @"(?m)^\s*if \(_list\.Items\.Count == 0\)\s*\n\s*\{\s*\n(?:\s*//[^\n]*\n)*\s*var filteredEmpty = ListFilter\.IsFilteredEmpty\(_entries\.Count, _list\.Items\.Count\);\s*\n\s*_filter\.Enabled = true;\s*\n\s*_keyword\.Enabled = true;\s*\n\s*ShowHint\(filteredEmpty",
             source);
-        Assert.Matches(@"(?m)^\s*\? ListFilter\.FilteredEmptyHint\(ListFilter\.DecisionNoun\)$", source);
+        // 第六十五轮起这一屏还有关键词框：筛到零行那句话的下一步因此有两个真实入口（关键词或筛选）。
+        Assert.Matches(@"(?m)^\s*\? ListFilter\.FilteredEmptyHint\(ListFilter\.DecisionNoun, ListFilter\.IsActive\(_keyword\.Text\)\)$", source);
         Assert.Matches(@"(?m)^\s*: ""没有需要处理的差异确认。"",$", source);
         Assert.Matches(@"(?m)^\s*keepAggregate: filteredEmpty\);$", source);
         // 判定先于两处触达：筛选器启停与提示文案都取同一个判定结果，不各判一次。
@@ -38,8 +39,9 @@ public class DecisionsFilterStateTests
     public void LoadGates_DisableFilterBeforeHint()
     {
         var source = Repo.Source("Desktop", "Native", "DecisionsDialog.cs");
-        // 打开期四个无数据门控（读取失败/尚未检查/已保存决策读取失败/没有条目）：先禁用筛选器再提示。
-        Assert.Equal(4, Regex.Matches(source, @"(?m)^\s*_filter\.Enabled = false;\s*\n\s*ShowHint\(").Count);
+        // 打开期四个无数据门控（读取失败/尚未检查/已保存决策读取失败/没有条目）：先禁用筛选器与关键词框再提示
+        // （第六十五轮起这一屏多了关键词框，两个筛选入口一起停用——只停一个等于留一个按不动的入口）。
+        Assert.Equal(4, Regex.Matches(source, @"(?m)^\s*_filter\.Enabled = false;\s*\n\s*_keyword\.Enabled = false;\s*\n\s*ShowHint\(").Count);
     }
 
     [Fact]

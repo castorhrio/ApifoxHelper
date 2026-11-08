@@ -33,6 +33,9 @@ internal sealed class CheckResultsDialog : Form
         Visible = false,
     };
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+    // 关键词框：检查结果在真实项目上动辄几十上百个接口，只有状态下拉时找「上次那个接口」只能逐行扫
+    // （冻结页面的差异视图一直有关键词框）。与两个主页面的筛选框同一形态、同一匹配口径（ListFilter）。
+    private readonly TextBox _keyword = Ui.Input();
     private readonly ListView _list = Ui.List();
     private readonly ListView _modelList = Ui.List();
     private readonly TextBox _detail = Ui.Preview(multiline: true, wordWrap: false, scrollBars: ScrollBars.Both);
@@ -79,6 +82,10 @@ internal sealed class CheckResultsDialog : Form
         _filter.SelectedIndex = 0;
         _filter.SelectedIndexChanged += (_, _) => PopulateList();
 
+        _keyword.Width = 240;
+        _keyword.PlaceholderText = ListFilter.EndpointSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => PopulateList();
+
         _computedAt.TextAlign = ContentAlignment.MiddleLeft;
         _counts.AutoSize = false;
         _counts.Dock = DockStyle.Fill;
@@ -93,9 +100,13 @@ internal sealed class CheckResultsDialog : Form
 
         var filterCaption = Ui.Body("筛选");
         filterCaption.Margin = new Padding(0, 0, UiTokens.Sm, 0);
+        var keywordCaption = Ui.Body("关键词");
+        keywordCaption.Margin = new Padding(UiTokens.Lg, 0, UiTokens.Sm, 0);
         var filterRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, BackColor = UiTokens.Panel, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
         filterRow.Controls.Add(filterCaption);
         filterRow.Controls.Add(_filter);
+        filterRow.Controls.Add(keywordCaption);
+        filterRow.Controls.Add(Ui.Field(_keyword));
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
@@ -158,12 +169,14 @@ internal sealed class CheckResultsDialog : Form
         catch (Exception ex)
         {
             _filter.Enabled = false;
+            _keyword.Enabled = false;
             ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新检查再试。", UiTokens.BadText);
             return;
         }
         if (result is null)
         {
             _filter.Enabled = false;
+            _keyword.Enabled = false;
             ShowHint("尚未检查。先在任务页点「开始检查」：读取分支概览与范围内接口、模型详情，与目标比较后在这里展示差异。", UiTokens.Muted);
             return;
         }
@@ -227,14 +240,29 @@ internal sealed class CheckResultsDialog : Form
         }
     }
 
+    /// <summary>
+    /// 关键词框里的裸 Enter 不提交对话框：对话框的 Enter=确认（§6「菜单/快捷键」）说的是表单字段，
+    /// 而筛选框不是表单字段——输入即筛选，没有「提交」这一步（冻结页面的差异视图关键词框在 Enter 上同样什么都不做）。
+    /// 不挡一下，按 Enter 会把刚筛出来的结果连同对话框一起关掉；带修饰键的组合不属本判定，照旧交给基类。
+    /// 结果清单在每次筛选后已自动选中第一行，Enter 因此不做事，也不把这一次按键说成做了什么。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (keyData == Keys.Enter && _keyword.Focused) return true;
+        return base.ProcessDialogKey(keyData);
+    }
+
     private void PopulateList()
     {
         if (_result is null) return;
         var selectedKey = (Ui.SelectedItem(_list)?.Tag as EndpointCheck)?.Key;
         var status = FilterValues[Math.Max(0, _filter.SelectedIndex)];
+        var keyword = _keyword.Text;
         _list.BeginUpdate();
         _list.Items.Clear();
-        var endpoints = _result.Endpoints
+        // 关键词先经共享口径（与两个主页面同一份匹配规则：词间「且」、字段间「或」、忽略大小写），
+        // 状态筛选在其后——两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
+        var endpoints = ListFilter.Apply(_result.Endpoints, keyword, c => [c.Method + " " + c.Path, c.RemoteName])
             .Where(c => status.Length == 0 || c.Status == status)
             .ToList();
         foreach (var check in endpoints)
@@ -248,11 +276,12 @@ internal sealed class CheckResultsDialog : Form
         }
         _list.EndUpdate();
         _filter.Enabled = _result.Endpoints.Count > 0;
+        _keyword.Enabled = _result.Endpoints.Count > 0;
         if (endpoints.Count == 0)
         {
             // 两种空的说法不同：范围内本来就没有接口，还是换一个筛选就有——提示语指名的是筛选。
             ShowHint(ListFilter.IsFilteredEmpty(_result.Endpoints.Count, endpoints.Count)
-                ? ListFilter.FilteredEmptyHint(ListFilter.EndpointNoun)
+                ? ListFilter.FilteredEmptyHint(ListFilter.EndpointNoun, ListFilter.IsActive(keyword))
                 : "范围内没有接口。请确认任务的模块与路径前缀范围，或先完成源码扫描。",
                 UiTokens.Muted);
             return;

@@ -57,6 +57,9 @@ internal sealed class DecisionsDialog : Form
 
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+    // 关键词框：条目按接口×位置展开，几十上百条里找「上次那个接口」只能逐行扫（冻结页面的差异视图
+    // 一直有关键词框）。与两个主页面的筛选框同一形态、同一匹配口径（ListFilter）。
+    private readonly TextBox _keyword = Ui.Input();
     // 标识列：首列是「类型」（接口/模型），许多行同值、认不出是哪一条；名称格在「资源」列——Ctrl+C 交出去的是它。
     private const int ResourceColumn = 1;
 
@@ -123,19 +126,30 @@ internal sealed class DecisionsDialog : Form
         _filter.SelectedIndex = 0;
         _filter.SelectedIndexChanged += (_, _) => ApplyFilter(Current());
 
-        var filterRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 3, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
+        _keyword.Width = 220;
+        _keyword.PlaceholderText = ListFilter.DecisionSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => ApplyFilter(Current());
+
+        var filterRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 5, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
+        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         var filterCaption = Ui.Body("筛选");
         filterCaption.Margin = new Padding(0, 0, UiTokens.Xs, 0);
         filterCaption.TextAlign = ContentAlignment.MiddleLeft;
+        var keywordCaption = Ui.Body("关键词");
+        keywordCaption.Margin = new Padding(UiTokens.Lg, 0, UiTokens.Xs, 0);
+        keywordCaption.TextAlign = ContentAlignment.MiddleLeft;
         _counts.AutoSize = false;
         _counts.Dock = DockStyle.Fill;
         _counts.TextAlign = ContentAlignment.MiddleRight;
         filterRow.Controls.Add(filterCaption, 0, 0);
         filterRow.Controls.Add(_filter, 1, 0);
-        filterRow.Controls.Add(_counts, 2, 0);
+        filterRow.Controls.Add(keywordCaption, 2, 0);
+        filterRow.Controls.Add(Ui.Field(_keyword), 3, 0);
+        filterRow.Controls.Add(_counts, 4, 0);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
@@ -186,12 +200,14 @@ internal sealed class DecisionsDialog : Form
         catch (Exception ex)
         {
             _filter.Enabled = false;
+            _keyword.Enabled = false;
             ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新检查再试。", UiTokens.BadText);
             return;
         }
         if (result is null)
         {
             _filter.Enabled = false;
+            _keyword.Enabled = false;
             ShowHint("尚未检查。先在任务页点「开始检查」：差异确认的条目（高风险变化、说明冲突、模型绑定）来自检查结果。", UiTokens.Muted);
             return;
         }
@@ -199,6 +215,7 @@ internal sealed class DecisionsDialog : Form
         {
             // 读取不到已保存决策时不提供保存动作，避免用空决策覆盖既有选择。
             _filter.Enabled = false;
+            _keyword.Enabled = false;
             ShowHint("读取已保存决策失败：" + error + "。为避免覆盖已有决策，保存已停用；请关闭后重试。", UiTokens.BadText);
             return;
         }
@@ -207,13 +224,27 @@ internal sealed class DecisionsDialog : Form
         if (_entries.Count == 0)
         {
             _filter.Enabled = false;
+            _keyword.Enabled = false;
             ShowHint("没有需要处理的差异确认：检查结果中没有高风险变化、说明冲突、待绑定的模型与待确认的共享模型更新。", UiTokens.Muted);
             return;
         }
         _hint.Visible = false;
         _filter.Enabled = true;
+        _keyword.Enabled = true;
         UpdateCounts();
         ApplyFilter();
+    }
+
+    /// <summary>
+    /// 关键词框里的裸 Enter 不提交对话框：对话框的 Enter=确认（§6「菜单/快捷键」）说的是表单字段，
+    /// 而筛选框不是表单字段——输入即筛选，没有「提交」这一步（冻结页面的差异视图关键词框在 Enter 上同样什么都不做）。
+    /// 不挡一下，按 Enter 会把刚筛出来的结果连同对话框一起关掉；带修饰键的组合不属本判定，照旧交给基类。
+    /// 结果清单在每次筛选后已自动选中第一行，Enter 因此不做事，也不把这一次按键说成做了什么。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (keyData == Keys.Enter && _keyword.Focused) return true;
+        return base.ProcessDialogKey(keyData);
     }
 
     /// <summary>从任务目录重新读取已保存决策；读取失败时返回 false 并带出脱敏错误。</summary>
@@ -342,7 +373,14 @@ internal sealed class DecisionsDialog : Form
             + $" · 共享模型 {_entries.Count(e => e.Kind == EntryKind.ModelChange)}";
     }
 
-    private bool Matches(Entry entry) => _filter.SelectedIndex switch
+    /// <summary>
+    /// 一行是否留在清单里：分类筛选与关键词都是「且」。关键词经共享口径（与两个主页面同一份匹配规则），
+    /// 匹配的是这一行在屏幕上被读作的那三格——资源、位置、类型，不另造一套字段。
+    /// </summary>
+    private bool Matches(Entry entry) =>
+        MatchesKind(entry) && ListFilter.Matches(_keyword.Text, entry.Resource, entry.Location, KindText(entry.Kind));
+
+    private bool MatchesKind(Entry entry) => _filter.SelectedIndex switch
     {
         1 => entry.Pending,
         2 => entry.Kind == EntryKind.Risk,
@@ -373,8 +411,9 @@ internal sealed class DecisionsDialog : Form
             // 此前随共享提示出口一并禁用，点开一个空分类或确认完「待处理」最后一条后对话框锁死在本状态，只能关闭重开。
             var filteredEmpty = ListFilter.IsFilteredEmpty(_entries.Count, _list.Items.Count);
             _filter.Enabled = true;
+            _keyword.Enabled = true;
             ShowHint(filteredEmpty
-                ? ListFilter.FilteredEmptyHint(ListFilter.DecisionNoun)
+                ? ListFilter.FilteredEmptyHint(ListFilter.DecisionNoun, ListFilter.IsActive(_keyword.Text))
                 : "没有需要处理的差异确认。",
                 UiTokens.Muted,
                 keepAggregate: filteredEmpty);

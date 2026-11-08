@@ -5,7 +5,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 固定顺序下要找到「上次那个任务」「某个配置下的任务」只能逐行扫一列；两个主页面列表上方
 /// 各有一个筛选框，输入即按关键词筛选行，清空回到全部（Esc 与空态的「清空筛选」按钮是同一条路的
 /// 两个触发，都走各页的 ClearListFilter 唯一路径——见 <see cref="EscClears"/>）。
-/// 规则：关键词按空白切成多个词，每个词都要在至少一个字段里出现（词间「且」、字段间「或」），
+/// 规则：关键词按空白切成多个词，每个词都要在至少一个字段里出现（词间「且」、字段间「或」，
 /// 按当前区域忽略大小写比较，空关键词即全部行；筛选先于排序（<see cref="Apply"/> → <see cref="ListSort.Order"/>）。
 /// 筛选只改呈现顺序与可见行：不写任务与配置数据，选中按 Id 恢复。
 /// 两个主页面之外，五个带筛选下拉的视图（注释候选、响应契约、差异确认、检查结果、注释缺口）同在册：
@@ -13,6 +13,14 @@ namespace ApifoxHelper.Desktop.Native;
 /// 这句话只讲「列表区这一屏空了」，不规定那一屏还要留下什么——整份数据的聚合入口留在各视图自己手里
 /// （前四处是计数行与筛选器；注释缺口另有覆盖率行与「分析警告与降级」「接口追踪明细」，那些讲的是整份扫描，
 /// 不因当前筛选不命中而失效）。
+/// 关键词框不止两个主页面有：差异视图的两张长清单（检查结果、差异确认）在第六十五轮补上同一个框——
+/// 检查结果在真实项目上动辄几十上百个接口（方案 §4.2 记录千级接口分支），差异确认的条目按接口×位置展开更多，
+/// 要找到「上次那个接口」只能逐行扫；冻结页面的差异视图一直有关键词框（「关键词（路径、接口名）」）。
+/// 同一个动作（在长清单里按关键词找一行）在主页有、在对话框没有，属同壳不同行为，故按同一份口径收口：
+/// 占位文字、匹配规则与「筛到零行那句话」都从这里取，两个对话框不各写一套。
+/// 关键词框不是表单字段：输入即筛选，没有「提交」这一步——框里的裸 Enter 不提交对话框
+/// （两个对话框各自在 <c>ProcessDialogKey</c> 里挡下；冻结页面的差异视图关键词框在 Enter 上同样什么都不做），
+/// 带修饰键的组合不属本判定、不吞键。
 /// 不依赖 WinForms，以共享源码编入测试工程在 Linux 断言。
 /// </summary>
 public static class ListFilter
@@ -20,6 +28,13 @@ public static class ListFilter
     // 文案单一落点：占位文字、空态文字与空态行动按钮的文字都从这里取，界面不就地拼写。
     public const string TaskPlaceholder = "筛选任务（名称、配置、下一步）";
     public const string ProfilePlaceholder = "筛选配置（名称、API 项目、Apifox 目标）";
+
+    /// <summary>检查结果的关键词框：按接口身份与远端名称找（与列表首两列同一批文字）。</summary>
+    public const string EndpointSearchPlaceholder = "筛选接口（方法、路径、名称）";
+
+    /// <summary>差异确认的关键词框：按条目资源、位置与类型找（与列表三列同一批文字）。</summary>
+    public const string DecisionSearchPlaceholder = "筛选条目（资源、位置、类型）";
+
     public const string TaskNoMatchTitle = "没有匹配的任务";
     public const string TaskNoMatchHint = "换一个关键词，或点「清空筛选」回到全部任务。";
     public const string ProfileNoMatchTitle = "没有匹配的配置";
@@ -54,6 +69,12 @@ public static class ListFilter
     public const string FilteredEmptyPointer = "换一个筛选再试。";
 
     /// <summary>
+    /// 带关键词框的视图（检查结果、差异确认）筛到零行时的下一步：这一屏有两个真实控件能变出条目，
+    /// 只指筛选器等于把关键词框那一半藏起来——用户刚在框里敲了字，最可能挡住行的正是它。
+    /// </summary>
+    public const string FilteredEmptySearchPointer = "换一个关键词或筛选再试。";
+
+    /// <summary>
     /// 这一屏的空属于哪一种：整份数据就没有条目，还是有条目、只是当前筛选一条都不命中。
     /// 两者的下一步不同——前者不在筛选上（各视图另有说明原因与出路的提示，筛选器也随之停用），
     /// 后者正是换一个筛选，而且聚合计数仍然可信，不能因为这一屏空了就把它抹掉：
@@ -61,8 +82,14 @@ public static class ListFilter
     /// </summary>
     public static bool IsFilteredEmpty(int totalEntries, int visibleEntries) => totalEntries > 0 && visibleEntries == 0;
 
-    /// <summary>筛到零行时给的一句话：说清这一屏为什么是空的，并指名下一步。</summary>
-    public static string FilteredEmptyHint(string noun) => $"这个筛选下没有{noun}。{FilteredEmptyPointer}";
+    /// <summary>
+    /// 筛到零行时给的一句话：说清这一屏为什么是空的，并指名下一步。
+    /// <paramref name="hasKeyword"/> 为真表示这一屏还有关键词框（检查结果、差异确认），
+    /// 下一步因此有两个真实入口；没有关键词框的三处（注释候选、响应契约、注释缺口）仍只指筛选器——
+    /// 文字不指向界面上不存在的控件（第四十二、四十六轮同一条纪律）。
+    /// </summary>
+    public static string FilteredEmptyHint(string noun, bool hasKeyword = false) =>
+        $"这个筛选下没有{noun}。" + (hasKeyword ? FilteredEmptySearchPointer : FilteredEmptyPointer);
 
     /// <summary>关键词去首尾空白；null 与全空白都视为「没有筛选」。</summary>
     public static string Normalize(string? query) => query?.Trim() ?? "";
