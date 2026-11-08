@@ -227,10 +227,11 @@ public class ListFocusTests
     }
 
     [Fact]
-    public void Handoff_IsWiredOnTheThreeReviewPathsAndTheFiveReadOnlyOpenPaths()
+    public void Handoff_IsWiredOnTheThreeReviewPathsAndTheSixOpenPaths()
     {
         // 第八十八轮把同一处入口接到五张只读长清单的打开时（OnShown），触达点因此由三处变八处：
         // 三处审阅路径（处理完一条之后交回）与五处只读清单（打开时交给它），判定仍是同一份 ListFocus。
+        // 第九十、九十一轮把注释候选、响应契约与注释缺口清单的打开落点补上后一并接上，触达点变九处。
         var callers = Repo.NativeSources()
             .Where(s => s.Contains("Ui.KeepKeyboardOnQueue"))
             .Select(s => s.Name)
@@ -241,6 +242,7 @@ public class ListFocusTests
             {
                 "CandidatesDialog.cs", "CheckResultsDialog.cs", "ContractsDialog.cs", "DecisionsDialog.cs",
                 "EndpointTraceDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs", "PropagationDialog.cs",
+                "ScanResultsDialog.cs",
             },
             callers);
     }
@@ -250,14 +252,13 @@ public class ListFocusTests
     [InlineData("ProjectsPage.cs")]
     [InlineData("SyncPreviewDialog.cs")]
     [InlineData("SupplementsDialog.cs")]
-    [InlineData("ScanResultsDialog.cs")]
     [InlineData("ApplyPlanDialog.cs")]
     public void OtherViews_NeverTakeTheKeyboard(string file)
     {
         // 两个主页面每次刷新与筛选都要重建（第五十一轮在筛选框 Enter 那一条路上才显式取焦点）；
-        // 同步预览（两页各一张清单）、补充说明（编辑位是这一屏的输入）、注释缺口（本视图不自动选中任何一行）
+        // 同步预览（两页各一张清单）、补充说明（编辑位是这一屏的输入）
         // 与注释回写（数据在 OnLoad 之后异步到达，打开时清单还是空的）都不接此口径——
-        // 五张只读长清单的打开时交键盘见 OpenFocusTests（第八十八轮）。
+        // 打开即选中一行的九张清单（含注释缺口，第九十一轮）的打开时交键盘见 OpenFocusTests。
         var source = Repo.Source("Desktop", "Native", file);
         Assert.DoesNotContain("KeepKeyboardOnQueue", source, StringComparison.Ordinal);
     }

@@ -150,16 +150,17 @@ public class OpenSelectionTests
     }
 
     [Fact]
-    public void OnlyTheTwoReviewQueues_LandOnTheFirstRowOnOpen()
+    public void OnlyTheThreeLists_LandOnTheFirstRowOnOpen()
     {
-        // 落点的调用点恰两处：注释候选与响应契约。差异确认不另加落点（它的重建路径本就落在第一条，
-        // 第五十六、五十九轮），五张只读长清单各有自己的打开落点（第八十一轮等），不经本入口。
+        // 落点的调用点恰三处：注释候选与响应契约（第九十轮）、注释缺口（第九十一轮）。
+        // 差异确认不另加落点（它的重建路径本就落在第一条，第五十六、五十九轮），
+        // 五张只读长清单各有自己的打开落点（第八十一轮等），不经本入口。
         var callers = Repo.NativeSources()
             .Where(s => s.Contains("Ui.SelectFirstOnOpen("))
             .Select(s => s.Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
-        Assert.Equal(new[] { "CandidatesDialog.cs", "ContractsDialog.cs" }, callers);
+        Assert.Equal(new[] { "CandidatesDialog.cs", "ContractsDialog.cs", "ScanResultsDialog.cs" }, callers);
     }
 
     // ---------- 设计基线 ----------

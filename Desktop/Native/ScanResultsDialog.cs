@@ -16,6 +16,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 关键词框与另两张长清单同一形态、同一匹配口径（ListFilter）：这一屏是全应用最长的一张清单
 /// （一次扫描的全部注释位置），只有状态下拉时找「上次那个位置」只能逐行扫；
 /// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）；
+/// 打开即选中第一条（第九十一轮：详情区与三个选中动作对着第一条，键盘在 OnShown 交给清单）；
 /// 筛到零行=列表区一句话与「换一个筛选」这一步，覆盖率行、计数行与两个聚合入口照旧（见 <see cref="ShowFilteredEmpty"/>；
 /// 它与「整份数据不可得」是两种空，后者才随提示把那些入口一起收掉）。
 /// </summary>
@@ -185,6 +186,28 @@ internal sealed class ScanResultsDialog : Form
         _traceButton.Visible = true;
         UpdateCounts();
         ApplyFilter();
+        // 打开即选中第一条（第九十一轮）：这一屏的详情区与三个选中动作（查看代码证据、手工填写说明、删除失效标签）
+        // 都挂在选中上，打开时一行都没选中就是一屏没有解释的灰——而另八张清单（五张只读长清单、三个审阅视图）
+        // 打开时都落在第一条，同一个动作在别处有、在这一处没有，属同壳不同行为。
+        // 落点经 Ui.SelectFirstOnOpen 唯一入口（有行才落，空态不索引不存在的第一行）；
+        // 只落选中、不取键盘——键盘在 OnShown 交给清单。
+        Ui.SelectFirstOnOpen(_list);
+    }
+
+    /// <summary>
+    /// 打开时把键盘交给清单（DESIGN.md §6「列表行」的「注释缺口清单打开即选中第一条」，第九十一轮）：
+    /// 这一屏打开即选中第一条注释位置（详情区已经显示那一行），而对话框打开时键盘落在框架 tab 序的第一个可聚焦控件上——
+    /// 方向键动的是别的控件、Ctrl+C 也复制不到那一行，「打开就有一行被标出来」只成立了一半。
+    /// 交键盘只在 <see cref="Ui.KeepKeyboardOnQueue"/> 一处（判定在 <see cref="ListFocus"/>：选中行与焦点行是同一行才交），
+    /// 本对话框不自己写 .Focus()、不选中、不滚动、不重建清单。
+    /// 放在 OnShown 而不是 OnLoad：OnLoad 时窗体尚未显示，Focus() 的落点取决于框架在激活时怎么选初始焦点。
+    /// 打开时那一屏是提示或空态（读取失败、没有扫描产物、筛到零行）就没有选中行，不动键盘——
+    /// 那一步的下一步在提示与按钮上，不在清单上。
+    /// </summary>
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        Ui.KeepKeyboardOnQueue(_list);
     }
 
     /// <summary>打开接口追踪明细（只读）：逐接口的调用链读取、未解析调用、外部调用与预算超限，来自 evidence.json。</summary>
@@ -292,7 +315,8 @@ internal sealed class ScanResultsDialog : Form
         }
         _hint.Visible = false;
         _list.Visible = true;
-        // 重建之后再问一次详情：本视图不自动选中任何一行，判在清空之前量到的是上一轮筛选的行数，
+        // 重建之后再问一次详情：重建路径不落点（落点只在打开这一处，见 OnLoad——关键词框每敲一个字都重建，
+        // 落点会把用户正在筛的那一屏选中重置掉），判在清空之前量到的是上一轮筛选的行数，
         // 「缺什么」那句话会在该说话的时候沉默（第一次进屏时清单还是空的）。
         ShowDetail();
     }

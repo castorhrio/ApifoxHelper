@@ -197,7 +197,8 @@ public class MissingSelectionTests
     // ---------- 重建之后再问：判在清空之前量到的是上一轮的行数 ----------
 
     [Theory]
-    // 这三处不自动选中任何一行：第一次进屏与换筛选后都是「有行可选但没选中」，那句话必须由重建之后的那次询问给出。
+    // 这三处的重建路径不落点（注释候选与响应契约的落点在打开时，第九十轮；注释缺口清单的落点同样只在打开时，
+    // 第九十一轮）：换筛选后是「有行可选但没选中」，那句话必须由重建之后的那次询问给出。
     [InlineData("CandidatesDialog.cs")]
     [InlineData("ContractsDialog.cs")]
     [InlineData("ScanResultsDialog.cs")]
