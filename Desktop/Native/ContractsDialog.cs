@@ -225,6 +225,7 @@ internal sealed class ContractsDialog : Form
     {
         if (Ui.TryFocusFilter(keyData, _keyword)) return true;
         if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
+        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
         return base.ProcessDialogKey(keyData);
     }
 

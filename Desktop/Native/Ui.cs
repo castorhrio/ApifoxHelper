@@ -306,6 +306,23 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 对话框筛选框里的 Esc（DESIGN.md §6「列表筛选」那条全键盘路径的退出一步）：与两个主页面同一手势——
+    /// Ctrl+F 到框、输入、Enter 到结果第一行、方向键逐行看，想回到全部时按 Esc 清空关键词。
+    /// 此前对话框里这一步是「取消对话框」：刚敲的关键词与审阅位置一起丢掉，要看全部只能重开一次。
+    /// 判定取 <see cref="ListFilter.EscClearsInDialog"/> 单一口径（焦点在框上、框里有字才接），
+    /// 清空只经 keyword.Clear() 一处——重建仍由各对话框既有的 TextChanged 触发，本入口不重建清单、
+    /// 不写数据、不碰选中（选中按各视图既有口径恢复）；不是本手势的按键返回 false，交回基类，
+    /// 对话框的 Esc=取消因此逐字不变（焦点不在框上时它仍是取消）。
+    /// </summary>
+    public static bool TryEscapeFilter(Keys keyData, TextBox keyword)
+    {
+        if ((keyData & Keys.KeyCode) != Keys.Escape) return false;
+        if (!ListFilter.EscClearsInDialog(keyword.Focused, ListFilter.IsActive(keyword.Text))) return false;
+        keyword.Clear();
+        return true;
+    }
+
+    /// <summary>
     /// 筛选框 Enter 的去向（DESIGN.md §6「列表筛选」）：焦点与选中交给筛选结果第一行——显示序第一行，
     /// 即筛选与排序之后的可见顺序；零行不动作（那一步的下一步是空态的「清空筛选」按钮，不把焦点丢进空列表）。
     /// 目标行判定在 <see cref="ListKeys.FirstResultIndex"/>，选中仍经 <see cref="SelectItem"/> 唯一入口

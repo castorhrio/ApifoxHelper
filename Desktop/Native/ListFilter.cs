@@ -81,6 +81,17 @@ public static class ListFilter
     /// </summary>
     public static bool EscClears(bool pageVisible, bool hasKeyword) => pageVisible && hasKeyword;
 
+    /// <summary>
+    /// 对话框里这一次 Esc 是不是「退出筛选」：关键词框取得焦点、且框里留着关键词才算。
+    /// 与两个主页面的 <see cref="EscClears"/> 差一件事——对话框的 Esc 另有「取消」这一既有含义
+    /// （DESIGN.md §6「对话框 Enter=确认、Esc=取消」），所以这里必须看焦点：焦点在筛选框上时
+    /// Esc 退出筛选（筛选框不是表单字段，与第七十轮 Enter 的判定同一理由），焦点在别处时 Esc 仍是
+    /// 取消对话框——一次按键只有一个含义，不因为框里留着字就把「取消」从用户手里拿走。
+    /// 关键词已空时不接这一次按键（空框里按 Esc 什么都没做，也就不把按键说成做了什么），
+    /// 于是「框里按 Esc 清空 → 再按一次关掉对话框」是两步，与资源管理器的搜索框同序。
+    /// </summary>
+    public static bool EscClearsInDialog(bool keywordFocused, bool hasKeyword) => keywordFocused && hasKeyword;
+
     // 这五个视图的每一行是什么：名词在这里给一份词汇表，筛到零行那句话与未选中那句话都由它组合，界面不就地拼写。
     public const string CandidateNoun = "候选";
     public const string ContractNoun = "契约";

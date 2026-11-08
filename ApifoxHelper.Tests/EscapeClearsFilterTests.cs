@@ -165,21 +165,27 @@ public class EscapeClearsFilterTests
         }
     }
 
-    // ---------- 全仓归属：Esc 只有两处，语义不串 ----------
+    // ---------- 全仓归属：Esc 只有三处，语义不串 ----------
 
     [Fact]
-    public void Escape_HasExactlyTwoOwnersInTheNativeUi()
+    public void Escape_HasExactlyThreeOwnersInTheNativeUi()
     {
-        // 壳：主窗口的 Esc 退出筛选（页级手势）；对话框：Esc=取消（既有语义，本轮一行未动）。
+        // 壳：主窗口的 Esc 退出筛选（页级手势）；能力探测对话框：Esc=关闭（与标题栏 × 同语义）；
+        // Ui：对话框筛选框里的 Esc 退出筛选（第七十一轮，焦点在框上且框里有字才接，其余仍是取消）。
         var owners = Repo.NativeSources()
             .Select(source => (source.Name, lines: CodeLines(source.Text, "Keys.Escape")))
             .Where(o => o.lines.Count > 0)
             .ToList();
-        Assert.Equal(["CapabilitiesDialog.cs", "NativeShellForm.cs"], owners.Select(o => o.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray());
+        Assert.Equal(["CapabilitiesDialog.cs", "NativeShellForm.cs", "Ui.cs"], owners.Select(o => o.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray());
         Assert.All(owners, o => Assert.Single(o.lines));
-        // 两种语义各走各的通路：壳不用对话框的 ProcessDialogKey，对话框不抢壳的 ProcessCmdKey。
+        // 三种语义各走各的通路：壳不用对话框的 ProcessDialogKey，对话框不抢壳的 ProcessCmdKey。
         Assert.DoesNotContain("ProcessCmdKey", Repo.Source("Desktop", "Native", "CapabilitiesDialog.cs"), StringComparison.Ordinal);
         Assert.DoesNotContain("ProcessDialogKey", Repo.Source("Desktop", "Native", "NativeShellForm.cs"), StringComparison.Ordinal);
+        // 五张长清单对话框不自己认 Esc：它们经 Ui.TryEscapeFilter 一处接线（判定与清空都在那里）。
+        foreach (var dialog in new[] { "CheckResultsDialog.cs", "DecisionsDialog.cs", "ScanResultsDialog.cs", "CandidatesDialog.cs", "ContractsDialog.cs" })
+        {
+            Assert.Empty(CodeLines(Repo.Source("Desktop", "Native", dialog), "Keys.Escape"));
+        }
     }
 
     [Fact]
