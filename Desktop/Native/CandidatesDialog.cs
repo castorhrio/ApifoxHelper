@@ -277,7 +277,7 @@ internal sealed class CandidatesDialog : Form
     /// <summary>列表里的位置标题：注释位置还在时用其展示名，不在时如实显示符号编号。</summary>
     private string SlotTitle(CommentCandidate candidate) =>
         _slotsById.GetValueOrDefault(candidate.SlotId) is { } slot
-            ? (string.IsNullOrWhiteSpace(slot.Display) ? slot.SymbolId : slot.Display)
+            ? SlotText.Name(slot)
             : candidate.SymbolId;
 
     private void ShowDetail()

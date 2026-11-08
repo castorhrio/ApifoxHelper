@@ -22,8 +22,11 @@ public class KeywordFilterTests
     {
         Assert.Equal("筛选接口（方法、路径、名称）", ListFilter.EndpointSearchPlaceholder);
         Assert.Equal("筛选条目（资源、位置、类型）", ListFilter.DecisionSearchPlaceholder);
-        // 两张清单找的不是同一样东西：并成一份等于把「找接口」说成「找条目」。
+        Assert.Equal("筛选位置（符号、标注、角色、文件）", ListFilter.SlotSearchPlaceholder);
+        // 三张长清单找的不是同一样东西：并成一份等于把「找接口」说成「找条目」。
         Assert.NotEqual(ListFilter.EndpointSearchPlaceholder, ListFilter.DecisionSearchPlaceholder);
+        Assert.NotEqual(ListFilter.EndpointSearchPlaceholder, ListFilter.SlotSearchPlaceholder);
+        Assert.NotEqual(ListFilter.DecisionSearchPlaceholder, ListFilter.SlotSearchPlaceholder);
         Assert.NotEqual(ListFilter.TaskPlaceholder, ListFilter.EndpointSearchPlaceholder);
         Assert.NotEqual(ListFilter.ProfilePlaceholder, ListFilter.DecisionSearchPlaceholder);
     }
@@ -50,10 +53,10 @@ public class KeywordFilterTests
     {
         Assert.Equal("换一个关键词或筛选再试。", ListFilter.FilteredEmptySearchPointer);
         Assert.NotEqual(ListFilter.FilteredEmptyPointer, ListFilter.FilteredEmptySearchPointer);
-        foreach (var noun in new[] { ListFilter.EndpointNoun, ListFilter.DecisionNoun })
+        foreach (var noun in new[] { ListFilter.EndpointNoun, ListFilter.DecisionNoun, ListFilter.SlotNoun })
         {
             Assert.EndsWith(ListFilter.FilteredEmptySearchPointer, ListFilter.FilteredEmptyHint(noun, true), StringComparison.Ordinal);
-            // 没有关键词框的三处仍只指筛选器：文字不指向界面上不存在的控件（第四十二、四十六轮同一条纪律）。
+            // 没有关键词框的两处（注释候选、响应契约）仍只指筛选器：文字不指向界面上不存在的控件（第四十二、四十六轮同一条纪律）。
             Assert.EndsWith(ListFilter.FilteredEmptyPointer, ListFilter.FilteredEmptyHint(noun), StringComparison.Ordinal);
             Assert.EndsWith(ListFilter.FilteredEmptyPointer, ListFilter.FilteredEmptyHint(noun, false), StringComparison.Ordinal);
         }
@@ -62,12 +65,25 @@ public class KeywordFilterTests
     [Theory]
     [InlineData("CandidatesDialog.cs", "CandidateNoun")]
     [InlineData("ContractsDialog.cs", "ContractNoun")]
-    [InlineData("ScanResultsDialog.cs", "SlotNoun")]
     public void ViewsWithoutKeywordBox_StillPointAtTheFilterOnly(string file, string nounConst)
     {
+        // 注释缺口清单在第六十六轮并入同一册（它有框了），剩下这两处仍只指筛选器：
+        // 文字不指向界面上不存在的控件。
         var source = Repo.Source("Desktop", "Native", file);
         Assert.Matches($@"(?m)^\s*(?:ShowHint\(|_hint\.Text = )ListFilter\.FilteredEmptyHint\(ListFilter\.{nounConst}\)", source);
         Assert.DoesNotContain("_keyword", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSlotList_JoinedTheKeywordBoxFamily()
+    {
+        // 第六十六轮：注释缺口清单并入同一册——它是全应用最长的一张清单（一次扫描的全部注释位置），
+        // 只有状态下拉时找「上次那个位置」只能逐行扫。
+        var source = Repo.Source("Desktop", "Native", "ScanResultsDialog.cs");
+        Assert.Matches(@"(?m)^\s*private readonly TextBox _keyword = Ui\.Input\(\);$", source);
+        Assert.Matches(@"(?m)^\s*_keyword\.PlaceholderText = ListFilter\.SlotSearchPlaceholder;$", source);
+        // 筛到零行那句话的下一步因此有两个真实入口（关键词或筛选）。
+        Assert.Matches(@"(?m)^\s*_hint\.Text = ListFilter\.FilteredEmptyHint\(ListFilter\.SlotNoun, ListFilter\.IsActive\(_keyword\.Text\)\);$", source);
     }
 
     // ---------- 检查结果：关键词按列表首两列的文字找 ----------

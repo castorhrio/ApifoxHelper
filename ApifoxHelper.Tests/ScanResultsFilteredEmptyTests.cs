@@ -89,7 +89,9 @@ public class ScanResultsFilteredEmptyTests
     public void FilteredEmptyShape_KeepsEveryAggregateEntryAndTheFilterUsable()
     {
         var body = ShapeBody();
-        Assert.Matches(@"(?m)^\s*_hint\.Text = ListFilter\.FilteredEmptyHint\(ListFilter\.SlotNoun\);$", body);
+        // 这一屏有关键词框了（第六十六轮）：那句话的下一步因此有两个真实入口（关键词或筛选），
+        // 关键词为空时仍只指筛选器——文字不指向界面上按不动的控件。
+        Assert.Matches(@"(?m)^\s*_hint\.Text = ListFilter\.FilteredEmptyHint\(ListFilter\.SlotNoun, ListFilter\.IsActive\(_keyword\.Text\)\);$", body);
         Assert.Matches(@"(?m)^\s*_hint\.ForeColor = UiTokens\.Muted;$", body);
         Assert.Matches(@"(?m)^\s*_hint\.Visible = true;$", body);
         Assert.Matches(@"(?m)^\s*_list\.Visible = false;$", body);
@@ -98,6 +100,8 @@ public class ScanResultsFilteredEmptyTests
         {
             Assert.DoesNotContain(untouched, body, StringComparison.Ordinal);
         }
+        // 关键词框是那句话指名的另一半入口，它同样得保持按得动：这一支不碰它。
+        Assert.DoesNotMatch(@"(?m)^\s*_keyword\.Enabled", body);
     }
 
     [Fact]

@@ -32,7 +32,7 @@ internal sealed class EvidenceDialog : Form
     };
 
     public EvidenceDialog(TaskStore tasks, CheckTask task, DocSlot slot)
-        : this(tasks, task, string.IsNullOrWhiteSpace(slot.Display) ? slot.SymbolId : slot.Display, slot.File + ":" + slot.Line, slot.EvidenceIds)
+        : this(tasks, task, SlotText.Name(slot), SlotText.Location(slot), slot.EvidenceIds)
     {
     }
 

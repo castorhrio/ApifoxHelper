@@ -7,12 +7,14 @@ using ApifoxHelper.Tasks;
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 注释缺口清单：展示扫描得到的全部注释位置（DocSlot），按状态筛选，逐条显示现状、覆盖接口与证据数；
+/// 注释缺口清单：展示扫描得到的全部注释位置（DocSlot），按状态筛选与关键词筛选，逐条显示现状、覆盖接口与证据数；
 /// 顶部注释覆盖率行与分析等级、扫描时间来自扫描落盘的 symbols.json 与 source-manifest.json；
 /// 选中条目可打开其代码证据（EvidenceDialog，只读），也可手工填写说明或删除失效 param 标签（经既有
 /// DraftService.AddManualAsync 写任务数据成为候选，不写源码、不访问 Apifox；候选在「查看注释候选」审阅）；
 /// 「分析警告与降级」打开只读清单（扫描警告、未解析符号与不可回写的外部类型——降级如实可见）；
 /// 「接口追踪明细」打开逐接口的调用链追踪只读视图（读取方法、未解析调用、外部调用与预算超限）。
+/// 关键词框与另两张长清单同一形态、同一匹配口径（ListFilter）：这一屏是全应用最长的一张清单
+/// （一次扫描的全部注释位置），只有状态下拉时找「上次那个位置」只能逐行扫；
 /// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）；
 /// 筛到零行=列表区一句话与「换一个筛选」这一步，覆盖率行、计数行与两个聚合入口照旧（见 <see cref="ShowFilteredEmpty"/>；
 /// 它与「整份数据不可得」是两种空，后者才随提示把那些入口一起收掉）。
@@ -27,6 +29,9 @@ internal sealed class ScanResultsDialog : Form
 
     private readonly Label _counts = Ui.Mono();
     private readonly ComboBox _filter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+    // 关键词框：注释缺口清单是全应用最长的一张清单（一次扫描的全部注释位置，方案 §4.2 记录千级接口分支），
+    // 此前只有状态下拉时找「上次那个位置」只能逐行扫。与另两张长清单同一形态、同一匹配口径（ListFilter）。
+    private readonly TextBox _keyword = Ui.Input();
     private readonly Label _coverage = Ui.Caption();
     private readonly Button _warningsButton;
     private readonly Button _traceButton;
@@ -92,31 +97,42 @@ internal sealed class ScanResultsDialog : Form
         _filter.SelectedIndex = 0;
         _filter.SelectedIndexChanged += (_, _) => ApplyFilter();
 
+        _keyword.Width = 220;
+        _keyword.PlaceholderText = ListFilter.SlotSearchPlaceholder;
+        _keyword.TextChanged += (_, _) => ApplyFilter();
+
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
         CancelButton = closeButton;
 
-        var filterRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 3, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
+        var filterRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 5, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
+        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         var filterCaption = Ui.Body("筛选");
         filterCaption.Margin = new Padding(0, 0, UiTokens.Xs, 0);
         filterCaption.TextAlign = ContentAlignment.MiddleLeft;
+        var keywordCaption = Ui.Body("关键词");
+        keywordCaption.Margin = new Padding(UiTokens.Lg, 0, UiTokens.Xs, 0);
+        keywordCaption.TextAlign = ContentAlignment.MiddleLeft;
         _counts.AutoSize = false;
         _counts.Dock = DockStyle.Fill;
         _counts.TextAlign = ContentAlignment.MiddleRight;
         filterRow.Controls.Add(filterCaption, 0, 0);
         filterRow.Controls.Add(_filter, 1, 0);
-        filterRow.Controls.Add(_counts, 2, 0);
+        filterRow.Controls.Add(keywordCaption, 2, 0);
+        filterRow.Controls.Add(Ui.Field(_keyword), 3, 0);
+        filterRow.Controls.Add(_counts, 4, 0);
         // 注释覆盖率行（分析等级与扫描时间在数据缺失时整段省略）；无扫描产物时整行隐藏。
         filterRow.RowCount = 2;
         filterRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         filterRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _coverage.Margin = new Padding(0, UiTokens.Xs, 0, 0);
         filterRow.Controls.Add(_coverage, 0, 1);
-        filterRow.SetColumnSpan(_coverage, 3);
+        filterRow.SetColumnSpan(_coverage, 5);
 
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
@@ -176,6 +192,7 @@ internal sealed class ScanResultsDialog : Form
         _slots = output.Slots;
         _hint.Visible = false;
         _filter.Enabled = true;
+        _keyword.Enabled = true;
         _list.Visible = true;
         _coverage.Visible = true;
         _coverage.Text = ScanOverview.CoverageText(
@@ -203,6 +220,7 @@ internal sealed class ScanResultsDialog : Form
         _hint.Visible = true;
         _list.Visible = false;
         _filter.Enabled = false;
+        _keyword.Enabled = false;
         _evidenceButton.Enabled = false;
         _manualButton.Enabled = false;
         _removeStaleButton.Enabled = false;
@@ -245,20 +263,33 @@ internal sealed class ScanResultsDialog : Form
         _ => true,
     };
 
+    /// <summary>
+    /// 关键词框里的裸 Enter 不提交对话框：对话框的 Enter=确认（§6「菜单/快捷键」）说的是表单字段，
+    /// 而筛选框不是表单字段——输入即筛选，没有「提交」这一步（另两张长清单与冻结页面的关键词框在 Enter 上同样什么都不做）。
+    /// 不挡一下，按 Enter 会把刚筛出来的结果连同对话框一起关掉；带修饰键的组合不属本判定，照旧交给基类。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (keyData == Keys.Enter && _keyword.Focused) return true;
+        return base.ProcessDialogKey(keyData);
+    }
+
     private void ApplyFilter()
     {
         _list.BeginUpdate();
         _list.Items.Clear();
-        foreach (var slot in _slots)
+        // 关键词先经共享口径（与两个主页面、另两张长清单同一份匹配规则：词间「且」、字段间「或」、忽略大小写），
+        // 状态筛选在其后——两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
+        var visible = ListFilter.Apply(_slots, _keyword.Text, SlotText.KeywordFields).Where(Matches).ToList();
+        foreach (var slot in visible)
         {
-            if (!Matches(slot)) continue;
-            var item = new ListViewItem(string.IsNullOrWhiteSpace(slot.Display) ? slot.SymbolId : slot.Display) { Tag = slot };
-            item.SubItems.Add(TaskDisplay.SlotTagText(slot.Tag) + (slot.Tag == "param" && slot.ParameterName is { } name ? " " + name : ""));
+            var item = new ListViewItem(SlotText.Name(slot)) { Tag = slot };
+            item.SubItems.Add(SlotText.Tag(slot));
             var status = item.SubItems.Add(TaskDisplay.SlotStatusText(slot.Status));
             item.UseItemStyleForSubItems = false;
             status.ForeColor = ToneColor(TaskDisplay.SlotTone(slot.Status));
             item.SubItems.Add(TaskDisplay.SlotRoleText(slot.Role));
-            var location = item.SubItems.Add(slot.File + ":" + slot.Line);
+            var location = item.SubItems.Add(SlotText.Location(slot));
             location.Font = UiTokens.Mono.Value;
             _list.Items.Add(item);
         }
@@ -285,7 +316,9 @@ internal sealed class ScanResultsDialog : Form
     /// </summary>
     private void ShowFilteredEmpty()
     {
-        _hint.Text = ListFilter.FilteredEmptyHint(ListFilter.SlotNoun);
+        // 有关键词框时那句话的下一步有两个真实入口（关键词或筛选），关键词为空时仍只指筛选器
+        // （文字不指向界面上按不动的控件——第四十二轮同一条纪律）。
+        _hint.Text = ListFilter.FilteredEmptyHint(ListFilter.SlotNoun, ListFilter.IsActive(_keyword.Text));
         _hint.ForeColor = UiTokens.Muted;
         _hint.Visible = true;
         _list.Visible = false;
@@ -457,7 +490,7 @@ internal sealed class ManualDraftDialog : Form
 
     private static Label PositionCaption(DocSlot slot)
     {
-        var caption = Ui.Body(slot.Display + "（" + TaskDisplay.SlotTagText(slot.Tag) + (slot.Tag == "param" && slot.ParameterName is { } name ? " " + name : "") + "）");
+        var caption = Ui.Body(SlotText.Name(slot) + "（" + SlotText.Tag(slot) + "）");
         caption.AutoSize = true;
         return caption;
     }
