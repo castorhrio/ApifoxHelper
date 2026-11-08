@@ -26,6 +26,7 @@ internal sealed class NativeShellForm : Form
     private readonly HelperHost _host;
     private readonly WindowPlacement _placement;
     private readonly LastPage _lastPage;
+    private readonly ListSortMemory _sortMemory;
     private readonly Panel _navPanel = new() { Dock = DockStyle.Left, Width = NavWidth, BackColor = UiTokens.Nav, Padding = new Padding(UiTokens.Sm) };
     private readonly Panel _marker = new() { Width = 3, BackColor = UiTokens.Accent, Visible = false };
     private readonly Panel _content = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg) };
@@ -94,6 +95,8 @@ internal sealed class NativeShellForm : Form
         _placement = new WindowPlacement(Path.Combine(host.Store.Root, "desktop-window-native.json"));
         _placement.Restore(this);
         _lastPage = new LastPage(Path.Combine(host.Store.Root, "desktop-page-native.json"));
+        // 两页列表的排序状态跨启动记忆：与页面键、窗口位置同目录同族，只记「按哪一列、朝哪个方向」。
+        _sortMemory = new ListSortMemory(Path.Combine(host.Store.Root, "desktop-list-sort-native.json"));
     }
 
     private Button NavButton(string text)
@@ -211,7 +214,8 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<Apifox.ApifoxCli>(),
             _host.Store,
             _host.Jobs,
-            _host.Services.GetRequiredService<CredentialStore>());
+            _host.Services.GetRequiredService<CredentialStore>(),
+            _sortMemory);
         _tasksPage = new TasksPage(
             _host.Services.GetRequiredService<TaskStore>(),
             _host.Services.GetRequiredService<SourceScanService>(),
@@ -227,7 +231,8 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<Sync.SupplementService>(),
             _host.Services.GetRequiredService<Reports.ReportExportService>(),
             _host.Services.GetRequiredService<Sync.SyncPlanService>(),
-            _host.Services.GetRequiredService<Sync.SyncExecutor>());
+            _host.Services.GetRequiredService<Sync.SyncExecutor>(),
+            _sortMemory);
 
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;

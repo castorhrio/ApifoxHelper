@@ -50,8 +50,10 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private bool _sortDescending;
     // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
     private readonly string[] _columnTitles;
+    // 排序状态跨启动记忆（ListSortMemory 口径）：记本页那一列的标题与方向，认不出标题即回退未排序。
+    private readonly ListSortMemory _sortMemory;
 
-    public ProjectsPage(ProfileStore profiles, CompatService compat, ApifoxCli cli, FileStore store, JobRunner jobs, CredentialStore credentials)
+    public ProjectsPage(ProfileStore profiles, CompatService compat, ApifoxCli cli, FileStore store, JobRunner jobs, CredentialStore credentials, ListSortMemory sortMemory)
     {
         _profiles = profiles;
         _compat = compat;
@@ -59,6 +61,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
         _store = store;
         _jobs = jobs;
         _credentials = credentials;
+        _sortMemory = sortMemory;
 
         var newButton = Ui.Primary(NewProfileLabel);
         newButton.Click += (_, _) => ShowDialog(null);
@@ -107,6 +110,9 @@ internal sealed class ProjectsPage : UserControl, INativePage
         _columnTitles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
         // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
         _list.ColumnClick += (_, e) => SortBy(e.Column);
+        // 上次排序的列与方向跨启动生效（ListSortMemory 口径）：在任何一次加载之前落在字段上，
+        // 首次显示即带着方向标记呈现；认不出标题（列增删或文案改动）时回退名称升序。
+        (_sortColumn, _sortDescending) = _sortMemory.Read(ListSortMemoryKeys.Profiles, _columnTitles);
 
         // 空态按钮是独立实例：同一控件不能同时挂在工具栏与空态面板上；动作与工具栏同一入口，不复制逻辑。
         _emptyCreate.Click += (_, _) => ShowDialog(null);
@@ -285,12 +291,14 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
     /// <summary>
     /// 点击列头排序（DESIGN.md §6「列表列排序」）：同一列再点反向，换一列从升序开始；
-    /// 排序状态留在本页，刷新、切页回来与保存后的重建都按同一列同一方向呈现。
+    /// 排序状态留在本页并按列标题记下（<see cref="_sortMemory"/>），刷新、切页回来与保存后的
+    /// 重建都按同一列同一方向呈现，下次启动回来仍是这一列。
     /// 只改呈现顺序：配置数据一行未动，选中按配置 Id 恢复（<see cref="RestoreSelection"/>）。
     /// </summary>
     private void SortBy(int column)
     {
         (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        _sortMemory.Save(ListSortMemoryKeys.Profiles, _columnTitles, _sortColumn, _sortDescending);
         LoadProfiles();
     }
 

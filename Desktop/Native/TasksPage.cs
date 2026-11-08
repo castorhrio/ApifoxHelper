@@ -131,8 +131,10 @@ internal sealed class TasksPage : UserControl, INativePage
     private bool _sortDescending;
     // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
     private readonly string[] _columnTitles;
+    // 排序状态跨启动记忆（ListSortMemory 口径）：记本页那一列的标题与方向，认不出标题即回退未排序。
+    private readonly ListSortMemory _sortMemory;
 
-    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, BuildService builds, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, SupplementService supplementSaves, ReportExportService exports, SyncPlanService syncPlans, SyncExecutor syncExecutor)
+    public TasksPage(TaskStore tasks, SourceScanService scan, JobRunner jobs, ProfileStore profiles, DraftService drafts, CommentPlanService plans, PropagationService propagation, BuildService builds, ContractReviewService reviews, CheckService checks, DecisionService decisionSaves, SupplementService supplementSaves, ReportExportService exports, SyncPlanService syncPlans, SyncExecutor syncExecutor, ListSortMemory sortMemory)
     {
         _tasks = tasks;
         _scan = scan;
@@ -149,6 +151,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _exports = exports;
         _syncPlans = syncPlans;
         _syncExecutor = syncExecutor;
+        _sortMemory = sortMemory;
 
         var newButton = Ui.Primary(NewTaskLabel);
         newButton.Click += (_, _) => ShowNewTaskDialog();
@@ -185,6 +188,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _columnTitles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
         // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
         _list.ColumnClick += (_, e) => SortBy(e.Column);
+        // 上次排序的列与方向跨启动生效（ListSortMemory 口径）：在任何一次加载之前落在字段上，
+        // 首次显示即带着方向标记呈现；认不出标题（列增删或文案改动）时回退创建时间倒序。
+        (_sortColumn, _sortDescending) = _sortMemory.Read(ListSortMemoryKeys.Tasks, _columnTitles);
 
         var nextTag = new Label
         {
@@ -554,12 +560,14 @@ internal sealed class TasksPage : UserControl, INativePage
 
     /// <summary>
     /// 点击列头排序（DESIGN.md §6「列表列排序」）：同一列再点反向，换一列从升序开始；
-    /// 排序状态留在本页，刷新、作业结束与切页回来后的重建都按同一列同一方向呈现。
+    /// 排序状态留在本页并按列标题记下（<see cref="_sortMemory"/>），刷新、作业结束与切页回来后的
+    /// 重建都按同一列同一方向呈现，下次启动回来仍是这一列。
     /// 只改呈现顺序：任务数据一行未动，选中按任务 Id 恢复（<see cref="SelectTask"/>）。
     /// </summary>
     private void SortBy(int column)
     {
         (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        _sortMemory.Save(ListSortMemoryKeys.Tasks, _columnTitles, _sortColumn, _sortDescending);
         LoadTasks();
     }
 

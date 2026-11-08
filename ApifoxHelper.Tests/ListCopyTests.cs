@@ -123,7 +123,7 @@ public class ListCopyTests
     {
         var slice = ListFactorySlice();
         // 复制的是「一行一格」：整段工厂里只取一次单元格文字，不拼整行、不把多格接在一起。
-        Assert.Equal(1, Regex.Matches(slice, @"row\.SubItems\[").Count);
+        Assert.Single(Regex.Matches(slice, @"row\.SubItems\["));
         Assert.DoesNotContain("string.Join", slice, StringComparison.Ordinal);
         Assert.DoesNotContain(".Text +", slice, StringComparison.Ordinal);
         // 默认标识列取口径常量，工厂不自己写死一个 0（声明处与默认值同源）。
