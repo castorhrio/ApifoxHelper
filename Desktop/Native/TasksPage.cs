@@ -98,6 +98,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly FlowLayoutPanel _remoteActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
     private readonly Button _importRemoteButton;
     private readonly Button _remoteCheckButton;
+    private readonly Button _reloadSwaggerButton;
     private readonly Button _decisionsButton;
     private readonly Button _supplementsButton;
     private readonly Button _remoteViewButton;
@@ -203,6 +204,10 @@ internal sealed class TasksPage : UserControl, INativePage
         _importRemoteButton.Click += (_, _) => ImportOfflineRemote();
         _remoteCheckButton = Ui.Ghost("开始检查");
         _remoteCheckButton.Click += (_, _) => StartRemoteCheck();
+        // 冻结副本的显式刷新入口（NextStep.CanReloadSwagger 单一口径）：冻结过才显示，默认隐藏。
+        _reloadSwaggerButton = Ui.Ghost(NextStep.ReloadSwaggerLabel);
+        _reloadSwaggerButton.Visible = false;
+        _reloadSwaggerButton.Click += (_, _) => StartRemoteCheck(reloadSwagger: true);
         _decisionsButton = Ui.Ghost("处理差异确认");
         _decisionsButton.Click += (_, _) => ShowDecisions();
         _supplementsButton = Ui.Ghost("补充说明");
@@ -213,6 +218,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _syncButton.Click += (_, _) => ShowSyncPreview();
         _remoteActions.Controls.Add(_importRemoteButton);
         _remoteActions.Controls.Add(_remoteCheckButton);
+        _remoteActions.Controls.Add(_reloadSwaggerButton);
         _remoteActions.Controls.Add(_decisionsButton);
         _remoteActions.Controls.Add(_supplementsButton);
         _remoteActions.Controls.Add(_remoteViewButton);
@@ -303,7 +309,7 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
         AddDetailRow(grid, _remoteActions);
-        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。「处理差异确认」与「补充说明」在检查完成后可用：前者逐项确认高风险变化、选择说明冲突与绑定模型，后者逐接口补充接口标题、说明、参数与请求体、200 响应的说明或选择「保留现状」；两者保存后都需重新检查才会生效。「同步预览」在检查完成后可用：勾选接口生成冻结计划，查看逐动作写入内容、排除原因与保留设置；「确认同步」在计划待确认且未过期时可用，逐项写入并立即回读核对，失败即停，执行结束后可「重新核对（只读）」；离线任务不能同步。"));
+        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。配置了 Swagger 时首次检查先加载并冻结副本，之后的检查都基于冻结副本；源码或 Swagger 更新后用「重新加载 Swagger 并检查」重新冻结再检查。「处理差异确认」与「补充说明」在检查完成后可用：前者逐项确认高风险变化、选择说明冲突与绑定模型，后者逐接口补充接口标题、说明、参数与请求体、200 响应的说明或选择「保留现状」；两者保存后都需重新检查才会生效。「同步预览」在检查完成后可用：勾选接口生成冻结计划，查看逐动作写入内容、排除原因与保留设置；「确认同步」在计划待确认且未过期时可用，逐项写入并立即回读核对，失败即停，执行结束后可「重新核对（只读）」；离线任务不能同步。"));
         AddDetailRow(grid, SectionCaption("报告与交接"));
         AddDetailRow(grid, _reportStatus);
         AddDetailRow(grid, _reportButton);
@@ -494,8 +500,10 @@ internal sealed class TasksPage : UserControl, INativePage
 
         // 远端区按钮：离线任务先导入作为「远端」的 OpenAPI JSON；配置了 Swagger 且未冻结时，下一次检查先加载并冻结 Swagger。
         _importRemoteButton.Visible = task.OfflineMode;
-        _remoteCheckButton.Text = NextStep.NeedsSwaggerLoad(task) ? "加载 Swagger 并检查"
+        _remoteCheckButton.Text = NextStep.NeedsSwaggerLoad(task) ? NextStep.LoadSwaggerLabel
             : File.Exists(_tasks.FilePath(task.Id, TaskFiles.Diff)) ? "重新检查" : "开始检查";
+        // 冻结副本刷新入口与「开始检查/重新检查」并列：已冻结且非离线时显示（冻结页面工具栏同一规则）。
+        _reloadSwaggerButton.Visible = NextStep.CanReloadSwagger(task);
 
         RefreshContractSection();
         RefreshBuildSection();
@@ -569,6 +577,7 @@ internal sealed class TasksPage : UserControl, INativePage
         _contractButton.Enabled = scanReady;
         _importRemoteButton.Enabled = scanReady && (_selectedTask?.OfflineMode ?? false);
         _remoteCheckButton.Enabled = scanReady;
+        _reloadSwaggerButton.Enabled = scanReady;
         _decisionsButton.Enabled = scanReady && _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
         // 补充说明与差异确认同门控：编辑位来自检查结果（离线任务同样可用，补充是本机任务数据）。
         _supplementsButton.Enabled = scanReady && _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Diff));
@@ -939,12 +948,16 @@ internal sealed class TasksPage : UserControl, INativePage
         RefreshReportSection();
     }
 
-    /// <summary>Apifox 差异检查（只读后台作业）：需要时先加载并冻结 Swagger，再读取远端与目标比较，结果落盘 diff.json；不写入远端。</summary>
-    private void StartRemoteCheck()
+    /// <summary>
+    /// Apifox 差异检查（只读后台作业）：需要时先加载并冻结 Swagger，再读取远端与目标比较，结果落盘 diff.json；
+    /// 不写入远端。检查始终基于冻结副本——已冻结后源码或 Swagger 有更新，经「重新加载 Swagger 并检查」
+    /// （reloadSwagger）重新冻结再检查，与冻结页面的 recheck(true) 同一语义。
+    /// </summary>
+    private void StartRemoteCheck(bool reloadSwagger = false)
     {
         if (_selectedTask is null) return;
         var taskId = _selectedTask.Id;
-        var loadSwagger = NextStep.NeedsSwaggerLoad(_selectedTask);
+        var loadSwagger = reloadSwagger || NextStep.NeedsSwaggerLoad(_selectedTask);
         try
         {
             _jobs.Start(taskId, "契约检查", async job =>

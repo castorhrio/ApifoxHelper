@@ -259,8 +259,69 @@ public class NextStepTests
         }));
         Assert.Equal("核对生成文档", step.Title);
         Assert.Contains("源码注释已回写。", step.Detail);
-        Assert.Contains("用「加载 Swagger 并检查」重新检查", step.Detail);
+        // 未配置 Swagger：没有加载入口，说明文字不指名一个界面上不存在的按钮。
+        Assert.Contains("再在「Apifox 差异与同步」区重新检查。", step.Detail);
+        Assert.DoesNotContain("加载 Swagger 并检查", step.Detail);
         Assert.Equal("openPropagation", step.PrimaryAction);
+    }
+
+    [Fact]
+    public void SwaggerEntryLabel_NamesTheEntryThatActuallyExists()
+    {
+        // 未配置 Swagger：界面上没有加载入口，说明文字不指名按钮。
+        Assert.Null(NextStep.SwaggerEntryLabel(Online()));
+        Assert.Null(NextStep.SwaggerEntryLabel(Online(t => t.ProfileSnapshot.Swagger.Type = "none")));
+        // 配置了 Swagger 且未冻结：任务页按钮是「加载 Swagger 并检查」。
+        Assert.Equal("加载 Swagger 并检查", NextStep.SwaggerEntryLabel(Online(t => t.ProfileSnapshot.Swagger.Type = "file")));
+        // 已冻结：加载入口不再出现，任务页按钮是「重新加载 Swagger 并检查」。
+        Assert.Equal("重新加载 Swagger 并检查", NextStep.SwaggerEntryLabel(Online(t =>
+        {
+            t.ProfileSnapshot.Swagger.Type = "file";
+            t.Stages.Remote.SourceHash = "abc";
+        })));
+        // 离线任务：结构来源是导入的 JSON，两个入口都不适用。
+        Assert.Null(NextStep.SwaggerEntryLabel(Online(t =>
+        {
+            t.ProfileSnapshot.Swagger.Type = "file";
+            t.Stages.Remote.SourceHash = "abc";
+            t.OfflineMode = true;
+        })));
+        // 文案常量与任务页按钮同一落点（不复制字面）。
+        Assert.Equal(NextStep.LoadSwaggerLabel, NextStep.SwaggerEntryLabel(Online(t => t.ProfileSnapshot.Swagger.Type = "url")));
+    }
+
+    [Fact]
+    public void AfterCheck_GeneratedPending_NamesReloadEntryWhenFrozen()
+    {
+        // 已冻结（检查开始过）时，说明文字指名的是「重新加载 Swagger 并检查」——冻结后加载入口已不存在。
+        var step = NextStep.Compute(Online(t =>
+        {
+            t.ProfileSnapshot.Swagger.Type = "file";
+            t.Stages.Remote.SourceHash = "abc";
+            t.Stages.Generated.Status = "pending";
+            t.Stages.Remote.Status = "previewable";
+        }));
+        Assert.Equal("核对生成文档", step.Title);
+        Assert.Contains("用「重新加载 Swagger 并检查」重新检查", step.Detail);
+        Assert.DoesNotContain("用「加载 Swagger 并检查」", step.Detail);
+    }
+
+    [Fact]
+    public void Expired_NamesReloadEntryWhenFrozen_AndOmitsHintWhenNoSwagger()
+    {
+        // 已冻结：过期提示指名真实存在的重新冻结入口。
+        var frozen = NextStep.Compute(Online(t =>
+        {
+            t.ProfileSnapshot.Swagger.Type = "file";
+            t.Stages.Remote.SourceHash = "abc";
+            t.Stages.Remote.Status = "expired";
+        }));
+        Assert.Equal("重新检查", frozen.Title);
+        Assert.Contains("请用「重新加载 Swagger 并检查」", frozen.Detail);
+        // 未配置 Swagger：没有可重新冻结的副本，提示不指名入口（不指向不存在的按钮）。
+        var plain = NextStep.Compute(Online(t => t.Stages.Remote.Status = "expired"));
+        Assert.Equal("检查或生成计划之后任务内容有变化，原结果已失效。", plain.Detail);
+        Assert.DoesNotContain("Swagger", plain.Detail);
     }
 
     [Fact]

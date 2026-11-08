@@ -36,6 +36,32 @@ public static class NextStep
         && task.ProfileSnapshot.Swagger.Type is not (null or "" or "none")
         && task.Stages.Remote.SourceHash is null;
 
+    /// <summary>
+    /// 「重新加载 Swagger 并检查」入口的可用条件（与冻结页面同一规则）：配置了 Swagger、已冻结过且
+    /// 不是离线任务。检查始终基于冻结副本，检查本身不悄悄换源；注释回写或定向构建后源码与 Swagger
+    /// 已更新，需要这个入口重新冻结，否则检查永远比较旧副本（冻结页面工具栏同一指引）。
+    /// </summary>
+    public static bool CanReloadSwagger(CheckTask task) =>
+        !task.OfflineMode
+        && task.ProfileSnapshot.Swagger.Type is not (null or "" or "none")
+        && task.Stages.Remote.SourceHash is not null;
+
+    /// <summary>「重新加载 Swagger 并检查」入口文案（与冻结页面同一文案）。</summary>
+    public const string ReloadSwaggerLabel = "重新加载 Swagger 并检查";
+
+    /// <summary>「加载 Swagger 并检查」入口文案（首次冻结，与冻结页面同一文案）。</summary>
+    public const string LoadSwaggerLabel = "加载 Swagger 并检查";
+
+    /// <summary>
+    /// 说明文字里指名的检查入口：配置了 Swagger 时按冻结状态给出界面上真实存在的入口名——
+    /// 未冻结是「加载 Swagger 并检查」，已冻结是「重新加载 Swagger 并检查」（检查始终基于冻结副本，
+    /// 冻结后加载入口不再出现）；未配置 Swagger 时没有加载入口，返回 null，说明文字不指名入口。
+    /// </summary>
+    public static string? SwaggerEntryLabel(CheckTask task) =>
+        NeedsSwaggerLoad(task) ? LoadSwaggerLabel
+        : CanReloadSwagger(task) ? ReloadSwaggerLabel
+        : null;
+
     public static Step Compute(CheckTask task)
     {
         var s = task.Stages.Source;
@@ -46,6 +72,8 @@ public static class NextStep
         var changed = r.Added + r.StructureChanged + r.DocChanged;
         // 源码阶段的说明（如「有候选已过期」）作为引导文字的前缀如实带出。
         var stale = string.IsNullOrEmpty(s.Message) ? "" : s.Message + " ";
+        // 说明文字指名的检查入口按任务状态取真实存在的那个（未配置 Swagger 时不指名）。
+        var swaggerEntry = SwaggerEntryLabel(task);
 
         // 远端执行中、被中断或等待确认最紧迫。
         if (r.Status == "executing")
@@ -83,12 +111,13 @@ public static class NextStep
         if (s.Status == "planReady")
             return new Step("应用注释补丁", "注释计划已生成：回写后重新生成 Swagger，再重新检查 Apifox；也可以导出补丁自行应用（之后请重新扫描）。", "", "查看补丁", "openApply", "Apifox 差异", "openRemoteResults");
         if (g.Status == "pending")
-            return new Step("核对生成文档", (g.Message ?? "源码注释已回写。") + " 重新生成 XML 文档与 Swagger 后核对，再在「Apifox 差异与同步」区用「加载 Swagger 并检查」重新检查。", "", "去核对", "openPropagation", "Apifox 差异", "openRemoteResults");
+            return new Step("核对生成文档", (g.Message ?? "源码注释已回写。") + " 重新生成 XML 文档与 Swagger 后核对，再在「Apifox 差异与同步」区" + (swaggerEntry is null ? "重新检查。" : $"用「{swaggerEntry}」重新检查。"), "", "去核对", "openPropagation", "Apifox 差异", "openRemoteResults");
 
         // 检查结果所基于的版本落后于任务（检查后又接受了注释、改了决策或补充说明）时，按过期处理。
         var checkStale = r.CheckedRevision is { } revision && revision != task.Revision && r.Status is "pending" or "previewable";
         if (r.Status == "expired" || checkStale)
-            return new Step("重新检查", "检查或生成计划之后任务内容有变化，原结果已失效。源码或 Swagger 有更新时，请用「加载 Swagger 并检查」。", "warn", "重新检查", "startCheck");
+            return new Step("重新检查", "检查或生成计划之后任务内容有变化，原结果已失效。"
+                + (swaggerEntry is null ? "" : $"源码或 Swagger 有更新时，请用「{swaggerEntry}」。"), "warn", "重新检查", "startCheck");
         if (r.Status == "pending")
             return new Step("处理待确认项", $"阻断 {r.Blocked} · 说明冲突 {r.Conflicts} · 可同步变化 {changed}：高风险变化逐项确认后保存并重新检查；其余接口可以直接勾选同步。", "warn", "去处理", "openDecisions");
         if (r.Status == "previewable" && changed > 0)
@@ -101,6 +130,6 @@ public static class NextStep
             return new Step("同步完成", r.Message ?? "已写入并回读核对通过。", "ok", "查看报告", "openReports", "重新检查", "startCheck");
         return new Step("Apifox 与目标一致", "范围内接口没有需要同步的变化；可以下载报告或前端交接说明。", "ok", "查看报告", "openReports", "Apifox 差异", "openRemoteResults");
 
-        string CheckLabel() => NeedsSwaggerLoad(task) ? "加载 Swagger 并检查" : "开始检查";
+        string CheckLabel() => NeedsSwaggerLoad(task) ? LoadSwaggerLabel : "开始检查";
     }
 }
