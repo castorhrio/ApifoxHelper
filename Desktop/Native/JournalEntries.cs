@@ -117,6 +117,18 @@ public static class JournalEntries
     }
 
     /// <summary>
+    /// 关键词匹配字段（DESIGN.md §6「列表筛选」）：这一行在屏幕上被读作的那两格——事件名与摘要。
+    /// 直接取 <see cref="Row"/> 的后两格，与单元格同源（不另造一套字段，两处必然一起漂或一起对）；
+    /// 时间列是时间戳、不进关键词（与两个主页面「时间列不进关键词」同一取舍）。
+    /// 摘要里带着「结果未知」标记，故传了未结束动作集合时敲「结果未知」就能把那几条找出来。
+    /// </summary>
+    public static string[] KeywordFields(JsonNode? line, IReadOnlySet<string>? unfinishedActionIds = null)
+    {
+        var cells = Row(line, unfinishedActionIds);
+        return [cells[1], cells[2]];
+    }
+
+    /// <summary>
     /// 只有写入意图、没有结果记录的动作（按出现顺序）。
     /// 这是日志存在的理由：意图先落盘，进程在写入途中中断时，远端到底写没写只能靠这一条看出来。
     /// 只认同步执行的写入意图——注释回写写的是本机源码文件，中断与否由逐文件结果与文件哈希核对，

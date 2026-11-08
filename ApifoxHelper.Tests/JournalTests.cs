@@ -265,12 +265,12 @@ public class JournalTests
     public void Dialog_TakesEveryTextFromTheSharedEntry()
     {
         var source = Repo.Source("Desktop", "Native", "JournalDialog.cs");
-        Assert.Matches(@"(?m)^\s*var cells = JournalEntries\.Row\(line, unfinishedIds\);$", source);
+        Assert.Matches(@"(?m)^\s*var cells = JournalEntries\.Row\(line, _unfinishedIds\);$", source);
         Assert.Matches(@"(?m)^\s*_counts\.Text = JournalEntries\.CountsLine\(lines\.Count\);$", source);
         Assert.Matches(@"(?m)^\s*var unfinished = JournalEntries\.UnfinishedActions\(lines\);$", source);
         Assert.Matches(@"(?m)^\s*var unfinishedText = JournalEntries\.UnfinishedCaption\(unfinished\);$", source);
         // 未结束动作的标识只用来在清单上认出那几行（不上屏幕），集合从同一份 UnfinishedActions 来。
-        Assert.Matches(@"(?m)^\s*var unfinishedIds = unfinished\.Select\(action => action\.ActionId\)\.ToHashSet\(StringComparer\.Ordinal\);$", source);
+        Assert.Matches(@"(?m)^\s*_unfinishedIds = unfinished\.Select\(action => action\.ActionId\)\.ToHashSet\(StringComparer\.Ordinal\);$", source);
         Assert.Matches(@"(?m)^\s*var caption = Ui\.Caption\(JournalEntries\.Caption\);$", source);
         Assert.Matches(@"(?m)^\s*ShowHint\(JournalEntries\.EmptyText, UiTokens\.Muted\);$", source);
         // 事件名与状态文字不在界面就地拼（口径文件里各一份）。
@@ -283,15 +283,21 @@ public class JournalTests
     public void Dialog_SelectsTheLastRecordOnOpen()
     {
         // 这一屏要回答的是「做到哪一步」，最后一行就是答案；选中经 Ui.SelectItem 唯一入口。
-        var body = MethodSlice(Repo.Source("Desktop", "Native", "JournalDialog.cs"), "protected override void OnLoad");
-        Assert.Single(Regex.Matches(body, @"(?m)^\s*Ui\.SelectItem\(_list\.Items\[\^1\]\);$"));
+        // 第八十四轮起清单重建收进 PopulateList（关键词框输入即筛选），选中落点随之搬进那里：
+        // 没有选中时（打开）落在最后一行，有选中时按行载荷恢复（筛一下再筛回来仍停在原来那一步）。
+        var source = Repo.Source("Desktop", "Native", "JournalDialog.cs");
+        var body = MethodSlice(source, "private void PopulateList");
+        Assert.Single(Regex.Matches(body, @"(?m)^\s*Ui\.SelectItem\(target \?\? _list\.Items\[\^1\]\);$"));
         var filled = body.IndexOf("_list.Items.Add(row);", StringComparison.Ordinal);
-        var selected = body.IndexOf("Ui.SelectItem(_list.Items[^1]);", StringComparison.Ordinal);
+        var selected = body.IndexOf("Ui.SelectItem(target ?? _list.Items[^1]);", StringComparison.Ordinal);
         Assert.True(filled >= 0 && selected > filled, "选中要排在清单填充之后。");
-        // 空清单与读取失败两支都在上面返回，不索引不存在的最后一行。
-        var emptyBranch = body.IndexOf("if (lines.Count == 0)", StringComparison.Ordinal);
-        Assert.True(emptyBranch >= 0 && selected > emptyBranch, "空清单分支要排在选中之前。");
-        Assert.Contains("return;", body[emptyBranch..selected], StringComparison.Ordinal);
+        // 空清单与读取失败两支都在 OnLoad 里返回，不索引不存在的最后一行；重建里另有一道行数守卫。
+        var onLoad = MethodSlice(source, "protected override void OnLoad");
+        var emptyBranch = onLoad.IndexOf("if (lines.Count == 0)", StringComparison.Ordinal);
+        var populate = onLoad.IndexOf("PopulateList();", StringComparison.Ordinal);
+        Assert.True(emptyBranch >= 0 && populate > emptyBranch, "空清单分支要排在重建之前。");
+        Assert.Contains("return;", onLoad[emptyBranch..populate], StringComparison.Ordinal);
+        Assert.Contains("if (_list.Items.Count == 0) return;", body, StringComparison.Ordinal);
         // 不自己写选中/焦点/滚动（各有唯一入口）。
         Assert.DoesNotContain(".Selected = true", body, StringComparison.Ordinal);
         Assert.DoesNotContain("EnsureVisible", body, StringComparison.Ordinal);
@@ -354,11 +360,17 @@ public class JournalTests
         Assert.Contains("第八十二轮", journalRow);
         Assert.Contains("不加关键词框", journalRow);
         Assert.Contains("不重发", journalRow);
-        // 本轮：那句话说出是哪个动作、清单在原处标出来，内部动作标识不上屏幕。
-        var unfinishedRow = Slice(ledger, "| 任务日志的未结束动作（§6） |", "\n| 输入框（§6） |");
+        // 第八十三轮：那句话说出是哪个动作、清单在原处标出来，内部动作标识不上屏幕。
+        var unfinishedRow = Slice(ledger, "| 任务日志的未结束动作（§6） |", "\n| 任务日志的关键词框（§6） |");
         Assert.Contains("第八十三轮", unfinishedRow);
         Assert.Contains("结果未知", unfinishedRow);
         Assert.Contains("内部动作标识", unfinishedRow);
+        // 第八十四轮：记录清单的关键词框与三个手势（上一轮「不加关键词框」的挂账在此收口）。
+        var keywordRow = Slice(ledger, "| 任务日志的关键词框（§6） |", "\n| 输入框（§6） |");
+        Assert.Contains("第八十四轮", keywordRow);
+        Assert.Contains("JournalSearchPlaceholder", keywordRow);
+        Assert.Contains("结果未知", keywordRow);
+        Assert.Contains("G-D5", keywordRow);
     }
 
     private static readonly DateTimeOffset At = new(2026, 11, 8, 9, 30, 5, TimeSpan.FromHours(8));

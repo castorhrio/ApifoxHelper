@@ -6,8 +6,9 @@ namespace ApifoxHelper.Tests;
 
 /// <summary>
 /// 第七十八轮：整份数据不可得时关键词框停用（DESIGN.md §6「列表筛选」/§7「禁用 = 控件禁用 + 一句话说明缺什么」）。
-/// 口径在 <see cref="ListFilter.KeywordEnabled"/> 一处，四张只有关键词框的清单（同步预览的接口勾选页、
-/// 接口追踪明细、补充说明、生成文档核对）同经它；停用的框不接 Ctrl+F（<c>Ui.TryFocusFilter</c> 不吞键）。
+/// 口径在 <see cref="ListFilter.KeywordEnabled"/> 一处，只有关键词框的清单（同步预览的接口勾选页、
+/// 接口追踪明细、补充说明、生成文档核对、注释回写文件清单、任务日志记录清单）同经它；
+/// 停用的框不接 Ctrl+F（<c>Ui.TryFocusFilter</c> 不吞键）。
 /// 口径是真执行（ListFilter 与测试工程共享编译），接线以源码切片与行首正则钉住。
 /// 真机上「没有数据时框是灰的、按 Ctrl+F 什么都不发生（按键不被吞掉）、有数据时框恢复可用」随 G-D5 复核
 /// （Linux 无 WinForms GUI 运行时）。
@@ -21,6 +22,7 @@ public class KeywordAvailabilityTests
         "SupplementsDialog.cs",
         "PropagationDialog.cs",
         "ApplyPlanDialog.cs",
+        "JournalDialog.cs",
     ];
 
     // ---------- 口径真值表（框能不能用只有一份判定，四张清单认的就是它） ----------
@@ -38,7 +40,7 @@ public class KeywordAvailabilityTests
     [Fact]
     public void KeywordEnabled_DefaultsToNotBusy()
     {
-        // 三张只读清单没有作业态，调用点只交「有没有数据」这一件事。
+        // 只读清单没有作业态，调用点只交「有没有数据」这一件事。
         Assert.Equal(ListFilter.KeywordEnabled(true, false), ListFilter.KeywordEnabled(true));
         Assert.Equal(ListFilter.KeywordEnabled(false, false), ListFilter.KeywordEnabled(false));
     }
@@ -59,10 +61,10 @@ public class KeywordAvailabilityTests
         Assert.DoesNotContain("Keys.F", body, StringComparison.Ordinal);
     }
 
-    // ---------- 四张只有关键词框的清单同经一处口径 ----------
+    // ---------- 只有关键词框的清单同经一处口径 ----------
 
     [Fact]
-    public void TheFourKeywordOnlyLists_AllUseTheSharedRule()
+    public void TheKeywordOnlyLists_AllUseTheSharedRule()
     {
         foreach (var file in KeywordOnlyDialogs)
         {
@@ -72,8 +74,8 @@ public class KeywordAvailabilityTests
             Assert.DoesNotContain("_keyword.Enabled = false;", source, StringComparison.Ordinal);
             Assert.DoesNotContain("_keyword.Enabled = true;", source, StringComparison.Ordinal);
         }
-        // 三张只读清单没有作业态，只交「有没有数据」；同步预览那一页另有作业态，交两件事。
-        foreach (var file in new[] { "EndpointTraceDialog.cs", "SupplementsDialog.cs", "PropagationDialog.cs" })
+        // 只读清单没有作业态，只交「有没有数据」；同步预览那一页另有作业态，交两件事。
+        foreach (var file in new[] { "EndpointTraceDialog.cs", "SupplementsDialog.cs", "PropagationDialog.cs", "JournalDialog.cs" })
         {
             var source = Repo.Source("Desktop", "Native", file);
             Assert.Contains("_keyword.Enabled = ListFilter.KeywordEnabled(false);", source, StringComparison.Ordinal);
@@ -84,10 +86,10 @@ public class KeywordAvailabilityTests
     }
 
     [Fact]
-    public void TheThreeReadOnlyLists_DisableTheBoxInTheirDataUnavailableExit()
+    public void TheReadOnlyLists_DisableTheBoxInTheirDataUnavailableExit()
     {
-        // 三张只读清单的「整份数据不可得」出口：提示出口（ShowHint）里停用——缺什么与下一步由那句话给出。
-        foreach (var file in new[] { "EndpointTraceDialog.cs", "SupplementsDialog.cs", "PropagationDialog.cs" })
+        // 只读清单的「整份数据不可得」出口：提示出口（ShowHint）里停用——缺什么与下一步由那句话给出。
+        foreach (var file in new[] { "EndpointTraceDialog.cs", "SupplementsDialog.cs", "PropagationDialog.cs", "JournalDialog.cs" })
         {
             var body = MethodSlice(Repo.Source("Desktop", "Native", file), "private void ShowHint");
             Assert.Contains("_keyword.Enabled = ListFilter.KeywordEnabled(false);", body, StringComparison.Ordinal);
@@ -102,10 +104,10 @@ public class KeywordAvailabilityTests
     }
 
     [Fact]
-    public void TheThreeReadOnlyLists_RestoreTheBoxWhenDataIsThere()
+    public void TheReadOnlyLists_RestoreTheBoxWhenDataIsThere()
     {
         // 有数据可筛时恢复可用：停用只属于「整份数据不可得」那一屏，不粘在框上。
-        foreach (var file in new[] { "EndpointTraceDialog.cs", "SupplementsDialog.cs", "PropagationDialog.cs" })
+        foreach (var file in new[] { "EndpointTraceDialog.cs", "SupplementsDialog.cs", "PropagationDialog.cs", "JournalDialog.cs" })
         {
             var source = Repo.Source("Desktop", "Native", file);
             Assert.Single(Regex.Matches(source, @"(?m)^\s*_keyword\.Enabled = ListFilter\.KeywordEnabled\(true\);$").Cast<Match>());
@@ -116,7 +118,7 @@ public class KeywordAvailabilityTests
     public void FilteredEmptyBranch_StillLeavesTheBoxUsable()
     {
         // 两种空不能混：筛到零行是「有数据、只是关键词不命中」，下一步就在那个框上（§7「禁用不得移除下一步」）。
-        foreach (var file in new[] { "EndpointTraceDialog.cs", "PropagationDialog.cs" })
+        foreach (var file in new[] { "EndpointTraceDialog.cs", "PropagationDialog.cs", "JournalDialog.cs" })
         {
             var body = MethodSlice(Repo.Source("Desktop", "Native", file), "private void PopulateList");
             var branch = body.IndexOf("IsFilteredEmpty(", StringComparison.Ordinal);

@@ -146,9 +146,10 @@ public class FilterRowFactoryTests
         Assert.DoesNotContain(Repo.NativeSources(), s => s.Contains("Ui.Field(_keyword)"));
         Assert.Contains("Field(keyword)", FactoryBody(), StringComparison.Ordinal);
         // 工厂的调用点恰为这五张清单加同步预览的接口勾选页（第七十二轮）、接口追踪明细（第七十五轮）、
-        // 补充说明（第七十六轮）与生成文档核对条目（第七十七轮）——后四处走的是只有关键词框的那一支。
+        // 补充说明（第七十六轮）、生成文档核对条目（第七十七轮）、注释回写文件清单（第七十九轮）
+        // 与任务日志记录清单（第八十四轮）——后五处走的是只有关键词框的那一支。
         var callers = Repo.NativeSources().Where(s => s.Contains("Ui.FilterRow(")).Select(s => s.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
-        Assert.Equal(FiveLists.Append("SyncPreviewDialog.cs").Append("EndpointTraceDialog.cs").Append("SupplementsDialog.cs").Append("PropagationDialog.cs").Append("ApplyPlanDialog.cs").OrderBy(n => n, StringComparer.Ordinal).ToList(), callers);
+        Assert.Equal(FiveLists.Append("SyncPreviewDialog.cs").Append("EndpointTraceDialog.cs").Append("SupplementsDialog.cs").Append("PropagationDialog.cs").Append("ApplyPlanDialog.cs").Append("JournalDialog.cs").OrderBy(n => n, StringComparer.Ordinal).ToList(), callers);
     }
 
     [Fact]
