@@ -9,8 +9,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 每一步（意图先落盘、结果随后追加），数据由 <c>CommentPlanService</c> 与 <c>SyncExecutor</c> 写入。
 /// 本对话框无任何写入动作，也不重发、不重试：它只回答「做到哪一步了」。
 /// 状态表：读取失败=内联错误与下一步；没有记录=空态说明；正常=说明行 + 计数行 + 未结束动作提示 + 记录清单
-/// （打开即选中最后一条——最后一行就是做到的那一步）。
-/// 三格文字、计数行、说明行与未结束动作那句话取 <see cref="JournalEntries"/> 一份（与测试工程单一口径）。
+/// （打开即选中最后一条——最后一行就是做到的那一步；只有意图、没有结果的那几行在摘要格标「结果未知」）。
+/// 三格文字、计数行、说明行、未结束动作那句话与清单标记取 <see cref="JournalEntries"/> 一份（与测试工程单一口径）。
 /// </summary>
 internal sealed class JournalDialog : Form
 {
@@ -118,12 +118,14 @@ internal sealed class JournalDialog : Form
         var unfinishedText = JournalEntries.UnfinishedCaption(unfinished);
         _unfinished.Text = unfinishedText;
         _unfinished.Visible = unfinishedText.Length > 0;
+        // 未结束动作的标识只用来在清单上认出那几行（不上屏幕）：那句话给名字与下一步，清单在原处标出来。
+        var unfinishedIds = unfinished.Select(action => action.ActionId).ToHashSet(StringComparer.Ordinal);
 
         foreach (var line in lines)
         {
             // 三格文字取 JournalEntries 一份（时间、事件名、摘要），与计数行、未结束动作那句话同源——
             // 这一屏的清单与提示讲的是同一份日志，各拼一遍必然有一处先漂。
-            var cells = JournalEntries.Row(line);
+            var cells = JournalEntries.Row(line, unfinishedIds);
             var row = new ListViewItem(cells[0]) { Tag = line };
             row.SubItems.Add(cells[1]);
             row.SubItems.Add(cells[2]);
