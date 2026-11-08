@@ -14,6 +14,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 状态表：读取失败=内联错误与下一步；没有追踪数据（旧任务缺 Coverage）=如实说明；
 /// 正常=接口列表 + 选中接口的追踪明细与证据入口；筛到零行=关键词框留着并说明下一步，
 /// 计数行仍是整份追踪数据的数字（见 <see cref="PopulateList"/>）。
+/// 清单支持点击列头排序（第九十八轮，口径见 <see cref="EndpointTraceSort"/> 与 <see cref="ListSort"/>）：
+/// 同一列再点反向、换一列从升序开始、表头带方向标记；排序状态留在本次打开期间，关闭即忘。
 /// </summary>
 internal sealed class EndpointTraceDialog : Form
 {
@@ -34,6 +36,15 @@ internal sealed class EndpointTraceDialog : Form
     };
 
     private List<EndpointCoverage> _coverages = [];
+
+    // 列排序状态（ListSort 口径，第九十八轮）：未排序时保持 evidence.json 里 Coverage 的自身顺序。
+    // 排序状态留在本次打开期间（敲关键词、重新读取都保持），关闭即忘——
+    // 跨启动记忆只有两个常驻页面（第五十五轮那两个页键），这一屏每次打开看的是这一次的扫描结果，
+    // 不为它另开一个记忆文件。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
+    private readonly string[] _titles;
 
     public EndpointTraceDialog(TaskStore tasks, CheckTask task)
     {
@@ -56,6 +67,9 @@ internal sealed class EndpointTraceDialog : Form
         _list.Columns.Add("外部调用", 88);
         _list.Columns.Add("预算", 64);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
+        _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
         _keyword.PlaceholderText = ListFilter.TraceSearchPlaceholder;
         _keyword.TextChanged += (_, _) => PopulateList();
 
@@ -167,7 +181,11 @@ internal sealed class EndpointTraceDialog : Form
     private void PopulateList()
     {
         var selectedKey = (Ui.SelectedItem(_list)?.Tag as EndpointCoverage)?.EndpointKey;
-        var visible = ListFilter.Apply(_coverages, _keyword.Text, c => EndpointTrace.KeywordFields(c.EndpointKey, c.BudgetExceeded));
+        // 筛选先于排序（ListFilter → ListSort，与两个主页面、检查结果同一顺序）：筛掉的行不参与排序，
+        // 排序状态与关键词各自留在本对话框；排序键取 EndpointTraceSort 单一口径（与单元格同源）。
+        var visible = ListSort.Order(
+            ListFilter.Apply(_coverages, _keyword.Text, c => EndpointTrace.KeywordFields(c.EndpointKey, c.BudgetExceeded)),
+            _sortColumn, _sortDescending, EndpointTraceSort.Key);
         _list.BeginUpdate();
         _list.Items.Clear();
         foreach (var coverage in visible)
@@ -191,6 +209,7 @@ internal sealed class EndpointTraceDialog : Form
             _list.Items.Add(row);
         }
         _list.EndUpdate();
+        RefreshSortHeaders();
         if (ListFilter.IsFilteredEmpty(_coverages.Count, visible.Count))
         {
             _hint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.EndpointNoun);
@@ -206,6 +225,26 @@ internal sealed class EndpointTraceDialog : Form
             ? null
             : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as EndpointCoverage)?.EndpointKey == selectedKey);
         Ui.SelectItem(target ?? _list.Items[0]);
+    }
+
+    /// <summary>
+    /// 点击列头（DESIGN.md §6「列表列排序」，第九十八轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="PopulateList"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改扫描结果、选中仍按接口身份恢复（重建前记下、重建后找回）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        PopulateList();
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _titles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_titles[i], i, _sortColumn, _sortDescending);
+        }
     }
 
     /// <summary>

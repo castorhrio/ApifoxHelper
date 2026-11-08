@@ -97,7 +97,10 @@ public class KeywordFilterTests
         Assert.Matches(@"(?m)^\s*private readonly TextBox _keyword = Ui\.Input\(\);$", source);
         Assert.Matches(@"(?m)^\s*_keyword\.TextChanged \+= \(_, _\) => PopulateList\(\);$", source);
         // 匹配的是这一行在屏幕上被读作的那两格（接口身份、远端名称），不另造一套字段。
-        Assert.Matches(@"(?m)^\s*var endpoints = ListFilter\.Apply\(_result\.Endpoints, keyword, c => \[c\.Method \+ "" "" \+ c\.Path, c\.RemoteName\]\)$", source);
+        // 第九十七轮起筛选结果先经 ListSort.Order 再上屏（筛选先于排序，与两个主页面同一顺序），
+        // 匹配字段与筛选口径一字未变，故断言跟着真实形状走、强度不降。
+        Assert.Matches(@"(?m)^\s*var endpoints = ListSort\.Order\($", source);
+        Assert.Matches(@"(?m)^\s*ListFilter\.Apply\(_result\.Endpoints, keyword, c => \[c\.Method \+ "" "" \+ c\.Path, c\.RemoteName\]\)$", source);
         // 关键词与状态下拉都是「且」：状态筛选在共享口径之后，匹配规则只有一份。
         Assert.Matches(@"(?m)^\s*\.Where\(c => status\.Length == 0 \|\| c\.Status == status\)$", source);
         // 两个筛选入口一起启停：只停一个等于留一个按不动的入口。

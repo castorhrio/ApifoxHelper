@@ -12,6 +12,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 状态表：尚未检查=空态指引；读取失败=内联错误与下一步；检查之后任务有变化=过期提示（结果仍如实展示）；
 /// 正常=概要行 + 筛选 + 接口列表 + 选中接口详情（结构差异/说明合并/备注/质量提示/阻断）+ 模型清单（含关键词框）+ 问题清单；
 /// 模型清单筛到零行=关键词框留着并说明下一步（见 <see cref="PopulateModels"/>）。
+/// 两张清单都支持点击列头排序（第九十七轮，口径见 <see cref="CheckResultSort"/> 与 <see cref="ListSort"/>）：
+/// 同一列再点反向、换一列从升序开始、表头带方向标记；排序状态留在本次打开期间，关闭即忘。
 /// </summary>
 internal sealed class CheckResultsDialog : Form
 {
@@ -22,6 +24,18 @@ internal sealed class CheckResultsDialog : Form
     private readonly string _taskId;
     private readonly CheckTask _task;
     private CheckResult? _result;
+
+    // 列排序状态（ListSort 口径，第九十七轮）：两张清单各记各的列与方向，未排序时保持检查结果自身顺序。
+    // 排序状态留在本次打开期间（切筛选、敲关键词、重新读取都保持），关闭即忘——
+    // 跨启动记忆只有两个常驻页面（第五十五轮那两个页键），
+    // 这一屏每次打开看的是这一次的检查结果，不为它另开一个记忆文件。
+    private int _endpointSortColumn = ListSort.None;
+    private bool _endpointSortDescending;
+    private int _modelSortColumn = ListSort.None;
+    private bool _modelSortDescending;
+    // 表头原标题（建列时取一次）：方向标记每次按原标题重算，不叠加、不复制字面。
+    private readonly string[] _endpointTitles;
+    private readonly string[] _modelTitles;
 
     private readonly Label _computedAt = Ui.StatusText();
     private readonly Label _counts = Ui.Mono();
@@ -83,12 +97,18 @@ internal sealed class CheckResultsDialog : Form
         _list.Columns.Add("状态", 96);
         _list.Columns.Add("阻断", 56);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
+        _endpointTitles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortEndpoints(e.Column);
 
         _modelList.Columns.Add("模型", 220);
         _modelList.Columns.Add("映射", 100);
         _modelList.Columns.Add("状态", 88);
         _modelList.Columns.Add("用于接口", 88);
         _modelList.Columns.Add("范围外影响", 100);
+        _modelTitles = _modelList.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 模型清单同一手势（同一个对话框里两张清单不能一个能排一个不能排）。
+        _modelList.ColumnClick += (_, e) => SortModels(e.Column);
 
         _filter.Items.AddRange(["全部状态", "新增", "结构变化", "说明变化", "无变化", "阻断", "仅源码"]);
         _filter.SelectedIndex = 0;
@@ -298,9 +318,13 @@ internal sealed class CheckResultsDialog : Form
         _list.Items.Clear();
         // 关键词先经共享口径（与两个主页面同一份匹配规则：词间「且」、字段间「或」、忽略大小写），
         // 状态筛选在其后——两个条件都是「且」，顺序不影响结果，但匹配规则只有一份。
-        var endpoints = ListFilter.Apply(_result.Endpoints, keyword, c => [c.Method + " " + c.Path, c.RemoteName])
-            .Where(c => status.Length == 0 || c.Status == status)
-            .ToList();
+        // 筛选先于排序（ListFilter → ListSort，与两个主页面同一顺序）：筛掉的行不参与排序，
+        // 排序状态与筛选状态各自留在本对话框；排序键取 CheckResultSort 单一口径（与单元格同源）。
+        var endpoints = ListSort.Order(
+            ListFilter.Apply(_result.Endpoints, keyword, c => [c.Method + " " + c.Path, c.RemoteName])
+                .Where(c => status.Length == 0 || c.Status == status)
+                .ToList(),
+            _endpointSortColumn, _endpointSortDescending, CheckResultSort.EndpointKey);
         foreach (var check in endpoints)
         {
             var row = new ListViewItem(check.Method + " " + check.Path) { Tag = check, UseItemStyleForSubItems = false };
@@ -311,6 +335,7 @@ internal sealed class CheckResultsDialog : Form
             _list.Items.Add(row);
         }
         _list.EndUpdate();
+        RefreshEndpointSortHeaders();
         _filter.Enabled = _result.Endpoints.Count > 0;
         _keyword.Enabled = _result.Endpoints.Count > 0;
         if (endpoints.Count == 0)
@@ -341,7 +366,10 @@ internal sealed class CheckResultsDialog : Form
     private void PopulateModels()
     {
         if (_result is null) return;
-        var visible = ListFilter.Apply(_result.Models, _modelKeyword.Text, ModelEntries.KeywordFields);
+        // 筛选先于排序（与接口清单同一顺序），排序键取 CheckResultSort 单一口径。
+        var visible = ListSort.Order(
+            ListFilter.Apply(_result.Models, _modelKeyword.Text, ModelEntries.KeywordFields),
+            _modelSortColumn, _modelSortDescending, CheckResultSort.ModelKey);
         _modelList.BeginUpdate();
         _modelList.Items.Clear();
         foreach (var model in visible)
@@ -356,6 +384,7 @@ internal sealed class CheckResultsDialog : Form
             _modelList.Items.Add(row);
         }
         _modelList.EndUpdate();
+        RefreshModelSortHeaders();
         if (ListFilter.IsFilteredEmpty(_result.Models.Count, visible.Count))
         {
             _modelsHint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.ModelNoun);
@@ -366,6 +395,42 @@ internal sealed class CheckResultsDialog : Form
         }
         _modelsHint.Visible = false;
         _modelList.Visible = true;
+    }
+
+    /// <summary>
+    /// 点击接口清单的列头（DESIGN.md §6「列表列排序」，第九十七轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="PopulateList"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改检查结果、选中仍按接口身份恢复（重建前记下、重建后找回）。
+    /// </summary>
+    private void SortEndpoints(int column)
+    {
+        (_endpointSortColumn, _endpointSortDescending) = ListSort.Toggle(_endpointSortColumn, _endpointSortDescending, column);
+        PopulateList();
+    }
+
+    /// <summary>模型清单同一手势（同一个对话框里两张清单不能一个能排一个不能排）。</summary>
+    private void SortModels(int column)
+    {
+        (_modelSortColumn, _modelSortDescending) = ListSort.Toggle(_modelSortColumn, _modelSortDescending, column);
+        PopulateModels();
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshEndpointSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _endpointTitles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_endpointTitles[i], i, _endpointSortColumn, _endpointSortDescending);
+        }
+    }
+
+    /// <summary>模型清单的表头方向标记（同一份口径、同一份标题快照）。</summary>
+    private void RefreshModelSortHeaders()
+    {
+        for (var i = 0; i < _modelList.Columns.Count && i < _modelTitles.Length; i++)
+        {
+            _modelList.Columns[i].Text = ListSort.Header(_modelTitles[i], i, _modelSortColumn, _modelSortDescending);
+        }
     }
 
     private void ShowHint(string message, Color color)
