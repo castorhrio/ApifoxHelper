@@ -15,6 +15,7 @@ namespace ApifoxHelper.Tests;
 /// 焦点在筛选框上时 Esc 退出筛选（筛选框不是表单字段，与第七十轮 Enter 的判定同一理由），
 /// 焦点在别处时 Esc 仍是取消——一次按键只有一个含义。判定在 <see cref="ListFilter.EscClearsInDialog"/>
 /// 单一口径，接线只经 <see cref="Ui.TryEscapeFilter"/> 一处，对话框不就地认 Esc、不自己清空关键词。
+/// 第七十三轮把第六张长清单（同步预览的接口勾选页）接上同一处入口，触达点清单随之由五张变六张。
 /// 口径是真执行（ListFilter 与测试工程共享编译），接线以源码切片与行首正则钉住。
 /// Esc 的实际按键路由与清空后列表回到全部的真机观感随 G-D5 复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
@@ -27,6 +28,7 @@ public class FilterEscapeTests
         "ScanResultsDialog.cs",
         "CandidatesDialog.cs",
         "ContractsDialog.cs",
+        "SyncPreviewDialog.cs",
     ];
 
     // ---------- 口径真值表：这一次 Esc 归谁 ----------
@@ -153,9 +155,10 @@ public class FilterEscapeTests
     }
 
     [Fact]
-    public void EscapeEntry_IsReachedFromExactlyTheFiveLongLists()
+    public void EscapeEntry_IsReachedFromExactlyTheSixLongLists()
     {
-        // 触达点清单：恰为五张长清单对话框的接线（定义在 Ui.cs，调用形式只在这五处）；其余界面（含两个主页面）不接这一条。
+        // 触达点清单：恰为六张长清单对话框的接线（定义在 Ui.cs，调用形式只在这六处；第六处是第七十三轮接上的
+        // 同步预览勾选页）；其余界面（含两个主页面）不接这一条。
         var callers = Repo.NativeSources()
             .Where(source => CodeLines(source.Text, "Ui.TryEscapeFilter(").Count > 0)
             .Select(source => source.Name)

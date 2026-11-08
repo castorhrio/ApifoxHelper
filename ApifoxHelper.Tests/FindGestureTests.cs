@@ -10,6 +10,7 @@ namespace ApifoxHelper.Tests;
 /// 同一个手势在主页有、在对话框没有，属同壳不同行为。本轮把字母与修饰键判定收进
 /// <see cref="ShellShortcuts"/> 单一口径（<c>FindKey</c> 与 <c>IsFindGesture</c>），
 /// 菜单显示、壳绑定与对话框判定同源；对话框只经 <c>Ui.TryFocusFilter</c> 一处接线。
+/// 第七十三轮把第六张长清单（同步预览的接口勾选页）接上同一处入口，触达点清单随之由五张变六张。
 /// 口径是真执行（ShellShortcuts 与测试工程共享编译），接线以源码切片与行首正则钉住。
 /// Ctrl+F 的实际按键路由与选中的真机观感随 G-D5 复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
@@ -22,6 +23,7 @@ public class FindGestureTests
         "ScanResultsDialog.cs",
         "CandidatesDialog.cs",
         "ContractsDialog.cs",
+        "SyncPreviewDialog.cs",
     ];
 
     // ---------- 口径真值表 ----------
@@ -64,7 +66,7 @@ public class FindGestureTests
             Assert.DoesNotContain("Keys.F", CodeLines(source), StringComparison.Ordinal);
             Assert.DoesNotContain("ShellShortcuts.IsFindGesture", CodeLines(source), StringComparison.Ordinal);
             // 裸 Enter 走「到结果第一行」的共享入口（第七十轮接线，见 FilterEnterTests），两条判定并存、顺序固定。
-            Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, _list\)\) return true;$", body);
+            Assert.Matches($@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, {ListField(file)}\)\) return true;$", body);
             var find = body.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
             var enter = body.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
             Assert.True(find >= 0 && enter > find, $"{file}:Ctrl+F 判定应排在 Enter 判定之前。");
@@ -120,6 +122,12 @@ public class FindGestureTests
         var ledger = Repo.DesignSection(8);
         Assert.Contains("对话框里的 Ctrl+F", ledger);
     }
+
+    /// <summary>
+    /// 各对话框里「本屏清单」的字段名：共享入口收的是「关键词框 + 这一屏的清单」，
+    /// 同步预览勾选页的清单叫 <c>_selectList</c>（同一对话框里还有写入清单与排除清单，不能都叫 _list）。
+    /// </summary>
+    private static string ListField(string file) => file == "SyncPreviewDialog.cs" ? "_selectList" : "_list";
 
     /// <summary>只算代码行：注释里引用「界面不就地写 Keys.F」是在说明理由，不算第二套判定。</summary>
     private static string CodeLines(string source) =>

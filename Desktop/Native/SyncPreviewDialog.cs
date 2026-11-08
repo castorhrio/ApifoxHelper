@@ -13,6 +13,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 首个失败即停止、取消只在动作之间生效、部分完成如实记录、不自动回滚），两者都走共享 JobRunner，可停止。
 /// 「确认同步」按设计基线用原生确认对话框（默认按钮在「取消」）；「重新核对（只读）」复用 VerifyAsync，不写入。
 /// 选中动作显示写入内容（脱敏后，与执行时写入的 JSON 一致）。
+/// 勾选页的键盘路径与另六张长清单同一份（Ctrl+F 到关键词框 → 输入 → Enter 到结果第一行 → 方向键逐行看 →
+/// Esc 退出筛选），关键词框只在勾选页上，预览页不接这三个手势。
 /// 状态表：未检查/读取失败/离线=空态指引并禁用全部动作；生成或执行中=状态行进度 + 停止；
 /// 生成失败/执行被拒=原因与下一步；计划就绪=概要 + 写入清单 + 排除清单 + 影响与保留设置；
 /// 执行或核对结束=逐动作结果 + 按计划状态如实报告（部分完成不显示成全部成功）；
@@ -358,6 +360,26 @@ internal sealed class SyncPreviewDialog : Form
     {
         if (disposing) _timer.Dispose();
         base.Dispose(disposing);
+    }
+
+    /// <summary>
+    /// 勾选页的三个筛选手势（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：Ctrl+F 把焦点交给关键词框并选中已有关键词、
+    /// 框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 退出筛选（清空关键词回到全部接口）。
+    /// 与另六张长清单同一份口径、同一处接线（<see cref="Ui.TryFocusFilter"/>、<see cref="Ui.TryEnterFilter"/>、
+    /// <see cref="Ui.TryEscapeFilter"/>）：本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+    /// 这一页与那六张有一处不同——关键词框只在勾选页上：预览页（计划生成后）没有这个框，三个手势一概不接，
+    /// Ctrl+F 不吞键、Esc 仍是取消对话框（一次按键只有一个含义，不把按键说成做了什么）。
+    /// 勾选状态按接口键记在 <see cref="SyncSelect"/>，Esc 清空关键词触发的重建从它恢复，勾选不因退出筛选而丢。
+    /// </summary>
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if (_page1.Visible)
+        {
+            if (Ui.TryFocusFilter(keyData, _keyword)) return true;
+            if (Ui.TryEnterFilter(keyData, _keyword, _selectList)) return true;
+            if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        }
+        return base.ProcessDialogKey(keyData);
     }
 
     private void DisableSelect(string message, Color color)

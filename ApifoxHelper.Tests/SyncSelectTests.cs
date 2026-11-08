@@ -368,16 +368,17 @@ public class SyncSelectTests
     }
 
     [Fact]
-    public void ThisRound_DoesNotWireTheKeyboardGestures()
+    public void KeyboardGestures_AreWiredThroughTheSharedEntries()
     {
-        // 如实挂账：Ctrl+F / Enter / Esc 在这一页还没接（另六张长清单在第六十九至七十一轮各接一次）。
-        // 本用例钉住「没接」这件事本身——下一轮接上时它会红，提醒把挂账改成接线记录。
+        // 第七十二轮如实挂账「Ctrl+F / Enter / Esc 在这一页还没接」，第七十三轮接上（另六张长清单在第六十九至
+        // 七十一轮各接一次）：三个手势只经 Ui 的三处共享入口，本对话框不就地认键、不就地拆修饰键。
         var source = Repo.Source("Desktop", "Native", File);
+        Assert.Contains("protected override bool ProcessDialogKey(Keys keyData)", source, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^\s*if \(Ui\.TryFocusFilter\(keyData, _keyword\)\) return true;$", source);
+        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, _selectList\)\) return true;$", source);
+        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _keyword\)\) return true;$", source);
+        // 不就地认键：代码行里没有 Keys.*（注释里写手势名是说明理由，不算第二套判定）。
         Assert.Empty(CodeLines(source, "Keys."));
-        Assert.DoesNotContain("ProcessDialogKey", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("Ui.TryFocusFilter", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("Ui.TryEnterFilter", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("Ui.TryEscapeFilter", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -409,10 +410,14 @@ public class SyncSelectTests
         var row = section.Split('\n').FirstOrDefault(l => l.StartsWith("| 同步预览勾选页的关键词框（§6） |", StringComparison.Ordinal));
         Assert.NotNull(row);
         Assert.Contains("第七十二轮", row!, StringComparison.Ordinal);
-        // 台账要如实：这一轮只加框与勾选状态搬家，不改勾选口径、不加视觉语言、不接键盘手势。
+        // 台账要如实：这一轮只加框与勾选状态搬家，不改勾选口径、不加视觉语言；
+        // 三个手势当时如实挂账，第七十三轮接上后那一行指向本轮（旧措辞「本轮未接」不得留着冒充现状）。
         Assert.Contains("不改勾选口径", row!, StringComparison.Ordinal);
         Assert.Contains("Ctrl+F", row!, StringComparison.Ordinal);
         Assert.Contains("G-D5", row!, StringComparison.Ordinal);
+        // 台账是历史：当时「未接」的理由留着，但必须指向第七十三轮的收口（旧措辞不得冒充现状）。
+        Assert.Contains("第七十三轮", row!, StringComparison.Ordinal);
+        Assert.Contains("已于第七十三轮接上", row!, StringComparison.Ordinal);
     }
 
     [Fact]
