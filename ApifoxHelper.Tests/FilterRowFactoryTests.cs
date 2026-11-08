@@ -161,10 +161,12 @@ public class FilterRowFactoryTests
         // 同步预览的接口勾选页没有筛选下拉：走 counts 可缺省的那一支重载，前两列留空、行形状仍是同一份五列。
         var source = Repo.Source("Desktop", "Native", "SyncPreviewDialog.cs");
         Assert.Matches(@"(?m)^\s*var filterRow = Ui\.FilterRow\(_keyword, _visibleCount\);$", source);
-        // 这个对话框里有两行（第八十轮给预览页的写入清单补了第二个框），两行都走同一支重载：
-        // 勾选页 `filterRow`、预览页 `actionFilterRow`，行形状仍是同一份五列。
-        Assert.Equal(2, Regex.Matches(source, @"Ui\.FilterRow\(").Count);
+        // 这个对话框里有三行（第八十轮给预览页的写入清单补了第二个框、第八十六轮给未纳入清单补了第三个），
+        // 三行都走同一支重载：勾选页 `filterRow`、预览页 `actionFilterRow` 与 `excludedFilterRow`，
+        // 行形状仍是同一份五列。
+        Assert.Equal(3, Regex.Matches(source, @"Ui\.FilterRow\(").Count);
         Assert.Matches(@"(?m)^\s*var actionFilterRow = Ui\.FilterRow\(_actionKeyword, counts: null\);$", source);
+        Assert.Matches(@"(?m)^\s*var excludedFilterRow = Ui\.FilterRow\(_excludedKeyword, counts: null\);$", source);
         // 界面不自己拼这一行，也不自己量关键词框的宽度。
         Assert.DoesNotContain("ColumnCount = 5", source, StringComparison.Ordinal);
         Assert.DoesNotContain("filterRow.Controls.Add(", source, StringComparison.Ordinal);

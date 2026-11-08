@@ -50,6 +50,7 @@
     <Compile Include="..\Desktop\Native\EvidenceEntries.cs" Link="Shared\EvidenceEntries.cs" />
     <Compile Include="..\Desktop\Native\JournalEntries.cs" Link="Shared\JournalEntries.cs" />
     <Compile Include="..\Desktop\Native\ModelEntries.cs" Link="Shared\ModelEntries.cs" />
+    <Compile Include="..\Desktop\Native\ExclusionEntries.cs" Link="Shared\ExclusionEntries.cs" />
     <Compile Include="..\Tasks\JournalLines.cs" Link="Shared\JournalLines.cs" />
     <Compile Include="..\Desktop\Native\PlanEntries.cs" Link="Shared\PlanEntries.cs" />
     <Compile Include="..\Desktop\Native\ApifoxPicker.cs" Link="Shared\ApifoxPicker.cs" />

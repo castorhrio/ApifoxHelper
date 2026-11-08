@@ -16,6 +16,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 两页各有一个关键词框、各接同一份键盘路径（Ctrl+F 到关键词框 → 输入 → Enter 到结果第一行 →
 /// 方向键逐行看 → Esc 退出筛选）：勾选页筛接口（第七十二、七十三轮），预览页筛写入清单（第八十轮）。
 /// 两个框各管自己那一页——一次按键只有一个含义，预览页的 Esc 不会去清勾选页的关键词，反之亦然。
+/// 预览页另有第二个框（第八十六轮）：未纳入清单的关键词框——同一页两张清单，写入清单自第八十轮起
+/// 就有关键词框、未纳入清单没有，属同壳不同行为；Enter 与 Esc 看焦点各接一次，Ctrl+F 只交给写入清单那个框。
 /// 状态表：未检查/读取失败/离线=空态指引并禁用全部动作；生成或执行中=状态行进度 + 停止；
 /// 生成失败/执行被拒=原因与下一步；计划就绪=概要 + 写入清单 + 排除清单 + 影响与保留设置；
 /// 执行或核对结束=逐动作结果 + 按计划状态如实报告（部分完成不显示成全部成功）；
@@ -101,6 +103,17 @@ internal sealed class SyncPreviewDialog : Form
     };
     private readonly TextBox _payload = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly ListView _excludedList = Ui.List();
+    // 未纳入清单的关键词框（第八十六轮）：这一张往往比写入清单更长（计划只纳入需要写入的接口与模型，
+    // 其余全部落在这里），要找到「上次那个接口为什么没进计划」只能逐行扫；占位文字取共享常量。
+    private readonly TextBox _excludedKeyword = Ui.Input();
+    // 筛到零行时说话的那一格（与另十一张长清单同一形状：清单与提示互斥地填满同一块）。
+    private readonly Label _excludedHint = new()
+    {
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = UiTokens.Muted,
+        Font = UiTokens.Body.Value,
+    };
     private readonly Panel _excludedHost;
     private readonly TextBox _notes = Ui.Preview(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Button _applyButton;
@@ -190,10 +203,25 @@ internal sealed class SyncPreviewDialog : Form
 
         _excludedList.Columns.Add("资源", 240);
         _excludedList.Columns.Add("未纳入原因", 620);
+        _excludedKeyword.PlaceholderText = ListFilter.ExclusionSearchPlaceholder;
+        _excludedKeyword.TextChanged += (_, _) => PopulateExcluded();
         var excludedInner = Ui.Hairline(_excludedList);
         excludedInner.Dock = DockStyle.Fill;
         excludedInner.Height = 92;
-        _excludedHost = BuildBottomHost(excludedInner, "未纳入计划（原因如下；处理后重新检查、重新生成同步预览）", 122);
+        var excludedCaption = Ui.Caption("未纳入计划（原因如下；处理后重新检查、重新生成同步预览）");
+        excludedCaption.Dock = DockStyle.Top;
+        // 筛选行取工厂（第六十八轮立的形状）：这一屏只有关键词框、没有筛选下拉，计数在表头行，故 counts 传 null。
+        // 底色随本页（Bg）：工厂给的是对话框的 Panel 底，这一页是页面底。
+        var excludedFilterRow = Ui.FilterRow(_excludedKeyword, counts: null);
+        excludedFilterRow.BackColor = UiTokens.Bg;
+        excludedFilterRow.Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm);
+        // 宿主高度让出筛选行那一行（写入清单是这一页的主内容，不为第二张清单再挤它）。
+        _excludedHost = new Panel { Dock = DockStyle.Bottom, Height = 150, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
+        _excludedHost.Controls.Add(excludedInner);
+        _excludedHost.Controls.Add(_excludedHint);
+        _excludedHost.Controls.Add(excludedFilterRow);
+        _excludedHost.Controls.Add(excludedCaption);
+        _excludedHint.Visible = false;
 
         _backButton = Ui.Ghost("重新选择接口");
         _backButton.Visible = false;
@@ -407,7 +435,9 @@ internal sealed class SyncPreviewDialog : Form
         {
             if (Ui.TryFocusFilter(keyData, _actionKeyword)) return true;
             if (Ui.TryEnterFilter(keyData, _actionKeyword, _actionList)) return true;
+            if (Ui.TryEnterFilter(keyData, _excludedKeyword, _excludedList)) return true;
             if (Ui.TryEscapeFilter(keyData, _actionKeyword)) return true;
+            if (Ui.TryEscapeFilter(keyData, _excludedKeyword)) return true;
         }
         return base.ProcessDialogKey(keyData);
     }
@@ -782,16 +812,10 @@ internal sealed class SyncPreviewDialog : Form
         _actionKeyword.Enabled = ListFilter.KeywordEnabled(plan.Actions.Count > 0);
         PopulateActions();
 
-        _excludedList.BeginUpdate();
-        _excludedList.Items.Clear();
-        foreach (var exclusion in plan.Excluded)
-        {
-            var row = new ListViewItem(exclusion.ResourceKey) { UseItemStyleForSubItems = false };
-            row.Font = UiTokens.Mono.Value;
-            row.SubItems.Add(exclusion.Reason).Font = UiTokens.Body.Value;
-            _excludedList.Items.Add(row);
-        }
-        _excludedList.EndUpdate();
+        // 未纳入清单按关键词呈现（第八十六轮）：整份计划没有未纳入条目时框一起停
+        // （没有可筛的东西，下一步不在这框上）。
+        _excludedKeyword.Enabled = ListFilter.KeywordEnabled(plan.Excluded.Count > 0);
+        PopulateExcluded();
         _excludedHost.Visible = plan.Excluded.Count > 0;
 
         var notes = new List<string>();
@@ -888,6 +912,49 @@ internal sealed class SyncPreviewDialog : Form
             ? null
             : _actionList.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as PlanAction)?.ActionId == selectedId);
         Ui.SelectItem(target ?? _actionList.Items[0]);
+    }
+
+    /// <summary>
+    /// 未纳入清单的关键词框（DESIGN.md §6「列表筛选」，第八十六轮）：输入即筛选，只改可见行——
+    /// 计数行按整份计划统计、不随关键词变化（「排除 N」正是要找的那批的凭据，被一屏的空抹掉等于把结果藏起来）。
+    /// 筛到零行不是「计划没有未纳入条目」：说清这一屏为什么空，下一步就在那个框上（这一屏没有筛选下拉，
+    /// 故不指「换一个筛选」），关键词框留着（§7「禁用不得移除下一步」）。
+    /// 这一张清单没有选中语义（未纳入条目没有详情可看），故不恢复选中、不碰键盘焦点、不自己滚动。
+    /// </summary>
+    private void PopulateExcluded()
+    {
+        var plan = _plan;
+        if (plan is null) return;
+        var visible = ListFilter.Apply(
+            plan.Excluded,
+            _excludedKeyword.Text,
+            exclusion => ExclusionEntries.KeywordFields(exclusion.ResourceKey, exclusion.Reason));
+        _excludedList.BeginUpdate();
+        try
+        {
+            _excludedList.Items.Clear();
+            foreach (var exclusion in visible)
+            {
+                var row = new ListViewItem(exclusion.ResourceKey) { Tag = exclusion, UseItemStyleForSubItems = false };
+                row.Font = UiTokens.Mono.Value;
+                row.SubItems.Add(exclusion.Reason).Font = UiTokens.Body.Value;
+                _excludedList.Items.Add(row);
+            }
+        }
+        finally
+        {
+            _excludedList.EndUpdate();
+        }
+        if (ListFilter.IsFilteredEmpty(plan.Excluded.Count, visible.Count))
+        {
+            _excludedHint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.ExclusionNoun);
+            _excludedHint.ForeColor = UiTokens.Muted;
+            _excludedHint.Visible = true;
+            _excludedList.Visible = false;
+            return;
+        }
+        _excludedHint.Visible = false;
+        _excludedList.Visible = true;
     }
 
     private void ShowSelectPage()

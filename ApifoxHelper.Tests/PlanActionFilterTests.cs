@@ -114,9 +114,11 @@ public class PlanActionFilterTests
         var source = Repo.Source("Desktop", "Native", File);
         // 这一屏没有筛选下拉：走 counts 可缺省的那一支（计数在表头行）。
         Assert.Matches(@"(?m)^\s*var actionFilterRow = Ui\.FilterRow\(_actionKeyword, counts: null\);$", source);
-        // 两页各一行、各一个框：勾选页那一行仍在（第七十二轮），预览页这一行是本轮。
-        Assert.Equal(2, Regex.Matches(source, @"Ui\.FilterRow\(").Count);
+        // 三行三框：勾选页那一行仍在（第七十二轮），预览页写入清单这一行是本轮（第八十轮），
+        // 预览页未纳入清单那一行是第八十六轮——三行都走同一支重载，行形状仍是同一份五列。
+        Assert.Equal(3, Regex.Matches(source, @"Ui\.FilterRow\(").Count);
         Assert.Matches(@"(?m)^\s*var filterRow = Ui\.FilterRow\(_keyword, _visibleCount\);$", source);
+        Assert.Matches(@"(?m)^\s*var excludedFilterRow = Ui\.FilterRow\(_excludedKeyword, counts: null\);$", source);
         // 界面不自己拼这一行，也不自己量关键词框的宽度。
         Assert.DoesNotContain("actionFilterRow.Controls.Add(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("_actionKeyword.Width", source, StringComparison.Ordinal);
@@ -241,12 +243,15 @@ public class PlanActionFilterTests
         Assert.DoesNotContain("_actionList", page1, StringComparison.Ordinal);
         Assert.DoesNotContain("_keyword", page2, StringComparison.Ordinal);
         Assert.DoesNotContain("_selectList", page2, StringComparison.Ordinal);
-        // 两页各一个门控、各三条判定：一次按键只有一个含义。
+        // 两页各一个门控：一次按键只有一个含义。Ctrl+F 两页各一次（一个手势一个落点），
+        // Enter 与 Esc 在预览页各两次——第八十六轮给未纳入清单补了第二个框，两个框各接一次。
         Assert.Single(Regex.Matches(body, @"_page1\.Visible"));
         Assert.Single(Regex.Matches(body, @"_page2\.Visible"));
         Assert.Equal(2, Regex.Matches(body, @"Ui\.TryFocusFilter\(").Count);
-        Assert.Equal(2, Regex.Matches(body, @"Ui\.TryEnterFilter\(").Count);
-        Assert.Equal(2, Regex.Matches(body, @"Ui\.TryEscapeFilter\(").Count);
+        Assert.Equal(3, Regex.Matches(body, @"Ui\.TryEnterFilter\(").Count);
+        Assert.Equal(3, Regex.Matches(body, @"Ui\.TryEscapeFilter\(").Count);
+        // Ctrl+F 只交给写入清单那个框：未纳入清单的框经 Tab 或点击进入，不为它发明第二个查找手势。
+        Assert.DoesNotContain("TryFocusFilter(keyData, _excludedKeyword)", body, StringComparison.Ordinal);
     }
 
     // ---------- 接线：整份数据不可得时框停用 ----------

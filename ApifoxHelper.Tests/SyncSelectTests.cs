@@ -293,9 +293,10 @@ public class SyncSelectTests
         var source = Repo.Source("Desktop", "Native", File);
         // 这一页只有关键词框、没有筛选下拉：走 counts 可缺省的那一支，行形状仍是同一份五列。
         Assert.Matches(@"(?m)^\s*var filterRow = Ui\.FilterRow\(_keyword, _visibleCount\);$", source);
-        // 两行两框（第八十轮给预览页的写入清单补了第二个框）：勾选页这一行仍是本页那一行，
-        // 另一行是预览页的（`actionFilterRow`），两页各管自己那一页。
-        Assert.Equal(2, Regex.Matches(source, @"Ui\.FilterRow\(").Count);
+        // 三行三框（第八十轮给预览页的写入清单补了第二个框、第八十六轮给未纳入清单补了第三个）：
+        // 勾选页这一行仍是本页那一行，另两行是预览页的（`actionFilterRow` 与 `excludedFilterRow`），
+        // 两页各管自己那一页。
+        Assert.Equal(3, Regex.Matches(source, @"Ui\.FilterRow\(").Count);
         Assert.DoesNotContain("ColumnCount = 5", source, StringComparison.Ordinal);
         Assert.DoesNotContain("filterRow.Controls.Add(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Ui.Field(_keyword)", source, StringComparison.Ordinal);

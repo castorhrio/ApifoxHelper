@@ -125,6 +125,8 @@ public class SyncSelectGestureTests
     public void Dialog_KeepsEachPagesGesturesInsideItsOwnGate()
     {
         // 形状锁：两页各有一个关键词框（勾选页筛接口、预览页筛写入清单，第八十轮），
+        // 预览页另有第二个框（未纳入清单，第八十六轮）——Enter 与 Esc 看焦点各接一次，
+        // Ctrl+F 只交给写入清单那个框（一个手势只能有一个落点）；
         // 三个手势各在**自己那一页**的门控之内——门控之外接住按键等于在另一页上吞掉 Ctrl+F、
         // 把 Esc 从「取消」手里拿走；两页都不在时（构造期）一概不接。
         var source = Repo.Source("Desktop", "Native", File);
@@ -142,7 +144,9 @@ public class SyncSelectGestureTests
             "        {",
             "            if (Ui.TryFocusFilter(keyData, _actionKeyword)) return true;",
             "            if (Ui.TryEnterFilter(keyData, _actionKeyword, _actionList)) return true;",
+            "            if (Ui.TryEnterFilter(keyData, _excludedKeyword, _excludedList)) return true;",
             "            if (Ui.TryEscapeFilter(keyData, _actionKeyword)) return true;",
+            "            if (Ui.TryEscapeFilter(keyData, _excludedKeyword)) return true;",
             "        }",
             "        return base.ProcessDialogKey(keyData);",
             "    }",
