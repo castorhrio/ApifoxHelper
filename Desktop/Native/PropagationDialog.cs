@@ -12,6 +12,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 状态表：尚未核对=空态指引；读取失败=内联错误与下一步；正常=概要计数 + 条目列表（源码/XML/Swagger 三环状态，
 /// 颜色 + 文字双通道）+ 条目详情 + XML 文件清单；筛到零行=关键词框留着并说明下一步，计数行仍是整份核对数据的数字
 /// （见 <see cref="PopulateList"/>）。
+/// 条目清单支持点击列头排序（第一百零三轮，口径见 <see cref="PropagationSort"/> 与 <see cref="ListSort"/>）：
+/// 这一屏存在的理由正是「注释有没有真的写进源码、出现在 XML、被 Swagger 读到」，
+/// 「把 XML 未收录的那几条集中看」只能逐行扫——排序只改呈现顺序，不改核对结果与筛选口径。
 /// </summary>
 internal sealed class PropagationDialog : Form
 {
@@ -42,6 +45,11 @@ internal sealed class PropagationDialog : Form
 
     private List<PropagationEntry> _entries = [];
 
+    // 列排序状态（ListSort 口径，第一百零三轮）：未排序时保持核对结果自身的顺序。
+    private int _sortColumn = ListSort.None;
+    private bool _sortDescending;
+    private readonly string[] _titles;
+
     public PropagationDialog(TaskStore tasks, CheckTask task)
     {
         _tasks = tasks;
@@ -62,6 +70,9 @@ internal sealed class PropagationDialog : Form
         _list.Columns.Add("源码", 100);
         _list.Columns.Add("XML", 110);
         _list.Columns.Add("Swagger", 130);
+        _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+        // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
+        _list.ColumnClick += (_, e) => SortBy(e.Column);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
         _keyword.PlaceholderText = ListFilter.PropagationSearchPlaceholder;
         _keyword.TextChanged += (_, _) => PopulateList();
@@ -215,16 +226,29 @@ internal sealed class PropagationDialog : Form
     /// <see cref="ShowDetail"/> 收口，不在这里另写一套收控件的赋值。
     /// 选中按位置恢复（筛一下再筛回来仍停在原来那个条目），恢复不到时落在新筛选第一条
     /// （与两个主页面「重建后按 Id 恢复选中」、第五十六轮「切换筛选落在新筛选第一条」同一口径）。
+    /// 筛选先于排序（<see cref="ListFilter"/> → <see cref="ListSort"/>，与另七处同一顺序）：筛掉的行不参与排序，
+    /// 排序键取 <see cref="PropagationSort"/> 单一口径（与单元格同源），界面不就地写 switch。
+    /// <paramref name="keep"/> 是「排序后重建要把当前这一条交回去」的那一条（排序不该把选中甩回队首）；
+    /// 关键词与筛选的重建路径不传它（那一屏的下一步是换关键词或筛选，落点会把详情区从用户正在看的那一条挪走）。
     /// </summary>
-    private void PopulateList()
+    private void PopulateList(PropagationEntry? keep = null)
     {
         var selectedDisplay = (Ui.SelectedItem(_list)?.Tag as PropagationEntry)?.Display;
-        var visible = ListFilter.Apply(_entries, _keyword.Text, entry => PropagationEntries.KeywordFields(
-            entry.Display,
-            PropagationEntries.TagText(entry.Tag, entry.ParameterName),
-            TaskDisplay.PropagationSourceText(entry.SourceState),
-            TaskDisplay.PropagationXmlText(entry.XmlState),
-            TaskDisplay.PropagationSwaggerText(entry.SwaggerState)));
+        var visible = ListSort.Order(
+            ListFilter.Apply(_entries, _keyword.Text, entry => PropagationEntries.KeywordFields(
+                entry.Display,
+                PropagationEntries.TagText(entry.Tag, entry.ParameterName),
+                TaskDisplay.PropagationSourceText(entry.SourceState),
+                TaskDisplay.PropagationXmlText(entry.XmlState),
+                TaskDisplay.PropagationSwaggerText(entry.SwaggerState))),
+            _sortColumn, _sortDescending,
+            (entry, column) => PropagationSort.Key(
+                entry.Display,
+                PropagationEntries.TagText(entry.Tag, entry.ParameterName),
+                TaskDisplay.PropagationSourceText(entry.SourceState),
+                TaskDisplay.PropagationXmlText(entry.XmlState),
+                TaskDisplay.PropagationSwaggerText(entry.SwaggerState),
+                column));
         _list.BeginUpdate();
         _list.Items.Clear();
         foreach (var entry in visible)
@@ -237,6 +261,7 @@ internal sealed class PropagationDialog : Form
             _list.Items.Add(row);
         }
         _list.EndUpdate();
+        RefreshSortHeaders();
         if (ListFilter.IsFilteredEmpty(_entries.Count, visible.Count))
         {
             _hint.Text = ListFilter.FilteredEmptyKeywordHint(ListFilter.PropagationNoun);
@@ -248,6 +273,9 @@ internal sealed class PropagationDialog : Form
         }
         _hint.Visible = false;
         _list.Visible = true;
+        // 排序后重建把当前这一条交回去（keep），不落到「选中第一行」——排序不该把选中甩回队首；
+        // 交回去仍经 Ui.SelectItem 唯一入口（选中事件随即问到详情，详情跟着那一行走）。
+        if (keep is not null && SelectEntry(keep.Display)) return;
         var target = selectedDisplay is null
             ? null
             : _list.Items.OfType<ListViewItem>().FirstOrDefault(i => (i.Tag as PropagationEntry)?.Display == selectedDisplay);
@@ -267,6 +295,42 @@ internal sealed class PropagationDialog : Form
         if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
         if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
         return base.ProcessDialogKey(keyData);
+    }
+
+    /// <summary>
+    /// 点击列头（DESIGN.md §6「列表列排序」，第一百零三轮）：同一列再点反向、换一列从升序开始，
+    /// 排序状态留在本对话框、重建走同一口径（<see cref="PopulateList"/> 里筛选先于排序）。
+    /// 只改呈现顺序——不写任务数据、不改核对结果，选中仍按条目自身恢复（重建前记下、重建后找回）。
+    /// </summary>
+    private void SortBy(int column)
+    {
+        (_sortColumn, _sortDescending) = ListSort.Toggle(_sortColumn, _sortDescending, column);
+        PopulateList(Current());
+    }
+
+    /// <summary>表头方向标记：排序列追加方向标记，其余列回到原标题（标题取自建列时的快照）。</summary>
+    private void RefreshSortHeaders()
+    {
+        for (var i = 0; i < _list.Columns.Count && i < _titles.Length; i++)
+        {
+            _list.Columns[i].Text = ListSort.Header(_titles[i], i, _sortColumn, _sortDescending);
+        }
+    }
+
+    private PropagationEntry? Current() => Ui.SelectedItem(_list)?.Tag as PropagationEntry;
+
+    /// <summary>重建后回到刚看的那一条；返回它是否仍在当前筛选的清单上（不在时由调用方续接既有落点）。</summary>
+    private bool SelectEntry(string display)
+    {
+        foreach (ListViewItem item in _list.Items)
+        {
+            if (item.Tag is PropagationEntry entry && entry.Display == display)
+            {
+                Ui.SelectItem(item);
+                return true;
+            }
+        }
+        return false;
     }
 
     private void ShowHint(string message, Color color)
