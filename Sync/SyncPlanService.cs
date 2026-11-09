@@ -27,7 +27,7 @@ public sealed class SyncPlanService(TaskStore tasks, FileStore store, ApifoxCli 
         var version = await cli.VersionAsync(profile.Apifox, job.Token);
         if (compat.Verified(version) is null)
         {
-            throw new UserException($"当前 Apifox CLI {version} 尚未通过写入兼容探测，只允许只读检查。请先在“项目设置”中对测试接口运行写入探测。");
+            throw new UserException($"当前 Apifox CLI {version} 尚未通过写入兼容探测，只允许只读检查。请先在「项目设置」中对测试接口运行写入探测。");
         }
         if (!diff.SnapshotComplete) throw new UserException("远端分支概览不完整，不能生成同步计划。");
 

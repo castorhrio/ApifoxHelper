@@ -92,7 +92,7 @@ public sealed class ProfileStore(FileStore store)
         if (!File.Exists(projectPath)) throw new UserException("API 项目文件不存在。", field: FieldApiProject);
         foreach (var allowed in p.AllowedSourcePaths)
         {
-            if (ResolveInside(p.WorkspaceRoot, allowed) is null) throw new UserException($"回写范围“{allowed}”不在代码工作区内。", field: FieldAllowedSourcePaths);
+            if (ResolveInside(p.WorkspaceRoot, allowed) is null) throw new UserException($"回写范围「{allowed}」不在代码工作区内。", field: FieldAllowedSourcePaths);
         }
         if (p.Apifox.ProjectId is not null && !p.Apifox.ProjectId.All(char.IsDigit)) throw new UserException("Apifox 项目 ID 应为数字。", field: FieldProjectId);
         switch (p.Swagger.Type)

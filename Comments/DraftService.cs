@@ -324,7 +324,7 @@ public sealed partial class DraftService(TaskStore tasks, CredentialStore creden
     {
         var task = tasks.Get(taskId);
         var settings = task.ProfileSnapshot.Generation;
-        if (settings.Mode != "openai") throw new UserException("配置中没有启用模型服务；可以使用“规则提取”、手工填写，或导出材料交给编码助手处理。");
+        if (settings.Mode != "openai") throw new UserException("配置中没有启用模型服务；可以使用「规则提取」、手工填写，或导出材料交给编码助手处理。");
         if (!confirmSend) throw new UserException("发送前需要确认材料范围。");
         var key = credentials.GetModelKey(task.ProfileId) ?? throw new UserException("尚未保存模型服务密钥。");
         var material = BuildMaterial(taskId, slotIds, out var included);
@@ -502,7 +502,7 @@ public sealed partial class DraftService(TaskStore tasks, CredentialStore creden
                     }
                     if (slot.Status == "valid" && candidate.Action == "set" && !candidate.OverwriteExisting)
                     {
-                        throw new UserException("该位置已有有效注释；如需改写，请勾选“覆盖已有注释”。");
+                        throw new UserException("该位置已有有效注释；如需改写，请勾选「覆盖已有注释」。");
                     }
                     foreach (var other in store.Candidates.Where(c => c.SlotId == candidate.SlotId && c.Id != candidate.Id && c.ReviewState == "accepted"))
                     {

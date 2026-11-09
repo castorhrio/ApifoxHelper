@@ -83,7 +83,7 @@ public sealed class CheckService(TaskStore tasks, FileStore store, ApifoxCli cli
         if (task.OfflineMode)
         {
             var offlinePath = tasks.FilePath(taskId, "offline.remote.openapi.json");
-            if (!File.Exists(offlinePath)) throw new UserException("离线检查需要先导入作为“远端”的 OpenAPI JSON。");
+            if (!File.Exists(offlinePath)) throw new UserException("离线检查需要先导入作为「远端」的 OpenAPI JSON。");
             var offline = OpenApiSource.Parse(await File.ReadAllTextAsync(offlinePath, Encoding.UTF8, job.Token), new OpenApiInfo());
             foreach (var (key, op) in OpenApiReader.Read(offline, result.Problems)) remoteOps[key] = (op, 0, new JsonObject());
             result.Problems.Add("离线检查：只比较结构，无法证明 Apifox 原生设置、重复接口与线上状态，同步不可用。");

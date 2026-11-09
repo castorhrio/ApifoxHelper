@@ -30,6 +30,21 @@ internal static class Repo
             .Select(f => new NativeSource(f, File.ReadAllText(f)))
             .ToList();
 
+    /// <summary>
+    /// 服务层源码目录（用户可见文案的扫描对象）。清单是封闭的：新增服务层目录要在这里登记，
+    /// 否则它的文案不会被中文排版检查覆盖——「漏一个目录」正是这条检查要防的事。
+    /// </summary>
+    public static readonly string[] ServiceDirectories =
+        ["Api", "Comments", "Sync", "Apifox", "Profiles", "Tasks", "Source", "Contracts", "Reports", "Infrastructure"];
+
+    /// <summary>服务层源码（相对路径 + 全文）。相对路径进断言消息，两个同名文件不会互相冒充。</summary>
+    public static IReadOnlyList<ServiceSource> ServiceSources() =>
+        ServiceDirectories
+            .SelectMany(dir => Directory.GetFiles(Path.Combine(Root, dir), "*.cs"))
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .Select(f => new ServiceSource(Path.GetRelativePath(Root, f).Replace('\\', '/'), File.ReadAllText(f)))
+            .ToList();
+
     public static string Source(params string[] relative) => File.ReadAllText(Path.Combine([Root, .. relative]));
 
     private static string FindRoot()
@@ -54,4 +69,14 @@ internal sealed class NativeSource(string path, string text)
     public bool Contains(string pattern) => Text.Contains(pattern, StringComparison.Ordinal);
 
     public MatchCollection Matches(string pattern) => Regex.Matches(Text, pattern);
+}
+
+internal sealed class ServiceSource(string relative, string text)
+{
+    /// <summary>相对仓库根的路径（如 <c>Api/ApifoxRoutes.cs</c>）。</summary>
+    public string Relative { get; } = relative;
+
+    public string Text { get; } = text;
+
+    public bool Contains(string pattern) => Text.Contains(pattern, StringComparison.Ordinal);
 }

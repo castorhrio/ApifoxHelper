@@ -136,7 +136,7 @@ public class ProfileStoreTests : IDisposable
         var profile = Valid();
         profile.AllowedSourcePaths = ["../outside"];
         var ex = Reject(profile);
-        Assert.Equal("回写范围“../outside”不在代码工作区内。", ex.Message);
+        Assert.Equal("回写范围「../outside」不在代码工作区内。", ex.Message);
         Assert.Equal(ProfileStore.FieldAllowedSourcePaths, ex.Field);
     }
 

@@ -14,7 +14,7 @@ public sealed class TaskStore(FileStore store, ProfileStore profiles)
         var prefixes = new List<string>();
         foreach (var name in request.ModuleNames)
         {
-            var module = profile.Modules.FirstOrDefault(m => m.Name == name) ?? throw new UserException($"配置中没有模块“{name}”。");
+            var module = profile.Modules.FirstOrDefault(m => m.Name == name) ?? throw new UserException($"配置中没有模块「{name}」。");
             prefixes.AddRange(module.PathPrefixes);
         }
         prefixes.AddRange(request.PathPrefixes.Select(p => p.Trim()).Where(p => p.Length > 0).Select(p => p.StartsWith('/') ? p : "/" + p));

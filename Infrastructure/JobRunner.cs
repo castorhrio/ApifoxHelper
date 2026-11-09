@@ -56,7 +56,7 @@ public sealed class JobRunner(ILogger<JobRunner> logger)
         if (!_running.TryAdd(scope, job.Id))
         {
             var runningKind = _running.TryGetValue(scope, out var runningId) && _jobs.TryGetValue(runningId, out var running) ? running.Kind : "其他操作";
-            throw new UserException($"该任务正在执行“{runningKind}”，请等待完成或取消后再试。", 409);
+            throw new UserException($"该任务正在执行「{runningKind}」，请等待完成或取消后再试。", 409);
         }
 
         _jobs[job.Id] = job;

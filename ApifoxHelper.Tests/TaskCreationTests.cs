@@ -124,7 +124,7 @@ public class TaskCreationTests : IDisposable
     {
         var ex = Assert.Throws<UserException>(() => new TaskStore(new FileStore(_root), _profiles).Create(
             new CreateTaskRequest { ProfileId = _profile.Id, ModuleNames = ["不存在"] }));
-        Assert.Equal("配置中没有模块“不存在”。", ex.Message);
+        Assert.Equal("配置中没有模块「不存在」。", ex.Message);
     }
 
     // ── 范围判定：指定接口与路径前缀取并集 ──────────────────────────
