@@ -114,6 +114,69 @@ public class ProfileGridColumnsTests
         }
     }
 
+    // ── 收缩分支的有界性（第一百二十五轮，防缺陷 2）──────────────────────
+
+    [Fact]
+    public void RemainderLoop_IsBoundedByTheColumnCount()
+    {
+        // 补余数的循环此前写成 `for (var k = 0; assigned < usable; k = (k + 1) % count)`：
+        // 终止只靠 assigned 递增，读代码看不出上界，输入偏斜时也无法从形状上排除多转。
+        // 现在循环条件里带 `k < count`——整数除法每列丢的余数都小于 1px，合计必然小于列数，
+        // 走一遍就够；形状本身钉住「迭代次数 ≤ 列数」。
+        var rule = Repo.Source("Desktop", "Native", "ProfileGridColumns.cs");
+        Assert.Contains("for (var k = 0; k < count && assigned < usable; k++)", rule);
+        // 环形写法不得回归（`% count` 的取模步进正是无上界的来源）。
+        Assert.DoesNotMatch(@"k = \(k \+ 1\) % count", rule);
+        // 兜底：万一上界不成立，差额全给最后一列，各列之和仍等于可用宽度。
+        Assert.Contains("if (assigned < usable) widths[count - 1] += usable - assigned;", rule);
+    }
+
+    [Fact]
+    public void ExtremeSkew_StillFillsTheUsableWidth()
+    {
+        // 极端偏斜的最小宽（1000:1、1:1000、int.MaxValue 对 1）在收缩分支里最容易把
+        // 「各列之和恰等于可用宽度」算丢：这里逐值跑一遍，和必须精确等于可用宽度，
+        // 且可用宽度容得下每列 1px 时不得出现 0 列。
+        int[][] skews =
+        [
+            [1, 1_000_000],
+            [1_000_000, 1],
+            [int.MaxValue, 1],
+            [1, int.MaxValue],
+            [int.MaxValue, int.MaxValue],
+            [int.MaxValue, int.MaxValue, 3],
+            [1, 1, 1_000_000],
+        ];
+        foreach (var minimums in skews)
+        {
+            for (var usable = 1; usable <= 600; usable++)
+            {
+                var widths = ApifoxHelper.Desktop.Native.ProfileGridColumns.ColumnWidths(usable + Pad, minimums, Pad);
+                Assert.Equal(usable, widths.Sum());
+                Assert.All(widths, w => Assert.True(w >= 0, $"最小宽 [{string.Join(",", minimums)}]、可用宽度 {usable} 时出现负列宽。"));
+                if (usable >= minimums.Length)
+                {
+                    Assert.All(widths, w => Assert.True(w >= 1, $"最小宽 [{string.Join(",", minimums)}]、可用宽度 {usable} 时出现 0 列。"));
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void HugeMinimums_DoNotOverflowTheSum()
+    {
+        // 最小宽合计在 int 上会溢出成负数（int.MaxValue + int.MaxValue = −2），
+        // 于是「没有最小宽约束」那条分支被误判命中、各列之和不再等于可用宽度。
+        // 合计改用 long 之后，极端输入仍走收缩分支、和仍精确。
+        var widths = ApifoxHelper.Desktop.Native.ProfileGridColumns.ColumnWidths(663, [int.MaxValue, int.MaxValue], Pad);
+        Assert.Equal(615, widths.Sum());
+        Assert.All(widths, w => Assert.True(w >= 1));
+        // 三列同理（int.MaxValue + int.MaxValue + 3 在 int 上是 1，会误判成「合计只有 1」）。
+        var three = ApifoxHelper.Desktop.Native.ProfileGridColumns.ColumnWidths(663, [int.MaxValue, int.MaxValue, 3], Pad);
+        Assert.Equal(615, three.Sum());
+        Assert.All(three, w => Assert.True(w >= 1));
+    }
+
     [Fact]
     public void NoUsableWidth_ReturnsZeros()
     {

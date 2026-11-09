@@ -62,7 +62,9 @@ public static class ProfileGridColumns
         var usable = totalWidth - Math.Max(0, pad);
         if (usable <= 0) return widths;
 
-        var minimum = 0;
+        // 最小宽合计用 long：极端输入（每列都给 int.MaxValue）在 int 上会溢出成负数，
+        // 于是「没有最小宽约束」那条分支被误判命中、各列之和不再等于可用宽度（第一百二十五轮）。
+        long minimum = 0;
         for (var i = 0; i < count; i++) minimum += Math.Max(0, minWidths[i]);
         if (minimum <= 0)
         {
@@ -74,7 +76,7 @@ public static class ProfileGridColumns
         if (minimum <= usable)
         {
             for (var i = 0; i < count; i++) widths[i] = Math.Max(0, minWidths[i]);
-            widths[count - 1] += usable - minimum;
+            widths[count - 1] += (int)(usable - minimum);
             return widths;
         }
 
@@ -90,11 +92,18 @@ public static class ProfileGridColumns
             assigned += widths[i];
         }
         var order = Enumerable.Range(0, count).OrderByDescending(i => remainders[i]).ThenBy(i => i).ToArray();
-        for (var k = 0; assigned < usable; k = (k + 1) % count)
+        // 补余数的循环**有界于列数**（第一百二十五轮）：整数除法每列丢掉的余数都小于 1px，
+        // 合计必然小于列数，所以按小数部分从大到小走一遍就够。此前是环形步进（取模回绕、
+        // 终止只靠 assigned 递增）——读代码看不出上界，输入偏斜时也无法从形状上排除多转（缺陷 2）。
+        for (var k = 0; k < count && assigned < usable; k++)
         {
             widths[order[k]]++;
             assigned++;
         }
+        // 兜底：上面的上界是算术结论，万一不成立（极端输入的取整意外）也不能让各列之和
+        // 少于可用宽度——差额全给最后一列。「各列之和恰等于可用宽度」这条不变量优先于
+        // 「余数按小数部分分配」这条分配规则。
+        if (assigned < usable) widths[count - 1] += usable - assigned;
 
         // 不出现 0 列：可用宽度至少能每列 1px 时，从最宽的一列挪过来。
         if (usable >= count)
