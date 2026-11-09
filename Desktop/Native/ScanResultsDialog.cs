@@ -17,6 +17,12 @@ namespace ApifoxHelper.Desktop.Native;
 /// （一次扫描的全部注释位置），只有状态下拉时找「上次那个位置」只能逐行扫；
 /// 清单支持点击列头排序（第一百零二轮，口径见 <see cref="SlotSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始、表头带方向标记，排序只改呈现顺序；
+/// 清单支持「上一条 / 下一条」（第一百一十五轮）：冻结页面的注释位置详情有「‹ 上一条 / N / M / 下一条 ›」，
+/// 原生此前只有清单——逐条处理（看代码证据、手工填写说明、删除失效标签）时不知道自己在第几条、还剩多少，
+/// 鼠标用户要逐条走只能回清单点行。现详情区正上方是导航行（两个 ghost 按钮夹一句位置指示），
+/// 按钮门控取 <see cref="ListAdvance.Step"/> 口径（到头不绕回、没有当前行不猜第一行），
+/// 位置指示取 <see cref="ListAdvance.PositionText"/> 口径（中文单位，越界说「不在当前筛选中」），
+/// 一行都没有时整行收掉；导航态只在 <see cref="UpdateNav"/> 一处刷新（详情区每次问到详情时一并问它）；
 /// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）；
 /// 打开即选中第一条（第九十一轮：详情区与三个选中动作对着第一条，键盘在 OnShown 交给清单）；
 /// 筛到零行=列表区一句话与「换一个筛选」这一步，覆盖率行、计数行与两个聚合入口照旧（见 <see cref="ShowFilteredEmpty"/>；
@@ -42,6 +48,11 @@ internal sealed class ScanResultsDialog : Form
     private readonly Button _evidenceButton;
     private readonly Button _manualButton;
     private readonly Button _removeStaleButton;
+    // 上一条 / 下一条（第一百一十五轮）：逐条处理时知道自己在第几条、还剩多少。
+    private readonly Button _prevButton;
+    private readonly Button _nextButton;
+    private readonly Label _navText = Ui.Caption();
+    private readonly FlowLayoutPanel _navRow;
     private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _status = Ui.StatusLine();
     private readonly Label _hint = new()
@@ -103,6 +114,13 @@ internal sealed class ScanResultsDialog : Form
         _list.SelectedIndexChanged += (_, _) => ShowDetail();
         // 双击=查看证据经共享入口：命中哪行看哪行的证据（行自身 Tag，不借当前选中），双击列头与空白区不动作。
         Ui.ActivateItem(_list, item => ShowEvidence(item.Tag as DocSlot));
+        // 上一条 / 下一条（第一百一十五轮）：逐条处理时知道自己在第几条、还剩多少；门控与位置指示见 UpdateNav。
+        _prevButton = Ui.Ghost(ListAdvance.PrevLabel);
+        _prevButton.Enabled = false;
+        _prevButton.Click += (_, _) => MoveSlot(-1);
+        _nextButton = Ui.Ghost(ListAdvance.NextLabel);
+        _nextButton.Enabled = false;
+        _nextButton.Click += (_, _) => MoveSlot(1);
 
         _filter.Items.AddRange(FilterChoices);
         _filter.SelectedIndex = 0;
@@ -131,6 +149,21 @@ internal sealed class ScanResultsDialog : Form
         listHost.Controls.Add(_hint);
         _hint.Visible = false;
 
+        // 上一条 / 下一条（第一百一十五轮）：与冻结页面的注释位置详情同一形状——两个 ghost 按钮夹一句位置指示，
+        // 紧贴详情区上方（那一行讲的就是详情区里这一条）。一行都没有时整行收掉（见 UpdateNav）。
+        _navRow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = UiTokens.Panel,
+            Padding = new Padding(0, 0, 0, UiTokens.Xs),
+        };
+        _navText.Margin = new Padding(UiTokens.Sm, UiTokens.Xs, UiTokens.Sm, 0);
+        _navRow.Controls.Add(_prevButton);
+        _navRow.Controls.Add(_navText);
+        _navRow.Controls.Add(_nextButton);
+
         var detailHost = Ui.Hairline(_detail);
         detailHost.Dock = DockStyle.Bottom;
         detailHost.Height = 96;
@@ -152,9 +185,11 @@ internal sealed class ScanResultsDialog : Form
         _warningsButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _traceButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
 
-        // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次状态行、详情框、筛选行，列表最后填满剩余空间。
+        // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次状态行、导航行、详情框、筛选行，列表最后填满剩余空间。
+        // 导航行排在详情框之后加入，倒序生效后正好落在详情框正上方（那一行讲的就是详情区里这一条）。
         Controls.Add(listHost);
         Controls.Add(detailHost);
+        Controls.Add(_navRow);
         Controls.Add(statusHost);
         Controls.Add(buttonRow);
         Controls.Add(filterRow);
@@ -238,6 +273,8 @@ internal sealed class ScanResultsDialog : Form
         _evidenceButton.Enabled = false;
         _manualButton.Enabled = false;
         _removeStaleButton.Enabled = false;
+        // 导航行随「一行都没有」整行收掉（口径见 UpdateNav），不在这里逐控件关一遍。
+        UpdateNav();
         _coverage.Visible = false;
         _coverage.Text = "";
         _warningsButton.Visible = false;
@@ -295,6 +332,22 @@ internal sealed class ScanResultsDialog : Form
         if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
         if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
         return base.ProcessDialogKey(keyData);
+    }
+
+    /// <summary>
+    /// 上一条 / 下一条（第一百一十五轮）：逐条处理时知道自己在第几条、还剩多少。
+    /// 落点取 <see cref="ListAdvance.Step"/> 口径（到头不绕回，没有当前行也不猜第一行）；
+    /// 落点就在当前清单上，选中经 <see cref="Ui.SelectItem"/> 唯一入口（Selected + Focused + 滚入可见区），
+    /// 选中事件随即问到详情与导航态——本方法不自己算位置、不自己滚、不重建清单、不写数据。
+    /// 键盘留在按钮上：这一行是给鼠标用户逐条走的，连点「下一条」不该被抢走焦点
+    /// （与第五十八轮「交回键盘只发生在刚处理完一条」同一取舍——这里没有处理，只有移动）。
+    /// </summary>
+    private void MoveSlot(int delta)
+    {
+        var index = Ui.SelectedIndex(_list) ?? ListAdvance.None;
+        var newIndex = ListAdvance.Step(index, delta, _list.Items.Count);
+        if (newIndex < 0) return;
+        Ui.SelectItem(_list.Items[newIndex]);
     }
 
     private void ApplyFilter(DocSlot? keep = null)
@@ -368,6 +421,40 @@ internal sealed class ScanResultsDialog : Form
         ShowDetail();
     }
 
+    /// <summary>
+    /// 选中随行重建恢复：先按 Id 找回重建后的行，再经 <see cref="Ui.SelectItem"/> 选中。
+    /// 不在当前筛选时由调用方续接详情区「不在当前筛选中」那句话。
+    /// </summary>
+    private bool SelectSlot(string slotId)
+    {
+        foreach (ListViewItem item in _list.Items)
+        {
+            if (item.Tag is DocSlot slot && slot.Id == slotId)
+            {
+                Ui.SelectItem(item);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 选中变化时更新导航按钮与位置指示（第一百一十五轮）：
+    /// 门控取 <see cref="ListAdvance.Step"/> 口径——第一条再往前、末条再往后都没有落点；
+    /// 位置指示取 <see cref="ListAdvance.PositionText"/> 口径（中文单位，越界说「不在当前筛选中」）。
+    /// 一行都没有时整行收掉：没有可走的上一条/下一条，位置指示也无话可说，那一屏由提示出口说话
+    /// （与 <see cref="ShowHint"/> 同一取舍，§7「禁用不得移除下一步」——那一步在筛选器上，不在这里）。
+    /// </summary>
+    private void UpdateNav()
+    {
+        var index = Ui.SelectedIndex(_list) ?? ListAdvance.None;
+        var count = _list.Items.Count;
+        _prevButton.Enabled = ListAdvance.Step(index, -1, count) >= 0;
+        _nextButton.Enabled = ListAdvance.Step(index, 1, count) >= 0;
+        _navText.Text = ListAdvance.PositionText(index, count);
+        _navRow.Visible = count > 0;
+    }
+
     private void ShowDetail()
     {
         if (Ui.SelectedItem(_list) is null)
@@ -379,6 +466,7 @@ internal sealed class ScanResultsDialog : Form
             _evidenceButton.Enabled = false;
             _manualButton.Enabled = false;
             _removeStaleButton.Enabled = false;
+            UpdateNav();
             return;
         }
         if (Ui.SelectedItem(_list)?.Tag is not DocSlot slot) return;
@@ -398,6 +486,7 @@ internal sealed class ScanResultsDialog : Form
         _detail.Text = string.Join(Environment.NewLine, lines);
         _detail.SelectionStart = 0;
         _detail.SelectionLength = 0;
+        UpdateNav();
     }
 
     /// <summary>
@@ -421,20 +510,6 @@ internal sealed class ScanResultsDialog : Form
     }
 
     private DocSlot? Current() => Ui.SelectedItem(_list)?.Tag as DocSlot;
-
-    /// <summary>重建后回到刚看的那一条；返回它是否仍在当前筛选的清单上（不在时由调用方续接详情区那句话）。</summary>
-    private bool SelectSlot(string slotId)
-    {
-        foreach (ListViewItem item in _list.Items)
-        {
-            if (item.Tag is DocSlot slot && slot.Id == slotId)
-            {
-                Ui.SelectItem(item);
-                return true;
-            }
-        }
-        return false;
-    }
 
     /// <summary>打开注释位置的代码证据（只读）：数据来自扫描落盘的 evidence.json，无写入动作；按钮与双击共用这一份行内门控。</summary>
     private void ShowEvidence(DocSlot? slot)

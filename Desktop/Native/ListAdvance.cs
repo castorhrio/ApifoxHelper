@@ -15,6 +15,18 @@ public static class ListAdvance
     /// <summary>没有落点：不选中任何行。</summary>
     public const int None = -1;
 
+    /// <summary>「上一条」按钮的文案（DESIGN.md §6「注释缺口清单的上一条/下一条」，第一百一十四轮）。</summary>
+    public const string PrevLabel = "上一条";
+
+    /// <summary>「下一条」按钮的文案。</summary>
+    public const string NextLabel = "下一条";
+
+    /// <summary>
+    /// 当前这一条不在可见清单里时位置指示的那句话——与冻结页面 <c>showSlot</c> 的「不在当前筛选中」逐字一致
+    /// （那一屏的「上一条 / 下一条」此时两侧都按不动，这里同一口径）。
+    /// </summary>
+    public const string NotInFilterText = "不在当前筛选中";
+
     /// <summary>
     /// 由「被处理那一行在旧清单中的显示序号」与「重建后的可见行数」给出新落点的显示序号。
     /// 行数少于落点时取末行（多条一并消失时不越过边界）；<paramref name="handledIndex"/> 未知
@@ -48,5 +60,40 @@ public static class ListAdvance
         if (displayedCount <= 0) return None;
         if (newIndex >= 0) return Math.Min(newIndex + 1, displayedCount - 1);
         return Math.Min(handledIndex < 0 ? 0 : handledIndex, displayedCount - 1);
+    }
+
+    /// <summary>
+    /// 逐条前进/后退的落点（DESIGN.md §6「注释缺口清单的上一条/下一条」，第一百一十四轮）：
+    /// 冻结页面的注释位置详情有「‹ 上一条 / N / M / 下一条 ›」，原生此前只有清单——逐条处理
+    /// （看代码证据、手工填写说明、删除失效标签）时不知道自己在第几条、还剩多少，鼠标用户要逐条走
+    /// 只能回清单点行。这里只算落点：<paramref name="index"/> 是当前这一条在可见清单里的显示序号，
+    /// <paramref name="delta"/> 是 ±1，<paramref name="count"/> 是可见行数。
+    /// <para>
+    /// 到头不绕回（第一条再往前、末条再往后都没有落点，与冻结页面两侧按钮在边界上按不动同一口径）；
+    /// 没有当前行（<see cref="None"/>，或序号已越界）时也不猜第一行——那一步的下一步是先在清单上选一行，
+    /// 与第五十一轮「焦点行缺失即不动作」、第五十三轮「宁可复制不到」同一取舍；
+    /// <paramref name="delta"/> 为 0 不是一次前进/后退，同样没有落点。
+    /// </para>
+    /// 只算落点，不碰数据：不改选中、不滚动、不重建清单。
+    /// </summary>
+    public static int Step(int index, int delta, int count)
+    {
+        if (count <= 0 || delta == 0) return None;
+        if (index < 0 || index >= count) return None;
+        var target = index + delta;
+        return target < 0 || target >= count ? None : target;
+    }
+
+    /// <summary>
+    /// 位置指示（与冻结页面 <c>showSlot</c> 的「N / M」同一语义）：当前这一条在可见清单里是第几条、共几条。
+    /// 补上中文单位（纯数字斜杠在中文界面里没有单位，与计数行「位置 42」同一词汇）；
+    /// 当前这一条不在可见清单里（没有选中、或序号越界）时如实说「不在当前筛选中」；
+    /// 一行都没有时留空——那一屏由提示出口说话，位置指示再讲「第 0 条」是把不存在的行说成还能走。
+    /// </summary>
+    public static string PositionText(int index, int count)
+    {
+        if (count <= 0) return "";
+        if (index < 0 || index >= count) return NotInFilterText;
+        return $"第 {index + 1} 条 / 共 {count} 条";
     }
 }
