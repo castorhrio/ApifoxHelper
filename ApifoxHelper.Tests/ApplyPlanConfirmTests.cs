@@ -112,6 +112,40 @@ public class ApplyPlanConfirmTests
     }
 
     [Fact]
+    public void ConfirmText_AndDialog_AgreeOnPromiseAndCounts()
+    {
+        // 跨文件闭环（第一百三十四轮）：此前两侧各自绿——正文侧断言「含承诺句」，
+        // 切片侧断言「构造里装了委托」，但没有一条断言同时看两处。于是把
+        // ApplyPlanEntries.ConfirmApplyText 的签名改成 (edits, files)、或把对话框里的调用
+        // 换成另拼一份、或把默认按钮挪到另一个 MessageBox 上，两侧都不会红。
+        // 本用例把「同一段构造体」作为断言单位：它必须既取共享正文（参数顺序与签名一致），
+        // 又带着默认按钮「取消」——两件事在同一段代码里，才叫闭环。
+        var dialog = Repo.Source("Desktop", "Native", File);
+        var block = ConfirmDelegateBlock(dialog);
+
+        // ① 正文取共享落点，且参数顺序与 ApplyPlanEntries 的签名一致（不是另拼一份、不是换序）。
+        Assert.Contains("ApplyPlanEntries.ConfirmApplyText(writable.Count, edits)", block, StringComparison.Ordinal);
+        Assert.Contains(
+            "public static string ConfirmApplyText(int writableFiles, int edits)",
+            Repo.Source("Desktop", "Native", "ApplyPlanEntries.cs"),
+            StringComparison.Ordinal);
+        // ② 数字来自计划本身：只数允许回写的文件，处数取这些文件的注释处数之和。
+        Assert.Contains("plan.Files.Where(f => f.WriteAllowed)", block, StringComparison.Ordinal);
+        Assert.Contains("writable.Sum(f => f.Edits.Count)", block, StringComparison.Ordinal);
+        // ③ 标题也取共享常量，不就地拼字。
+        Assert.Contains("ApplyPlanEntries.ConfirmApplyTitle", block, StringComparison.Ordinal);
+        // ④ 默认按钮「取消」就在这一段构造体里——不是「文件里某处有 Button2」。
+        Assert.Contains("MessageBoxDefaultButton.Button2", block, StringComparison.Ordinal);
+        Assert.DoesNotContain("MessageBoxDefaultButton.Button1", block, StringComparison.Ordinal);
+        Assert.DoesNotContain("MessageBoxDefaultButton.Button3", block, StringComparison.Ordinal);
+        // ⑤ 这一段里只有一个确认框，且只有「确定」才继续（取消与关闭一律不写）。
+        Assert.Single(Regex.Matches(block, @"MessageBox\.Show\("));
+        Assert.Contains("== DialogResult.OK", block, StringComparison.Ordinal);
+        // ⑥ 设计基线记着这条闭环（改了实现不更新基线即红）。
+        Assert.Contains("跨文件闭环", Repo.DesignSection(6));
+    }
+
+    [Fact]
     public void RunApply_AsksBeforeWriting()
     {
         var source = Repo.Source("Desktop", "Native", File);
@@ -137,6 +171,12 @@ public class ApplyPlanConfirmTests
         Assert.Contains("ConfirmApply", smoke, StringComparison.Ordinal);
         Assert.Contains("Method.DeclaringType", smoke, StringComparison.Ordinal);
         Assert.Contains("typeof(ApplyPlanDialog)", smoke, StringComparison.Ordinal);
+        // 运行时核对正文与标题（第一百三十四轮）：MessageBox 是静态方法，默认按钮参数在运行时读不到
+        // （如实记录，不冒充），退而求其次核对与产品路径逐字同源的那份正文——删掉这段核对即红。
+        Assert.Contains("ApplyPlanEntries.ConfirmApplyTitle", smoke, StringComparison.Ordinal);
+        Assert.Contains("ApplyPlanEntries.ConfirmApplyText(3, 7)", smoke, StringComparison.Ordinal);
+        Assert.Contains(SafetyPromise, smoke, StringComparison.Ordinal);
+        Assert.Contains("确认回写？", smoke, StringComparison.Ordinal);
     }
 
     // ---------- 设计基线 ----------
@@ -183,6 +223,21 @@ public class ApplyPlanConfirmTests
         }
         Assert.Fail($"{signature} 的方法体没有闭合。");
         return "";
+    }
+
+    /// <summary>
+    /// 默认确认委托的构造体：从 <c>ConfirmApply = plan =&gt;</c> 到其后的第一个 <c>};</c>。
+    /// 断言单位取这一段而不是整份文件——「文件里某处有 Button2」与「这个确认框的默认按钮是取消」
+    /// 是两件事，前者在有人新增第二个 MessageBox 时照样绿。
+    /// </summary>
+    private static string ConfirmDelegateBlock(string source)
+    {
+        const string start = "ConfirmApply = plan =>";
+        var from = source.IndexOf(start, StringComparison.Ordinal);
+        Assert.True(from >= 0, "构造里没有装默认确认委托（产品路径点「确认回写」会 NRE）。");
+        var to = source.IndexOf("};", from + start.Length, StringComparison.Ordinal);
+        Assert.True(to > from, "默认确认委托的构造体没有闭合。");
+        return source[from..(to + 2)];
     }
 
     private static string Slice(string source, string start, string end)

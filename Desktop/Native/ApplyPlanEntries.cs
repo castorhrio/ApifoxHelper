@@ -62,6 +62,13 @@ public static class ApplyPlanEntries
     /// 收成纯函数后，正文在 Linux 侧真执行断言，默认按钮由源码切片钉住（见
     /// <c>ApifoxHelper.Tests/ApplyPlanConfirmTests.cs</c>）。
     /// </para>
+    /// <para>
+    /// 换行符口径（第一百三十四轮显式化）：正文里用 <c>\n</c> 而**不是** <c>Environment.NewLine</c>。
+    /// 两条理由：① <c>MessageBox</c> 自己会按平台转换换行，传 <c>\r\n</c> 在 Windows 上不会多出空行、
+    /// 传 <c>\n</c> 也不会少；② 测试断言要的是跨平台稳定的字面量——用 <c>Environment.NewLine</c>
+    /// 会让同一份断言在 Linux（<c>\n</c>）与 Windows（<c>\r\n</c>）上读到不同的字符串。
+    /// 这是有意的取舍，不是漏改：下一轮不要「顺手」改成 <c>Environment.NewLine</c>，那会把断言改红。
+    /// </para>
     /// </summary>
     public static string ConfirmApplyText(int writableFiles, int edits) =>
         "将把注释改动写入 " + writableFiles.ToString(CultureInfo.InvariantCulture)

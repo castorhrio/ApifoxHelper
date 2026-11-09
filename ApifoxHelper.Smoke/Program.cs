@@ -183,6 +183,9 @@ internal static class Program
         // 默认确认委托（第一百三十三轮）：Linux 侧的源码切片只能钉住「构造里装了委托」这一处形状，
         // 「装上的确实是对话框自己的默认实现」只有真构造一次才知道——留空的话产品路径点「确认回写」
         // 会 NRE，而 Linux 侧测试全绿。
+        // 运行时核对正文与标题（第一百三十四轮）：MessageBox 是静态方法，默认按钮参数在运行时读不到
+        // （如实记录，不冒充），退而求其次核对与产品路径逐字同源的那份正文——对话框的默认委托取的就是
+        // 这两个成员，它们在这里对得上，产品路径上弹出的那段话就对得上。
         yield return ("ApplyPlanDialog 默认确认委托（真实控件）", () =>
         {
             var dialog = new ApplyPlanDialog(services.GetRequiredService<CommentPlanService>(), tasks, task);
@@ -192,6 +195,25 @@ internal static class Program
             if (declaring != typeof(ApplyPlanDialog) && declaring?.DeclaringType != typeof(ApplyPlanDialog))
             {
                 throw new InvalidOperationException($"默认确认委托的声明类型是「{declaring?.Name}」，不是 ApplyPlanDialog 自己的默认实现。");
+            }
+            if (ApplyPlanEntries.ConfirmApplyTitle != "确认注释回写")
+            {
+                throw new InvalidOperationException($"确认框标题是「{ApplyPlanEntries.ConfirmApplyTitle}」，不是「确认注释回写」。");
+            }
+            var text = ApplyPlanEntries.ConfirmApplyText(3, 7);
+            // 承诺句在这里是**故意重复的字面量**：它是运行时核对的绊线，不是第二份正文——
+            // 正文改了而这里没跟上，冒烟就红，逼人回来看这段承诺还在不在。
+            if (!text.Contains("只修改 /// 注释行，不改执行代码", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("确认正文里没有「只修改 /// 注释行，不改执行代码」这句承诺。");
+            }
+            if (!text.Contains("将把注释改动写入 3 个源码文件，共 7 处注释修改。", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"确认正文没有按计划给的数字说话：{text}");
+            }
+            if (!text.EndsWith("确认回写？", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("确认正文没有以问句收尾（这是要用户回答的问题，不是通知）。");
             }
             return dialog;
         });
