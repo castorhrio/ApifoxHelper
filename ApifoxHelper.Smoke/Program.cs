@@ -58,7 +58,9 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.SetDefaultFont(new Font("Microsoft YaHei UI", 9F));
+        // 与产品入口同一份字体口径（DESIGN §3 的字体栈，找到即停）：冒烟器量到的控件尺寸
+        // 必须与真机同一套字体，否则「字段宽度实测」量的是另一只壳。
+        Application.SetDefaultFont(ApifoxHelper.Desktop.Native.UiTokens.Create(ApifoxHelper.Desktop.Native.UiTokens.CaptionPt));
 
         // 控制台按 UTF-8 输出：wine 的默认代码页会把中文打成问号，失败行读不出是哪一处。
         try

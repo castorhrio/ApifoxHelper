@@ -37,7 +37,10 @@ public static class DesktopApp
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.SetDefaultFont(new Font("Microsoft YaHei UI", 9F));
+        // 进程默认字体与界面控件同一份回退结果（DESIGN §3 的字体栈，找到即停）：
+        // 此前这里写死 "Microsoft YaHei UI"，缺这个字体的机器上会静默落到系统默认，
+        // 与界面层（UiTokens 四档工厂）不是同一份口径。
+        Application.SetDefaultFont(Native.UiTokens.Create(Native.UiTokens.CaptionPt));
 
         HelperHost host;
         try

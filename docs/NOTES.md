@@ -1357,3 +1357,17 @@
 | 19 | 无异常 | 全程无未处理异常弹窗；任务日志（`JournalDialog`）无未记录的中断 | `[ ]` 未验证 |
 
 **已知前置条件（真机到位前先备齐，否则第 5 步之后必然断链）**：① .NET 8 桌面运行时；② Roslyn 参考程序集（扫描用）；③ 真实 Apifox CLI 与登录态（第 15 步）；④ 模型服务密钥（若演示「与 AI 共生」的模型生成链路——`docs/NOTES.md` 挂账「只验证了请求构造与结果校验代码可编译」）。
+
+## 字体栈回退落地（2026-11-10 第一百三十五轮）
+
+- **接续前确认**：开局工作树干净（仅 `.winecheck/` 未跟踪，本机 wine 试跑脚本，非产品代码，不入库），HEAD（a1de5c6）为第一百三十四轮（确认回写的正文与默认按钮收成跨文件闭环断言），主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误、`dotnet test` 2013 用例全绿，基线成立；第四十七至一百三十四轮逐字保留。
+- **本轮定位**：控制仓简报的 P0-1（Windows 真机跑 19 项全链路清单）与 P1（真机 100%/200% DPI 截图）在本会话**不可能完成**——Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机（第一百二十四轮的挂账决策继续有效：责任在环境供给）。按简报「能在 Linux 验证的验证、不可验证的如实记录」，本轮只做 P0-2（字体栈回退落地），不开新功能、不动服务链路语义。
+- **P0-2 已交付：字体栈的有序回退从「已记录未实现」变成真实现**。基线可核对：`docs/DESIGN.md` §3 承诺「Segoe UI → Microsoft YaHei UI → Microsoft YaHei → SimHei，找到即停，全不匹配回退系统字体」，而 WinForms 的 `Control.Font` 不支持 CSS 式回退——`Desktop/DesktopApp.cs` 与 `ApifoxHelper.Smoke/Program.cs` 都写着 `SetDefaultFont(new Font("Microsoft YaHei UI", 9F))`，缺这个字体的机器（老 Windows、精简系统）上会静默落到系统默认。更要紧的是**两处不是同一份口径**：界面控件经 `UiTokens` 的四档工厂（当时已有一份私有的 `ResolveFamily`），进程默认字体（决定 MessageBox、菜单等未显式设字体的控件）写死一个字体名——同一只壳里界面回退到雅黑、MessageBox 回退到系统默认。
+  - **栈与判定收进 `Desktop/Native/FontStack.cs`**（不依赖 WinForms 与 GDI+、与测试工程共享编译）：`Families` / `MonoFamilies` 两份栈（顺序即回退顺序，与 DESIGN §3 同序），`Resolve(栈, 装没装, 回退名)` 按顺序探测、找到即停、空白项跳过而不当成一个字体名去探测、全不匹配回退系统无衬线。界面层只提供「这个名字本机装没装」这一个事实（`FontFamily` 构造在未安装时抛 `ArgumentException`，探测在 `UiTokens.IsInstalled` 恰一处），回退顺序不在界面层重写。
+  - **两处共用同一份结果**：`UiTokens.ResolveFontFamily()` 是唯一入口，四档字号工厂（`UiTokens.Create`）与进程默认字体都取它；`DesktopApp.cs` 与 `Smoke/Program.cs` 的 `SetDefaultFont` 改为 `UiTokens.Create(UiTokens.CaptionPt)`——磅值仍是 9pt（DESIGN §3 的 Caption 档，与改前一致），故有字体的机器上观感不变，缺字体的机器上界面与 MessageBox 用同一个字体。冒烟器与产品入口同一份字体，否则「字段宽度实测」量的是另一只壳。
+  - **栈只有一份**：`UiTokens` 里原来的 `FamilyStack` / `MonoStack` 字面删除，`TypographyTests.FontStack_MatchesDesignDocOrder` 的锚点从 `UiTokens.cs` 的 `FamilyStack = [` 改为 `FontStack.cs` 的 `Families = [`（断言内容不变：与 DESIGN §3 逐项同序）。
+- **测试 2013 → 2029 用例**（新增 `FontStackTests` 16：判定真值表——取第一个已装、找到即停不探测后面的、全不匹配回退、空栈回退、空白项跳过且不探测、只有空白项回退、按栈序探测；栈本身与 DESIGN §3 同序且无空白项；栈只在 `FontStack` 一处（界面层不再留字面，只算代码行）；`UiTokens` 把回退顺序交给共享口径（`FontStack.Resolve(...)` 行首正则、`FontFamily` 构造恰一次、界面层不出现遍历字体名的 `foreach`）；两处入口都经 `UiTokens.Create(UiTokens.CaptionPt)` 且不再写死字体名、不再就地写磅值；口径文件不引用 WinForms/GDI+；共享编译清单；§3/§8 条款与「进程默认字体那一行不再是未改的挂账」）。
+- **变异验证 4 处实测可红**（各自独立变红，还原后重建 2029 全绿，备份以 `cp` 还原并逐处 `cmp` 核对与开局一致）：① 把「找到即停」改成继续探测（`return name` 换成空语句）→ 3 红；② 去掉空白项跳过 → 2 红；③ 进程默认字体退回 `SetDefaultFont(new Font("Microsoft YaHei UI", 9F))` → 2 红；④ 界面层自己重写回退顺序（`stack.FirstOrDefault(IsInstalled) ?? …`，不走 `FontStack.Resolve`）→ 1 红。
+- **P0-1 / P1 真机证据：本轮仍不可得（环境限制，非验证手段选错）**。本会话是 Linux 容器、无 Windows 真机，`docs/NOTES.md` 那张「Windows 真机全链路清单（19 项）」本轮**一项都没勾**，第一百三十四轮的登记原样保留；本轮**未再重复 wine 试跑**（第一百二十五至一百二十七轮已连续三次在同一处卡住），故不据此宣称冒烟器 37 通过在本轮复跑过——那是第一百三十二轮的证据。本轮冒烟器只做了编译验证（`dotnet build -t:Rebuild` 0 警告 0 错误）。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2029 用例全部通过**；口径是真执行——`FontStack.cs` 经共享编译进测试程序集，回退判定跑的是主工程同一份代码；界面接线属 WinForms 控件触达、本环境不可执行，以源码切片与行首正则钉住，不冒充跑过。主链路（新建配置 → 新建任务 → 扫描 → …）仍未打通，卡在「Windows 真机复跑」这一环境门槛上。本轮未连接或写入 Apifox，未调用任何模型服务。
+- **下一轮候选（如实挂账，本轮未做）**：`ApifoxCli.Parse` 的表驱动用例（简报 P0-3）——`IsNotFound` 只认 `404000` 的口径目前只在源码层，若上游 CLI 版本改动错误码，会把「网络失败」当「不存在」；本轮已试通共享编译路径（`Apifox/ApifoxCli.cs` + `Infrastructure/Redactor.cs` + `Infrastructure/ProcessRunner.cs` 三者可在测试工程编译通过），但用例未写，故**未把这三条共享编译登记留在 csproj 里**（半成品不入库）。

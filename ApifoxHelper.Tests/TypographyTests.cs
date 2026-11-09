@@ -156,9 +156,10 @@ public class TypographyTests
         var expected = doc.Groups[1].Value.Trim().Split("→", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(["Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "SimHei"], expected);
 
-        var code = Repo.Source("Desktop", "Native", "UiTokens.cs");
-        var match = Regex.Match(code, @"FamilyStack = \[([^\]]*)\]");
-        Assert.True(match.Success, "UiTokens.cs 缺少 FamilyStack 字体栈。");
+        // 栈本身在 FontStack（不依赖 WinForms、与测试工程共享编译），界面层只提供「装没装」这一个事实。
+        var code = Repo.Source("Desktop", "Native", "FontStack.cs");
+        var match = Regex.Match(code, @"\bFamilies = \[([^\]]*)\]");
+        Assert.True(match.Success, "FontStack.cs 缺少 Families 字体栈。");
         var actual = Regex.Matches(match.Groups[1].Value, "\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
         Assert.Equal(expected, actual);
     }

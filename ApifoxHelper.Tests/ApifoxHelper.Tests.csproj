@@ -32,6 +32,7 @@
   <ItemGroup>
     <!-- 与主工程共享同一份文件：主工程改动该文件即同时改变两边，断言始终对准真实实现。 -->
     <Compile Include="..\Desktop\LaunchOptions.cs" Link="Shared\LaunchOptions.cs" />
+    <Compile Include="..\Desktop\Native\FontStack.cs" Link="Shared\FontStack.cs" />
     <Compile Include="..\Desktop\Native\TaskDisplay.cs" Link="Shared\TaskDisplay.cs" />
     <Compile Include="..\Desktop\Native\SyncSelection.cs" Link="Shared\SyncSelection.cs" />
     <Compile Include="..\Desktop\Native\SyncSelect.cs" Link="Shared\SyncSelect.cs" />

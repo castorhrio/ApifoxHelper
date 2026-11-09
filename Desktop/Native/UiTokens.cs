@@ -38,11 +38,10 @@ internal static class UiTokens
     public const int Xl = 24;
 
     // 字体栈（docs/DESIGN.md §3）：有序回退，找到即停，全不匹配用系统无衬线。
-    private static readonly string[] FamilyStack = ["Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "SimHei"];
-    private static readonly string[] MonoStack = ["Cascadia Mono", "Consolas", "Courier New"];
-
-    private static readonly Lazy<string> Family = new(ResolveFamily(FamilyStack));
-    private static readonly Lazy<string> MonoFamily = new(ResolveFamily(MonoStack));
+    // 栈本身与回退判定都在 FontStack（不依赖 WinForms、与测试工程共享编译），本文件只提供
+    // 「这个名字本机装没装」这一个事实，并把结果缓存成进程内唯一的一份。
+    private static readonly Lazy<string> Family = new(() => ResolveFamily(FontStack.Families));
+    private static readonly Lazy<string> MonoFamily = new(() => ResolveFamily(FontStack.MonoFamilies));
 
     // 共享字体实例只创建不释放（与进程同生命周期），避免每控件新建。
     public static readonly Lazy<Font> Caption = new(() => Create(CaptionPt));
@@ -55,21 +54,29 @@ internal static class UiTokens
 
     public static Font Create(float points, FontStyle style = FontStyle.Regular) => new(Family.Value, points, style);
 
-    private static string ResolveFamily(string[] stack)
+    /// <summary>
+    /// 进程默认字体用的字体名（与界面控件同一份回退结果）。
+    /// <c>Application.SetDefaultFont</c> 决定 MessageBox、菜单等未显式设字体的控件；
+    /// 此前那里写死 <c>"Microsoft YaHei UI"</c>，缺这个字体的机器上会静默落到系统默认，
+    /// 与 DESIGN §3 的「找到即停」不是同一件事——两处各写一份必然漂移，故收成这一个入口。
+    /// </summary>
+    public static string ResolveFontFamily() => Family.Value;
+
+    private static string ResolveFamily(IReadOnlyList<string> stack) =>
+        FontStack.Resolve(stack, IsInstalled, FontFamily.GenericSansSerif.Name);
+
+    /// <summary>本机是否装了这个名字的字体：<see cref="FontFamily"/> 构造在未安装时抛 <see cref="ArgumentException"/>。</summary>
+    private static bool IsInstalled(string name)
     {
-        foreach (var name in stack)
+        try
         {
-            try
-            {
-                using var probe = new FontFamily(name);
-                return name;
-            }
-            catch (ArgumentException)
-            {
-                // 本机未安装该字体（FontFamily 构造抛 ArgumentException），尝试下一个。
-            }
+            using var probe = new FontFamily(name);
+            return true;
         }
-        return FontFamily.GenericSansSerif.Name;
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     private static Color FromHex(int rgb) => Color.FromArgb((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
