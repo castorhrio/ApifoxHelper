@@ -61,6 +61,23 @@ internal sealed class ApplyPlanDialog : Form
     private CommentPlan? _plan;
     private bool _busy;
 
+    /// <summary>
+    /// 冒烟器用的确认替身（第一百三十二轮）：默认就是那个原生确认对话框（默认按钮在「取消」）。
+    /// 存在的理由：确认框是模态的，无人值守的冒烟器点不动它；把「确认」收成一个可替换的委托，
+    /// 冒烟器就能真的点「确认回写」按钮、走同一条回写链路，而不是绕过对话框直接调服务。
+    /// 产品行为不变——默认实现仍是同一个 MessageBox，文案与默认按钮一字未改。
+    /// </summary>
+    internal Func<CommentPlan, bool> ConfirmApply { get; set; }
+
+    /// <summary>冒烟器用：最近一次「生成计划」的异步任务（<see cref="OnLoad"/> 与「重新生成计划」都会置位）。</summary>
+    internal Task? PendingLoad { get; private set; }
+
+    /// <summary>冒烟器用：最近一次「确认回写」的异步任务（按钮点击后由冒烟器等待完成）。</summary>
+    internal Task? PendingApply { get; private set; }
+
+    /// <summary>冒烟器用：当前界面上的计划（只读，供断言计划非空与哈希稳定）。</summary>
+    internal CommentPlan? Plan => _plan;
+
     // 列排序状态（ListSort 口径，第一百零五轮）：未排序时保持计划自身的文件顺序。
     private int _sortColumn = ListSort.None;
     private bool _sortDescending;
@@ -131,6 +148,20 @@ internal sealed class ApplyPlanDialog : Form
         _skippedHint.Visible = false;
         _skippedHost.Visible = false;
 
+        // 确认的默认实现：原生确认对话框（默认按钮在「取消」，防回车误触）。冒烟器可替换本委托，
+        // 产品路径不变——文案、按钮与默认按钮与接入本委托之前逐字一致。
+        ConfirmApply = plan =>
+        {
+            var writable = plan.Files.Where(f => f.WriteAllowed).ToList();
+            var edits = writable.Sum(f => f.Edits.Count);
+            return MessageBox.Show(this,
+                $"将把注释改动写入 {writable.Count} 个源码文件，共 {edits} 处注释修改。\n只修改 /// 注释行，不改执行代码；文件在确认后被改动会拒绝写入，失败即停并如实记录。\n\n确认回写？",
+                "确认注释回写",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2) == DialogResult.OK;
+        };
+
         _applyButton = Ui.Primary("确认回写");
         _applyButton.Enabled = false;
         _applyButton.Click += (_, _) => RunApply();
@@ -139,7 +170,7 @@ internal sealed class ApplyPlanDialog : Form
         _patchButton.Click += (_, _) => ExportPatch();
         _regenButton = Ui.Ghost("重新生成计划");
         _regenButton.Enabled = false;
-        _regenButton.Click += (_, _) => LoadPlan();
+        _regenButton.Click += (_, _) => PendingLoad = LoadPlanAsync();
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
@@ -209,11 +240,11 @@ internal sealed class ApplyPlanDialog : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
-        LoadPlan();
+        PendingLoad = LoadPlanAsync();
     }
 
     /// <summary>生成（或重新生成）注释计划：读工作区、核对文件与证据指纹，产物为 comment-plan.json 与 comments.patch。</summary>
-    private async void LoadPlan()
+    internal async Task LoadPlanAsync()
     {
         if (_busy) return;
         SetBusy(true);
@@ -495,19 +526,13 @@ internal sealed class ApplyPlanDialog : Form
     }
 
     /// <summary>确认回写：覆盖式写入源码，按设计基线用原生确认对话框（默认按钮在「取消」，防回车误触）。</summary>
-    private async void RunApply()
+    private void RunApply() => PendingApply = RunApplyAsync();
+
+    private async Task RunApplyAsync()
     {
         var plan = _plan;
         if (plan is null || _busy || !_applyButton.Enabled) return;
-        var writable = plan.Files.Where(f => f.WriteAllowed).ToList();
-        var edits = writable.Sum(f => f.Edits.Count);
-        var choice = MessageBox.Show(this,
-            $"将把注释改动写入 {writable.Count} 个源码文件，共 {edits} 处注释修改。\n只修改 /// 注释行，不改执行代码；文件在确认后被改动会拒绝写入，失败即停并如实记录。\n\n确认回写？",
-            "确认注释回写",
-            MessageBoxButtons.OKCancel,
-            MessageBoxIcon.Warning,
-            MessageBoxDefaultButton.Button2);
-        if (choice != DialogResult.OK) return;
+        if (!ConfirmApply(plan)) return;
         SetBusy(true);
         _status.Text = "正在回写注释…";
         _status.ForeColor = UiTokens.Text;

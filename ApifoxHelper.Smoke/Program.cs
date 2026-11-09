@@ -141,6 +141,9 @@ internal static class Program
         Console.WriteLine("== 端到端主链路（真实控件交互）==");
         RunEndToEnd(services, dataRoot);
 
+        Console.WriteLine("== 端到端回写链路（扫描 → 候选 → 计划 → 回写落盘）==");
+        RunWriteBackEndToEnd(services, dataRoot);
+
         Console.WriteLine($"== 结果：{_passed} 通过 / {_failed} 失败 ==");
         WriteReport();
         return _failed == 0 ? 0 : 1;
@@ -395,6 +398,308 @@ internal static class Program
         });
     }
 
+    /// <summary>
+    /// 探针工作区（第一百三十二轮）：一个 Web SDK 项目 + 一个缺 <c>///</c> 的控制器。
+    /// <para>
+    /// 存在理由：扫描要真的发现接口与注释缺口，项目就必须是 Web SDK（<c>EndpointDiscovery</c> 按
+    /// ASP.NET Core MVC 的属性路由发现动作），控制器里必须真的少一段文档注释（否则没有可回写的位置）。
+    /// 文件按 UTF-8 带 BOM + CRLF 写，回写后要能断言「BOM 与换行符一字未改」。
+    /// </para>
+    /// </summary>
+    private static void CreateProbeWorkspace(string projectDir)
+    {
+        Directory.CreateDirectory(Path.Combine(projectDir, "Controllers"));
+        File.WriteAllText(
+            Path.Combine(projectDir, Path.GetFileName(projectDir) + ".csproj"),
+            "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup></Project>");
+        File.WriteAllText(
+            Path.Combine(projectDir, "Controllers", "ProbeController.cs"),
+            ProbeControllerSource,
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    /// <summary>探针控制器源码：<c>Get</c> 与 <c>ProbeResponse.Name</c> 都没有 <c>///</c>，扫描会报缺口。</summary>
+    private const string ProbeControllerSource =
+        "using Microsoft.AspNetCore.Mvc;\r\n" +
+        "\r\n" +
+        "namespace Probe.Api.Controllers;\r\n" +
+        "\r\n" +
+        "[ApiController]\r\n" +
+        "[Route(\"api/probe\")]\r\n" +
+        "public class ProbeController : ControllerBase\r\n" +
+        "{\r\n" +
+        "    [HttpGet]\r\n" +
+        "    public ActionResult<ProbeResponse> Get()\r\n" +
+        "    {\r\n" +
+        "        return Ok(new ProbeResponse { Name = \"probe\" });\r\n" +
+        "    }\r\n" +
+        "}\r\n" +
+        "\r\n" +
+        "public class ProbeResponse\r\n" +
+        "{\r\n" +
+        "    public string Name { get; set; } = \"\";\r\n" +
+        "}\r\n";
+
+    /// <summary>
+    /// 端到端回写链路（第一百三十二轮）：从扫描一路走到「注释真的写进源码文件」。
+    /// <para>
+    /// 存在理由：第一百三十一轮的端到端只覆盖到「新建配置 → 新建任务」，扫描及之后各段仍停在
+    /// 「能构造对话框」或「纯服务层单测」。注释回写是产品核心价值动作，也是写入安全不变量最集中的地方
+    /// （只改 <c>///</c> 注释行、写入前保存前态、确认后文件被改动即拒绝写入），这一段没跑过，
+    /// 「主链路可靠」无从谈起。
+    /// </para>
+    /// <para>
+    /// 六段：① 扫描产出注释缺口；② 手工候选并接受；③ 生成计划且两次哈希一致；
+    /// ④ 反向——计划哈希不符时拒绝写入、磁盘不变；⑤ 确认后回写落盘，只改 <c>///</c> 行、BOM/换行不变；
+    /// ⑥ 真实对话框驱动——构造 <c>ApplyPlanDialog</c>、等它自己生成计划、点「确认回写」按钮，
+    /// 断言源码真的被改（确认框用 <c>ConfirmApply</c> 替身，因为模态框在无人值守下点不动）。
+    /// </para>
+    /// <para>
+    /// 服务层调用一律包在 <c>Task.Run</c> 里同步等待：WinForms 装了同步上下文，直接在界面线程上
+    /// <c>GetResult()</c> 会把续体排到没有消息循环的队列上，等成死锁。
+    /// </para>
+    /// </summary>
+    private static void RunWriteBackEndToEnd(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var scan = services.GetRequiredService<SourceScanService>();
+        var drafts = services.GetRequiredService<DraftService>();
+        var plans = services.GetRequiredService<CommentPlanService>();
+
+        string? taskId = null;
+        string? slotId = null;
+        string? planHash = null;
+        string? before = null;
+        var probeSource = Path.Combine(dataRoot, "Probe.Api", "Controllers", "ProbeController.cs");
+
+        // 第一段：扫描。真的加载项目、发现接口、产出注释位置清单。
+        RunAction("回写链路：源码扫描产出注释缺口（真实服务）", () =>
+        {
+            var profile = profiles.Save(new ProjectProfile
+            {
+                Name = "回写配置",
+                WorkspaceRoot = dataRoot,
+                ApiProject = "Probe.Api/Probe.Api.csproj",
+                AllowedSourcePaths = ["Probe.Api/"],
+            }, isNew: true);
+            var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "回写任务" });
+            taskId = task.Id;
+            var job = new JobContext(new JobInfo { Id = "job-smoke-scan", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+            Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+
+            var output = tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)
+                ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+            if (output.Endpoints.Count == 0) throw new InvalidOperationException("扫描没有发现任何接口。");
+            if (output.Slots.Count == 0) throw new InvalidOperationException("扫描没有产出任何注释位置。");
+            var missing = output.Slots.Where(s => s.Status == "missing" && s.Editable).ToList();
+            if (missing.Count == 0) throw new InvalidOperationException("扫描没有产出可回写的缺失注释位置。");
+            var summary = missing.FirstOrDefault(s => s.Tag == "summary") ?? missing[0];
+            slotId = summary.Id;
+            _lines.Add($"     扫描：{output.Endpoints.Count} 个接口、{output.Slots.Count} 个注释位置，其中缺失且可回写 {missing.Count} 个；选中「{summary.Display}」");
+        });
+
+        // 第二段：手工候选 → 接受。走 DraftService 的既有校验（占位文字、待确认问题、覆盖已有注释）。
+        RunAction("回写链路：手工候选接受（真实服务）", () =>
+        {
+            if (taskId is null || slotId is null) throw new InvalidOperationException("上一段没有产出任务或注释位置。");
+            var candidate = Task.Run(() => drafts.AddManualAsync(
+                taskId,
+                new ManualCandidateRequest { SlotId = slotId, Text = "按名称查询探针数据。" },
+                CancellationToken.None)).GetAwaiter().GetResult();
+            var accepted = Task.Run(() => drafts.UpdateAsync(
+                taskId,
+                candidate.Id,
+                new CandidateUpdateRequest { ReviewState = "accepted" },
+                CancellationToken.None)).GetAwaiter().GetResult();
+            if (accepted.ReviewState != "accepted") throw new InvalidOperationException($"候选审阅状态是「{accepted.ReviewState}」。");
+            _lines.Add($"     候选已接受：{accepted.Id}，文字「{accepted.Text}」");
+        });
+
+        // 第三段：生成计划，并断言两次生成的哈希一致（计划哈希是回写的确认凭据）。
+        RunAction("回写链路：生成注释计划且哈希稳定（真实服务）", () =>
+        {
+            if (taskId is null) throw new InvalidOperationException("上一段没有产出任务。");
+            var first = Task.Run(() => plans.CreateAsync(taskId, CancellationToken.None)).GetAwaiter().GetResult();
+            if (first.Files.Count == 0)
+            {
+                throw new InvalidOperationException("计划里没有可回写的文件：" + string.Join("；", first.Skipped.Select(s => s.Reason)));
+            }
+            if (!first.Files.Any(f => f.WriteAllowed)) throw new InvalidOperationException("计划里没有允许回写的文件。");
+            if (first.Hash.Length == 0) throw new InvalidOperationException("计划哈希为空。");
+            var second = Task.Run(() => plans.CreateAsync(taskId, CancellationToken.None)).GetAwaiter().GetResult();
+            if (second.Hash != first.Hash) throw new InvalidOperationException($"两次生成的计划哈希不一致：{first.Hash} / {second.Hash}。");
+            planHash = first.Hash;
+            before = File.ReadAllText(probeSource);
+            _lines.Add($"     计划 {first.Id}：{first.Files.Count} 个文件、{first.Files.Sum(f => f.Edits.Count)} 处注释，哈希 {first.Hash[..12]}…（两次一致）");
+        });
+
+        // 第四段（反向）：计划哈希不符 → 拒绝写入、磁盘一字未改。
+        RunAction("回写链路：计划哈希不符时拒绝写入（真实服务）", () =>
+        {
+            if (taskId is null || before is null) throw new InvalidOperationException("上一段没有产出任务或计划。");
+            var rejected = false;
+            try
+            {
+                Task.Run(() => plans.ApplyAsync(taskId, "0000000000000000", CancellationToken.None)).GetAwaiter().GetResult();
+            }
+            catch (UserException ex)
+            {
+                rejected = true;
+                if (ex.StatusCode != 409) throw new InvalidOperationException($"拒绝回写的状态码是 {ex.StatusCode}，期望 409。");
+                _lines.Add($"     拒绝文案：{ex.Message}");
+            }
+            if (!rejected) throw new InvalidOperationException("计划哈希不符却回写成功。");
+            if (File.ReadAllText(probeSource) != before) throw new InvalidOperationException("被拒绝的回写改动了源码。");
+        });
+
+        // 第五段：确认后回写落盘。只改 /// 行、BOM 与换行符不变、执行代码一字未改。
+        RunAction("回写链路：确认后回写落盘且只改 /// 行（真实服务）", () =>
+        {
+            if (taskId is null || planHash is null || before is null) throw new InvalidOperationException("上一段没有产出任务或计划。");
+            var applied = Task.Run(() => plans.ApplyAsync(taskId, planHash, CancellationToken.None)).GetAwaiter().GetResult();
+            if (applied.Status != "applied")
+            {
+                throw new InvalidOperationException($"计划状态是「{applied.Status}」：" + string.Join("；", applied.ApplyResults.Select(r => r.State + " " + r.Message)));
+            }
+            var after = File.ReadAllText(probeSource);
+            if (after == before) throw new InvalidOperationException("回写后源码内容没有变化。");
+            AssertOnlyDocLinesChanged(before, after);
+            AssertBomAndEolPreserved(probeSource);
+            if (!after.Contains("/// 按名称查询探针数据。", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("回写后的源码里找不到候选文字。");
+            }
+            _lines.Add($"     回写结果：{applied.ApplyResults.Count(r => r.State == "applied")} 个文件已写入，/// 行新增 {DocLineCount(after) - DocLineCount(before)} 行，BOM 与 CRLF 保留");
+        });
+
+        // 第六段：真实对话框驱动。构造 ApplyPlanDialog → 等它自己生成计划 → 点「确认回写」→ 断言源码被改。
+        RunAction("回写链路：真实对话框点「确认回写」落盘（真实控件）", () =>
+        {
+            var secondDir = Path.Combine(dataRoot, "Probe2.Api");
+            CreateProbeWorkspace(secondDir);
+            var profile = profiles.Save(new ProjectProfile
+            {
+                Name = "回写对话框配置",
+                WorkspaceRoot = dataRoot,
+                ApiProject = "Probe2.Api/Probe2.Api.csproj",
+                AllowedSourcePaths = ["Probe2.Api/"],
+            }, isNew: true);
+            var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "回写对话框任务" });
+            var job = new JobContext(new JobInfo { Id = "job-smoke-scan-2", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+            Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+
+            var output = tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)
+                ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+            var slot = output.Slots.FirstOrDefault(s => s.Status == "missing" && s.Editable && s.Tag == "summary")
+                ?? throw new InvalidOperationException("扫描没有产出可回写的 summary 缺口。");
+            var candidate = Task.Run(() => drafts.AddManualAsync(
+                task.Id,
+                new ManualCandidateRequest { SlotId = slot.Id, Text = "按名称查询第二份探针数据。" },
+                CancellationToken.None)).GetAwaiter().GetResult();
+            Task.Run(() => drafts.UpdateAsync(
+                task.Id,
+                candidate.Id,
+                new CandidateUpdateRequest { ReviewState = "accepted" },
+                CancellationToken.None)).GetAwaiter().GetResult();
+
+            var source = Path.Combine(secondDir, "Controllers", "ProbeController.cs");
+            var beforeText = File.ReadAllText(source);
+
+            using var dialog = new ApplyPlanDialog(plans, tasks, tasks.Get(task.Id));
+            var confirmed = 0;
+            // 确认框是模态的，无人值守点不动：换成替身，但按钮与回写链路一字不改。
+            dialog.ConfirmApply = _ =>
+            {
+                confirmed++;
+                return true;
+            };
+            dialog.Show();
+            PumpUntil(dialog.PendingLoad);
+            Application.DoEvents();
+
+            var plan = dialog.Plan;
+            if (plan is null)
+            {
+                throw new InvalidOperationException("对话框没有拿到注释计划。界面文案：" + LabelTexts(dialog));
+            }
+            if (plan.Files.Count == 0) throw new InvalidOperationException("对话框里的计划没有可回写的文件。");
+
+            Click(dialog, "确认回写");
+            PumpUntil(dialog.PendingApply);
+            Application.DoEvents();
+
+            if (confirmed != 1) throw new InvalidOperationException($"确认委托被调用 {confirmed} 次，期望 1 次。");
+            var afterText = File.ReadAllText(source);
+            if (afterText == beforeText) throw new InvalidOperationException("点「确认回写」后源码没有变化。");
+            AssertOnlyDocLinesChanged(beforeText, afterText);
+            AssertBomAndEolPreserved(source);
+            var status = FindAll<Label>(dialog).Select(l => l.Text)
+                .FirstOrDefault(t => t.Contains("已回写", StringComparison.Ordinal));
+            if (status is null) throw new InvalidOperationException("状态行没有出现「已回写」的结果文案。界面文案：" + LabelTexts(dialog));
+            _lines.Add($"     对话框状态行：{status}");
+        });
+    }
+
+    /// <summary>
+    /// 等一个异步任务完成，期间泵消息（<c>Application.DoEvents</c>）。
+    /// 对话框的异步续体排在 WinForms 同步上下文上，不泵消息就永远等不到。
+    /// </summary>
+    private static void PumpUntil(Task? task, int timeoutMs = 180000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (task is { IsCompleted: false })
+        {
+            if (Environment.TickCount64 > deadline) throw new TimeoutException("等待异步操作超时。");
+            Application.DoEvents();
+            Thread.Sleep(10);
+        }
+        // 任务失败时把异常原样抛出来（RunAction 会记成失败行）。
+        task?.GetAwaiter().GetResult();
+    }
+
+    /// <summary>控件树里所有非空标签文字（失败时用来交代「界面上到底写了什么」）。</summary>
+    private static string LabelTexts(Control root) =>
+        string.Join(" / ", FindAll<Label>(root).Select(l => l.Text).Where(t => t.Length > 0));
+
+    /// <summary>源码里 <c>///</c> 注释行的条数。</summary>
+    private static int DocLineCount(string text) =>
+        text.Replace("\r\n", "\n").Split('\n').Count(line => line.TrimStart().StartsWith("///", StringComparison.Ordinal));
+
+    /// <summary>
+    /// 写入安全不变量（SHARED）的机械断言：把两侧的 <c>///</c> 行都去掉后，剩下的内容必须逐行相同——
+    /// 即回写只动了文档注释行，执行代码、空行、其他注释一字未改。
+    /// </summary>
+    private static void AssertOnlyDocLinesChanged(string before, string after)
+    {
+        static List<string> Code(string text) => text.Replace("\r\n", "\n").Split('\n')
+            .Where(line => !line.TrimStart().StartsWith("///", StringComparison.Ordinal))
+            .ToList();
+        var oldLines = Code(before);
+        var newLines = Code(after);
+        if (!oldLines.SequenceEqual(newLines, StringComparer.Ordinal))
+        {
+            var index = Enumerable.Range(0, Math.Min(oldLines.Count, newLines.Count))
+                .FirstOrDefault(i => !string.Equals(oldLines[i], newLines[i], StringComparison.Ordinal), -1);
+            throw new InvalidOperationException($"回写改动了 /// 注释行以外的内容（第 {index + 1} 行起不同）。");
+        }
+        if (DocLineCount(after) <= DocLineCount(before)) throw new InvalidOperationException("回写没有新增任何 /// 注释行。");
+    }
+
+    /// <summary>回写后 UTF-8 BOM 与 CRLF 换行必须原样保留（不因写入而改写编码或换行）。</summary>
+    private static void AssertBomAndEolPreserved(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        if (bytes.Length < 3 || bytes[0] != 0xEF || bytes[1] != 0xBB || bytes[2] != 0xBF)
+        {
+            throw new InvalidOperationException("回写后 UTF-8 BOM 丢失。");
+        }
+        var text = File.ReadAllText(path);
+        var crlf = text.Split("\r\n").Length - 1;
+        var lf = text.Count(c => c == '\n');
+        if (crlf != lf) throw new InvalidOperationException($"回写后换行符被改写：CRLF {crlf} 处、LF {lf} 处。");
+    }
+
     /// <summary>按标签文字找到字段行第 1 列的控件（与各对话框 <c>AddRow</c> 的摆放约定一致）。</summary>
     private static Control? FieldOf(TableLayoutPanel grid, string label)
     {
@@ -557,11 +862,11 @@ internal static class Program
     {
         // ProfileStore.Validate 要求 API 项目文件真实存在：造一个最小工作区，
         // 否则冒烟在环境初始化阶段就退出，一个对话框都构造不到。
+        // 第一百三十二轮起这个工作区同时是「扫描 → 候选 → 计划 → 回写」的探针：
+        // 项目改成 Web SDK 并带一个缺 /// 的控制器，扫描才真的能发现接口与注释缺口。
         var probeDir = Path.Combine(dataRoot, "Probe.Api");
         Directory.CreateDirectory(probeDir);
-        File.WriteAllText(
-            Path.Combine(probeDir, "Probe.Api.csproj"),
-            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+        CreateProbeWorkspace(probeDir);
 
         var store = new FileStore(dataRoot);
         var services = new ServiceCollection();
