@@ -55,7 +55,9 @@ public class ContractReviewRefreshTests
         Assert.Matches(
             @"(?m)^\s*_remoteStatus\.Text = ""状态："" \+ TaskDisplay\.RemoteStatusText\(remote\.Status\) \+ \(remote\.CheckedRevision is \{ \} rev && rev < task\.Revision \? ""（任务内容在检查后有变化，需要重新检查）"" : """"\);",
             source);
-        Assert.Matches(@"(?m)^\s*RefreshNextBanner\(NextStep\.Compute\(task\)\);", source);
+        // 下一步只算一次：横幅与三阶段进度条共用同一份判定（第一百一十六轮起不再就地重算）。
+        Assert.Matches(@"(?m)^\s*var next = NextStep\.Compute\(task\);$", source);
+        Assert.Matches(@"(?m)^\s*RefreshNextBanner\(next\);$", source);
     }
 
     [Fact]

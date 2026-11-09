@@ -76,6 +76,16 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Label _nextDetail = Ui.Caption();
     private readonly FlowLayoutPanel _nextActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
 
+    // 三阶段进度条（口径在 StageSteps）：三格 ghost 按钮 + 一句「点一下会发生什么」，
+    // 点一下滚到对应分区（冻结页面 stepper 点一下切到该阶段页签的同一手势）。
+    private readonly FlowLayoutPanel _stepper = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+    private readonly Button[] _stepButtons;
+    private readonly Label _stepperHint = Ui.Caption(StageSteps.JumpHint);
+    // 三个分区的标题控件：进度条点击的滚动落点（文字取 StageSteps 常量，本页不就地拼）。
+    private readonly Label _sourceSection = SectionCaption(StageSteps.SourceLabel);
+    private readonly Label _generatedSection = SectionCaption(StageSteps.GeneratedLabel);
+    private readonly Label _remoteSection = SectionCaption(StageSteps.RemoteSectionLabel);
+
     // 详情区（固定控件，按任务刷新文本，不整面板重建）。
     private readonly Label _detailHint;
     private readonly TableLayoutPanel _detail;
@@ -201,6 +211,21 @@ internal sealed class TasksPage : UserControl, INativePage
         };
         _nextHead.Controls.Add(nextTag);
         _nextHead.Controls.Add(_nextTitle);
+
+        // 三格按钮按 StageSteps.Keys 的顺序出厂：文案在每次刷新时取 StageSteps.ButtonText，
+        // 点击只滚到对应分区（不改任何状态、不写数据）。
+        _stepButtons = new Button[StageSteps.Keys.Length];
+        for (var i = 0; i < StageSteps.Keys.Length; i++)
+        {
+            var key = StageSteps.Keys[i];
+            var stepButton = Ui.Ghost("");
+            stepButton.Margin = new Padding(0, 0, UiTokens.Sm, 0);
+            stepButton.Click += (_, _) => JumpToStage(key);
+            _stepButtons[i] = stepButton;
+            _stepper.Controls.Add(stepButton);
+        }
+        _stepperHint.Margin = new Padding(0, 0, 0, 0);
+        _stepper.Controls.Add(_stepperHint);
 
         _gapButton = Ui.Ghost("查看注释缺口");
         _gapButton.Click += (_, _) => ShowScanResults();
@@ -344,18 +369,19 @@ internal sealed class TasksPage : UserControl, INativePage
     {
         var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Lg, UiTokens.Lg, 0) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        AddDetailRow(grid, _stepper);
         AddDetailRow(grid, _nextHead);
         AddDetailRow(grid, _nextDetail);
         AddDetailRow(grid, _nextActions);
         AddDetailRow(grid, _detailName);
         AddDetailRow(grid, _detailMeta);
         AddDetailRow(grid, _detailRange);
-        AddDetailRow(grid, SectionCaption("源码注释"));
+        AddDetailRow(grid, _sourceSection);
         AddDetailRow(grid, _sourceStatus);
         AddDetailRow(grid, _sourceNumbers);
         AddDetailRow(grid, _scanActions);
         AddDetailRow(grid, Ui.Caption("「查看注释缺口」「规则提取候选」「模型生成候选」「导出材料」「查看注释候选」与「注释回写」在扫描完成后可用；「注释回写」需要有已接受且未回写的候选。「模型生成候选」只在配置的草稿生成方式为 OpenAI 兼容模型服务时可用，发送材料前会先确认范围；没有模型服务时可用「导出材料」交给编码助手处理，或在「查看注释缺口」里手工填写，结果都在「查看注释候选」审阅。"));
-        AddDetailRow(grid, SectionCaption("生成文档"));
+        AddDetailRow(grid, _generatedSection);
         AddDetailRow(grid, _generatedStatus);
         AddDetailRow(grid, _generatedNumbers);
         AddDetailRow(grid, _generatedActions);
@@ -365,7 +391,7 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _contractStatus);
         AddDetailRow(grid, _contractButton);
         AddDetailRow(grid, Ui.Caption("契约在扫描时从返回表达式与调用链静态追踪生成；「查看响应契约」在扫描完成后可用。确认后的契约在后续 Apifox 检查中替换该接口的 200 响应体；确认或拒绝后需重新检查才会生效。"));
-        AddDetailRow(grid, SectionCaption("Apifox 差异与同步"));
+        AddDetailRow(grid, _remoteSection);
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
         AddDetailRow(grid, _remoteActions);
@@ -645,7 +671,10 @@ internal sealed class TasksPage : UserControl, INativePage
         _detailMeta.Text = TaskSummary.MetaText(task);
         _detailRange.Text = TaskSummary.RangeText(task);
 
-        RefreshNextBanner(NextStep.Compute(task));
+        // 下一步只算一次：横幅与三阶段进度条共用同一份判定（进度条的「当前」取 next.Stage）。
+        var next = NextStep.Compute(task);
+        RefreshNextBanner(next);
+        RefreshStepper(task, next);
 
         var source = task.Stages.Source;
         _sourceStatus.Text = "状态：" + TaskDisplay.SourceStatusText(source.Status);
@@ -681,6 +710,36 @@ internal sealed class TasksPage : UserControl, INativePage
 
         var job = _jobs.Running(task.Id);
         ShowJobState(job);
+    }
+
+    /// <summary>
+    /// 三阶段进度条：三格文字取 StageSteps 单一口径（序号/✓、标签、状态、当前后缀），
+    /// 当前那一格由 next.Stage 决定（与「下一步」横幅同一份判定）。
+    /// </summary>
+    private void RefreshStepper(CheckTask task, NextStep.Step next)
+    {
+        var steps = StageSteps.Build(task, next.Stage);
+        for (var i = 0; i < _stepButtons.Length && i < steps.Count; i++)
+        {
+            _stepButtons[i].Text = StageSteps.ButtonText(steps[i], i);
+        }
+    }
+
+    /// <summary>
+    /// 点阶段跳到对应分区：只把详情滚动到那一区的标题，不改选中、不改任务数据、不触发任何动作。
+    /// 认不出的键不动作（不猜一个分区）。
+    /// </summary>
+    private void JumpToStage(string key)
+    {
+        var section = key switch
+        {
+            NextStep.StageSource => _sourceSection,
+            NextStep.StageGenerated => _generatedSection,
+            NextStep.StageRemote => _remoteSection,
+            _ => null,
+        };
+        if (section is null) return;
+        _detailScroll.AutoScrollPosition = new Point(0, Math.Max(0, section.Top - UiTokens.Lg));
     }
 
     /// <summary>下一步引导横幅：标题按语义色调着色，动作按钮映射到本页既有入口（只做引导，不改变状态）。</summary>

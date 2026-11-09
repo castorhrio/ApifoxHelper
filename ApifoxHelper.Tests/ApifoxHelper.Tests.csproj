@@ -86,6 +86,7 @@
     <Compile Include="..\Desktop\Native\BindingChoices.cs" Link="Shared\BindingChoices.cs" />
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />
+    <Compile Include="..\Desktop\Native\StageSteps.cs" Link="Shared\StageSteps.cs" />
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />
     <Compile Include="..\Desktop\Native\TaskSummary.cs" Link="Shared\TaskSummary.cs" />
     <Compile Include="..\Desktop\Native\ShellShortcuts.cs" Link="Shared\ShellShortcuts.cs" />
