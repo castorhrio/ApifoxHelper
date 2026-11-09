@@ -1403,3 +1403,17 @@
 - **测试 2039 → 2080 用例**（+41：`InteractionAssertions` 38 行 Theory + 3 条清单完备性用例）。
 - **P1-2（导出产物排版机械检查）与 P2-1（critique 结论）本轮未做，如实挂账**：回合时间用尽。P1-2 的入口已探明——`Reports/ReportService.cs` 的 `Markdown` / `Handoff` / `Html` 三个渲染方法里的中文字面量可提取（`Html` 只从 Markdown 转写、唯一中文是 `<title>Apifox 助手报告</title>`，与 Markdown 标题同源），但 `ReportService` 依赖 `CommentPlan` / `PropagationResult` / `Redactor` 等未共享编译的类型，**不能像 `SlotText` 那样直接共享编译进测试工程**，下一轮须先决定「源码切片」还是「把报告文案收成无依赖的 `ReportCopy` 单一落点」，再写断言；分档口径已定：**报告是 Markdown（`#`/`-`/`|`/`>` 结构记号合法），UI 文案不是（`**` 强调记号仍禁）**。
 - **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2080 用例全部通过**；GUI 侧本轮有**真实执行证据**（wine 下 46 通过 / 0 失败 + 变异 45/1）。**Windows 真机（19 项清单、100%/125%/150% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效。本轮未连接或写入 Apifox，未调用任何模型服务；未改服务层一行，未新增对话框或功能。
+
+## 候选审阅对话框提示态收掉回答框与覆盖勾选（2026-11-10 第一百三十八轮）
+
+- **接续前确认**：开局工作树干净（仅 `.winecheck/` 未跟踪，本机 wine 试跑脚本，非产品代码，不入库），HEAD（0d60cb4）为第一百三十七轮（交互断言清单与 wine 实测 46 通过），主工程、测试工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误、`dotnet test` 2080 用例全绿，基线成立；第四十七至一百三十七轮逐字保留。
+- **本轮定位**：控制仓简报的 P0-1（Windows 真机跑 19 项清单）在本会话**不可能完成**——Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机（第一百二十四轮挂账决策继续有效：责任在环境供给）。按「能在 Linux 验证的验证、不可验证的如实记录」，本轮推进**一个小范围真实原生交互**：候选审阅对话框（`CandidatesDialog`）——它是真机清单第 6/7/8 项（规则提取候选 → 查看注释候选 → 接受候选）的落点，此前只被 `Cases` 里 `new` 一次 + 建句柄。
+- **本轮抓到的真实缺陷（产品可见面）**：提示态（读取失败 / 没有候选 / 筛到零行）此前只收了候选文字那一格（`_text`），**回答框与覆盖勾选留着上一条候选的状态**——清单已经藏起来、五个动作已经禁用，用户却还能对着一条看不见的候选填回答、勾「覆盖已有注释」（填完也没有「接受」可按）。这与第四十/四十一轮「残留启用」同族，也与 `ShowHint` 里那句「留着上一行候选的文字等于让用户对着一条看不见的候选改字」的取舍自相矛盾——同一段注释只管住了文字那一格。
+  - **修法**：`ShowHint` 把回答框与覆盖勾选一起收掉（清空文字、禁用、清脏标记、取消勾选），说明行换成「选中一条候选后可填写」。
+  - **口径收口**：回答框那一行的三种说法收进 `CandidateEdit`（`AnswersCaptionOpen` / `AnswersCaptionNone` / `AnswersCaptionNoSelection` + `AnswersCaptionFor`），与 `TextCaptionFor` 同一形状；对话框不再就地拼两种说法。
+- **测试 2080 → 2082 用例**（+2，`CandidateEditTests`）：`AnswersCaptions_SayWhatTheBoxIsAndWhyItIsDisabled`（三句互不相同、按候选取那一句、两句各自讲清为什么/怎么可用）+ `Dialog_ClearsAnswersAndOverwriteWhenTheListIsHidden`（`ShowHint` 方法体切片里六件事必须一起发生、说明行取共享口径、对话框里不再有就地拼的字面）。
+- **变异验证 1 处实测可红**：删掉 `ShowHint` 里的 `_answers.Enabled = false;` → `Dialog_ClearsAnswersAndOverwriteWhenTheListIsHidden` 恰 1 红（`CandidateEditTests` 27 例中 1 失败），还原后 `cmp` 逐字节核对与开局一致、重建 2082 全绿。
+- **验证状态**：Linux 主工程、测试工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2082 用例全部通过**；口径是真执行——`CandidateEdit.cs` 经共享编译进测试程序集，说明行跑的是主工程同一份代码；界面接线属 WinForms 控件触达，本环境不可执行，以源码切片钉住，不冒充跑过。
+- **P0-1 真机证据：本轮仍不可得（环境限制，非验证手段选错）**。`docs/NOTES.md` 那张「Windows 真机全链路清单（19 项）」本轮**一项都没勾**，第一百三十四轮的登记原样保留；本轮**未重复 wine 试跑**，故不据此宣称冒烟器在本轮跑过——46 通过是第一百三十七轮的证据。
+- **下一轮候选（如实挂账，本轮未做）**：① 候选审阅对话框的真实控件交互段（打开即选中第一条、接受并下一条、待确认问题未回答时接受被拒、筛到零行）——本轮只做到「提示态收口」，交互段与断言清单登记未写；② 报告导出的中文排版机械检查（第一百三十七轮已探明入口：`ReportService` 依赖未共享编译的类型，须先决定源码切片还是收成 `ReportCopy`）；③ `ApifoxCli.Parse` 的表驱动用例。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改候选数据、审阅校验与写入链路，服务层一行未动。

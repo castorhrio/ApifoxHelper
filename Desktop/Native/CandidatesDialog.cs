@@ -268,6 +268,15 @@ internal sealed class CandidatesDialog : Form
         _text.Text = "";
         _text.Enabled = false;
         _textCaption.Text = CandidateEdit.TextCaptionNoSelection;
+        // 回答框与覆盖勾选随提示一起收掉（第一百三十八轮）：此前只收了候选文字那一格，
+        // 这两格留着上一条候选的状态——清单已经藏起来、动作已经禁用，用户却还能对着一条看不见的候选
+        // 填回答、勾覆盖（填完也没有「接受」可按）。与候选文字同一取舍，说明行换成「选中一条候选后可填写」。
+        _answers.Text = "";
+        _answers.Enabled = false;
+        _answersDirty = false;
+        _answersCaption.Text = CandidateEdit.AnswersCaptionNoSelection;
+        _overwrite.Enabled = false;
+        _overwrite.Checked = false;
     }
 
     /// <summary>
@@ -433,9 +442,7 @@ internal sealed class CandidatesDialog : Form
         _answers.Text = candidate.Answers ?? "";
         _answersDirty = false;
         _answers.Enabled = candidate.OpenQuestions.Count > 0;
-        _answersCaption.Text = candidate.OpenQuestions.Count > 0
-            ? "待确认问题的回答（接受前需逐条确认）"
-            : "待确认问题的回答（该候选没有待确认问题）";
+        _answersCaption.Text = CandidateEdit.AnswersCaptionFor(candidate);
 
         _overwrite.Enabled = slot is { Status: "valid" } && candidate.Action == "set";
         _overwrite.Checked = candidate.OverwriteExisting;

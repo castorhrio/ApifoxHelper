@@ -80,6 +80,22 @@ public static class CandidateEdit
     public static string TextCaptionFor(CommentCandidate candidate) =>
         CanEditText(candidate) ? TextCaption : TextCaptionReadOnly;
 
+    /// <summary>待确认问题回答那一行的说明：有问题的候选，接受前要逐条确认。</summary>
+    public const string AnswersCaptionOpen = "待确认问题的回答（接受前需逐条确认）";
+
+    /// <summary>该候选没有待确认问题时的说明：这一格禁用，说清为什么。</summary>
+    public const string AnswersCaptionNone = "待确认问题的回答（该候选没有待确认问题）";
+
+    /// <summary>
+    /// 没有选中候选时的说明（第一百三十八轮）：这一格随提示一起收掉，
+    /// 不指着一条看不见的候选说「接受前需逐条确认」——与 <see cref="TextCaptionNoSelection"/> 同一取舍。
+    /// </summary>
+    public const string AnswersCaptionNoSelection = "待确认问题的回答（选中一条候选后可填写）";
+
+    /// <summary>按候选取那一行的说明（界面不就地写两种说法）。</summary>
+    public static string AnswersCaptionFor(CommentCandidate candidate) =>
+        candidate.OpenQuestions.Count > 0 ? AnswersCaptionOpen : AnswersCaptionNone;
+
     /// <summary>
     /// 审阅动作（接受 / 搁置 / 驳回）之后的状态行（第一百三十七轮收进共享口径）：
     /// 前半句是这一条的结果，后半句是「剩余待审阅 N 条」——逐条清队列时，用户要知道还剩多少。

@@ -235,6 +235,44 @@ public class CandidateEditTests
         Assert.Contains("候选文字编辑", gaps);
     }
 
+    // ---------- 回答框与覆盖勾选：提示态一起收掉（第一百三十八轮） ----------
+
+    [Fact]
+    public void AnswersCaptions_SayWhatTheBoxIsAndWhyItIsDisabled()
+    {
+        // 三种状态三句话，界面不就地写两种说法。
+        var open = Candidate("set");
+        open.OpenQuestions.Add("业务用途需补充。");
+        var none = Candidate("set");
+        Assert.Equal(CandidateEdit.AnswersCaptionOpen, CandidateEdit.AnswersCaptionFor(open));
+        Assert.Equal(CandidateEdit.AnswersCaptionNone, CandidateEdit.AnswersCaptionFor(none));
+        Assert.NotEqual(CandidateEdit.AnswersCaptionOpen, CandidateEdit.AnswersCaptionNone);
+        Assert.NotEqual(CandidateEdit.AnswersCaptionNoSelection, CandidateEdit.AnswersCaptionOpen);
+        // 有问题那一句要讲清「接受前要逐条确认」——否则用户不知道为什么接受被拒。
+        Assert.Contains("接受前", CandidateEdit.AnswersCaptionOpen, StringComparison.Ordinal);
+        // 没有选中那一句要讲清怎么让它可用（下一步在清单上）。
+        Assert.Contains("选中一条候选", CandidateEdit.AnswersCaptionNoSelection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dialog_ClearsAnswersAndOverwriteWhenTheListIsHidden()
+    {
+        // 提示态（读取失败 / 没有候选 / 筛到零行）此前只收了候选文字那一格，回答框与覆盖勾选
+        // 留着上一条候选的状态：清单已经藏起来、动作已经禁用，用户却还能对着一条看不见的候选
+        // 填回答、勾覆盖。四件事必须一起发生，缺一条就是「残留启用」。
+        var source = Repo.Source("Desktop", "Native", "CandidatesDialog.cs");
+        var hint = Slice(source, "private void ShowHint(string message, Color color, bool keepAggregate = false)", "/// <summary>\n    /// 计数行按全部候选统计");
+        Assert.Contains("_answers.Text = \"\";", hint, StringComparison.Ordinal);
+        Assert.Contains("_answers.Enabled = false;", hint, StringComparison.Ordinal);
+        Assert.Contains("_answersDirty = false;", hint, StringComparison.Ordinal);
+        Assert.Contains("_answersCaption.Text = CandidateEdit.AnswersCaptionNoSelection;", hint, StringComparison.Ordinal);
+        Assert.Contains("_overwrite.Enabled = false;", hint, StringComparison.Ordinal);
+        Assert.Contains("_overwrite.Checked = false;", hint, StringComparison.Ordinal);
+        // 说明行按候选取那一句，界面不就地拼两种说法。
+        Assert.Contains("_answersCaption.Text = CandidateEdit.AnswersCaptionFor(candidate);", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("待确认问题的回答（接受前需逐条确认）", source, StringComparison.Ordinal);
+    }
+
     /// <summary>方法体切片：从签名到下一个成员锚点（锚点缺失即红，防止断言漂移到空切片）。</summary>
     private static string Slice(string source, string signature, string endAnchor)
     {
