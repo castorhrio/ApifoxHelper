@@ -640,10 +640,10 @@ internal sealed class TasksPage : UserControl, INativePage
         _detailHint.Visible = false;
 
         _detailName.Text = task.Name;
-        _detailMeta.Text = $"配置 {task.ProfileSnapshot.Name} · Apifox {(task.ProfileSnapshot.Apifox.ProjectId ?? "未绑定")} · {(task.OfflineMode ? "离线模式" : "在线")}";
-        _detailRange.Text = task.PathPrefixes.Count > 0
-            ? "范围：" + string.Join("、", task.ModuleNames) + " " + string.Join(" ", task.PathPrefixes)
-            : task.ModuleNames.Count > 0 ? "范围：模块 " + string.Join("、", task.ModuleNames) : "范围：API 项目全部接口";
+        // 两行元信息的口径在 TaskSummary 一处（范围按模块/路径前缀/指定接口三个维度如实列出，
+        // 元信息行补上版本备注）——本页不就地拼这两行文字。
+        _detailMeta.Text = TaskSummary.MetaText(task);
+        _detailRange.Text = TaskSummary.RangeText(task);
 
         RefreshNextBanner(NextStep.Compute(task));
 

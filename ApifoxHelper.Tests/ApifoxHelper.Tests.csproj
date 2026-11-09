@@ -87,6 +87,7 @@
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />
+    <Compile Include="..\Desktop\Native\TaskSummary.cs" Link="Shared\TaskSummary.cs" />
     <Compile Include="..\Desktop\Native\ShellShortcuts.cs" Link="Shared\ShellShortcuts.cs" />
     <Compile Include="..\Desktop\Native\NoticeText.cs" Link="Shared\NoticeText.cs" />
     <Compile Include="..\Tasks\TaskModels.cs" Link="Shared\TaskModels.cs" />
