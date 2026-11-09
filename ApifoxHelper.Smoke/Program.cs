@@ -138,6 +138,9 @@ internal static class Program
         Console.WriteLine("== 字段宽度实测 ==");
         MeasureFieldWidths(services, profile);
 
+        Console.WriteLine("== 端到端主链路（真实控件交互）==");
+        RunEndToEnd(services, dataRoot);
+
         Console.WriteLine($"== 结果：{_passed} 通过 / {_failed} 失败 ==");
         WriteReport();
         return _failed == 0 ? 0 : 1;
@@ -281,6 +284,189 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// 端到端主链路（第一百三十一轮）：不再只判「构造不抛异常」，而是**真的把字敲进控件、
+    /// 真的点按钮**，再断言数据落到了磁盘上。
+    /// <para>
+    /// 存在理由：第一百二十九轮的冒烟器把「构造期崩」变成了可拦截，但控制仓简报的 P0 缺口是
+    /// 「只到每个对话框能构造，未到端到端能走通」——构造成功不等于「填得进、点得动、存得下」。
+    /// 本段覆盖主链路的前两段（新建配置 → 保存 → 新建任务 → 落盘），全部走真实 WinForms 控件：
+    /// <c>TextBox.Text</c> 赋值、<c>Button.PerformClick()</c>（WinForms 的点击链路，不是直接调事件处理器），
+    /// 断言读的是 <c>ProfileStore.Get</c> / <c>TaskStore.Get</c> 从磁盘重读的结果。
+    /// </para>
+    /// <para>
+    /// 不覆盖的部分如实挂账：扫描及之后各段需要 Roslyn 参考程序集与真实 Apifox CLI 登录态，
+    /// 本环境（wine）不具备，仍待 Windows 真机（见 docs/NOTES.md 的真机清单）。
+    /// </para>
+    /// </summary>
+    private static void RunEndToEnd(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        var credentials = services.GetRequiredService<CredentialStore>();
+
+        // 第一段：新建配置 → 填四个字段 → 点「保存」→ 配置真的落到 profiles/<id>.json。
+        string? profileId = null;
+        RunAction("端到端：新建配置填写并保存（真实控件）", () =>
+        {
+            var before = profiles.List().Count;
+            using var dialog = new ProfileDialog(profiles, cli, credentials, editing: null);
+            dialog.Show();
+            Application.DoEvents();
+
+            var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+            SetField(grid, "名称", "端到端配置");
+            SetField(grid, "仓库根目录", dataRoot);
+            SetField(grid, "API 项目", "Probe.Api/Probe.Api.csproj");
+            SetField(grid, "允许回写范围", "Probe.Api/");
+            Click(dialog, "保存");
+            Application.DoEvents();
+
+            if (dialog.DialogResult != DialogResult.OK)
+            {
+                throw new InvalidOperationException("点「保存」后对话框没有以「确定」结束（校验被拒或按钮未触发）。");
+            }
+            var saved = dialog.Saved ?? throw new InvalidOperationException("保存后 Saved 为空。");
+            // 从磁盘重读：ProfileStore.Get 直接读 profiles/<id>.json，不经内存缓存。
+            var reread = profiles.Get(saved.Id);
+            if (reread.Name != "端到端配置") throw new InvalidOperationException($"落盘名称是「{reread.Name}」。");
+            if (reread.WorkspaceRoot != dataRoot) throw new InvalidOperationException($"落盘仓库根目录是「{reread.WorkspaceRoot}」。");
+            if (reread.ApiProject != "Probe.Api/Probe.Api.csproj") throw new InvalidOperationException($"落盘 API 项目是「{reread.ApiProject}」。");
+            if (profiles.List().Count != before + 1) throw new InvalidOperationException("配置数量没有增加一条。");
+            profileId = saved.Id;
+            _lines.Add($"     配置已落盘：{saved.Id}，名称「{reread.Name}」，回写范围「{string.Join(";", reread.AllowedSourcePaths)}」");
+        });
+
+        // 第二段：新建任务 → 选配置、填名称/指定接口/版本备注 → 点「仅创建」→ 任务真的落到 tasks/<id>/task.json。
+        RunAction("端到端：新建任务填写并创建（真实控件）", () =>
+        {
+            if (profileId is null) throw new InvalidOperationException("上一段没有产出配置，无法继续。");
+            using var dialog = new NewTaskDialog(profiles);
+            dialog.Show();
+            Application.DoEvents();
+
+            var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+            SelectProfile(grid, "端到端配置");
+            SetField(grid, "任务名称", "端到端任务");
+            SetField(grid, "指定接口", "GET /api/probe\nPOST /api/probe");
+            SetField(grid, "版本备注", "v1.2.3");
+            Click(dialog, "仅创建");
+            Application.DoEvents();
+
+            if (dialog.DialogResult != DialogResult.OK) throw new InvalidOperationException("点「仅创建」后对话框没有以「确定」结束。");
+            if (dialog.StartScan) throw new InvalidOperationException("点「仅创建」却要求立即扫描。");
+            var request = dialog.Request;
+            if (request.ProfileId != profileId) throw new InvalidOperationException("创建请求里的配置不是刚保存的那一个。");
+            if (request.Name != "端到端任务") throw new InvalidOperationException($"创建请求里的任务名是「{request.Name}」。");
+            if (request.EndpointKeys.Count != 2) throw new InvalidOperationException($"指定接口解析出 {request.EndpointKeys.Count} 行，期望 2 行。");
+            if (request.SourceVersionNote != "v1.2.3") throw new InvalidOperationException($"创建请求里的版本备注是「{request.SourceVersionNote}」。");
+
+            // 页面在对话框确认后做的事：把请求交给 TaskStore（与 TasksPage 同一入口）。
+            var task = tasks.Create(request);
+            var reread = tasks.Get(task.Id);
+            if (reread.Name != "端到端任务") throw new InvalidOperationException($"落盘任务名是「{reread.Name}」。");
+            if (reread.EndpointKeys.Count != 2) throw new InvalidOperationException($"落盘指定接口是 {reread.EndpointKeys.Count} 行。");
+            if (reread.SourceVersionNote != "v1.2.3") throw new InvalidOperationException($"落盘版本备注是「{reread.SourceVersionNote}」。");
+            if (reread.ProfileId != profileId) throw new InvalidOperationException("落盘任务的配置不是刚保存的那一个。");
+            _lines.Add($"     任务已落盘：{task.Id}，名称「{reread.Name}」，指定接口「{string.Join("、", reread.EndpointKeys)}」");
+        });
+
+        // 第三段（反向）：名称留空点「保存」→ 校验拒绝、不落盘、状态行有文案。
+        RunAction("端到端：保存校验失败不落盘（真实控件）", () =>
+        {
+            var before = profiles.List().Count;
+            using var dialog = new ProfileDialog(profiles, cli, credentials, editing: null);
+            dialog.Show();
+            Application.DoEvents();
+
+            var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+            SetField(grid, "仓库根目录", dataRoot);
+            SetField(grid, "API 项目", "Probe.Api/Probe.Api.csproj");
+            Click(dialog, "保存");
+            Application.DoEvents();
+
+            if (dialog.DialogResult == DialogResult.OK) throw new InvalidOperationException("名称留空却保存成功。");
+            if (dialog.Saved is not null) throw new InvalidOperationException("保存被拒却留下了 Saved。");
+            if (profiles.List().Count != before) throw new InvalidOperationException("保存被拒却多出一条配置。");
+            var status = FindAll<Label>(dialog).Select(l => l.Text).FirstOrDefault(t => t.Contains("请填写配置名称", StringComparison.Ordinal));
+            if (status is null) throw new InvalidOperationException("状态行没有出现「请填写配置名称」的拒绝文案。");
+            _lines.Add($"     拒绝文案：{status}");
+        });
+    }
+
+    /// <summary>按标签文字找到字段行第 1 列的控件（与各对话框 <c>AddRow</c> 的摆放约定一致）。</summary>
+    private static Control? FieldOf(TableLayoutPanel grid, string label)
+    {
+        foreach (Control control in grid.Controls)
+        {
+            if (grid.GetColumn(control) != 0) continue;
+            if (!string.Equals(control.Text, label, StringComparison.Ordinal)) continue;
+            var row = grid.GetRow(control);
+            foreach (Control candidate in grid.Controls)
+            {
+                if (grid.GetRow(candidate) == row && grid.GetColumn(candidate) == 1) return candidate;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>把文字真的敲进字段行里的输入框（或下拉框的可编辑区）。</summary>
+    private static void SetField(TableLayoutPanel grid, string label, string text)
+    {
+        var host = FieldOf(grid, label) ?? throw new InvalidOperationException($"字段网格里找不到「{label}」这一行。");
+        // 字段行第 1 列可能是输入框本身（裸 ComboBox）、也可能是包着输入框的描边面板（Ui.FieldBox）。
+        Control input = host as TextBox ?? (Control?)host as ComboBox
+            ?? FindFirst<TextBox>(host) ?? (Control?)FindFirst<ComboBox>(host)
+            ?? throw new InvalidOperationException($"「{label}」这一行里没有输入框或下拉框。");
+        input.Text = text;
+    }
+
+    /// <summary>在「项目配置」下拉里按配置名选中一项（与用户点选同一结果）。</summary>
+    private static void SelectProfile(TableLayoutPanel grid, string profileName)
+    {
+        var host = FieldOf(grid, "项目配置") ?? throw new InvalidOperationException("字段网格里找不到「项目配置」这一行。");
+        var combo = host as ComboBox ?? FindFirst<ComboBox>(host)
+            ?? throw new InvalidOperationException("「项目配置」这一行里没有下拉框。");
+        for (var i = 0; i < combo.Items.Count; i++)
+        {
+            if (!string.Equals(combo.Items[i]?.ToString(), profileName, StringComparison.Ordinal)) continue;
+            combo.SelectedIndex = i;
+            return;
+        }
+        throw new InvalidOperationException($"下拉里没有配置「{profileName}」。");
+    }
+
+    /// <summary>按按钮文字找到按钮并真的点一下（<c>PerformClick</c> 走 WinForms 的点击链路，不是直接调事件处理器）。</summary>
+    private static void Click(Control root, string text)
+    {
+        var button = FindAll<Button>(root).FirstOrDefault(b => string.Equals(b.Text, text, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"对话框里找不到「{text}」按钮。");
+        if (!button.CanSelect) throw new InvalidOperationException($"「{text}」按钮不可点（禁用或不可见）。");
+        button.PerformClick();
+    }
+
+    /// <summary>控件树里第一个指定类型的后代。</summary>
+    private static T? FindFirst<T>(Control root) where T : Control
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is T match) return match;
+            if (FindFirst<T>(child) is { } found) return found;
+        }
+        return null;
+    }
+
+    /// <summary>控件树里全部指定类型的后代（按树的先序）。</summary>
+    private static IEnumerable<T> FindAll<T>(Control root) where T : Control
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is T match) yield return match;
+            foreach (var nested in FindAll<T>(child)) yield return nested;
+        }
+    }
+
     /// <summary>递归找两列字段网格（<c>Ui.FieldGrid</c> 出厂的那个 <c>TableLayoutPanel</c>）。</summary>
     private static TableLayoutPanel? FindGrid(Control root)
     {
@@ -315,6 +501,27 @@ internal static class Program
         catch (Exception ex)
         {
             Console.WriteLine("报告写入失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>与 <see cref="Run"/> 同款的结果记账，用于不返回控件的交互用例。</summary>
+    private static void RunAction(string name, Action action)
+    {
+        try
+        {
+            action();
+            _passed++;
+            Console.WriteLine("PASS " + name);
+            _lines.Add("PASS " + name);
+        }
+        catch (Exception ex)
+        {
+            _failed++;
+            var frame = (ex.StackTrace ?? "").Split('\n').FirstOrDefault()?.Trim() ?? "";
+            Console.WriteLine($"FAIL {name}：{ex.GetType().Name}：{ex.Message}");
+            Console.WriteLine("     " + frame);
+            _lines.Add($"FAIL {name}：{ex.GetType().Name}：{ex.Message}");
+            _lines.Add("     " + frame);
         }
     }
 
