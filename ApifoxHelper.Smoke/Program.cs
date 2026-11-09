@@ -138,6 +138,9 @@ internal static class Program
         Console.WriteLine("== 字段宽度实测 ==");
         MeasureFieldWidths(services, profile);
 
+        Console.WriteLine("== 字段宽度实测（DPI 缩放 125% / 150% / 200%）==");
+        MeasureFieldWidthsAtScale(services, profile);
+
         Console.WriteLine("== 端到端主链路（真实控件交互）==");
         RunEndToEnd(services, dataRoot);
 
@@ -177,6 +180,21 @@ internal static class Program
         yield return ("CandidatesDialog（注释候选）", () => new CandidatesDialog(services.GetRequiredService<DraftService>(), tasks, task));
         yield return ("EvidenceDialog（代码证据）", () => new EvidenceDialog(tasks, task, slot));
         yield return ("ApplyPlanDialog（注释回写）", () => new ApplyPlanDialog(services.GetRequiredService<CommentPlanService>(), tasks, task));
+        // 默认确认委托（第一百三十三轮）：Linux 侧的源码切片只能钉住「构造里装了委托」这一处形状，
+        // 「装上的确实是对话框自己的默认实现」只有真构造一次才知道——留空的话产品路径点「确认回写」
+        // 会 NRE，而 Linux 侧测试全绿。
+        yield return ("ApplyPlanDialog 默认确认委托（真实控件）", () =>
+        {
+            var dialog = new ApplyPlanDialog(services.GetRequiredService<CommentPlanService>(), tasks, task);
+            var confirm = dialog.ConfirmApply
+                ?? throw new InvalidOperationException("构造后 ConfirmApply 为空（产品路径点「确认回写」会 NRE）。");
+            var declaring = confirm.Method.DeclaringType;
+            if (declaring != typeof(ApplyPlanDialog) && declaring?.DeclaringType != typeof(ApplyPlanDialog))
+            {
+                throw new InvalidOperationException($"默认确认委托的声明类型是「{declaring?.Name}」，不是 ApplyPlanDialog 自己的默认实现。");
+            }
+            return dialog;
+        });
         yield return ("PropagationDialog（生成文档核对）", () => new PropagationDialog(tasks, task));
         yield return ("BuildLogDialog（定向构建输出）", () => new BuildLogDialog(tasks, task));
         yield return ("ContractsDialog（响应契约）", () => new ContractsDialog(tasks, task, services.GetRequiredService<ContractReviewService>()));
@@ -284,6 +302,83 @@ internal static class Program
             Console.WriteLine("     " + frame);
             _lines.Add($"FAIL {name}：{ex.GetType().Name}：{ex.Message}");
             _lines.Add("     " + frame);
+        }
+    }
+
+    /// <summary>
+    /// 字段宽度实测（DPI 缩放，第一百三十三轮）：把「新建配置」对话框按 125% / 150% / 200% 缩放后
+    /// 再量一遍字段列。
+    /// <para>
+    /// 存在理由：控制仓简报的 P0-3 要求真机 125%/150%/200% 三档 DPI 实测，本环境没有 Windows 真机
+    /// （第一百二十四轮的挂账决策：责任在环境供给）。这里做的是**本环境能做的替代**——用
+    /// <c>Control.Scale</c> 模拟三档缩放，量真实 WinForms 布局算出来的列宽与字段宽，并断言
+    /// 「列宽之和恰等于网格可用宽度」这条不变量在缩放后仍成立（<c>Ui.FieldGridPanel</c> 在
+    /// <c>OnSizeChanged</c> 里按当前宽度重算，缩放会改宽度，正是这条路径）。
+    /// </para>
+    /// <para>
+    /// 它**不能替代真机 DPI 观感复核**：wine 的字体度量与 GDI 绘制不是 Windows 实现，
+    /// 文字截断、按钮热区这类观感问题只有真机截图能判（见 docs/NOTES.md 的真机清单）。
+    /// </para>
+    /// </summary>
+    private static void MeasureFieldWidthsAtScale(IServiceProvider services, ProjectProfile profile)
+    {
+        foreach (var percent in new[] { 125, 150, 200 })
+        {
+            var name = $"ProfileDialog 字段宽度（DPI {percent}%）";
+            try
+            {
+                using var dialog = new ProfileDialog(
+                    services.GetRequiredService<ProfileStore>(),
+                    services.GetRequiredService<ApifoxCli>(),
+                    services.GetRequiredService<CredentialStore>(),
+                    editing: profile);
+                _ = dialog.Handle;
+                dialog.CreateControl();
+                dialog.Scale(new SizeF(percent / 100f, percent / 100f));
+                dialog.PerformLayout();
+
+                var grid = FindGrid(dialog)
+                    ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+                // 不变量：列宽之和恰等于网格可用宽度（缩放改了宽度，列宽必须跟着重算）。
+                var usable = grid.Width - grid.Padding.Horizontal;
+                var sum = grid.ColumnStyles.Cast<ColumnStyle>().Sum(style => (int)style.Width);
+                if (sum != usable)
+                {
+                    throw new InvalidOperationException($"列宽之和 {sum} 与网格可用宽度 {usable} 不一致（缩放后列宽没有按当前宽度重算）。");
+                }
+
+                var measured = new List<string>();
+                var tooNarrow = new List<string>();
+                foreach (Control control in grid.Controls)
+                {
+                    if (grid.GetColumn(control) != 1) continue;
+                    if (control is not (Ui.FieldBox or ComboBox)) continue;
+                    var label = RowLabel(grid, grid.GetRow(control));
+                    measured.Add($"{label}={control.Width}");
+                    if (control.Width < ProfileGridColumns.MinFieldBoxWidth) tooNarrow.Add($"{label}={control.Width}");
+                }
+                if (measured.Count == 0) throw new InvalidOperationException("字段列里一个字段控件都没量到。");
+                if (tooNarrow.Count > 0)
+                {
+                    throw new InvalidOperationException($"{string.Join("，", tooNarrow)} 低于下限 {ProfileGridColumns.MinFieldBoxWidth}。");
+                }
+
+                var line = $"     {percent}%：网格 {grid.Width}、可用 {usable}、列宽 [{grid.ColumnStyles[0].Width}, {grid.ColumnStyles[1].Width}]；" + string.Join("，", measured);
+                Console.WriteLine(line);
+                _lines.Add(line);
+                _passed++;
+                Console.WriteLine("PASS " + name);
+                _lines.Add("PASS " + name);
+            }
+            catch (Exception ex)
+            {
+                _failed++;
+                var frame = (ex.StackTrace ?? "").Split('\n').FirstOrDefault()?.Trim() ?? "";
+                Console.WriteLine($"FAIL {name}：{ex.GetType().Name}：{ex.Message}");
+                Console.WriteLine("     " + frame);
+                _lines.Add($"FAIL {name}：{ex.GetType().Name}：{ex.Message}");
+                _lines.Add("     " + frame);
+            }
         }
     }
 

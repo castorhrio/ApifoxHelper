@@ -47,6 +47,28 @@ public static class ApplyPlanEntries
     public const string DiffCaption = "选中文件的注释差异（只改 /// 注释行；与回写时写入的内容一致）";
 
     /// <summary>
+    /// 确认回写的标题（原生确认框，第一百三十三轮）：与正文同处一份，界面不就地拼。
+    /// </summary>
+    public const string ConfirmApplyTitle = "确认注释回写";
+
+    /// <summary>
+    /// 确认回写的正文（第一百三十三轮）：把「将把注释改动写入 N 个源码文件，共 M 处注释修改」
+    /// 与安全承诺（只改 <c>///</c> 注释行、不改执行代码、确认后文件被改动即拒绝写入）收成一处纯函数。
+    /// <para>
+    /// 存在理由：这段字是用户按下「确认回写」之前读到的唯一一段话，也是「只改注释、不动执行代码」
+    /// 这条写入安全边界在界面上的唯一表述。它此前就地拼在 <c>ApplyPlanDialog</c> 的默认确认委托里，
+    /// 而那个委托在 Linux 上构造不出来（WinForms 窗体），于是「文案与默认按钮不漂移」这件事
+    /// 没有任何机械检查——有人把默认按钮从「取消」改成「确定」、或把承诺句删掉，测试全绿。
+    /// 收成纯函数后，正文在 Linux 侧真执行断言，默认按钮由源码切片钉住（见
+    /// <c>ApifoxHelper.Tests/ApplyPlanConfirmTests.cs</c>）。
+    /// </para>
+    /// </summary>
+    public static string ConfirmApplyText(int writableFiles, int edits) =>
+        "将把注释改动写入 " + writableFiles.ToString(CultureInfo.InvariantCulture)
+        + " 个源码文件，共 " + edits.ToString(CultureInfo.InvariantCulture)
+        + " 处注释修改。\n只修改 /// 注释行，不改执行代码；文件在确认后被改动会拒绝写入，失败即停并如实记录。\n\n确认回写？";
+
+    /// <summary>
     /// 计数行：文件总数、注释处数与跳过数。按整份计划统计、不随关键词变化——
     /// 「跳过 N」正是要找的那批的凭据，被一屏的空抹掉等于把结果藏起来。
     /// </summary>

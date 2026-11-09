@@ -1298,3 +1298,19 @@
 - [ ] 点「回写」→ 回写计划对话框列出待写条目 → 执行 → 状态行显示成功，回读核对通过。
 - [ ] 100% 与 200% DPI 各截一张「新建配置」对话框图，确认右列宽度与文字不重叠、不裁切。
 - [ ] 全程无未处理异常弹窗；`%TEMP%\ah-smoke-report.txt` 或 `--report` 指定路径的报告为 27 通过 / 0 失败。
+
+## 收口轮「确认回写的默认委托钉住不漂移 + 冒烟器分段自检」（2026-11-10 第一百三十三轮）
+
+- **接续前确认**：开局工作树干净（仅 `.winecheck/` 未跟踪，本机 wine 试跑脚本，非产品代码，不入库），HEAD（b76b624）为第一百三十二轮（端到端冒烟推到「注释回写落盘」，wine 实测 37 通过），主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误、`dotnet test` 1999 用例全绿，基线成立；第四十七至一百三十二轮逐字保留。
+- **本轮定位**：控制仓简报的 P0-1（Windows 真机跑冒烟器）与 P0-3（真机 125%/150%/200% DPI 实测）在本会话**不可能完成**——Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机（第一百二十四轮的挂账决策继续有效：责任在环境供给）。按简报「P0-2 可机读、可变异变红」与「能在 Linux 验证的验证、不可验证的如实记录」，本轮只做 P0-2 与 P1-1，不开新功能、不动服务链路语义。
+- **P0-2 已交付：`ConfirmApply` 默认委托不漂移**。第一百三十二轮为冒烟器把「确认」收成可替换委托 `ApplyPlanDialog.ConfirmApply`，产品路径与测试路径从此共用同一个委托——默认实现就是用户按下「确认回写」之前看到的那个原生确认框。而那个委托在 Linux 上构造不出来（WinForms 窗体），于是「文案与默认按钮不漂移」此前**没有任何机械检查**：把默认按钮从「取消」改成「确定」（回车误触即写入源码）、或删掉「只修改 /// 注释行，不改执行代码」这句承诺，测试全绿。
+  - **正文与标题收成一份落点**：`ApplyPlanEntries.ConfirmApplyText(writableFiles, edits)` 与 `ConfirmApplyTitle`（不依赖 WinForms、与测试工程共享编译），对话框的默认委托取它们，界面不就地拼字。文案逐字不变（写什么、写多少、只改注释行、确认后文件被改动即拒绝写入、问句收尾）。
+  - **默认按钮由源码切片钉住**：`MessageBoxDefaultButton.Button2`（默认在「取消」）、`MessageBoxButtons.OKCancel`、`MessageBoxIcon.Warning`、这一屏只有一个 `MessageBox.Show`、`Button1`/`Button3` 不得出现；确认排在写入之前（`if (!ConfirmApply(plan)) return;` 在 `_plans.ApplyAsync` 之前）。
+  - **真实运行时证据由冒烟器给**：新增用例「ApplyPlanDialog 默认确认委托（真实控件）」——构造后核对 `ConfirmApply` 非空（留空则产品路径点「确认回写」NRE）且 `Method.DeclaringType` 是 `ApplyPlanDialog` 自己的默认实现（不是别处塞进来的替身）。
+- **P1-1 已交付：冒烟器分段自检**。冒烟器的判定方式是「段里的断言抛异常即失败」——段还在、断言被删掉，这一段就变成「跑过、什么也没判」，报告照样 PASS，而这类退化在 Linux 侧看不出来（冒烟器跑在 Windows 桌面运行时上）。`NativeDialogSmokeTests` 新增三条：① 每个 `RunAction` 段至少含一条判失败的等价物（抛异常 / `_failed++` / `tooNarrow`），段数地板 8 防扫描空转；② 两段「字段宽度实测」的方法体里必须留着 `tooNarrow`、`_failed++` 与「一个字段都没量到」的判定；③ 两段端到端各自至少三个 `RunAction` 段（删段比删断言更难发现）。
+- **测试 1999 → 2012 用例**（+13）：`ApplyPlanConfirmTests` 10 例（正文真执行 3、一份落点 1、默认委托接线 2、确认先于写入 1、冒烟器运行时核对 1、设计基线 2）+ `NativeDialogSmokeTests` 3 例（分段自检）。
+- **变异验证 3 处实测可红**（各自独立变红，还原后重建 2012 全绿，备份以 `cp` 还原并逐处 `grep` 核对）：① 默认按钮 `Button2` → `Button1`（`DefaultDelegate_DefaultsToCancel` 红）；② 承诺句改成「只修改注释行；」（`ConfirmText_SaysWhatWillBeWrittenAndWhatWillNot` 与 `ConfirmText_IsTheSingleSource` 两红）；③ 删掉 `if (!ConfirmApply(plan)) return;`（`RunApply_AsksBeforeWriting` 红）。
+- **P0-1 / P0-3 真机证据：本轮仍不可得（环境限制，非验证手段选错）**。本会话是 Linux 容器、无 Windows 真机，**Windows 真机跑冒烟器与 125%/150%/200% DPI 截图这两项在本环境不可能产出**；第一百二十四轮的挂账决策继续有效。本轮**未再重复 wine 试跑**（第一百二十五至一百二十七轮已连续三次在同一处卡住：主窗口起得来、对话框在回合内没出现），故**不据此宣称第一百二十三/一百二十四轮的列宽修复已在 GUI 上成立**，也不宣称冒烟器 37 通过在本轮复跑过——那是第一百三十二轮的证据，本轮未复跑。
+- **本轮新增的替代手段（如实标注为替代，不冒充真机）**：冒烟器新增「字段宽度实测（DPI 缩放 125% / 150% / 200%）」段——用 `Control.Scale` 模拟三档缩放后量真实 WinForms 布局算出的列宽与字段宽，并断言「列宽之和恰等于网格可用宽度」这条不变量在缩放后仍成立（`Ui.FieldGridPanel` 在 `OnSizeChanged` 里按当前宽度重算，缩放正是这条路径）。它**不能替代真机 DPI 观感复核**：wine 的字体度量与 GDI 绘制不是 Windows 实现，文字截断、按钮热区这类观感问题只有真机截图能判。该段在 wine 下的实测结果见下一轮（本轮回合用尽，未跑）。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2012 用例全部通过**（含令牌接线与 G-D4 机械检查）；口径是真执行——`ApplyPlanEntries.cs` 经共享编译进测试程序集，确认正文跑的是主工程同一份代码；界面接线属 WinForms 控件触达、本环境不可执行，以源码切片与行首正则钉住，不冒充跑过。主链路（新建配置 → 新建任务 → 扫描 → …）仍未打通，卡在「Windows 真机复跑」这一环境门槛上。本轮未连接或写入 Apifox，未调用任何模型服务。
+- **顺带记录**：第九十六至一百三十二轮未回写 `docs/方案.md` 的 F16 行，本轮同样只回写 `docs/DESIGN.md` §6/§8 与本文件。

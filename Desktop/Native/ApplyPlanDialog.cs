@@ -150,13 +150,15 @@ internal sealed class ApplyPlanDialog : Form
 
         // 确认的默认实现：原生确认对话框（默认按钮在「取消」，防回车误触）。冒烟器可替换本委托，
         // 产品路径不变——文案、按钮与默认按钮与接入本委托之前逐字一致。
+        // 正文与标题取 ApplyPlanEntries 一份落点（第一百三十三轮）：这段字是「只改注释、不动执行代码」
+        // 在界面上的唯一表述，收成纯函数后 Linux 侧可断言，界面不就地拼。
         ConfirmApply = plan =>
         {
             var writable = plan.Files.Where(f => f.WriteAllowed).ToList();
             var edits = writable.Sum(f => f.Edits.Count);
             return MessageBox.Show(this,
-                $"将把注释改动写入 {writable.Count} 个源码文件，共 {edits} 处注释修改。\n只修改 /// 注释行，不改执行代码；文件在确认后被改动会拒绝写入，失败即停并如实记录。\n\n确认回写？",
-                "确认注释回写",
+                ApplyPlanEntries.ConfirmApplyText(writable.Count, edits),
+                ApplyPlanEntries.ConfirmApplyTitle,
                 MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2) == DialogResult.OK;

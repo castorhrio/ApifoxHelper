@@ -182,6 +182,112 @@ public class NativeDialogSmokeTests
         Assert.Contains(@"..\ApifoxHelper.csproj", SmokeProject);
     }
 
+    // ---------- 分段自检（第一百三十三轮，控制仓简报 P1-1） ----------
+
+    /// <summary>
+    /// 冒烟器的每一段交互用例都必须自带断言（第一百三十三轮）。
+    /// <para>
+    /// 存在理由：冒烟器已是主链路唯一的自动化证据，而它的判定方式是「段里的断言抛异常即失败」——
+    /// 段还在、断言被删掉，这一段就变成「跑过、什么也没判」，报告照样 PASS。
+    /// 这类退化在 Linux 侧看不出来（冒烟器跑在 Windows 桌面运行时上），只能靠源码切片钉住。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryRunActionSegment_AssertsSomething()
+    {
+        var segments = Segments("RunAction");
+        // 地板：段数掉下去说明扫描口径坏了，检查会静默空转。
+        Assert.True(segments.Count >= 8, $"只找到 {segments.Count} 个 RunAction 段，扫描口径可能已失效。");
+        var silent = segments.Where(segment => !HasAssertion(segment.Body)).Select(segment => segment.Name).ToList();
+        Assert.True(silent.Count == 0, "以下 RunAction 段没有任何断言（段在、断言丢）：" + string.Join("、", silent));
+    }
+
+    [Fact]
+    public void EveryMeasureSection_AssertsSomething()
+    {
+        // 两段「字段宽度实测」不走 RunAction（它们自己记账），断言必须留在方法体里：
+        // 量不到控件、量到的宽度低于下限，两种都要判失败，否则「量了一遍」等于没量。
+        foreach (var signature in new[]
+        {
+            "private static void MeasureFieldWidths(",
+            "private static void MeasureFieldWidthsAtScale(",
+        })
+        {
+            var body = MethodBody(SmokeProgram, signature);
+            Assert.Contains("tooNarrow", body, StringComparison.Ordinal);
+            Assert.Contains("_failed++", body, StringComparison.Ordinal);
+            Assert.Contains("measured.Count == 0", body, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void EveryEndToEndSection_IsMadeOfAssertingSegments()
+    {
+        // 两段端到端各自至少三段交互用例：段数掉下去说明有人把某一段删了（删段比删断言更难发现）。
+        foreach (var signature in new[]
+        {
+            "private static void RunEndToEnd(",
+            "private static void RunWriteBackEndToEnd(",
+        })
+        {
+            var body = MethodBody(SmokeProgram, signature);
+            var count = Regex.Matches(body, @"RunAction\(").Count;
+            Assert.True(count >= 3, $"{signature} 里只有 {count} 个 RunAction 段。");
+        }
+    }
+
+    /// <summary>
+    /// 冒烟器里以 <paramref name="call"/> 开头的段（从该行到下一个段或下一个方法定义之前）。
+    /// 按行切而不是按括号配平：段体里含插值字符串与字符字面量，配平扫描容易把边界算错。
+    /// </summary>
+    private static List<(string Name, string Body)> Segments(string call)
+    {
+        var lines = SmokeProgram.Split('\n');
+        var marker = new Regex(@"^\s*" + call + @"\(""([^""]+)""");
+        var method = new Regex(@"^    (private|internal|public|protected)\b");
+        var starts = new List<int>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (marker.IsMatch(lines[i])) starts.Add(i);
+        }
+        var segments = new List<(string Name, string Body)>();
+        foreach (var start in starts)
+        {
+            var end = lines.Length;
+            for (var j = start + 1; j < lines.Length; j++)
+            {
+                if (marker.IsMatch(lines[j]) || method.IsMatch(lines[j]))
+                {
+                    end = j;
+                    break;
+                }
+            }
+            segments.Add((marker.Match(lines[start]).Groups[1].Value, string.Join('\n', lines[start..end])));
+        }
+        return segments;
+    }
+
+    /// <summary>段体里有没有一条「判失败」的等价物：抛异常、记失败、或宽度下限判定。</summary>
+    private static bool HasAssertion(string body) =>
+        body.Contains("throw new InvalidOperationException", StringComparison.Ordinal)
+        || body.Contains("_failed++", StringComparison.Ordinal)
+        || body.Contains("tooNarrow", StringComparison.Ordinal);
+
+    private static string MethodBody(string source, string signature)
+    {
+        var from = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(from >= 0, $"源码缺少 {signature}。");
+        var open = source.IndexOf('{', from);
+        var depth = 0;
+        for (var i = open; i < source.Length; i++)
+        {
+            if (source[i] == '{') depth++;
+            else if (source[i] == '}' && --depth == 0) return source[open..(i + 1)];
+        }
+        Assert.Fail($"{signature} 的方法体没有闭合。");
+        return "";
+    }
+
     [Fact]
     public void NotesDoc_RecordsTheSmokeRunAndTheChecklist()
     {
