@@ -30,6 +30,19 @@ public static class ProfileGridColumns
     public const int MinFieldWidth = 96;
 
     /// <summary>
+    /// 字段控件（输入框/下拉框）自身的最小宽：低于这个宽度，一行提示语或一个路径就折成两行，
+    /// 而字段列本身可能比它窄（窗口很窄时列宽按比例收缩）——此时控件保持这个宽度、由网格出横向滚动条，
+    /// 不把控件压到读不出内容。
+    /// <para>
+    /// 此前这个数在三个配置子对话框（<c>GenerationDialog</c> / <c>ProfileAdvancedDialog</c> /
+    /// <c>ProfileAnalysisDialog</c>）的 <c>AddRow</c> 里各写一遍 <c>Math.Max(field.Width, 480)</c>——
+    /// 同一个数三处字面重复，改一处就三处不一致（第一百二十四轮收口）。现在只在这里出现，
+    /// 界面代码引用本常量，机械检查钉住「界面代码不出现字面 480」。
+    /// </para>
+    /// </summary>
+    public const int MinFieldBoxWidth = 480;
+
+    /// <summary>
     /// 按可用宽度算各列宽（像素）。<paramref name="totalWidth"/> 是网格自身宽度，
     /// <paramref name="pad"/> 是网格左右留白合计（列宽可用的是 <c>totalWidth − pad</c>）。
     /// <list type="bullet">

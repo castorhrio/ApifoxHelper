@@ -233,10 +233,27 @@ internal static class Ui
             ApplyColumnWidths();
         }
 
-        /// <summary>按网格当前宽度重算两列宽；宿主还没给出可用宽度时保持构造时的最小宽，等下一次尺寸变化。</summary>
+        /// <summary>
+        /// 留白改了就重算列宽（第一百二十四轮）：可用宽度是「网格宽 − 左右留白」，
+        /// 留白与列宽是同一笔账的两项——此前 <see cref="ApplyColumnWidths"/> 把留白写成
+        /// <c>UiTokens.Xl × 2</c> 的字面，与构造里设的 <c>Padding</c> 靠「两处都写 Xl」这种
+        /// 读代码看不出来的约定耦合：改 Padding 而忘了改那一处，列宽就会多算或少算一段，
+        /// 网格右侧多一条缝或出横向滚动条。现在留白只从 <c>Padding.Horizontal</c> 取，
+        /// 且 Padding 变化时也走同一次重算。
+        /// </summary>
+        protected override void OnPaddingChanged(EventArgs e)
+        {
+            base.OnPaddingChanged(e);
+            ApplyColumnWidths();
+        }
+
+        /// <summary>
+        /// 按网格当前宽度重算两列宽；宿主还没给出可用宽度时保持构造时的最小宽，等下一次尺寸变化。
+        /// 左右留白取 <c>Padding.Horizontal</c>（唯一来源），不再另写一个数。
+        /// </summary>
         private void ApplyColumnWidths()
         {
-            var widths = ProfileGridColumns.ColumnWidths(Width, [_labelWidth, ProfileGridColumns.MinFieldWidth], UiTokens.Xl * 2);
+            var widths = ProfileGridColumns.ColumnWidths(Width, [_labelWidth, ProfileGridColumns.MinFieldWidth], Padding.Horizontal);
             if (widths[0] <= 0) return;
             if (Math.Abs(ColumnStyles[0].Width - widths[0]) < 0.5f && Math.Abs(ColumnStyles[1].Width - widths[1]) < 0.5f) return;
             ColumnStyles[0].Width = widths[0];

@@ -158,6 +158,44 @@ public class ProfileGridColumnsTests
         Assert.Equal(120, ApifoxHelper.Desktop.Native.ProfileGridColumns.LabelWidth);
         Assert.Equal(110, ApifoxHelper.Desktop.Native.ProfileGridColumns.NarrowLabelWidth);
         Assert.Equal(96, ApifoxHelper.Desktop.Native.ProfileGridColumns.MinFieldWidth);
+        // 字段控件自身的最小宽（第一百二十四轮从三处字面 480 收进来）。
+        Assert.Equal(480, ApifoxHelper.Desktop.Native.ProfileGridColumns.MinFieldBoxWidth);
+    }
+
+    // ── 留白与列宽是同一笔账（第一百二十四轮）────────────────────────────
+
+    [Fact]
+    public void PadChange_MovesTheColumnWidths()
+    {
+        // 可用宽度 = 网格宽 − 左右留白：留白多 16px，右列就少 16px（左列不动）。
+        // 这条断言钉的是「留白与列宽同源」这件事本身——界面那边把留白从 Padding.Horizontal 取，
+        // 改 Padding 就必然改列宽，不会出现「Padding 改了、列宽还按旧留白算」的缝。
+        var narrow = ApifoxHelper.Desktop.Native.ProfileGridColumns.ColumnWidths(663, [120, 96], 48);
+        var wide = ApifoxHelper.Desktop.Native.ProfileGridColumns.ColumnWidths(663, [120, 96], 64);
+        Assert.Equal([120, 495], narrow);
+        Assert.Equal([120, 479], wide);
+        Assert.Equal(narrow[1] - 16, wide[1]);
+        // 留白大到吃掉全部可用宽度时全 0（调用方据此跳过这一次重算），不出现负数。
+        Assert.Equal([0, 0], ApifoxHelper.Desktop.Native.ProfileGridColumns.ColumnWidths(663, [120, 96], 663));
+    }
+
+    [Fact]
+    public void FieldGridPanel_TakesThePadFromItsOwnPadding()
+    {
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        var start = ui.IndexOf("private sealed class FieldGridPanel", StringComparison.Ordinal);
+        Assert.True(start >= 0, "Ui.cs 缺少 FieldGridPanel（两列字段网格的唯一形状落点）。");
+        var rest = ui[start..];
+        var end = rest.IndexOf("\n    }\n", StringComparison.Ordinal);
+        var panel = end < 0 ? rest : rest[..end];
+
+        // 留白唯一来源：列宽计算取 Padding.Horizontal，不再另写 UiTokens.Xl × 2 的字面。
+        Assert.Contains("ProfileGridColumns.ColumnWidths(Width, [_labelWidth, ProfileGridColumns.MinFieldWidth], Padding.Horizontal)", panel);
+        Assert.DoesNotContain("UiTokens.Xl * 2", panel);
+        // Padding 变化也走同一次重算：改 Padding 不会算错列宽。
+        Assert.Matches(@"(?m)^\s*protected override void OnPaddingChanged\(EventArgs e\)", panel);
+        var paddingHandler = panel[panel.IndexOf("OnPaddingChanged", StringComparison.Ordinal)..];
+        Assert.Contains("ApplyColumnWidths();", paddingHandler[..paddingHandler.IndexOf("}", StringComparison.Ordinal)]);
     }
 
     // ── 界面接线：形状唯一落点 ────────────────────────────────────────────
@@ -181,7 +219,8 @@ public class ProfileGridColumnsTests
         Assert.Matches(@"(?m)^\s*ColumnCount = 2;", panel);
         // 列宽按当前宽度重算：尺寸变化时调一次，构造时也调一次（先按最小宽摆好）。
         Assert.Matches(@"(?m)^\s*protected override void OnSizeChanged\(EventArgs e\)", panel);
-        Assert.Equal(2, Regex.Matches(panel, @"(?m)^\s*ApplyColumnWidths\(\);").Count);
+        // 三处调用：构造一次（先按最小宽摆好）、尺寸变化一次、留白变化一次（第一百二十四轮）。
+        Assert.Equal(3, Regex.Matches(panel, @"(?m)^\s*ApplyColumnWidths\(\);").Count);
         Assert.Contains("ProfileGridColumns.ColumnWidths(Width,", panel);
         // 百分比列正是缺陷本体：工厂里不得再出现。
         Assert.DoesNotMatch(@"SizeType\.Percent", panel);
@@ -208,6 +247,30 @@ public class ProfileGridColumnsTests
             Assert.DoesNotMatch(@"(?m)^\s*grid\.ColumnStyles\.Add\(new ColumnStyle\(SizeType\.Absolute, (120|110)\)\);", source);
             Assert.DoesNotMatch(@"new TableLayoutPanel \{ Dock = DockStyle\.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens\.Panel", source);
         }
+    }
+
+    [Fact]
+    public void FieldBoxMinimum_LivesOnlyInTheSharedEntry()
+    {
+        // 第一百二十四轮：三个配置子对话框的 AddRow 里各写一遍 Math.Max(field.Width, 480)，
+        // 同一个数三处字面重复。现在只允许引用 ProfileGridColumns.MinFieldBoxWidth。
+        var dialogs = new[] { "GenerationDialog.cs", "ProfileAdvancedDialog.cs", "ProfileAnalysisDialog.cs" };
+        foreach (var file in dialogs)
+        {
+            var source = Repo.Source("Desktop", "Native", file);
+            Assert.Contains("ProfileGridColumns.MinFieldBoxWidth", source);
+            // 界面代码不出现字面 480（这个数只属于 ProfileGridColumns）。
+            Assert.DoesNotMatch(@"\b480\b", source);
+            // 字段加宽只经共享常量：不得再出现「Math.Max(field.Width, 数字)」。
+            Assert.DoesNotMatch(@"Math\.Max\(field\.Width, \d", source);
+        }
+        // 常量本身只在一处定义。
+        var rule = Repo.Source("Desktop", "Native", "ProfileGridColumns.cs");
+        Assert.Contains("public const int MinFieldBoxWidth = 480;", rule);
+        var others = Directory.GetFiles(Path.Combine(Repo.Root, "Desktop", "Native"), "*.cs")
+            .Where(f => Path.GetFileName(f) != "ProfileGridColumns.cs")
+            .Where(f => Regex.IsMatch(File.ReadAllText(f), @"const int MinFieldBoxWidth"));
+        Assert.Empty(others);
     }
 
     [Fact]
