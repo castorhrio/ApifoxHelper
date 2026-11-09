@@ -143,8 +143,7 @@ internal sealed class SupplementsDialog : Form
         editorsCaption.Dock = DockStyle.Top;
         editorsCaption.TextAlign = ContentAlignment.MiddleLeft;
         editorsCaption.Padding = new Padding(0, 0, 0, UiTokens.Sm);
-        // 对象初始化器不能跟在方法调用后（CS1003），Dock 在此补设。
-        _editorsScroll.Dock = DockStyle.Fill;
+        // 停靠方向由工厂一处决定（Dock = Fill），这里不再补设。
         _editorsHost.Controls.Add(_editorsScroll);
         _editorsHost.Controls.Add(editorsCaption);
 

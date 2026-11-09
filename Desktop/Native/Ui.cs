@@ -379,6 +379,15 @@ internal static class Ui
     /// 长内容区的可滚动宿主（DESIGN.md §6「长内容区」）：内容超出可视高度时出滚动条；
     /// 子项多为不接收焦点的标签，点击内容的任意处（含标签上）把焦点交给宿主，滚轮随后可滚动
     /// （任务详情、补充说明编辑区共用）。不是 Tab 停靠点，不改变 Tab 序。
+    /// <para>
+    /// <b>宿主自己就是「填满剩余空间」的那一块</b>（<c>Dock = Fill</c>，第一百二十轮）：
+    /// 此前工厂只设 <c>AutoScroll</c>、不设 <c>Dock</c>，而 <c>Panel</c> 的默认尺寸是 200×100——
+    /// 于是每一个「长内容区」都变成左上角一块 200×100 的小框：配置编辑对话框里
+    /// 第二列（<c>SizeType.Percent</c>）只剩 200 − 120（标签列）− 48（左右留白）− 17（滚动条）≈ 15px，
+    /// 输入框窄到无法填写，其余客户区一片空白（真机故障报告：输入框约 15px、滚动区约 100px 高）；
+    /// 任务详情同样被压成 200×100，九个分区与全部同步/报告动作挤在一条缝里。
+    /// 停靠方向由工厂一处决定，界面代码不得再各自设 <c>Dock</c>（机械检查钉住）。
+    /// </para>
     /// </summary>
     public static Panel ScrollHost() => new ScrollPanel();
 
@@ -386,6 +395,9 @@ internal static class Ui
     {
         public ScrollPanel()
         {
+            // 填满父容器的剩余空间：停靠按集合倒序生效，先加入的宿主最后停靠，
+            // 因此底部按钮行与状态行先占位、宿主拿剩下的全部（与各对话框的加入顺序配套）。
+            Dock = DockStyle.Fill;
             AutoScroll = true;
             BackColor = UiTokens.Bg;
             // Panel 默认不可选中：不开 Selectable 就 Focus() 不到，滚轮事件到不了宿主。

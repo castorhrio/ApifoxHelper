@@ -63,8 +63,8 @@ internal sealed class NoticeDialog : Form
             grid.Controls.Add(noteLabel);
         }
 
+        // 停靠方向由工厂一处决定（Dock = Fill），这里不再补设。
         var host = Ui.ScrollHost();
-        host.Dock = DockStyle.Fill;
         host.Controls.Add(grid);
 
         var closeButton = Ui.Ghost("关闭");

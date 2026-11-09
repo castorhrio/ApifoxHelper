@@ -24,6 +24,37 @@ public class ScrollHostTests
     }
 
     [Fact]
+    public void Factory_FillsTheRemainingSpace()
+    {
+        // 第一百二十轮的真实缺陷：工厂只设 AutoScroll、不设 Dock，Panel 的默认尺寸 200×100 就成了
+        // 每一个「长内容区」的实际尺寸——配置编辑对话框第二列（Percent）被压到约 15px、输入框无法填写，
+        // 任务详情被压成 200×100。停靠方向必须在工厂一处定死（Dock = Fill），界面代码不得各自补设。
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        Assert.Matches(@"(?m)^\s*Dock = DockStyle\.Fill;", ui);
+        // 工厂返回的就是填满剩余空间的那一块：ScrollPanel 构造里设，不在调用点设。
+        var panel = ui[ui.IndexOf("private sealed class ScrollPanel", StringComparison.Ordinal)..];
+        Assert.Matches(@"(?m)^\s*Dock = DockStyle\.Fill;", panel);
+        Assert.Matches(@"(?m)^\s*AutoScroll = true;", panel);
+    }
+
+    [Fact]
+    public void Hosts_DoNotSetDockThemselves()
+    {
+        // 停靠方向单一落点：界面代码不得对 ScrollHost 实例再设 Dock（两处口径必然漂移——
+        // 第一百二十轮之前 NoticeDialog 与 SupplementsDialog 各补设一次，其余五处忘了补，
+        // 于是同一个工厂出来的宿主有两种尺寸）。
+        foreach (var name in new[]
+                 {
+                     "ProjectsPage.cs", "TasksPage.cs", "NoticeDialog.cs", "SupplementsDialog.cs",
+                     "GenerationDialog.cs", "ProfileAdvancedDialog.cs", "ProfileAnalysisDialog.cs",
+                 })
+        {
+            var source = Repo.Source("Desktop", "Native", name);
+            Assert.DoesNotMatch(@"(?m)^\s*(gridScroll|host|_editorsScroll|_detailScroll)\.Dock\s*=", source);
+        }
+    }
+
+    [Fact]
     public void Host_TakesFocusOnClickAnywhere()
     {
         // 子项多为不接收焦点的标签，且内容盖住宿主可视面时宿主自己的 MouseDown 收不到——
@@ -70,7 +101,8 @@ public class ScrollHostTests
         // 编辑区宿主收敛为同一工厂：AutoScroll、点击取焦的口径只有一份。
         var supplements = Repo.Source("Desktop", "Native", "SupplementsDialog.cs");
         Assert.Matches(@"(?m)^\s*private readonly Panel _editorsScroll = Ui\.ScrollHost\(\);", supplements);
-        Assert.Matches(@"(?m)^\s*_editorsScroll\.Dock = DockStyle\.Fill;", supplements);
+        // 填满剩余空间由工厂负责（第一百二十轮），对话框不再自己补设 Dock。
+        Assert.DoesNotMatch(@"(?m)^\s*_editorsScroll\.Dock\s*=", supplements);
     }
 
     [Fact]
