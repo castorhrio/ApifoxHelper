@@ -1155,3 +1155,18 @@
 - **本轮未改产品代码**：根因假设（`AutoScroll` 宿主 + `Dock = Top` + `AutoSize` 的网格拿不到宿主宽度）需要一次最小复现探针确认后再改，本轮剩余时间不足以完成「探针 → 修复 → 机械检查用例 → 变异验证」的完整切片，按「未完成可交付切片不提交」的纪律**只提交本记录**，修复留给下一轮。
 - **下一轮的具体入口（已定位到行）**：`Desktop/Native/ProjectsPage.cs` 的 `ProfileDialog` 构造函数——`var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, … }` 与 `gridScroll.Controls.Add(grid)`。候选修法（择一，需探针判定）：① 网格改 `Dock = Fill` 并让宿主 `AutoScroll` 依内容高度出滚动条；② 保留 `Dock = Top` 但在宿主 `ClientSizeChanged` 时显式设 `grid.Width = gridScroll.ClientSize.Width`；③ 网格 `AutoSize` 关掉、行高显式给。同一形状在 `TasksPage` 的 `NewTaskDialog` 与三个配置子对话框里各有一份，修法必须收进 `Ui.ScrollHost` 一处（第一百二十轮「收进工厂一处」的手法），并补机械检查用例钉住「网格宽度来自宿主」。
 - **验证状态**：Linux 主工程与测试工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **1928 用例全部通过**（本轮未改产品代码，用例数不变）。GUI 侧：wine 下对话框内容已实测可见可读（本轮唯一有真实 GUI 证据的结论），**主链路（新建配置 → 新建任务 → 扫描 → …）仍未打通**，卡在「名称输入框只有 32px 宽、API 项目下拉框错位」这一处布局缺陷上；Windows 真机（具备 .NET 8 桌面运行时）复跑同一路径仍是 G-D5 的硬门槛。本轮未连接或写入 Apifox，未调用任何模型服务。
+
+## 验证轮「新建配置对话框第二列塌陷：拿到真实控件边界，根因从『宿主宽度』收窄到『网格列宽陈旧』」（2026-11-09 第一百二十二轮）
+
+- **接续前确认**：开局工作树干净（仅 `.winecheck/` 未跟踪，本机 wine 试跑脚本，非产品代码，不入库），HEAD（ac3d27b）为第一百二十一轮，主工程 `dotnet build -t:Rebuild` 0 警告 0 错误、`dotnet test` 1928 用例全绿，基线成立；第四十七至一百二十一轮逐字保留。
+- **本轮定位**：控制仓简报的 P0 是「Windows 真机走通主链路」，本会话仍是 Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机，**P0 无法按简报口径完成**。按「能在 Linux 验证的验证、不可验证的如实记录」，本轮只做一件事：把第一百二十一轮挂账的「第二列塌陷」从**像素猜测**推进到**真实控件边界**，判定根因归属。
+- **方法（本轮新增，可复现）**：给 `ProfileDialog` 临时加一个 `OnShown` 诊断（环境变量 `AH_LAYOUT_DUMP` 指定落点，递归 dump 控件树 `Bounds/ClientSize/Dock/Visible`），`dotnet publish -c Release -r win-x64 --self-contained` 后在 wine 10.0 + Xvfb 下启动、点空态「新建配置」，读回 dump。**诊断代码在提交前已整段删除**（`git diff` 干净），产品代码本轮零改动。
+- **实测数据（真实控件边界，非像素推断）**：
+  - `ProfileDialog` client 680×720；
+  - `ScrollPanel`（`Ui.ScrollHost`）bounds 680×623、client **663**（纵向滚动条 17 已出现）——**第一百二十轮的 `Dock = Fill` 修复有效，宿主宽度正确**；
+  - `TableLayoutPanel` bounds **663×1370**、`Dock = Top`——**网格宽度也正确**；
+  - 但第二列里的 `FieldBox` 是 **32×23**（内部 `TextBox` 30×21），而同一列里 `Row(...)` 的 AutoSize 面板是 **495** 宽、`ComboBox` 是显式 420 宽。
+- **根因收窄（推翻第一百二十一轮的假设）**：第一百二十一轮推测「`Dock = Top + AutoSize` 的网格在 `AutoScroll` 宿主里拿不到宿主宽度」，**实测不成立**——网格拿到的是 663。真实缺陷是**网格的列宽陈旧**：`32 = 200 − 24 − 24 − 120`，即第二列（`SizeType.Percent, 100`）的宽度仍是网格**默认尺寸 200** 时算出的值，网格后来变成 663 宽却没有重算列宽；AutoSize 面板与显式宽度的 ComboBox 不受列宽约束所以看着正常，只有**不设 Dock、靠列宽撑开的 `FieldBox`** 被压成 32——这正是「名称/允许回写范围/版本备注/Swagger 位置四个输入框塌陷、下拉框与按钮行正常」的完整解释。
+- **未修，如实挂账**：本轮剩余时间不足以完成「最小复现探针 → 修法择一 → 机械检查用例 → 变异验证」的完整切片，按「未完成可交付切片不提交」的纪律**只提交本记录**，产品代码一行未改。
+- **下一轮的具体入口（已定位到行与数值）**：`Desktop/Native/ProjectsPage.cs` 的 `ProfileDialog` 构造函数——`var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, … }` 与 `gridScroll.Controls.Add(grid)`。候选修法（需一次最小复现探针判定，探针形状已备：`/tmp/probe` 的 A–E 五组对照在 wine 下实测 `Dock=Top + AutoSize` 本身能拿到 680/col1=512，说明差异来自**真实对话框的列内容**——AutoSize 面板与不设 Dock 的 `FieldBox` 混排）：① 网格 `AutoSize = false` + 显式高度（列宽随宽度重算）；② 宿主 `ClientSizeChanged` 时显式 `grid.Width = gridScroll.ClientSize.Width` 并 `grid.PerformLayout()`；③ 第二列内容统一 `Dock = Fill`（`FieldBox` 也 Dock，列宽由网格给）。同一形状在 `TasksPage` 的 `NewTaskDialog` 与三个配置子对话框里各有一份，修法必须收进 `Ui.ScrollHost` 一处，并补机械检查钉住「第二列宽度来自网格当前宽度」。
+- **验证状态**：Linux 主工程与测试工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **1928 用例全部通过**（本轮未改产品代码，用例数不变）。GUI 侧：wine 下对话框内容可见可读、控件树边界已实测（本轮唯一有真实 GUI 证据的结论）；**主链路（新建配置 → 新建任务 → 扫描 → …）仍未打通**，卡在「第二列四个输入框只有 32px 宽」这一处列宽缺陷上；Windows 真机（具备 .NET 8 桌面运行时）复跑同一路径仍是 G-D5 的硬门槛。本轮未连接或写入 Apifox，未调用任何模型服务。
