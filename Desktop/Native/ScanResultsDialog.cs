@@ -284,25 +284,12 @@ internal sealed class ScanResultsDialog : Form
         _detail.Text = "";
     }
 
-    /// <summary>计数行按全部位置统计（不随筛选变化），等宽数字不跳宽。</summary>
-    private void UpdateCounts()
-    {
-        int valid = 0, missing = 0, empty = 0, stale = 0, other = 0;
-        foreach (var slot in _slots)
-        {
-            switch (slot.Status)
-            {
-                case "valid": valid++; break;
-                case "missing": missing++; break;
-                case "empty": empty++; break;
-                case "stale": stale++; break;
-                default: other++; break;
-            }
-        }
-        _counts.Text = _slots.Count == 0
-            ? "没有注释位置"
-            : $"位置 {_slots.Count} · 有效 {valid} · 缺失 {missing} · 空 {empty} · 失效 {stale} · 其他 {other}";
-    }
+    /// <summary>
+    /// 计数行按全部位置统计（不随筛选变化），等宽数字不跳宽。
+    /// 文字取 <see cref="SlotText.CountsLine"/> 单一口径（第一百三十六轮）：冒烟器要在真实控件上
+    /// 断言「计数行与扫描产物对得上」，两边各拼一份的话，断言比的是第二份文字、不是屏幕上那一份。
+    /// </summary>
+    private void UpdateCounts() => _counts.Text = SlotText.CountsLine(_slots);
 
     private bool Matches(DocSlot slot) => _filter.SelectedIndex switch
     {
@@ -385,7 +372,8 @@ internal sealed class ScanResultsDialog : Form
         RefreshSortHeaders();
         if (ListFilter.IsFilteredEmpty(_slots.Count, _list.Items.Count))
         {
-            // 筛到零行不是「没有注释位置」：这一屏给共享口径的那句话，整份数据的聚合入口留着（口径见 ListFilter）。
+            // 筛到零行不是整份数据为空那句话（文案在 SlotText.CountsLine）：这一屏给共享口径的筛选提示，
+            // 整份数据的聚合入口留着（口径见 ListFilter）。
             ShowFilteredEmpty();
             return;
         }

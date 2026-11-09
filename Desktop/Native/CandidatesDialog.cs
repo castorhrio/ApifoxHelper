@@ -270,25 +270,12 @@ internal sealed class CandidatesDialog : Form
         _textCaption.Text = CandidateEdit.TextCaptionNoSelection;
     }
 
-    /// <summary>计数行按全部候选统计（不随筛选变化），等宽数字不跳宽。</summary>
-    private void UpdateCounts()
-    {
-        int pending = 0, accepted = 0, deferred = 0, rejected = 0, stale = 0;
-        foreach (var candidate in _store.Candidates)
-        {
-            switch (candidate.ReviewState)
-            {
-                case "accepted": accepted++; break;
-                case "deferred": deferred++; break;
-                case "rejected": rejected++; break;
-                case "stale": stale++; break;
-                default: pending++; break;
-            }
-        }
-        _counts.Text = _store.Candidates.Count == 0
-            ? "没有候选"
-            : $"候选 {_store.Candidates.Count} · 待审阅 {pending} · 已接受 {accepted} · 已搁置 {deferred} · 已驳回 {rejected} · 证据已变化 {stale}";
-    }
+    /// <summary>
+    /// 计数行按全部候选统计（不随筛选变化），等宽数字不跳宽。
+    /// 文字取 <see cref="QueueText.CandidateCountsLine"/> 单一口径（第一百三十七轮）：冒烟器要在真实控件上
+    /// 断言「计数行与候选队列对得上」，两边各拼一份的话，断言比的是第二份文字、不是屏幕上那一份。
+    /// </summary>
+    private void UpdateCounts() => _counts.Text = QueueText.CandidateCountsLine(_store.Candidates);
 
     private bool Matches(CommentCandidate candidate) => _filter.SelectedIndex switch
     {
@@ -486,8 +473,10 @@ internal sealed class CandidatesDialog : Form
             : new CandidateUpdateRequest { ReviewState = reviewState };
         // 接受是「接受并下一条」（与冻结页面候选卡片同一句）：逐条清队列时选中交给下一条；
         // 搁置 / 驳回留在原处——那两步的下一步是看这一条的结果，不是下一条。
-        RunCandidateUpdate(update, () => TaskDisplay.ReviewStateText(reviewState)
-            + "。剩余待审阅 " + _store.Candidates.Count(c => c.ReviewState == "pending") + " 条。",
+        // 状态行文字取 CandidateEdit.ReviewDoneText 单一口径（第一百三十七轮）：冒烟器要在真实控件上
+        // 断言这一行，两边各拼一份的话，断言比的是第二份文字。
+        RunCandidateUpdate(update, () => CandidateEdit.ReviewDoneText(
+                reviewState, _store.Candidates.Count(c => c.ReviewState == "pending")),
             advanceToNext: reviewState == "accepted");
     }
 

@@ -236,6 +236,45 @@ public class NativeDialogSmokeTests
         }
     }
 
+    // ---------- 注释缺口对话框的真实控件交互（第一百三十六轮） ----------
+
+    /// <summary>
+    /// 注释缺口对话框此前只被「构造一次」（<c>Cases</c> 里 <c>new</c> + 建句柄），而它是整条审阅链路的入口。
+    /// 这一段钉住「真的打开、真的点、真的敲」——只构造的话，计数行、覆盖率行、打开即选中第一条、
+    /// 上一条/下一条、关键词与状态筛选全都可以是坏的而冒烟照样 PASS。
+    /// </summary>
+    [Fact]
+    public void ScanResultsInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunScanResultsInteraction(");
+        // 真的打开（Show 触发 OnLoad 读盘）、真的点按钮、真的敲关键词、真的改筛选下拉。
+        Assert.Contains("dialog.Show();", body);
+        Assert.Contains("PerformClick()", body);
+        Assert.Contains("keyword.Text =", body);
+        Assert.Contains("filter.SelectedIndex =", body);
+        // 断言取共享口径，不是第二份拼字（否则比的是冒烟器自己那份文字）。
+        Assert.Contains("SlotText.CountsLine(", body);
+        Assert.Contains("ScanOverview.CoverageText(", body);
+        Assert.Contains("ListAdvance.PositionText(", body);
+        Assert.Contains("ListFilter.FilteredEmptyHint(", body);
+        // 段数与断言：段数掉下去说明有人删了某一段（删段比删断言更难发现）。
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 5, $"缺口对话框交互只有 {count} 个 RunAction 段。");
+        // Show 出来的窗体必须释放：不 Dispose 会漏窗口句柄，跑第二遍就换一只壳。
+        Assert.Contains("dialog?.Dispose();", body);
+    }
+
+    /// <summary>段写好了但没在 Main 里调用 = 永远不会跑，报告照样 PASS。</summary>
+    [Fact]
+    public void ScanResultsInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var writeBack = main.IndexOf("RunWriteBackEndToEnd(services, dataRoot);", StringComparison.Ordinal);
+        var interaction = main.IndexOf("RunScanResultsInteraction(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(writeBack >= 0, "Main 里没有调用回写链路。");
+        Assert.True(interaction > writeBack, "缺口对话框交互没有排在回写链路之后（主链路顺序：构造 → 端到端 → 回写 → 缺口对话框）。");
+    }
+
     /// <summary>
     /// 冒烟器里以 <paramref name="call"/> 开头的段（从该行到下一个段或下一个方法定义之前）。
     /// 按行切而不是按括号配平：段体里含插值字符串与字符字面量，配平扫描容易把边界算错。

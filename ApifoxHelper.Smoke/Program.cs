@@ -149,6 +149,9 @@ internal static class Program
         Console.WriteLine("== 端到端回写链路（扫描 → 候选 → 计划 → 回写落盘）==");
         RunWriteBackEndToEnd(services, dataRoot);
 
+        Console.WriteLine("== 注释缺口对话框（真实控件交互）==");
+        RunScanResultsInteraction(services, dataRoot);
+
         Console.WriteLine($"== 结果：{_passed} 通过 / {_failed} 失败 ==");
         WriteReport();
         return _failed == 0 ? 0 : 1;
@@ -761,6 +764,269 @@ internal static class Program
     }
 
     /// <summary>
+    /// 注释缺口对话框的真实控件交互（第一百三十六轮）：打开 → 计数行与覆盖率行 → 打开即选中第一条 →
+    /// 上一条/下一条 → 关键词筛到零行与清空 → 状态筛选。
+    /// <para>
+    /// 存在理由：第一百二十九轮起这个对话框只被「构造一次」（<c>Cases</c> 里 <c>new</c> + 建句柄），
+    /// 而它是整条审阅链路的入口——计数行、覆盖率行、打开即选中第一条、上一条/下一条、关键词与状态筛选
+    /// 都是「构造成功」看不出来的行为；真机清单第 5 项（查看缺口对话框可读）此前只有「构造不抛异常」这一层证据。
+    /// </para>
+    /// <para>
+    /// 全部走真实 WinForms 控件：<c>Show()</c> 触发 <c>OnLoad</c> 读盘、<c>Button.PerformClick()</c> 走点击链路、
+    /// 关键词真的敲进 <c>TextBox</c>、状态筛选真的改 <c>ComboBox.SelectedIndex</c>；
+    /// 断言读的是控件上的文字与清单行数，不是服务层返回值。
+    /// </para>
+    /// </summary>
+    private static void RunScanResultsInteraction(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var scan = services.GetRequiredService<SourceScanService>();
+        var drafts = services.GetRequiredService<DraftService>();
+
+        ScanOutput? output = null;
+        SourceManifest? manifest = null;
+        CheckTask? task = null;
+        ScanResultsDialog? dialog = null;
+        try
+        {
+            // 第一段：造一份真实扫描产物（Web SDK 探针项目 + 缺 /// 的控制器）。
+            RunAction("缺口对话框：准备扫描产物（真实服务）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe3.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "缺口对话框配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe3.Api/Probe3.Api.csproj",
+                    AllowedSourcePaths = ["Probe3.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "缺口对话框任务" });
+                var job = new JobContext(new JobInfo { Id = "job-smoke-scan-3", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+                Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+                output = tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)
+                    ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+                manifest = tasks.Read<SourceManifest>(task.Id, TaskFiles.Manifest);
+                if (output.Slots.Count < 2)
+                {
+                    throw new InvalidOperationException($"扫描只产出 {output.Slots.Count} 个注释位置，不足以验证上一条/下一条。");
+                }
+                _lines.Add($"     扫描产物：{output.Slots.Count} 个注释位置，缺失 {output.Slots.Count(s => s.Status == "missing")} 个");
+            });
+
+            // 第二段：打开对话框（Show 触发 OnLoad 读盘），核对计数行、覆盖率行、清单行数与打开时的选中落点。
+            RunAction("缺口对话框：打开即选中第一条且计数与覆盖率对得上（真实控件）", () =>
+            {
+                if (task is null || output is null) throw new InvalidOperationException("上一段没有产出扫描结果。");
+                dialog = new ScanResultsDialog(tasks, drafts, task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var counts = CountsLabel(dialog);
+                var expectedCounts = SlotText.CountsLine(output.Slots);
+                if (counts.Text != expectedCounts)
+                {
+                    throw new InvalidOperationException($"计数行是「{counts.Text}」，期望「{expectedCounts}」。");
+                }
+                var coverage = CoverageLabel(dialog);
+                var expectedCoverage = ScanOverview.CoverageText(
+                    output.Coverage.Valid, output.Coverage.InheritDoc, output.Coverage.Total,
+                    manifest?.AnalysisLevel, manifest?.ScannedAt);
+                if (coverage.Text != expectedCoverage)
+                {
+                    throw new InvalidOperationException($"覆盖率行是「{coverage.Text}」，期望「{expectedCoverage}」。");
+                }
+                var list = SlotList(dialog);
+                if (!list.Visible) throw new InvalidOperationException("清单不可见（对话框停在提示态）。");
+                if (list.Items.Count != output.Slots.Count)
+                {
+                    throw new InvalidOperationException($"清单有 {list.Items.Count} 行，扫描产出 {output.Slots.Count} 个位置。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"打开后选中 {list.SelectedIndices.Count} 行（首行序号 {list.SelectedIndices.Cast<int>().FirstOrDefault()}），期望恰好第一行。");
+                }
+                var detail = DetailBox(dialog);
+                if (!detail.Text.Contains("符号：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("详情区没有显示第一条的符号行：" + detail.Text);
+                }
+                // 降级入口按可见条目计数（第二十轮口径）：有降级才显示，标题数字与条目数一致。
+                var degradations = ScanOverview.DegradationItems(manifest?.Warnings, output.UnresolvedSymbols, output.ExternalTypes);
+                var warnings = ButtonOf(dialog, ScanOverview.Headline(degradations.Count));
+                if (warnings.Visible != degradations.Count > 0)
+                {
+                    throw new InvalidOperationException($"降级入口可见性是 {warnings.Visible}，降级条目 {degradations.Count} 条。");
+                }
+                _lines.Add($"     计数行：{counts.Text}");
+                _lines.Add($"     覆盖率行：{coverage.Text}");
+            });
+
+            // 第三段：上一条/下一条（真实按钮）：到头不绕回、位置指示与 ListAdvance 口径一致。
+            RunAction("缺口对话框：上一条/下一条按钮逐条走（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = SlotList(dialog);
+                var prev = ButtonOf(dialog, ListAdvance.PrevLabel);
+                var next = ButtonOf(dialog, ListAdvance.NextLabel);
+                var navText = NavLabel(dialog);
+                if (prev.Enabled) throw new InvalidOperationException("停在第一条时「上一条」仍可点。");
+                if (!next.Enabled) throw new InvalidOperationException($"清单有 {list.Items.Count} 行，「下一条」却不可点。");
+                if (navText.Text != ListAdvance.PositionText(0, list.Items.Count))
+                {
+                    throw new InvalidOperationException($"位置指示是「{navText.Text}」，期望「{ListAdvance.PositionText(0, list.Items.Count)}」。");
+                }
+                next.PerformClick();
+                Application.DoEvents();
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"点「下一条」后选中第 {list.SelectedIndices.Cast<int>().FirstOrDefault()} 行，期望第 1 行（0 基）。");
+                }
+                if (!prev.Enabled) throw new InvalidOperationException("走到第二条后「上一条」仍不可点。");
+                if (navText.Text != ListAdvance.PositionText(1, list.Items.Count))
+                {
+                    throw new InvalidOperationException($"位置指示是「{navText.Text}」，期望「{ListAdvance.PositionText(1, list.Items.Count)}」。");
+                }
+                prev.PerformClick();
+                Application.DoEvents();
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException("点「上一条」后没有回到第一行。");
+                }
+                // 走到末条：「下一条」按不动（到头不绕回）。
+                var steps = 0;
+                while (next.Enabled)
+                {
+                    next.PerformClick();
+                    Application.DoEvents();
+                    if (++steps > list.Items.Count) throw new InvalidOperationException("「下一条」没有在末条停下（可能绕回了队首）。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != list.Items.Count - 1)
+                {
+                    throw new InvalidOperationException(
+                        $"走到末条后选中第 {list.SelectedIndices.Cast<int>().FirstOrDefault()} 行，期望第 {list.Items.Count - 1} 行。");
+                }
+                // 回到第一条，后续段从已知状态开始。
+                while (prev.Enabled)
+                {
+                    prev.PerformClick();
+                    Application.DoEvents();
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException("连点「上一条」后没有回到第一行。");
+                }
+                _lines.Add($"     逐条走：{list.Items.Count} 行，末条「下一条」按不动，位置指示「{navText.Text}」");
+            });
+
+            // 第四段：关键词筛到零行（提示语与筛选器可用性）与清空恢复。
+            RunAction("缺口对话框：关键词筛到零行与清空恢复（真实控件）", () =>
+            {
+                if (dialog is null || output is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = SlotList(dialog);
+                var keyword = KeywordBox(dialog);
+                var filter = StatusFilter(dialog);
+                var total = list.Items.Count;
+                keyword.Text = "zzz-没有这个位置";
+                Application.DoEvents();
+                if (list.Items.Count != 0) throw new InvalidOperationException($"关键词不命中时清单还有 {list.Items.Count} 行。");
+                if (!filter.Enabled) throw new InvalidOperationException("筛到零行时状态筛选被禁用（那句话指名的下一步按不动）。");
+                if (!keyword.Enabled) throw new InvalidOperationException("筛到零行时关键词框被禁用。");
+                var hint = HintLabel(dialog);
+                var expectedHint = ListFilter.FilteredEmptyHint(ListFilter.SlotNoun, ListFilter.IsActive(keyword.Text));
+                if (!hint.Visible || hint.Text != expectedHint)
+                {
+                    throw new InvalidOperationException(
+                        $"筛到零行的提示是「{(hint.Visible ? hint.Text : "（不可见）")}」，期望「{expectedHint}」。");
+                }
+                // 计数行讲的是整份扫描，不因筛选变化（与 ListFilter.IsFilteredEmpty 同一取舍）。
+                if (CountsLabel(dialog).Text != SlotText.CountsLine(output.Slots))
+                {
+                    throw new InvalidOperationException("筛到零行后计数行变了：" + CountsLabel(dialog).Text);
+                }
+                keyword.Text = "";
+                Application.DoEvents();
+                if (list.Items.Count != total) throw new InvalidOperationException($"清空关键词后清单 {list.Items.Count} 行，期望 {total} 行。");
+                if (hint.Visible) throw new InvalidOperationException("清空关键词后提示仍然可见。");
+                _lines.Add($"     关键词筛到零行：提示「{expectedHint}」，清空后回到 {total} 行");
+            });
+
+            // 第五段：状态筛选（真实下拉）：选「缺失」后行数等于扫描里的缺失数，计数行不随筛选变化。
+            RunAction("缺口对话框：状态筛选按缺失计数（真实控件）", () =>
+            {
+                if (dialog is null || output is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = SlotList(dialog);
+                var filter = StatusFilter(dialog);
+                var missing = output.Slots.Count(s => s.Status == "missing");
+                // 下拉项与对话框 FilterChoices 同序：0 全部位置、1 缺失。
+                filter.SelectedIndex = 1;
+                Application.DoEvents();
+                if (list.Items.Count != missing)
+                {
+                    throw new InvalidOperationException($"选「缺失」后清单 {list.Items.Count} 行，扫描里缺失 {missing} 个。");
+                }
+                if (CountsLabel(dialog).Text != SlotText.CountsLine(output.Slots))
+                {
+                    throw new InvalidOperationException("状态筛选后计数行变了：" + CountsLabel(dialog).Text);
+                }
+                filter.SelectedIndex = 0;
+                Application.DoEvents();
+                if (list.Items.Count != output.Slots.Count)
+                {
+                    throw new InvalidOperationException($"回到「全部位置」后清单 {list.Items.Count} 行，期望 {output.Slots.Count} 行。");
+                }
+                _lines.Add($"     状态筛选：缺失 {missing} 行，回到全部 {output.Slots.Count} 行");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>注释缺口对话框的计数行（「位置 N · 有效 …」或空态那句）。</summary>
+    private static Label CountsLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Text.StartsWith("位置 ", StringComparison.Ordinal) || l.Text == "没有注释位置")
+        ?? throw new InvalidOperationException("对话框里找不到计数行。界面文案：" + LabelTexts(root));
+
+    /// <summary>注释覆盖率行（第二十轮口径，文字取 <c>ScanOverview.CoverageText</c>）。</summary>
+    private static Label CoverageLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Text.StartsWith("注释覆盖率", StringComparison.Ordinal))
+        ?? throw new InvalidOperationException("对话框里找不到注释覆盖率行。界面文案：" + LabelTexts(root));
+
+    /// <summary>上一条/下一条之间的位置指示（「第 N 条 / 共 M 条」或「不在当前筛选中」）。</summary>
+    private static Label NavLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l =>
+            l.Text.StartsWith("第 ", StringComparison.Ordinal) || l.Text == ListAdvance.NotInFilterText)
+        ?? throw new InvalidOperationException("对话框里找不到位置指示。界面文案：" + LabelTexts(root));
+
+    /// <summary>空态/筛到零行的提示行（铺满列表区、居中）。</summary>
+    private static Label HintLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Dock == DockStyle.Fill && l.TextAlign == ContentAlignment.MiddleCenter)
+        ?? throw new InvalidOperationException("对话框里找不到空态提示行。界面文案：" + LabelTexts(root));
+
+    /// <summary>注释位置清单（对话框里唯一的 <c>ListView</c>）。</summary>
+    private static ListView SlotList(Control root) =>
+        FindFirst<ListView>(root) ?? throw new InvalidOperationException("对话框里找不到注释位置清单。");
+
+    /// <summary>关键词框（单行输入框；多行那个是详情预览）。</summary>
+    private static TextBox KeywordBox(Control root) =>
+        FindAll<TextBox>(root).FirstOrDefault(t => !t.Multiline)
+        ?? throw new InvalidOperationException("对话框里找不到关键词框。");
+
+    /// <summary>详情预览框（多行只读）。</summary>
+    private static TextBox DetailBox(Control root) =>
+        FindAll<TextBox>(root).FirstOrDefault(t => t.Multiline)
+        ?? throw new InvalidOperationException("对话框里找不到详情预览框。");
+
+    /// <summary>状态筛选下拉（对话框里唯一的 <c>ComboBox</c>）。</summary>
+    private static ComboBox StatusFilter(Control root) =>
+        FindFirst<ComboBox>(root) ?? throw new InvalidOperationException("对话框里找不到状态筛选下拉。");
+
+    /// <summary>
     /// 等一个异步任务完成，期间泵消息（<c>Application.DoEvents</c>）。
     /// 对话框的异步续体排在 WinForms 同步上下文上，不泵消息就永远等不到。
     /// </summary>
@@ -861,11 +1127,15 @@ internal static class Program
         throw new InvalidOperationException($"下拉里没有配置「{profileName}」。");
     }
 
+    /// <summary>按按钮文字找到按钮（不点：读 <c>Enabled</c> 与再点都要用同一个查找口径）。</summary>
+    private static Button ButtonOf(Control root, string text) =>
+        FindAll<Button>(root).FirstOrDefault(b => string.Equals(b.Text, text, StringComparison.Ordinal))
+        ?? throw new InvalidOperationException($"对话框里找不到「{text}」按钮。");
+
     /// <summary>按按钮文字找到按钮并真的点一下（<c>PerformClick</c> 走 WinForms 的点击链路，不是直接调事件处理器）。</summary>
     private static void Click(Control root, string text)
     {
-        var button = FindAll<Button>(root).FirstOrDefault(b => string.Equals(b.Text, text, StringComparison.Ordinal))
-            ?? throw new InvalidOperationException($"对话框里找不到「{text}」按钮。");
+        var button = ButtonOf(root, text);
         if (!button.CanSelect) throw new InvalidOperationException($"「{text}」按钮不可点（禁用或不可见）。");
         button.PerformClick();
     }

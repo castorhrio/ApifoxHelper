@@ -277,16 +277,28 @@ public class QueueKeywordFilterTests
     // ---------- 计数行仍按全部条目统计 ----------
 
     [Theory]
-    [InlineData("CandidatesDialog.cs", "foreach (var candidate in _store.Candidates)")]
+    [InlineData("CandidatesDialog.cs", "QueueText.CandidateCountsLine(_store.Candidates)")]
     [InlineData("ContractsDialog.cs", "foreach (var contract in _contracts)")]
     public void CountsRow_StillCountsEveryEntry_NotTheFilteredOnes(string file, string loop)
     {
         // 聚合计数不随筛选变化（第五十九轮）：「候选 128 · 待审阅 0」正是清完队列的凭据，
         // 被当前筛选抹掉等于把结果藏起来。
+        // 第一百三十七轮起候选计数行收进共享口径 QueueText.CandidateCountsLine（对话框与冒烟器取同一份），
+        // 对话框只做委托——统计本身在共享口径里，两处都要钉住，否则「不随筛选变化」这条不变量
+        // 会随着搬家一起丢掉。
         var body = Slice(Repo.Source("Desktop", "Native", file), "private void UpdateCounts()", "private bool Matches");
         Assert.Contains(loop, body, StringComparison.Ordinal);
         Assert.DoesNotContain("_list.Items.Count", body, StringComparison.Ordinal);
         Assert.DoesNotContain("visible", body, StringComparison.Ordinal);
+        if (file == "CandidatesDialog.cs")
+        {
+            var shared = Repo.Source("Desktop", "Native", "QueueText.cs");
+            var counts = shared[shared.IndexOf("public static string CandidateCountsLine(", StringComparison.Ordinal)..];
+            counts = counts[..counts.IndexOf("public static string ContractWrapper", StringComparison.Ordinal)];
+            Assert.Contains("foreach (var candidate in candidates)", counts, StringComparison.Ordinal);
+            Assert.Contains("candidates.Count", counts, StringComparison.Ordinal);
+            Assert.DoesNotContain("_list.Items.Count", counts, StringComparison.Ordinal);
+        }
     }
 
     // ---------- 口径是真执行：跑的是主工程同一份 ListFilter 与 QueueText ----------

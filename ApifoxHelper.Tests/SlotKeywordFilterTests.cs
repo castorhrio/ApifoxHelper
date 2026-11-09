@@ -177,11 +177,19 @@ public class SlotKeywordFilterTests
     {
         // 聚合计数不随筛选变化（第五十九轮）：「位置 128 · 有效 12 · …」是整份扫描的凭据，
         // 被当前筛选抹掉等于把结果藏起来。
+        // 第一百三十六轮起计数文字收进共享口径 SlotText.CountsLine（对话框与冒烟器取同一份）：
+        // 对话框只做委托，统计本身在共享口径里——两处都要钉住，否则「不随筛选变化」这条不变量
+        // 会随着搬家一起丢掉。
         var body = Slice("private void UpdateCounts()", "private bool Matches");
-        Assert.Contains("foreach (var slot in _slots)", body, StringComparison.Ordinal);
-        Assert.Contains("_slots.Count", body, StringComparison.Ordinal);
+        Assert.Contains("SlotText.CountsLine(_slots)", body, StringComparison.Ordinal);
         Assert.DoesNotContain("_list.Items.Count", body, StringComparison.Ordinal);
-        Assert.DoesNotContain("visible", body, StringComparison.Ordinal);
+        var shared = Repo.Source("Desktop", "Native", "SlotText.cs");
+        var counts = shared[shared.IndexOf("public static string CountsLine(", StringComparison.Ordinal)..];
+        counts = counts[..counts.IndexOf("public static string?[] KeywordFields", StringComparison.Ordinal)];
+        Assert.Contains("foreach (var slot in slots)", counts, StringComparison.Ordinal);
+        Assert.Contains("slots.Count", counts, StringComparison.Ordinal);
+        Assert.DoesNotContain("_list.Items.Count", counts, StringComparison.Ordinal);
+        Assert.DoesNotContain("visible", counts, StringComparison.Ordinal);
     }
 
     // ---------- 口径是真执行：跑的是主工程同一份 ListFilter ----------

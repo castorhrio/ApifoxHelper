@@ -80,6 +80,15 @@ public static class CandidateEdit
     public static string TextCaptionFor(CommentCandidate candidate) =>
         CanEditText(candidate) ? TextCaption : TextCaptionReadOnly;
 
+    /// <summary>
+    /// 审阅动作（接受 / 搁置 / 驳回）之后的状态行（第一百三十七轮收进共享口径）：
+    /// 前半句是这一条的结果，后半句是「剩余待审阅 N 条」——逐条清队列时，用户要知道还剩多少。
+    /// 收进这里而不是留在对话框里：冒烟器要在真实控件上断言状态行，两边各拼一份的话，
+    /// 断言比的是第二份文字、不是屏幕上那一份。不依赖 WinForms，与测试工程共享编译。
+    /// </summary>
+    public static string ReviewDoneText(string reviewState, int pendingRemaining) =>
+        TaskDisplay.ReviewStateText(reviewState) + "。剩余待审阅 " + pendingRemaining + " 条。";
+
     /// <summary>保存修改后的状态行。</summary>
     public const string SaveDoneText = "已保存修改。";
 

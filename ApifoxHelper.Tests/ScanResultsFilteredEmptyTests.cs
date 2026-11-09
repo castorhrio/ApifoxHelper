@@ -131,7 +131,7 @@ public class ScanResultsFilteredEmptyTests
     public void TheNoDataExit_StillTearsTheAggregateDown()
     {
         // 读取失败与没有扫描产物时，覆盖率、降级与追踪本身也不可得，随提示一起收掉才是如实。
-        var body = Slice("private void ShowHint(string message, Color color)", "/// <summary>计数行按全部位置统计");
+        var body = Slice("private void ShowHint(string message, Color color)", "private void UpdateCounts()");
         Assert.DoesNotContain("keepAggregate", body, StringComparison.Ordinal);
         Assert.DoesNotContain("FilteredEmptyHint", body, StringComparison.Ordinal);
         Assert.DoesNotContain("ShowFilteredEmpty", body, StringComparison.Ordinal);
@@ -162,7 +162,10 @@ public class ScanResultsFilteredEmptyTests
         // 「没有注释位置」讲的是整份数据（_slots.Count == 0 时判定为假，列表区不给那句话），
         // 它是计数行的文案，本轮逐字不动，也不与列表区那句话合并。
         var source = Repo.Source("Desktop", "Native", File);
-        Assert.Single(Regex.Matches(source, "\"没有注释位置\""));
+        // 第一百三十六轮起这句文案收进共享口径 SlotText.CountsLine（对话框与冒烟器取同一份）：
+        // 全仓仍只有一处字面，对话框不再就地拼它。
+        Assert.DoesNotContain("没有注释位置", source, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(Repo.Source("Desktop", "Native", "SlotText.cs"), "\"没有注释位置\""));
         Assert.DoesNotContain("这个筛选下", source, StringComparison.Ordinal);
         Assert.DoesNotContain("换一个筛选再试", source, StringComparison.Ordinal);
         // 判定不在计数行了结这一屏：整份数据没有条目时走的仍是原路径（列表空、无提示）。

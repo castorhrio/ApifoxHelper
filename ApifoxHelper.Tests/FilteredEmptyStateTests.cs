@@ -308,7 +308,7 @@ public class FilteredEmptyStateTests
         var source = Repo.Source("Desktop", "Native", file);
         var body = file switch
         {
-            "CandidatesDialog.cs" => Slice(source, "private void ShowHint", "/// <summary>计数行按全部候选统计"),
+            "CandidatesDialog.cs" => Slice(source, "private void ShowHint", "private void UpdateCounts()"),
             "ContractsDialog.cs" => Slice(source, "private void ShowHint", "/// <summary>计数行按全部契约统计"),
             "DecisionsDialog.cs" => Slice(source, "private void ShowHint", "/// <summary>计数行按全部条目统计"),
             _ => Slice(source, "private void ShowHint", "private void ShowDetail"),
