@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 原生对话框冒烟构造器（第一百二十九轮）：把 Desktop/Native 下每个 *Dialog 与字段网格
+         真的 new 出来并建句柄，断言不抛异常。它必须跑在 Windows 桌面运行时上（WinForms 控件
+         在 Linux 上无法构造），因此是独立可执行程序而不是 xunit 用例：
+         Linux 侧只做编译验证，真实执行在 Windows 真机或 wine 下（见 docs/NOTES.md 的勾选清单）。 -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>ApifoxHelper.Smoke</AssemblyName>
+    <RootNamespace>ApifoxHelper.Smoke</RootNamespace>
+    <!-- 在 Linux（CI）上编译 net8.0-windows：仅取 Windows 引用包完成编译验证，不在 Linux 运行 GUI。 -->
+    <EnableWindowsTargeting Condition="$([MSBuild]::IsOSPlatform('Linux'))">true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 冒烟对象是主工程里的 internal 对话框：主工程用 InternalsVisibleTo 放行本程序集。 -->
+    <ProjectReference Include="..\ApifoxHelper.csproj" />
+  </ItemGroup>
+
+  <!-- 主工程经 WebView2 包间接带入 WPF 包装程序集（本仓只用 WinForms），
+       与主工程同一处理：排除它，避免 WindowsBase 版本冲突警告。 -->
+  <Target Name="ExcludeWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

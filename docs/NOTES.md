@@ -1251,3 +1251,50 @@
 - **本轮未修、如实挂账（下一轮入口已定位到行）**：dump 显示四个输入框的 `FieldBox` 仍是 **68×23**（内部 `TextBox` 66×21），而字段列已是 495——`ProfileDialog.AddRow`（`ProjectsPage.cs` 第 663 行）把控件加进第 1 列时**不设 `Dock`/宽度**，`FieldBox` 因此保持自身自然宽、不撑满列。三个配置子对话框与新建任务对话框的 `AddRow` 各自设了显式宽（480 / 380），只有配置编辑这一处没有。修法候选：`AddRow` 里对 `Ui.FieldBox` 设 `Dock = DockStyle.Fill`（内层 `TextBox` 由 `SyncFromOuter` 跟随），或统一收进 `Ui.FieldGrid` 的 `OnControlAdded`。**本轮未改**——回合时间不足以完成「修法 + 机械检查 + 变异验证」的完整切片，按纪律不半途改界面。
 - **测试 1983 → 1984 用例**：新增 `FieldGridPanel_BuildsColumnsBeforePadding`（源码切片：两处 `ColumnStyles.Add` 必须早于 `Padding = new Padding(`；`if (ColumnStyles.Count < 2) return;` 存在且早于任何 `ColumnStyles[下标]`）。**变异验证实测可红**：把构造顺序退回「Padding 在前」→ 该用例红；还原后 `diff` 逐字节核对干净、1984 全绿。
 - **验证状态**：Linux 主工程与测试工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **1984 用例全部通过**。GUI 侧本轮有真实证据：wine 10.0 + Xvfb 下对话框能构造、能 dump 控件树、列宽 495 与缩放后 1127 均实测。**Windows 真机（100%/200% DPI 截图）仍不可得**，第一百二十四轮的挂账决策继续有效（责任在环境供给）。本轮未连接或写入 Apifox，未调用任何模型服务。
+
+## 验证轮「原生对话框冒烟构造器：把『编译绿、构造期崩』变成可拦截 + wine 实测 27 通过」（2026-11-10 第一百二十九轮）
+
+- **接续前确认**：开局工作树有上一轮未提交的改动（`ApifoxHelper.csproj` 的冒烟工程排除与 `InternalsVisibleTo`、未跟踪的 `ApifoxHelper.Smoke/` 与 `.winecheck/`），HEAD（7f53cca）为第一百二十八轮（列样式先于 Padding 落地）。本轮**保留并接续**这份未完成工作，不覆盖、不重写；第四十七至一百二十八轮逐字保留。
+- **本轮定位**：控制仓简报 P0-1 要求「原生对话框冒烟构造测试 + 真机清单」。本会话仍是 Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机，但**本机有 wine 10.0 + Xvfb**——第一百二十八轮已证明它能跑真实 WinForms 布局。因此本轮把「冒烟器」从半成品做成**真跑过一遍**的交付物。
+- **P0-1 已交付：`ApifoxHelper.Smoke` 原生对话框冒烟构造器（真执行，非源码切片）**。独立可执行工程（`net8.0-windows` + `UseWindowsForms`，Linux 侧 `EnableWindowsTargeting` 只做编译验证），把 `Desktop/Native` 下**全部 23 个 `*Dialog` 类**（含 `ProjectsPage.cs` 的 `ProfileDialog`、`TasksPage.cs` 的 `NewTaskDialog`、`ScanResultsDialog.cs` 的 `ManualDraftDialog` / `ScanWarningsDialog`）逐个 `new` 出来，并对每个控件做 `Handle` + `CreateControl()` + `PerformLayout()`——**构造期事件顺序缺陷（第一百二十八轮那一类）在这里必然暴露**。另加三条控件工厂用例（`Ui.FieldGrid` / `Ui.ScrollHost` / `Ui.ListHost`），因为第一百二十八轮的缺陷本体就在工厂里，只冒烟对话框会漏掉。
+- **本轮修掉冒烟器自身的两个坑（都是实测踩到的）**：① `ProfileStore.Validate` 要求 API 项目文件真实存在，初版没造工作区，冒烟在环境初始化阶段就以退出码 2 结束、一个对话框都没构造到——现在先造 `Probe.Api/Probe.Api.csproj` 最小工作区；② wine 控制台代码页把中文打成问号（整份 PASS 行读不出是哪一处），现在结果按 UTF-8 落报告文件（`--report=<路径>`，缺省临时目录 `ah-smoke-report.txt`），环境初始化失败也落报告。
+- **wine 实测（真实执行证据，非推断）**：`dotnet publish -c Release -r win-x64 --self-contained` 后 `xvfb-run -a wine ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke-report.txt`，**退出码 0，27 通过 / 0 失败**（24 条对话框用例 + 3 条控件工厂用例），报告逐行 `PASS`；`Ui.FieldGrid` 打印 `cols=[120, 495]`，与第一百二十三/一百二十四轮算出的列宽逐值一致——**列宽修复在真实 WinForms 布局里再次成立**。
+- **变异验证（本轮最关键的一条证据）**：把第一百二十八轮的修法**退回**（`Padding` 挪回两处 `ColumnStyles.Add` 之前，并删掉 `if (ColumnStyles.Count < 2) return;` 守卫），同一命令重跑——**退出码 1，20 通过 / 7 失败**，失败行是 `ArgumentOutOfRangeException：Index was out of range`，命中的正是 `ProfileDialog`（新建/编辑）、`NewTaskDialog`、`GenerationDialog` 等七处。**即：第一百二十八轮那类缺陷现在有了可机读的拦截手段**，不再依赖「碰巧有人去 wine 里点一下」。还原后 `diff` 逐字节核对干净。
+- **Linux 侧机械检查：`ApifoxHelper.Tests/NativeDialogSmokeTests.cs`（13 例）**。冒烟器跑在 Windows 桌面运行时上、本环境不可执行，所以测试**不冒充「跑过」**，只钉「冒烟器自身的完备性」：① 磁盘上每个 `*Dialog` 类都在冒烟清单里（漏登记即红，含 ≥20 的地板防扫描空转）；② 清单里没有磁盘上不存在的类；③ 每个用例都建句柄 + 强制布局（且三件事在同一个 `Run` 里，用例不得绕过）；④ 失败计数转非零退出码、失败行带异常类型与首帧堆栈；⑤ 报告按 UTF-8 写、环境初始化失败也落报告；⑥ 探针工作区先于保存配置创建、数据根在临时目录；⑦ 控件工厂也在冒烟范围内、列宽要打出来；⑧ 冒烟器不起服务端（无 `WebApplication` / `Kestrel` / `AddHostedService` / `JobRunner.Start`）——**它不是第二个调度器**；⑨ 冒烟工程从主工程编译通配中排除；⑩ `InternalsVisibleTo` 只放行这一个程序集；⑪ 冒烟工程目标框架与 Linux 编译开关；⑫ 本文件记录可核对。
+- **P0-2 已交付：`docs/NOTES.md` 纠偏与瘦身**（见下两节）。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误；`dotnet test` **1996 用例全部通过**（1984 + 12：冒烟器完备性 12 例）。GUI 侧本轮有**真实执行证据**（wine 下 27 通过 / 0 失败 + 变异 7 失败）。**Windows 真机（100%/200% DPI 截图）仍不可得**，第一百二十四轮的挂账决策继续有效（责任在环境供给）。本轮未连接或写入 Apifox，未调用任何模型服务。
+
+## 纠偏「第一百二十一轮的『整窗不画』结论已被推翻」（第一百二十九轮补记）
+
+- **被推翻的结论**：第一百二十一轮记录的「新建配置对话框在 wine 下整窗 98.8% 是 Panel 白、`Text` 色像素为 0、一个字段都没画出来」——**已被第一百二十二轮与第一百二十八轮推翻**。
+- **真因（一句话）**：第一百二十一轮的截图早于对话框完成绘制（未留足绘制时间），而当时真正存在的缺陷是**网格列宽陈旧**（第二列 32px，第一百二十二轮用真实控件边界量到）与**构造期 `Padding` 先于 `ColumnStyles` 导致一打开就崩**（第一百二十八轮用日志堆栈实证）。第一百二十一轮据此写下的「无法判定是修复引入的回归还是 wine 渲染差异」**不成立**，不要再据此怀疑第一百二十轮的 `Dock = Fill` 修复。
+- **保留原文的理由**：逐轮记录不删改，纠偏以本节为准；读第一百二十一轮时请先读本节。
+
+## 缺陷定位方法教训（第一百二十九轮补记）
+
+- **列宽缺陷连修四轮未中的原因**：第一百二十至一百二十三轮围绕「第二列塌陷」反复推断，前几轮靠**静态读代码 + 像素猜测**（「200 − 24 − 24 − 120 = 32，与实测吻合」这类算术自证），没有先拿到**真实控件边界**。第一百二十二轮改用「临时 `OnShown` 递归 dump 控件树 `Bounds/ClientSize/Dock/Visible`」后，一轮就把根因从「宿主宽度」收窄到「网格列宽陈旧」；第一百二十八轮改用「直接构造对话框 + 读日志堆栈」后，一轮就抓到「一打开就崩」这个前几轮一直误判为「点击落点没找准」的真因。
+- **可复用的三条**：① **先量后猜**——控件边界、日志堆栈这类一手数据比算术自证可靠；② **一次截图不能当结论**（第一百二十一轮的教训，第一百一十六轮同族），重跑一遍再下判断；③ **能真构造就别只读源码**——源码切片只能钉住已知的那一处顺序，构造一次能覆盖整类「编译绿、构造期崩」。
+- **本轮把第 ③ 条固化成工具**：`ApifoxHelper.Smoke` 就是「能真构造」的常设落点，不再每轮临时加探针再删掉。
+
+## 真机/模拟器验证清单（第一百二十九轮集中挂账，可勾选）
+
+> 口径：**能在本环境（Linux + wine 10.0 + Xvfb）跑的已跑并勾上**；Windows 真机项一律未勾，责任在环境供给（第一百二十四轮挂账决策）。每项都写「路径 + 期望现象」，便于真机到位后逐条核对。
+
+**A. 已在本环境实测（wine 10.0 + Xvfb，非 Windows 真机）**
+
+- [x] `dotnet publish -c Release -r win-x64 --self-contained` 冒烟工程 → `xvfb-run -a wine ApifoxHelper.Smoke.exe --report=<路径>` → **退出码 0、27 通过 / 0 失败**（2026-11-10 第一百二十九轮）。
+- [x] 同一命令把第一百二十八轮修法退回 → **退出码 1、7 失败**（`ArgumentOutOfRangeException`），证明拦截有效。
+- [x] `Ui.FieldGrid` 在真实 WinForms 布局里 `cols=[120, 495]`（网格宽 663），与纯函数 `ProfileGridColumns.ColumnWidths` 逐值一致。
+- [x] 主窗口启动 + 项目设置页空态可读（第一百二十四/一百二十五轮 OCR 实测，本轮未复跑）。
+
+**B. 待 Windows 真机（具备 .NET 8 桌面运行时）逐条勾选**
+
+- [ ] 双击 `ApifoxHelper.exe` 启动 → 主窗口出现，项目设置页空态显示「还没有项目配置」与「新建配置」按钮。
+- [ ] 点「新建配置」→ 对话框出现（680×720，标题「新建配置」），**名称 / 允许回写范围 / 版本备注 / Swagger 位置四个输入框完整可见可填**（右列约 495px，不是 32px）。
+- [ ] 填写名称与仓库根目录 → 点「保存」→ 对话框关闭，列表回显该配置。
+- [ ] 点「新建任务」→ 选配置、填名称 → 保存 → 任务出现在任务列表。
+- [ ] 任务详情点「扫描」→ 扫描完成，注释缺口清单有行；点「查看缺口」→ 缺口对话框可读。
+- [ ] 缺口对话框点「规则提取」→ 候选清单出现；点「审阅」→ 候选对话框可读可改。
+- [ ] 点「回写」→ 回写计划对话框列出待写条目 → 执行 → 状态行显示成功，回读核对通过。
+- [ ] 100% 与 200% DPI 各截一张「新建配置」对话框图，确认右列宽度与文字不重叠、不裁切。
+- [ ] 全程无未处理异常弹窗；`%TEMP%\ah-smoke-report.txt` 或 `--report` 指定路径的报告为 27 通过 / 0 失败。

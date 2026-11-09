@@ -28,13 +28,21 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 测试工程目录在本工程目录内：从默认编译通配中排除，由 ApifoxHelper.Tests.csproj 单独编译。 -->
+    <!-- 测试工程与冒烟工程目录在本工程目录内：从默认编译通配中排除，由各自的 csproj 单独编译。 -->
     <Compile Remove="ApifoxHelper.Tests\**" />
     <EmbeddedResource Remove="ApifoxHelper.Tests\**" />
+    <Compile Remove="ApifoxHelper.Smoke\**" />
+    <EmbeddedResource Remove="ApifoxHelper.Smoke\**" />
   </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 原生对话框冒烟构造器（ApifoxHelper.Smoke）要 new 出 Desktop/Native 下的 internal 对话框：
+         这是唯一放行的程序集，产品代码的可见性不因此对外公开。 -->
+    <InternalsVisibleTo Include="ApifoxHelper.Smoke" />
   </ItemGroup>
 
   <ItemGroup>
