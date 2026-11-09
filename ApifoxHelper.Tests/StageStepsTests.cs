@@ -62,9 +62,17 @@ public class StageStepsTests
     [Fact]
     public void SourceDone_FollowsTheFrozenStepperRule()
     {
-        // 已回写 / 部分回写即完成；已扫描且没有缺口也算完成（与冻结页面 stepper 同一表达式）。
+        // 已回写即完成；部分回写与已扫描要求没有缺口（第一百一十八轮收敛为 StageSteps.SourceStageDone 一份，
+        // 与「下一步」横幅同一判定——冻结页面把「部分回写」直接算完成，本壳要求它同时没有缺口）。
         Assert.True(StageSteps.Build(Task(t => t.Stages.Source.Status = "applied"), null)[0].Done);
         Assert.True(StageSteps.Build(Task(t => t.Stages.Source.Status = "partiallyApplied"), null)[0].Done);
+        // 部分回写但仍有缺口：不算完成（同一屏上横幅也在说「补全注释」）。
+        Assert.False(StageSteps.Build(Task(t =>
+        {
+            t.Stages.Source.Status = "partiallyApplied";
+            t.Stages.Source.Slots = 4;
+            t.Stages.Source.ValidSlots = 1;
+        }), null)[0].Done);
         Assert.True(StageSteps.Build(Task(t =>
         {
             t.Stages.Source.Status = "scanned";

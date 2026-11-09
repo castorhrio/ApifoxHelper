@@ -83,7 +83,10 @@ public static class NextStep
         var s = task.Stages.Source;
         var g = task.Stages.Generated;
         var r = task.Stages.Remote;
-        var gaps = Math.Max(0, s.Slots - s.ValidSlots);
+        // 缺口数与「源码阶段是否完成」都取 StageSteps 那一份（第一百一十八轮）：进度条第一格与
+        // 本文件的「补全注释」那一支不再各算一遍，同一屏上不会出现「进度条打 ✓、横幅说还有缺口」。
+        var gaps = StageSteps.SourceGaps(task);
+        var sourceDone = StageSteps.SourceStageDone(task);
         var remoteStarted = r.Status != "notChecked";
         var changed = r.Added + r.StructureChanged + r.DocChanged;
         // 源码阶段的说明（如「有候选已过期」）作为引导文字的前缀如实带出。
@@ -114,7 +117,9 @@ public static class NextStep
                 return new Step("生成注释计划", stale + $"已接受 {s.Accepted} 条候选；生成计划后先预览补丁，再决定回写或导出。", "", "生成注释计划", "openApply", "继续审阅", "openCandidates", StageSource);
             if (s.Status == "reviewing")
                 return new Step("审阅注释草稿", stale + $"共 {s.Candidates} 条候选：查看代码证据后接受，接受的候选才会进入补丁。", "", "去审阅", "openCandidates", "跳过，检查 Apifox", "startCheck", StageSource);
-            if (gaps > 0)
+            // 只有共享判定说源码阶段没完成时才引导「补全注释」——这一支与进度条第一格同源，
+            // 已回写（applied）但扫描数据还留着缺口时不再把用户拉回源码阶段。
+            if (!sourceDone && gaps > 0)
                 return new Step("补全注释", $"{gaps} 个位置缺少有效说明：用规则提取、模型生成或手工填写得到候选。", "", "去生成草稿", "startRuleExtraction", "跳过，检查 Apifox", "startCheck", StageSource);
             if (task.OfflineMode)
                 return new Step("导入「远端」OpenAPI 并检查", "离线比较：导入作为「远端」的 OpenAPI JSON 后开始检查（不访问 Apifox，同步不可用）。", "", "去导入", "importOfflineRemote", Stage: StageRemote);

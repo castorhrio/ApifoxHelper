@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ApifoxHelper.Desktop.Native;
 using ApifoxHelper.Tasks;
 using Xunit;
@@ -5,16 +6,15 @@ using Xunit;
 namespace ApifoxHelper.Tests;
 
 /// <summary>
-/// 「源码阶段完成」的交叉断言（第一百一十七轮，纯测试补强，不动产品代码）：
-/// <see cref="StageSteps.Build"/> 与 <see cref="NextStep.Compute"/> 各自算
-/// <c>Math.Max(0, Slots - ValidSlots)</c> 判源码阶段是否完成，此前没有任何用例把两处钉在一起——
-/// 一处改了判定、另一处没跟上，进度条会显示 ✓ 而横幅还在说「补全注释」（或反过来），
-/// 而这两处正是同一屏上下相邻的两块。
+/// 「源码阶段完成」的交叉断言（第一百一十七轮建立，第一百一十八轮收敛为单一判定）：
+/// <see cref="StageSteps.Build"/> 与 <see cref="NextStep.Compute"/> 曾各自算
+/// <c>Math.Max(0, Slots - ValidSlots)</c> 判源码阶段是否完成，一处改了判定、另一处没跟上，
+/// 进度条会显示 ✓ 而横幅还在说「补全注释」（或反过来），而这两处正是同一屏上下相邻的两块。
 /// <para>
-/// 这里用同一批 <see cref="CheckTask"/> 状态跑真值表：源码阶段没有其他待办时，
-/// 「进度条第一格已完成」与「下一步不在源码阶段」必须同真同假。
-/// 另有一条用例把本轮实测发现的**已知漂移**钉住（见 <see cref="KnownDivergence_PartiallyAppliedWithRemainingGaps"/>），
-/// 它一旦被修好就会变红，提醒把那条用例改成一致断言。
+/// 第一百一十八轮把判定收进 <see cref="StageSteps.SourceStageDone"/> 与
+/// <see cref="StageSteps.SourceGaps"/> 一份，两处都调它；本文件因此从「钉住漂移」改为「一致断言」：
+/// 真值表逐行断言「进度条第一格已完成」与「下一步不在源码阶段」同真同假，
+/// 另有一条机械检查钉住「缺口表达式只有一处」。
 /// </para>
 /// </summary>
 public class NextStepStageTests
@@ -56,6 +56,13 @@ public class NextStepStageTests
                 t.Stages.Source.Accepted = 2;
             } },
         { "已扫描但有缺口", ScannedWithGaps },
+        // 第一百一十八轮收敛的那一行：部分回写且仍有缺口，两处必须同判未完成。
+        { "部分回写且有缺口", t =>
+            {
+                t.Stages.Source.Status = "partiallyApplied";
+                t.Stages.Source.Slots = 3;
+                t.Stages.Source.ValidSlots = 1;
+            } },
         // 已开始检查 Apifox 后，源码侧的回写失败与未应用补丁仍然优先。
         { "回写失败且已检查", t =>
             {
@@ -75,6 +82,13 @@ public class NextStepStageTests
                 t.Stages.Source.Status = "partiallyApplied";
                 t.Stages.Source.Slots = 3;
                 t.Stages.Source.ValidSlots = 3;
+            } },
+        // 已回写是源码阶段的终态：扫描留下的缺口数不再参与判定，两处仍须一致（都判完成）。
+        { "已回写但扫描数据留着缺口", t =>
+            {
+                t.Stages.Source.Status = "applied";
+                t.Stages.Source.Slots = 3;
+                t.Stages.Source.ValidSlots = 1;
             } },
         { "已回写且生成文档待核对", t =>
             {
@@ -153,14 +167,12 @@ public class NextStepStageTests
     }
 
     /// <summary>
-    /// 已知漂移（本轮实测发现，如实钉住，不在本轮改产品代码）：
-    /// 源码阶段「部分回写」且仍有缺口时，<see cref="StageSteps"/> 按冻结页面 stepper 的规则判第一格完成
-    /// （<c>partiallyApplied</c> 即完成），而 <see cref="NextStep"/> 走到 <c>gaps &gt; 0</c> 那一支，
-    /// 仍引导「补全注释」并落在源码阶段——同一屏上进度条打 ✓、横幅说还有缺口。
-    /// 这条用例钉住现状：修好任一侧都会变红，届时把它改成一致断言。
+    /// 第一百一十七轮实测抓到的那处漂移，第一百一十八轮已收敛：源码阶段「部分回写」且仍有缺口时，
+    /// 进度条第一格与「下一步」横幅必须**同判未完成**（此前进度条按冻结页面规则打 ✓、横幅说「补全注释」）。
+    /// 这条用例从「钉住漂移」改为「一致断言」——任一侧退回旧判定都会变红。
     /// </summary>
     [Fact]
-    public void KnownDivergence_PartiallyAppliedWithRemainingGaps()
+    public void PartiallyAppliedWithRemainingGaps_BothSidesSayNotDone()
     {
         var task = Task(t =>
         {
@@ -169,9 +181,12 @@ public class NextStepStageTests
             t.Stages.Source.ValidSlots = 1;
         });
         var next = NextStep.Compute(task);
-        Assert.True(StageSteps.Build(task, next.Stage)[0].Done);
+        Assert.False(StageSteps.Build(task, next.Stage)[0].Done);
         Assert.Equal(NextStep.StageSource, next.Stage);
         Assert.Equal("补全注释", next.Title);
+        // 引导文字里的缺口数与判定取同一份（2 = 3 - 1）。
+        Assert.Equal(2, StageSteps.SourceGaps(task));
+        Assert.Contains("2 个位置缺少有效说明", next.Detail);
     }
 
     /// <summary>
@@ -188,6 +203,12 @@ public class NextStepStageTests
             t => t.Stages.Source.Status = "planReady",
             t => t.Stages.Source.Status = "reviewing",
             ScannedWithGaps,
+            t =>
+            {
+                t.Stages.Source.Status = "partiallyApplied";
+                t.Stages.Source.Slots = 3;
+                t.Stages.Source.ValidSlots = 1;
+            },
         };
         foreach (var setup in states)
         {
@@ -196,5 +217,44 @@ public class NextStepStageTests
             Assert.False(StageSteps.Build(task, next.Stage)[0].Done);
             Assert.Equal(NextStep.StageSource, next.Stage);
         }
+    }
+
+    // ---------- 单一来源（机械检查） ----------
+
+    /// <summary>
+    /// 缺口表达式（<c>Slots - ValidSlots</c>）在 Desktop/Native 下只允许出现在 <c>StageSteps.cs</c> 一处：
+    /// 两处各算一遍正是第一百一十七轮那处漂移的成因，收成一份之后由这条用例守住。
+    /// </summary>
+    [Fact]
+    public void GapExpression_LivesOnlyInTheSharedEntry()
+    {
+        var hits = Repo.NativeSources()
+            .SelectMany(source => source.Matches(@"Slots\s*-\s*\w*\.?ValidSlots").Select(m => source.Name))
+            .ToList();
+        Assert.Equal(["StageSteps.cs"], hits);
+    }
+
+    /// <summary>
+    /// 两处都调共享判定：进度条第一格与「下一步」横幅不得自己写完成判定
+    /// （<c>StageSteps.Build</c> 调 <c>SourceStageDone</c>，<c>NextStep.Compute</c> 调
+    /// <c>SourceStageDone</c> 与 <c>SourceGaps</c>，且「补全注释」那一支被共享判定门控）。
+    /// </summary>
+    [Fact]
+    public void BothSidesCallTheSharedEntry()
+    {
+        var stageSteps = Repo.Source("Desktop", "Native", "StageSteps.cs");
+        var nextStep = Repo.Source("Desktop", "Native", "NextStep.cs");
+
+        // 进度条：第一格取共享判定，不就地写状态字面。
+        Assert.Matches(@"var sourceDone = SourceStageDone\(task\);", stageSteps);
+        Assert.DoesNotMatch(@"source\.Status is ""applied"" or ""partiallyApplied""", stageSteps);
+
+        // 横幅：缺口数与完成判定都取共享口径。
+        Assert.Matches(@"var gaps = StageSteps\.SourceGaps\(task\);", nextStep);
+        Assert.Matches(@"var sourceDone = StageSteps\.SourceStageDone\(task\);", nextStep);
+        Assert.Matches(@"if \(!sourceDone && gaps > 0\)", nextStep);
+        // 横幅不再自己算缺口、不再自己写完成判定的状态字面。
+        Assert.DoesNotMatch(@"Math\.Max\(0, s\.Slots", nextStep);
+        Assert.DoesNotMatch(@"s\.Status is ""applied"" or ""partiallyApplied""", nextStep);
     }
 }
