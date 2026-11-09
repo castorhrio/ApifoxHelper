@@ -62,8 +62,8 @@ internal sealed class ProfileAnalysisDialog : Form
 
         AddSection(grid, "序列化与响应封装");
         AddRow(grid, "JSON 命名", _naming);
-        AddRow(grid, "枚举输出为字符串", _enumAsString, widen: false);
-        AddRow(grid, "非空引用类型", _nonNullable, widen: false);
+        AddRow(grid, "枚举输出为字符串", _enumAsString);
+        AddRow(grid, "非空引用类型", _nonNullable);
         AddHint(grid, "与 Swashbuckle SupportNonNullableReferenceTypes 一致。");
         _wrappers.Height = 64;
         AddRow(grid, "通用响应封装", Ui.Field(_wrappers));
@@ -79,13 +79,13 @@ internal sealed class ProfileAnalysisDialog : Form
         _xmlDocPaths.Height = 56;
         AddRow(grid, "XML 文档路径", Field(_xmlDocPaths, ProfileAnalysis.FieldXmlDocPaths));
         AddHint(grid, "可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。");
-        AddRow(grid, "去掉 Async 后缀", _suppressAsync, widen: false);
+        AddRow(grid, "去掉 Async 后缀", _suppressAsync);
         AddHint(grid, "与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。");
 
         AddSection(grid, "质量规则");
         AddRow(grid, "通用 data 属性名", Ui.Field(_dataProperty));
-        AddRow(grid, "参数说明必填", _requireParam, widen: false);
-        AddRow(grid, "字段说明必填", _requireProperty, widen: false);
+        AddRow(grid, "参数说明必填", _requireParam);
+        AddRow(grid, "字段说明必填", _requireProperty);
 
         AddSection(grid, "Apifox CLI");
         AddRow(grid, "读取并发", Field(_concurrency, ProfileAnalysis.FieldReadConcurrency));
@@ -216,7 +216,7 @@ internal sealed class ProfileAnalysisDialog : Form
         grid.SetColumnSpan(caption, 2);
     }
 
-    private void AddRow(TableLayoutPanel grid, string label, Control field, bool widen = true)
+    private void AddRow(TableLayoutPanel grid, string label, Control field)
     {
         var row = grid.RowCount;
         grid.RowCount = row + 1;
@@ -225,7 +225,6 @@ internal sealed class ProfileAnalysisDialog : Form
         caption.Margin = new Padding(0, UiTokens.Sm, UiTokens.Sm, UiTokens.Xs);
         grid.Controls.Add(caption, 0, row);
         field.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
-        if (widen) field.Width = Math.Max(field.Width, ProfileGridColumns.MinFieldBoxWidth);
         grid.Controls.Add(field, 1, row);
     }
 

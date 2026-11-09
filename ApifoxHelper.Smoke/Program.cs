@@ -135,6 +135,9 @@ internal static class Program
             Run(name, build);
         }
 
+        Console.WriteLine("== 字段宽度实测 ==");
+        MeasureFieldWidths(services, profile);
+
         Console.WriteLine($"== 结果：{_passed} 通过 / {_failed} 失败 ==");
         WriteReport();
         return _failed == 0 ? 0 : 1;
@@ -199,6 +202,105 @@ internal static class Program
         });
         yield return ("Ui.ScrollHost（长内容区宿主）", () => Ui.ScrollHost());
         yield return ("Ui.ListHost（清单宿主 + 空态）", () => Ui.ListHost(Ui.List(), new Panel()));
+    }
+
+    /// <summary>
+    /// 字段宽度实测（第一百三十轮）：把「新建配置」对话框真的构造出来、强制布局，然后量
+    /// 字段列里每个输入框/下拉框的宽度。
+    /// <para>
+    /// 存在理由：第一百二十八轮挂账的缺陷是「字段列 495，而四个输入框只有 68px」——这类
+    /// 「构造不崩、但摆错了」的缺陷，构造冒烟（只判抛不抛异常）拦不住，源码切片也只能钉住
+    /// 已知的那一处。这里量的是**真实 WinForms 布局算出来的宽度**，与 <c>Ui.FieldGridPanel</c>
+    /// 的 <c>ApplyFieldWidths</c> 走同一条路径：宽度小于 <c>MinFieldBoxWidth</c> 即判失败。
+    /// </para>
+    /// </summary>
+    private static void MeasureFieldWidths(IServiceProvider services, ProjectProfile profile)
+    {
+        const string name = "ProfileDialog 字段宽度（真实布局）";
+        try
+        {
+            using var dialog = new ProfileDialog(
+                services.GetRequiredService<ProfileStore>(),
+                services.GetRequiredService<ApifoxCli>(),
+                services.GetRequiredService<CredentialStore>(),
+                editing: profile);
+            _ = dialog.Handle;
+            dialog.CreateControl();
+            dialog.PerformLayout();
+
+            var grid = FindGrid(dialog);
+            if (grid is null)
+            {
+                _failed++;
+                Console.WriteLine("FAIL " + name + "：对话框里找不到两列字段网格。");
+                _lines.Add("FAIL " + name + "：对话框里找不到两列字段网格。");
+                return;
+            }
+
+            var measured = new List<string>();
+            var tooNarrow = new List<string>();
+            foreach (Control control in grid.Controls)
+            {
+                if (grid.GetColumn(control) != 1) continue;
+                if (control is not (Ui.FieldBox or ComboBox)) continue;
+                var label = RowLabel(grid, grid.GetRow(control));
+                measured.Add($"{label}={control.Width}");
+                if (control.Width < ProfileGridColumns.MinFieldBoxWidth) tooNarrow.Add($"{label}={control.Width}");
+            }
+
+            var line = "     " + string.Join("，", measured);
+            Console.WriteLine(line);
+            _lines.Add(line);
+            if (measured.Count == 0)
+            {
+                _failed++;
+                Console.WriteLine("FAIL " + name + "：字段列里一个字段控件都没量到。");
+                _lines.Add("FAIL " + name + "：字段列里一个字段控件都没量到。");
+                return;
+            }
+            if (tooNarrow.Count > 0)
+            {
+                _failed++;
+                var fail = $"FAIL {name}：{string.Join("，", tooNarrow)} 低于下限 {ProfileGridColumns.MinFieldBoxWidth}。";
+                Console.WriteLine(fail);
+                _lines.Add(fail);
+                return;
+            }
+            _passed++;
+            Console.WriteLine("PASS " + name);
+            _lines.Add("PASS " + name);
+        }
+        catch (Exception ex)
+        {
+            _failed++;
+            var frame = (ex.StackTrace ?? "").Split('\n').FirstOrDefault()?.Trim() ?? "";
+            Console.WriteLine($"FAIL {name}：{ex.GetType().Name}：{ex.Message}");
+            Console.WriteLine("     " + frame);
+            _lines.Add($"FAIL {name}：{ex.GetType().Name}：{ex.Message}");
+            _lines.Add("     " + frame);
+        }
+    }
+
+    /// <summary>递归找两列字段网格（<c>Ui.FieldGrid</c> 出厂的那个 <c>TableLayoutPanel</c>）。</summary>
+    private static TableLayoutPanel? FindGrid(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is TableLayoutPanel { ColumnCount: 2 } grid && grid.ColumnStyles.Count == 2) return grid;
+            if (FindGrid(child) is { } found) return found;
+        }
+        return null;
+    }
+
+    /// <summary>同一行第 0 列的标签文字（量到的宽度要能对上「名称 / 版本备注」这些字段）。</summary>
+    private static string RowLabel(TableLayoutPanel grid, int row)
+    {
+        foreach (Control control in grid.Controls)
+        {
+            if (grid.GetRow(control) != row || grid.GetColumn(control) != 0) continue;
+            if (control.Text.Length > 0) return control.Text;
+        }
+        return "第" + row + "行";
     }
 
     /// <summary>把逐行结果按 UTF-8 落到报告文件；写不进去只提示，不改退出码（退出码才是判定）。</summary>

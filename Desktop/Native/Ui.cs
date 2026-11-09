@@ -238,6 +238,17 @@ internal static class Ui
         }
 
         /// <summary>
+        /// 新加进字段列的控件立刻按当前列宽摆好（第一百三十轮）：不靠「尺寸变化事件一定在
+        /// 所有行加完之后才到」这个顺序假设——构造期加行时网格还是默认 200 宽，真正的宽度
+        /// 要等宿主布局才给，两处都走同一次重算，谁先谁后都得到同一个结果。
+        /// </summary>
+        protected override void OnControlAdded(ControlEventArgs e)
+        {
+            base.OnControlAdded(e);
+            ApplyColumnWidths();
+        }
+
+        /// <summary>
         /// 留白改了就重算列宽（第一百二十四轮）：可用宽度是「网格宽 − 左右留白」，
         /// 留白与列宽是同一笔账的两项——此前 <see cref="ApplyColumnWidths"/> 把留白写成
         /// <c>UiTokens.Xl × 2</c> 的字面，与构造里设的 <c>Padding</c> 靠「两处都写 Xl」这种
@@ -262,9 +273,30 @@ internal static class Ui
             if (ColumnStyles.Count < 2) return;
             var widths = ProfileGridColumns.ColumnWidths(Width, [_labelWidth, ProfileGridColumns.MinFieldWidth], Padding.Horizontal);
             if (widths[0] <= 0) return;
-            if (Math.Abs(ColumnStyles[0].Width - widths[0]) < 0.5f && Math.Abs(ColumnStyles[1].Width - widths[1]) < 0.5f) return;
-            ColumnStyles[0].Width = widths[0];
-            ColumnStyles[1].Width = widths[1];
+            if (Math.Abs(ColumnStyles[0].Width - widths[0]) >= 0.5f || Math.Abs(ColumnStyles[1].Width - widths[1]) >= 0.5f)
+            {
+                ColumnStyles[0].Width = widths[0];
+                ColumnStyles[1].Width = widths[1];
+            }
+            ApplyFieldWidths(widths[1]);
+        }
+
+        /// <summary>
+        /// 字段列里的输入框/下拉框按列宽摆满（第一百三十轮）：宽度口径只在
+        /// <see cref="ProfileGridColumns.FieldWidth"/> 一处，界面不再各写一遍 420 / 320 / 480。
+        /// 只认「字段控件」两类——标签（AutoSize）、按钮（Ghost 自带内边距）、复选框与
+        /// 行容器（<c>Row(...)</c> 自己排布）都不在这里改宽，否则按钮会被拉成整列宽。
+        /// </summary>
+        private void ApplyFieldWidths(int columnWidth)
+        {
+            var width = ProfileGridColumns.FieldWidth(columnWidth);
+            foreach (Control control in Controls)
+            {
+                if (GetColumn(control) != 1) continue;
+                if (control is not (FieldBox or ComboBox)) continue;
+                if (control.Width == width) continue;
+                control.Width = width;
+            }
         }
     }
 

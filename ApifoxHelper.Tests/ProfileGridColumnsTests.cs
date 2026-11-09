@@ -310,8 +310,9 @@ public class ProfileGridColumnsTests
         Assert.Matches(@"(?m)^\s*ColumnCount = 2;", panel);
         // 列宽按当前宽度重算：尺寸变化时调一次，构造时也调一次（先按最小宽摆好）。
         Assert.Matches(@"(?m)^\s*protected override void OnSizeChanged\(EventArgs e\)", panel);
-        // 三处调用：构造一次（先按最小宽摆好）、尺寸变化一次、留白变化一次（第一百二十四轮）。
-        Assert.Equal(3, Regex.Matches(panel, @"(?m)^\s*ApplyColumnWidths\(\);").Count);
+        // 四处调用：构造一次（先按最小宽摆好）、尺寸变化一次、留白变化一次（第一百二十四轮）、
+        // 加控件一次（第一百三十轮：新加进字段列的控件立刻按当前列宽摆好，不靠事件顺序）。
+        Assert.Equal(4, Regex.Matches(panel, @"(?m)^\s*ApplyColumnWidths\(\);").Count);
         Assert.Contains("ProfileGridColumns.ColumnWidths(Width,", panel);
         // 百分比列正是缺陷本体：工厂里不得再出现。
         Assert.DoesNotMatch(@"SizeType\.Percent", panel);
@@ -344,16 +345,26 @@ public class ProfileGridColumnsTests
     public void FieldBoxMinimum_LivesOnlyInTheSharedEntry()
     {
         // 第一百二十四轮：三个配置子对话框的 AddRow 里各写一遍 Math.Max(field.Width, 480)，
-        // 同一个数三处字面重复。现在只允许引用 ProfileGridColumns.MinFieldBoxWidth。
-        var dialogs = new[] { "GenerationDialog.cs", "ProfileAdvancedDialog.cs", "ProfileAnalysisDialog.cs" };
+        // 同一个数三处字面重复。第一百三十轮把「字段控件多宽」整件事收进网格（Ui.FieldGridPanel
+        // 调 ProfileGridColumns.FieldWidth），界面代码不再自己设字段宽度——所以这里钉的是
+        // 「五处字段网格的宿主文件里一个字段宽度都不许写」。
+        var dialogs = new[]
+        {
+            "ProjectsPage.cs",
+            "TasksPage.cs",
+            "GenerationDialog.cs",
+            "ProfileAdvancedDialog.cs",
+            "ProfileAnalysisDialog.cs",
+        };
         foreach (var file in dialogs)
         {
             var source = Repo.Source("Desktop", "Native", file);
-            Assert.Contains("ProfileGridColumns.MinFieldBoxWidth", source);
             // 界面代码不出现字面 480（这个数只属于 ProfileGridColumns）。
             Assert.DoesNotMatch(@"\b480\b", source);
-            // 字段加宽只经共享常量：不得再出现「Math.Max(field.Width, 数字)」。
+            // 字段加宽只经共享口径：不得再出现「Math.Max(field.Width, 数字)」。
             Assert.DoesNotMatch(@"Math\.Max\(field\.Width, \d", source);
+            // 也不得再出现「某个字段控件就地设宽」（第一百三十轮收口的 420 / 320 / 380 三处）。
+            Assert.DoesNotMatch(@"(?m)^\s*_(name|allowed|swaggerType|swaggerLocation|apiProject)\.Width = \d+;", source);
         }
         // 常量本身只在一处定义。
         var rule = Repo.Source("Desktop", "Native", "ProfileGridColumns.cs");
@@ -362,6 +373,64 @@ public class ProfileGridColumnsTests
             .Where(f => Path.GetFileName(f) != "ProfileGridColumns.cs")
             .Where(f => Regex.IsMatch(File.ReadAllText(f), @"const int MinFieldBoxWidth"));
         Assert.Empty(others);
+    }
+
+    // ── 字段控件宽度：列宽与下限取大者（第一百三十轮）────────────────────
+
+    [Fact]
+    public void FieldWidth_TakesTheColumnWidthWhenThereIsRoom()
+    {
+        // 字段列 495（网格 663 的实测值）：控件就摆 495，右边缘与列对齐。
+        Assert.Equal(495, ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(495));
+        // 新建任务对话框的字段列 505（标签列 110）：同样摆满。
+        Assert.Equal(505, ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(505));
+        // 恰好等于下限时仍是下限。
+        Assert.Equal(480, ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(480));
+    }
+
+    [Fact]
+    public void FieldWidth_KeepsTheFloorWhenTheColumnIsNarrower()
+    {
+        // 窗口很窄时列宽按比例收缩到 480 以下：控件保持 480，由网格出横向滚动条，
+        // 不把控件压到读不出内容（MinFieldBoxWidth 的原始口径）。
+        Assert.Equal(480, ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(96));
+        Assert.Equal(480, ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(0));
+        Assert.Equal(480, ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(-100));
+        // 单调不减：列宽变大，控件宽度不会变小。
+        for (var column = 0; column <= 1200; column++)
+        {
+            Assert.True(ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(column) >= 480);
+            Assert.True(ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(column + 1)
+                >= ApifoxHelper.Desktop.Native.ProfileGridColumns.FieldWidth(column));
+        }
+    }
+
+    [Fact]
+    public void FieldGridPanel_StretchesFieldControlsToTheColumn()
+    {
+        // 第一百三十轮的真机缺陷：字段列 495，而控件宽度是各对话框自己写的 420 / 320，
+        // 「版本备注」那一行一个宽度都没设（保持 TextBox 自然宽）——同一列里三种宽度，
+        // 右边缘参差，最窄的那个连一个路径都填不下。宽度口径收进网格之后：
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        var start = ui.IndexOf("private sealed class FieldGridPanel", StringComparison.Ordinal);
+        Assert.True(start >= 0, "Ui.cs 缺少 FieldGridPanel（两列字段网格的唯一形状落点）。");
+        var rest = ui[start..];
+        var end = rest.IndexOf("\n    }\n", StringComparison.Ordinal);
+        var panel = end < 0 ? rest : rest[..end];
+
+        // 宽度只经共享口径算，不就地写数。
+        Assert.Contains("var width = ProfileGridColumns.FieldWidth(columnWidth);", panel);
+        // 只认字段控件两类：标签（AutoSize）、按钮、复选框、行容器都不在这里改宽。
+        Assert.Contains("if (control is not (FieldBox or ComboBox)) continue;", panel);
+        // 只改字段列（第 1 列）里的控件。
+        Assert.Contains("if (GetColumn(control) != 1) continue;", panel);
+        // 每次重算列宽之后都跟着摆一次字段宽度（尺寸变化、留白变化、加控件三条路径同一处）。
+        var apply = panel.IndexOf("private void ApplyColumnWidths()", StringComparison.Ordinal);
+        Assert.True(apply >= 0);
+        var applyBody = panel[apply..];
+        Assert.Contains("ApplyFieldWidths(widths[1]);", applyBody[..applyBody.IndexOf("\n        }\n", StringComparison.Ordinal)]);
+        // 加控件也走同一次重算：不靠「尺寸变化事件一定在行加完之后才到」这个顺序假设。
+        Assert.Matches(@"(?m)^\s*protected override void OnControlAdded\(ControlEventArgs e\)", panel);
     }
 
     [Fact]

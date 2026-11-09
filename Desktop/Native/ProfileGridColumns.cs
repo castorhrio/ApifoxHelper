@@ -43,6 +43,24 @@ public static class ProfileGridColumns
     public const int MinFieldBoxWidth = 480;
 
     /// <summary>
+    /// 字段控件（输入框/下拉框）在字段列里的宽度：取列宽与 <see cref="MinFieldBoxWidth"/> 的较大者。
+    /// <para>
+    /// <b>为什么要有这一条</b>（第一百三十轮）：字段列宽由 <see cref="ColumnWidths"/> 算出来，
+    /// 但控件自身的宽度此前是各对话框在 <c>AddRow</c> 里各写一遍的——配置编辑对话框写
+    /// <c>_name.Width = 420</c>（四个字段）与 <c>_swaggerType.Width = 320</c>，
+    /// 三个配置子对话框写 <c>Math.Max(field.Width, 480)</c>，而「版本备注」那一行
+    /// <b>一个宽度都没设</b>（保持 <c>TextBox</c> 的自然宽）。于是同一列里并排放着
+    /// 420 / 320 / 102 三种宽度，字段列本身是 495——右边缘参差，最窄的那个连一个路径都填不下。
+    /// 宽度口径收在这里之后，界面只负责「把控件放进字段列」，宽度由网格按列宽统一给。
+    /// </para>
+    /// <para>
+    /// 下限仍是 <see cref="MinFieldBoxWidth"/>：窗口很窄时列宽会按比例收缩到 480 以下，
+    /// 此时控件保持 480、由网格出横向滚动条，不把控件压到读不出内容。
+    /// </para>
+    /// </summary>
+    public static int FieldWidth(int columnWidth) => Math.Max(columnWidth, MinFieldBoxWidth);
+
+    /// <summary>
     /// 按可用宽度算各列宽（像素）。<paramref name="totalWidth"/> 是网格自身宽度，
     /// <paramref name="pad"/> 是网格左右留白合计（列宽可用的是 <c>totalWidth − pad</c>）。
     /// <list type="bullet">

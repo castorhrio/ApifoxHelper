@@ -267,7 +267,6 @@ internal sealed class ProfileAdvancedDialog : Form
         caption.Margin = new Padding(0, UiTokens.Sm, UiTokens.Sm, UiTokens.Xs);
         grid.Controls.Add(caption, 0, row);
         field.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
-        field.Width = Math.Max(field.Width, ProfileGridColumns.MinFieldBoxWidth);
         grid.Controls.Add(field, 1, row);
     }
 

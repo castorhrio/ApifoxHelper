@@ -471,12 +471,6 @@ internal sealed class ProfileDialog : Form
         _swaggerType.Items.AddRange(SwaggerChoices);
         _swaggerType.SelectedIndexChanged += (_, _) => _swaggerLocation.Enabled = _swaggerType.SelectedIndex > 0;
 
-        _name.Width = 420;
-        _apiProject.Width = 420;
-        _allowed.Width = 420;
-        _swaggerType.Width = 320;
-        _swaggerLocation.Width = 420;
-
         var saveButton = Ui.Primary("保存");
         saveButton.Click += (_, _) => Save();
         var cancelButton = Ui.Ghost("取消");

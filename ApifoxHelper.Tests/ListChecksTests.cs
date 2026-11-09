@@ -185,14 +185,15 @@ public class ListChecksTests
     [Fact]
     public void ModuleColumnWidth_StaysInsideTheFieldFloor()
     {
-        // 列宽若超过 AddRow 给字段的下限，单列清单会逼出横向滚动条——多出来的宽度本该是整行勾选的可点面。
+        // 列宽若超过字段列给字段控件的下限，单列清单会逼出横向滚动条——多出来的宽度本该是整行勾选的可点面。
+        // 下限自第一百三十轮起只在 ProfileGridColumns.FieldWidth 一处（各对话框 AddRow 里的就地加宽已收口），
+        // 所以这里比的是共享常量本身，而不是 TasksPage 里的一处字面。
         var tasks = Repo.Source("Desktop", "Native", "TasksPage.cs");
         var column = Regex.Match(tasks, @"_modules\.Columns\.Add\(""模块"", (\d+)\);");
-        var floor = Regex.Match(tasks, @"field\.Width = Math\.Max\(field\.Width, (\d+)\);");
         Assert.True(column.Success, "模块清单缺少「模块」列。");
-        Assert.True(floor.Success, "AddRow 的字段下限形状变了，本条检查要跟着改。");
-        Assert.True(int.Parse(column.Groups[1].Value) <= int.Parse(floor.Groups[1].Value),
-            $"列宽 {column.Groups[1].Value} 超出字段下限 {floor.Groups[1].Value}——会逼出横向滚动条。");
+        var floor = ApifoxHelper.Desktop.Native.ProfileGridColumns.MinFieldBoxWidth;
+        Assert.True(int.Parse(column.Groups[1].Value) <= floor,
+            $"列宽 {column.Groups[1].Value} 超出字段下限 {floor}——会逼出横向滚动条。");
     }
 
     [Fact]

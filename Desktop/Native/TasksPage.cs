@@ -1445,7 +1445,6 @@ internal sealed class NewTaskDialog : Form
             grid.Controls.Add(new Panel { Margin = new Padding(0) }, 0, row);
         }
         field.Margin = new Padding(0, UiTokens.Sm, 0, UiTokens.Xs);
-        field.Width = Math.Max(field.Width, 380);
         grid.Controls.Add(field, 1, row);
     }
 
