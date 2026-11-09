@@ -116,16 +116,17 @@ public class ScrollHostTests
         Assert.Matches(@"(?m)^\s*gridScroll\.BackColor = UiTokens\.Panel;", projects);
         Assert.Matches(@"(?m)^\s*gridScroll\.Controls\.Add\(grid\);", projects);
         Assert.Matches(@"(?m)^\s*Controls\.Add\(gridScroll\);", projects);
-        // 旧直连写法（网格直接停靠窗体）不得回归；网格保持 Dock=Top + AutoSize（Dock=Fill 退回不可滚动）。
+        // 旧直连写法（网格直接停靠窗体）不得回归；网格经 Ui.FieldGrid 出厂（Dock=Top + AutoSize 在工厂里，
+        // 第一百二十三轮起列宽也由工厂按当前宽度重算——形状唯一落点，见 ProfileGridColumnsTests）。
         Assert.DoesNotMatch(@"(?m)^\s*Controls\.Add\(grid\);", projects);
-        Assert.Contains("new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel", projects);
+        Assert.Contains("var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);", projects);
 
         var tasks = Repo.Source("Desktop", "Native", "TasksPage.cs");
         Assert.Matches(@"(?m)^\s*var gridScroll = Ui\.ScrollHost\(\);", tasks);
         Assert.Matches(@"(?m)^\s*gridScroll\.Controls\.Add\(grid\);", tasks);
         Assert.Matches(@"(?m)^\s*Controls\.Add\(gridScroll\);", tasks);
         Assert.DoesNotMatch(@"(?m)^\s*Controls\.Add\(grid\);", tasks);
-        Assert.Contains("new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel", tasks);
+        Assert.Contains("var grid = Ui.FieldGrid(ProfileGridColumns.NarrowLabelWidth);", tasks);
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public class ScrollHostTests
             Assert.Matches(@"(?m)^\s*Controls\.Add\(gridScroll\);", source);
             Assert.DoesNotMatch(@"(?m)^\s*Controls\.Add\(grid\);", source);
             Assert.DoesNotMatch(@"(?m)^\s*AutoScroll\b", source);
-            Assert.Contains("new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel", source);
+            Assert.Contains("var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);", source);
         }
 
         // 工厂自身的 AutoScroll 仍在（口径唯一落点）。

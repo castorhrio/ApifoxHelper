@@ -194,6 +194,56 @@ internal static class Ui
         }
     }
 
+    /// <summary>
+    /// 两列字段网格（DESIGN.md §6「两列字段网格」，第一百二十三轮）：左列字段名固定宽、右列输入框吃剩余宽度，
+    /// 列宽随网格<b>当前</b>宽度重算——配置编辑、新建任务与三个配置子对话框共用这一份形状。
+    /// <para>
+    /// 此前五处各拼一遍 <c>new TableLayoutPanel { Dock = Top, AutoSize = true, … }</c> 并把右列写成
+    /// <c>SizeType.Percent, 100</c>：百分比列宽在网格还是默认 200 宽时算过一次就再没重算，
+    /// 网格被停靠拉到 663 宽后右列仍是 <c>200 − 48 − 120 = 32px</c>，四个输入框窄到填不了字
+    /// （第一百二十二轮在 wine 下量到真实控件边界，见 docs/NOTES.md）。现两列都按像素给，
+    /// 宽度在尺寸变化时经 <see cref="ProfileGridColumns.ColumnWidths"/> 重算——列宽口径只有一份，
+    /// 且能在 Linux 上逐值断言（<c>ProfileGridColumnsTests</c>）。
+    /// </para>
+    /// </summary>
+    public static TableLayoutPanel FieldGrid(int labelWidth) => new FieldGridPanel(labelWidth);
+
+    private sealed class FieldGridPanel : TableLayoutPanel
+    {
+        private readonly int _labelWidth;
+
+        public FieldGridPanel(int labelWidth)
+        {
+            _labelWidth = labelWidth;
+            Dock = DockStyle.Top;
+            AutoSize = true;
+            ColumnCount = 2;
+            BackColor = UiTokens.Panel;
+            Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0);
+            // 构造时先按最小宽摆好（此时 Width 还是 TableLayoutPanel 的默认 200），
+            // 真正的列宽由第一次尺寸变化重算——不在打开时一次性定死。
+            ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, labelWidth));
+            ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ProfileGridColumns.MinFieldWidth));
+            ApplyColumnWidths();
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            ApplyColumnWidths();
+        }
+
+        /// <summary>按网格当前宽度重算两列宽；宿主还没给出可用宽度时保持构造时的最小宽，等下一次尺寸变化。</summary>
+        private void ApplyColumnWidths()
+        {
+            var widths = ProfileGridColumns.ColumnWidths(Width, [_labelWidth, ProfileGridColumns.MinFieldWidth], UiTokens.Xl * 2);
+            if (widths[0] <= 0) return;
+            if (Math.Abs(ColumnStyles[0].Width - widths[0]) < 0.5f && Math.Abs(ColumnStyles[1].Width - widths[1]) < 0.5f) return;
+            ColumnStyles[0].Width = widths[0];
+            ColumnStyles[1].Width = widths[1];
+        }
+    }
+
     /// <summary>用 1px 发丝边（Line 色）包裹无边框内容控件。</summary>
     public static Panel Hairline(ListView inner)
     {

@@ -485,9 +485,9 @@ internal sealed class ProfileDialog : Form
         CancelButton = cancelButton;
 
         // 网格十几个字段加提示行高于可视高度：放入可滚动宿主，底部子配置入口与导出可达（DESIGN.md §6 长内容区）。
-        var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        // 两列字段网格经工厂出厂（DESIGN.md §6「两列字段网格」）：列宽随网格当前宽度重算，
+        // 不再用百分比列（第一百二十三轮修掉的真机缺陷：右列停在 32px，四个输入框填不了字）。
+        var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);
         AddRow(grid, "名称", Field(_name, ProfileStore.FieldName));
         AddRow(grid, "仓库根目录", Row(300, Field(_workspace, ProfileStore.FieldWorkspaceRoot), browseButton, _findButton));
         AddRow(grid, "API 项目", _apiProject);

@@ -66,9 +66,7 @@ internal sealed class GenerationDialog : Form
         CancelButton = cancelButton;
 
         // 长内容区（DESIGN.md §6）：网格统一经 Ui.ScrollHost 出厂（AutoScroll 与点击取焦只有一份口径）。
-        var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);
 
         AddSection(grid, "注释草稿生成");
         AddRow(grid, "生成方式", _mode);

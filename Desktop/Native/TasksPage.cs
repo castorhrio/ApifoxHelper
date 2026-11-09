@@ -1374,9 +1374,7 @@ internal sealed class NewTaskDialog : Form
         _modules.Columns.Add("模块", 360);
 
         // 网格十二行（模块清单、指定接口、版本备注与提示）高于可视高度：放入可滚动宿主，离线模式行可达（DESIGN.md §6 长内容区）。
-        var grid = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0) };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        var grid = Ui.FieldGrid(ProfileGridColumns.NarrowLabelWidth);
         AddRow(grid, "项目配置", _profile);
         AddRow(grid, "任务名称", Ui.Field(_name));
         AddRow(grid, "", Ui.Caption("留空则用「配置名 月-日 时:分」。"));
