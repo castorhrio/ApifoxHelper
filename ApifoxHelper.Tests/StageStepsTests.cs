@@ -283,6 +283,26 @@ public class StageStepsTests
         Assert.True(stepper >= 0 && banner > stepper, "进度条要排在「下一步」横幅之前。");
     }
 
+    [Theory]
+    [InlineData("weird")]
+    [InlineData("")]
+    [InlineData("APPLIED")]
+    [InlineData("applied ")]
+    public void SourceDone_TreatsUnknownStatusAsNotDone(string status)
+    {
+        // 未知状态一律当未完成（安全默认）：磁盘上的状态字符串可能来自更新的版本、手工编辑或损坏，
+        // 认不出时宁可让进度条不打 ✓、横幅继续引导补全注释，也不把读不懂的状态当成「已经做完」。
+        // 与 TaskDisplay 的「原样回退」口径不同：那一格要如实显示磁盘上写的是什么，这里要判一个动作。
+        var task = Task(t =>
+        {
+            t.Stages.Source.Status = status;
+            t.Stages.Source.Slots = 3;
+            t.Stages.Source.ValidSlots = 3;
+        });
+        Assert.False(StageSteps.SourceStageDone(task));
+        Assert.False(StageSteps.Build(task, NextStep.StageSource)[0].Done);
+    }
+
     [Fact]
     public void TasksPage_BuildsTheThreeButtonsFromTheSharedKeys()
     {

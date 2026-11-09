@@ -765,6 +765,10 @@ function nextStep(task) {
 function stepper(task, next) {
   const s = task.stages.source;
   const gaps = Math.max(0, (s.slots || 0) - (s.validSlots || 0));
+  // 源码阶段的完成判定：本页把 partiallyApplied 直接算完成（历史口径，行为不改——本页已冻结，只修阻断性缺陷）。
+  // 原生壳（Desktop/Native/StageSteps.cs 的 SourceStageDone）有意收紧为「部分回写且没有缺口才算完成」：
+  // 部分回写本身就说明还有位置没写进去，此时进度条打 ✓ 而「下一步」横幅说「补全注释」是同一屏自相矛盾。
+  // 这是有意的口径差异，定案见 docs/DESIGN.md §6「源码阶段完成口径」（第一百一十九轮）。
   const stages = [
     ['source', '源码注释', s.status, 'source', ['applied', 'partiallyApplied'].includes(s.status) || (s.status === 'scanned' && gaps === 0)],
     ['generated', '生成文档', task.stages.generated.status, 'propagation', task.stages.generated.status === 'verified'],

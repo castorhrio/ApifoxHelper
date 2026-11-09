@@ -135,8 +135,9 @@ internal sealed class ProjectsPage : UserControl, INativePage
         toolbar.Controls.Add(buttons, 0, 0);
         toolbar.Controls.Add(_status, 1, 0);
 
-        Controls.Add(Ui.Hairline(_list));
-        Controls.Add(_empty);
+        // 清单区形状（发丝边 + 叠在前面的空态）取 Ui.ListHost 一份：两页同一份，z 序只在那里定。
+        // 此前这里把发丝边面板加在空态面板之后，空态被整块盖住（第一百一十九轮实测）。
+        Controls.Add(Ui.ListHost(_list, _empty));
         Controls.Add(toolbar);
     }
 

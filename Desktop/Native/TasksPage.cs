@@ -329,10 +329,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _detailHint.Dock = DockStyle.Fill;
         _detailHint.TextAlign = ContentAlignment.MiddleCenter;
 
-        var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg };
-        listHost.Controls.Add(Ui.Hairline(_list));
-        listHost.Controls.Add(_empty);
-        _split.Panel1.Controls.Add(listHost);
+        // 清单区形状（发丝边 + 叠在前面的空态）取 Ui.ListHost 一份：两页同一份，z 序只在那里定。
+        _split.Panel1.Controls.Add(Ui.ListHost(_list, _empty));
         // 停靠按集合倒序生效：滚动宿主最后加入、在提示标签之下填满剩余空间。
         _detailScroll.Controls.Add(_detail);
         _split.Panel2.Controls.Add(_detailHint);

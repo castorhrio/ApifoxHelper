@@ -222,6 +222,29 @@ internal static class Ui
         return panel;
     }
 
+    /// <summary>
+    /// 清单宿主（DESIGN.md §6「列表行」的「空态叠在清单之上」，第一百一十九轮）：
+    /// 发丝边包住清单，空态面板叠在它前面——两个主页面的清单区共用这一份形状。
+    /// <para>
+    /// 顺序不是随手写的：发丝边面板与空态面板都是 <c>Dock = Fill</c>、占同一块矩形，
+    /// 谁在上面只由 z 序决定，而 <c>Control.Controls</c> 的索引 0 才是 z 序最前
+    /// （<c>BringToFront()</c> 即 <c>SetChildIndex(this, 0)</c>），后加入的控件默认排在后面。
+    /// 项目设置页此前把发丝边面板加在空态面板之后，于是没有配置时内容区被发丝边面板
+    /// （<c>BackColor = Line</c>）整块盖住：空态标题、说明与「新建配置」按钮都看不见，
+    /// 只剩一片 <c>#E3E8F0</c>（第一百一十九轮在 wine 下实测复现，见 docs/NOTES.md）。
+    /// 这里显式把空态提到最前，不依赖「谁先加入」这种读代码看不出来的约定。
+    /// </para>
+    /// </summary>
+    public static Panel ListHost(ListView list, Panel empty)
+    {
+        var host = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg };
+        host.Controls.Add(Hairline(list));
+        host.Controls.Add(empty);
+        // 空态压在发丝边面板之上：两者同矩形，不显式提到最前就被发丝边整块盖住。
+        empty.BringToFront();
+        return host;
+    }
+
     /// <summary>筛选行里关键词框的宽度（唯一落点）：五张长清单的框一样宽，不各写一个数。</summary>
     public const int FilterKeywordWidth = 220;
 
