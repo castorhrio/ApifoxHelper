@@ -219,11 +219,15 @@ internal static class Ui
             AutoSize = true;
             ColumnCount = 2;
             BackColor = UiTokens.Panel;
-            Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0);
+            // 列样式必须先于 Padding 落地（第一百二十八轮）：ColumnCount = 2 只声明列数、
+            // 不建 ColumnStyle，而 set_Padding 会同步触发 OnPaddingChanged → ApplyColumnWidths，
+            // 此时 ColumnStyles 还是空的，索引 [0] 抛 ArgumentOutOfRangeException——
+            // 新建配置对话框一打开就崩（wine 实测：界面线程未处理异常，对话框根本不出现）。
             // 构造时先按最小宽摆好（此时 Width 还是 TableLayoutPanel 的默认 200），
             // 真正的列宽由第一次尺寸变化重算——不在打开时一次性定死。
             ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, labelWidth));
             ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ProfileGridColumns.MinFieldWidth));
+            Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, 0);
             ApplyColumnWidths();
         }
 
@@ -253,6 +257,9 @@ internal static class Ui
         /// </summary>
         private void ApplyColumnWidths()
         {
+            // 列样式还没建好（构造期 Padding/尺寸事件先到）时没有可写的列，直接跳过：
+            // 构造函数末尾与第一次尺寸变化都会再走一次，不靠事件顺序保证正确性。
+            if (ColumnStyles.Count < 2) return;
             var widths = ProfileGridColumns.ColumnWidths(Width, [_labelWidth, ProfileGridColumns.MinFieldWidth], Padding.Horizontal);
             if (widths[0] <= 0) return;
             if (Math.Abs(ColumnStyles[0].Width - widths[0]) < 0.5f && Math.Abs(ColumnStyles[1].Width - widths[1]) < 0.5f) return;

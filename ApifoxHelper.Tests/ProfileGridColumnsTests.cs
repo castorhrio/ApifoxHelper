@@ -261,6 +261,34 @@ public class ProfileGridColumnsTests
         Assert.Contains("ApplyColumnWidths();", paddingHandler[..paddingHandler.IndexOf("}", StringComparison.Ordinal)]);
     }
 
+    [Fact]
+    public void FieldGridPanel_BuildsColumnsBeforePadding()
+    {
+        // 第一百二十八轮（wine 实测的真实崩溃）：ColumnCount = 2 只声明列数、不建 ColumnStyle，
+        // 而 set_Padding 会同步触发 OnPaddingChanged → ApplyColumnWidths，此时 ColumnStyles 还是空的，
+        // 索引 [0] 抛 ArgumentOutOfRangeException——新建配置对话框一打开就崩（界面线程未处理异常，
+        // 对话框根本不出现，前几轮 wine 里「对话框没出现」的真因）。
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        var start = ui.IndexOf("private sealed class FieldGridPanel", StringComparison.Ordinal);
+        Assert.True(start >= 0, "Ui.cs 缺少 FieldGridPanel（两列字段网格的唯一形状落点）。");
+        var rest = ui[start..];
+        var end = rest.IndexOf("\n    }\n", StringComparison.Ordinal);
+        var panel = end < 0 ? rest : rest[..end];
+
+        // 构造顺序：两列样式必须先于 Padding 落地（Padding 的 setter 会立刻重算列宽）。
+        var firstColumnStyle = panel.IndexOf("ColumnStyles.Add(", StringComparison.Ordinal);
+        var padding = panel.IndexOf("Padding = new Padding(", StringComparison.Ordinal);
+        Assert.True(firstColumnStyle >= 0, "构造里没有建列样式。");
+        Assert.True(padding >= 0, "构造里没有设 Padding。");
+        Assert.True(firstColumnStyle < padding, "列样式必须先于 Padding 落地，否则构造期重算会索引空集合。");
+
+        // 事件顺序不承担正确性：列样式没建好时重算直接跳过（构造末尾与首次尺寸变化都会再走一次）。
+        Assert.Contains("if (ColumnStyles.Count < 2) return;", panel);
+        var guard = panel.IndexOf("if (ColumnStyles.Count < 2) return;", StringComparison.Ordinal);
+        var firstIndex = panel.IndexOf("ColumnStyles[0]", StringComparison.Ordinal);
+        Assert.True(guard < firstIndex, "空集合守卫必须在任何 ColumnStyles[下标] 之前。");
+    }
+
     // ── 界面接线：形状唯一落点 ────────────────────────────────────────────
 
     [Fact]
