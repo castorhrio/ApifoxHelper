@@ -337,4 +337,123 @@ public class NativeDialogSmokeTests
         Assert.Contains("27 通过 / 0 失败", notes);
         Assert.Contains("真机/模拟器验证清单", notes);
     }
+
+    // ---------- 交互断言清单（第一百三十七轮，控制仓简报 P1-1） ----------
+
+    /// <summary>冒烟器里三段真实控件交互用例的方法名（唯一有真实控件触达的三段）。</summary>
+    private static readonly string[] InteractionMethods =
+        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction"];
+
+    /// <summary>
+    /// 交互断言清单：每行是「方法 + 段名 + 该段里一条判失败的等价物」。
+    /// <para>
+    /// 存在理由：第一百三十三/一百三十六轮已钉住「每段至少有一条断言」，但**具体哪几条**没有登记——
+    /// 段里五条断言删掉四条、只留一条，前两条检查照样全绿，而冒烟报告照样 PASS。
+    /// 这里把三段交互用例的断言逐条登记成清单：删掉任何一条（或把它改写成不判失败的样子），
+    /// 对应行即红；删掉整段由 <see cref="EveryInteractionSegment_IsCoveredByTheAssertionInventory"/> 拦下；
+    /// 段被改名由 <see cref="InteractionAssertionInventory_NamesOnlyExistingSegments"/> 拦下。
+    /// </para>
+    /// <para>
+    /// 清单是**源码切片**，不是「跑过」：冒烟器跑在 Windows 桌面运行时上，本环境不可执行。
+    /// 真实执行证据在 <c>docs/NOTES.md</c>（wine 10.0 + Xvfb 下 46 通过 / 0 失败，退出码 0；
+    /// 把「下一条」的门控改成「有行就可点」后同一命令 45 通过 / 1 失败、退出码 1）。
+    /// </para>
+    /// </summary>
+    public static TheoryData<string, string, string> InteractionAssertions => new()
+    {
+        // 端到端主链路：新建配置 / 新建任务 / 校验失败不落盘。
+        { "RunEndToEnd", "端到端：新建配置填写并保存（真实控件）", "dialog.DialogResult != DialogResult.OK" },
+        { "RunEndToEnd", "端到端：新建配置填写并保存（真实控件）", "var reread = profiles.Get(saved.Id);" },
+        { "RunEndToEnd", "端到端：新建配置填写并保存（真实控件）", "reread.Name != \"端到端配置\"" },
+        { "RunEndToEnd", "端到端：新建配置填写并保存（真实控件）", "profiles.List().Count != before + 1" },
+        { "RunEndToEnd", "端到端：新建任务填写并创建（真实控件）", "if (dialog.StartScan)" },
+        { "RunEndToEnd", "端到端：新建任务填写并创建（真实控件）", "request.EndpointKeys.Count != 2" },
+        { "RunEndToEnd", "端到端：新建任务填写并创建（真实控件）", "reread.SourceVersionNote != \"v1.2.3\"" },
+        { "RunEndToEnd", "端到端：新建任务填写并创建（真实控件）", "reread.ProfileId != profileId" },
+        { "RunEndToEnd", "端到端：保存校验失败不落盘（真实控件）", "dialog.Saved is not null" },
+        { "RunEndToEnd", "端到端：保存校验失败不落盘（真实控件）", "profiles.List().Count != before" },
+        { "RunEndToEnd", "端到端：保存校验失败不落盘（真实控件）", "请填写配置名称" },
+
+        // 回写链路：扫描 / 候选 / 计划哈希 / 拒绝写入 / 落盘只改 /// 行 / 真实对话框确认。
+        { "RunWriteBackEndToEnd", "回写链路：源码扫描产出注释缺口（真实服务）", "output.Endpoints.Count == 0" },
+        { "RunWriteBackEndToEnd", "回写链路：源码扫描产出注释缺口（真实服务）", "missing.Count == 0" },
+        { "RunWriteBackEndToEnd", "回写链路：手工候选接受（真实服务）", "accepted.ReviewState != \"accepted\"" },
+        { "RunWriteBackEndToEnd", "回写链路：生成注释计划且哈希稳定（真实服务）", "first.Hash.Length == 0" },
+        { "RunWriteBackEndToEnd", "回写链路：生成注释计划且哈希稳定（真实服务）", "second.Hash != first.Hash" },
+        { "RunWriteBackEndToEnd", "回写链路：计划哈希不符时拒绝写入（真实服务）", "ex.StatusCode != 409" },
+        { "RunWriteBackEndToEnd", "回写链路：计划哈希不符时拒绝写入（真实服务）", "File.ReadAllText(probeSource) != before" },
+        { "RunWriteBackEndToEnd", "回写链路：确认后回写落盘且只改 /// 行（真实服务）", "applied.Status != \"applied\"" },
+        { "RunWriteBackEndToEnd", "回写链路：确认后回写落盘且只改 /// 行（真实服务）", "AssertOnlyDocLinesChanged(before, after)" },
+        { "RunWriteBackEndToEnd", "回写链路：确认后回写落盘且只改 /// 行（真实服务）", "AssertBomAndEolPreserved(probeSource)" },
+        { "RunWriteBackEndToEnd", "回写链路：真实对话框点「确认回写」落盘（真实控件）", "confirmed != 1" },
+        { "RunWriteBackEndToEnd", "回写链路：真实对话框点「确认回写」落盘（真实控件）", "AssertOnlyDocLinesChanged(beforeText, afterText)" },
+        { "RunWriteBackEndToEnd", "回写链路：真实对话框点「确认回写」落盘（真实控件）", "已回写" },
+
+        // 注释缺口对话框：产物 / 打开落点与计数覆盖率 / 逐条走 / 关键词 / 状态筛选。
+        { "RunScanResultsInteraction", "缺口对话框：准备扫描产物（真实服务）", "output.Slots.Count < 2" },
+        { "RunScanResultsInteraction", "缺口对话框：准备扫描产物（真实服务）", "扫描后没有 symbols.json" },
+        { "RunScanResultsInteraction", "缺口对话框：打开即选中第一条且计数与覆盖率对得上（真实控件）", "counts.Text != expectedCounts" },
+        { "RunScanResultsInteraction", "缺口对话框：打开即选中第一条且计数与覆盖率对得上（真实控件）", "coverage.Text != expectedCoverage" },
+        { "RunScanResultsInteraction", "缺口对话框：打开即选中第一条且计数与覆盖率对得上（真实控件）", "list.SelectedIndices[0] != 0" },
+        { "RunScanResultsInteraction", "缺口对话框：打开即选中第一条且计数与覆盖率对得上（真实控件）", "warnings.Visible != degradations.Count > 0" },
+        { "RunScanResultsInteraction", "缺口对话框：上一条/下一条按钮逐条走（真实控件）", "if (prev.Enabled)" },
+        { "RunScanResultsInteraction", "缺口对话框：上一条/下一条按钮逐条走（真实控件）", "navText.Text != ListAdvance.PositionText(" },
+        { "RunScanResultsInteraction", "缺口对话框：上一条/下一条按钮逐条走（真实控件）", "steps > list.Items.Count" },
+        { "RunScanResultsInteraction", "缺口对话框：关键词筛到零行与清空恢复（真实控件）", "list.Items.Count != 0" },
+        { "RunScanResultsInteraction", "缺口对话框：关键词筛到零行与清空恢复（真实控件）", "!filter.Enabled" },
+        { "RunScanResultsInteraction", "缺口对话框：关键词筛到零行与清空恢复（真实控件）", "hint.Text != expectedHint" },
+        { "RunScanResultsInteraction", "缺口对话框：关键词筛到零行与清空恢复（真实控件）", "CountsLabel(dialog).Text != SlotText.CountsLine(output.Slots)" },
+        { "RunScanResultsInteraction", "缺口对话框：状态筛选按缺失计数（真实控件）", "list.Items.Count != missing" },
+        { "RunScanResultsInteraction", "缺口对话框：状态筛选按缺失计数（真实控件）", "filter.SelectedIndex = 1" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InteractionAssertions))]
+    public void InteractionAssertion_IsStillInItsSegment(string method, string segment, string fragment)
+    {
+        var body = SegmentBody(segment);
+        Assert.True(
+            body.Contains(fragment, StringComparison.Ordinal),
+            $"{method} 的「{segment}」段里找不到断言「{fragment}」——断言被删或改写成不判失败的样子，"
+            + "这一段就变成「跑过、什么也没判」，而冒烟报告照样 PASS。");
+    }
+
+    [Fact]
+    public void EveryInteractionSegment_IsCoveredByTheAssertionInventory()
+    {
+        var inventory = InteractionAssertions
+            .Select(row => (Method: (string)row[0], Segment: (string)row[1]))
+            .ToList();
+        // 地板：清单行数掉下去说明有人整批删行，检查会静默空转。
+        Assert.True(inventory.Count >= 30, $"交互断言清单只有 {inventory.Count} 行（地板 30）。");
+        foreach (var method in InteractionMethods)
+        {
+            var body = MethodBody(SmokeProgram, $"private static void {method}(");
+            var names = Regex.Matches(body, @"RunAction\(""([^""]+)""").Select(m => m.Groups[1].Value).ToList();
+            Assert.True(names.Count >= 3, $"{method} 里只有 {names.Count} 个 RunAction 段。");
+            var covered = inventory.Where(r => r.Method == method).Select(r => r.Segment).ToHashSet(StringComparer.Ordinal);
+            var missing = names.Where(n => !covered.Contains(n)).ToList();
+            Assert.True(missing.Count == 0, $"{method} 里这些段没有进断言清单：" + string.Join("、", missing));
+        }
+    }
+
+    [Fact]
+    public void InteractionAssertionInventory_NamesOnlyExistingSegments()
+    {
+        // 段被改名或删除时，清单里那一行会静默失效（找不到段就永远不检查）——这里把它变成红。
+        var segments = Segments("RunAction").Select(s => s.Name).ToHashSet(StringComparer.Ordinal);
+        var stale = InteractionAssertions
+            .Select(row => (string)row[1])
+            .Where(name => !segments.Contains(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        Assert.True(stale.Count == 0, "断言清单里这些段名在冒烟器里不存在（段被改名或删除）：" + string.Join("、", stale));
+    }
+
+    private static string SegmentBody(string name)
+    {
+        var segment = Segments("RunAction").FirstOrDefault(s => s.Name == name);
+        Assert.True(segment.Body is not null, $"冒烟器里找不到段「{name}」。");
+        return segment.Body!;
+    }
 }
