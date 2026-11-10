@@ -105,6 +105,51 @@ public class CaptionBrevityTests
         }
     }
 
+    /// <summary>
+    /// 任务详情区五段说明行不得是同一句式（第一百五十六轮，具名 pass：clarify）。
+    /// <para>
+    /// <b>为什么还要一条</b>：第一百五十五轮的 <c>distill</c> 把长度收敛了（179/153/91/370/79 字 →
+    /// 44/41/26/59/27 字），但五段仍是「一句描述 + 一句门控」的同一句式，且都以「…；…。」收尾——
+    /// 模板脸的风险从「长度」挪到了「句式」：五段并排读，读者看到的是同一个模板填了五次，
+    /// 而不是五个分区各自在说自己的事。长度门挡不住这件事（五段都合规、都短、都同形）。
+    /// </para>
+    /// <para>
+    /// 判据取「末句的收尾两字」：同一收尾在五段里出现 ≥3 次即红。这是弱断言——它不规定每段该用
+    /// 什么句式（问句/陈述/条件/结果导向各有各的用处），只钉住「不许五段一个模子」。
+    /// 变异验证（本轮实测）：把五段都改成以「时可用」收尾，这条即红并列出重复的收尾。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TaskDetailCaptions_DoNotShareOneSentenceShape()
+    {
+        var source = Repo.Source("Desktop", "Native", "TasksPage.cs");
+        var captions = Regex.Matches(source, @"AddDetailRow\(grid, Ui\.Caption\(""([^""]*)""\)\)")
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+        // 地板：五个分区各一段，提取口径失效时断言会静默空转。
+        Assert.True(captions.Count >= 5, $"任务详情区只找到 {captions.Count} 段说明行，提取口径可能已失效。");
+
+        // 末句 = 最后一个分句（按全角标点切开后的最后一段），收尾取它的最后两个字。
+        static string Ending(string caption)
+        {
+            var last = caption.Split('。', '；', '，', '：', '？', '！')
+                .Last(clause => clause.Trim().Length > 0)
+                .Trim();
+            return last.Length <= 2 ? last : last[^2..];
+        }
+
+        var endings = captions.Select(Ending).ToList();
+        var repeated = endings
+            .GroupBy(e => e, StringComparer.Ordinal)
+            .Where(g => g.Count() >= 3)
+            .Select(g => $"「{g.Key}」×{g.Count()}")
+            .ToList();
+        Assert.True(
+            repeated.Count == 0,
+            $"任务详情区五段说明行是同一句式（收尾重复：{string.Join("、", repeated)}）："
+            + "五段并排读像同一个模板填了五次，改成各自合适的句式（问句 / 陈述 / 条件 / 结果导向）。");
+    }
+
     /// <summary>设计基线要记下这次蒸馏（口径与理由），否则下一轮又会把教程写回说明行。</summary>
     [Fact]
     public void DesignDoc_RecordsTheCaptionBrevityRule()

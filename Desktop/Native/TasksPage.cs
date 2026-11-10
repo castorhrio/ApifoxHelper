@@ -384,26 +384,26 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _sourceStatus);
         AddDetailRow(grid, _sourceNumbers);
         AddDetailRow(grid, _scanActions);
-        AddDetailRow(grid, Ui.Caption("扫描完成后可用；「注释回写」需有已接受且未回写的候选；「模型生成候选」需配置模型服务。"));
+        AddDetailRow(grid, Ui.Caption("什么时候可用？扫描完成后；回写另需已接受的候选，模型生成另需配置模型服务。"));
         AddDetailRow(grid, _generatedSection);
         AddDetailRow(grid, _generatedStatus);
         AddDetailRow(grid, _generatedNumbers);
         AddDetailRow(grid, _generatedActions);
         AddDetailRow(grid, _buildStatus);
-        AddDetailRow(grid, Ui.Caption("需有已接受的注释候选；核对不构建项目，XML 与 Swagger 重新生成后才会更新。"));
+        AddDetailRow(grid, Ui.Caption("结果需先接受候选：XML 与 Swagger 重新生成后才会更新，核对本身不构建项目。"));
         AddDetailRow(grid, SectionCaption("响应契约"));
         AddDetailRow(grid, _contractStatus);
         AddDetailRow(grid, _contractButton);
-        AddDetailRow(grid, Ui.Caption("扫描时静态追踪生成；确认或拒绝后需重新检查才会生效。"));
+        AddDetailRow(grid, Ui.Caption("契约在扫描时静态追踪生成，确认或拒绝后需重新检查才生效。"));
         AddDetailRow(grid, _remoteSection);
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
         AddDetailRow(grid, _remoteActions);
-        AddDetailRow(grid, Ui.Caption("只读，不写入远端；扫描完成后可用，离线任务先导入远端 JSON 且不能同步。源码或 Swagger 更新后用「重新加载 Swagger 并检查」重新冻结。"));
+        AddDetailRow(grid, Ui.Caption("只读，不写入远端。离线任务需先导入远端 JSON 才能检查，且不能同步；源码或 Swagger 更新后用「重新加载 Swagger 并检查」重新冻结。"));
         AddDetailRow(grid, SectionCaption("报告与交接"));
         AddDetailRow(grid, _reportStatus);
         AddDetailRow(grid, _reportButton);
-        AddDetailRow(grid, Ui.Caption("随时可用；基于当前任务数据生成并脱敏，导出后自行发给前端或测试。"));
+        AddDetailRow(grid, Ui.Caption("导出即可用：内容基于当前任务数据并已脱敏，发给前端或测试即可。"));
         return grid;
     }
 

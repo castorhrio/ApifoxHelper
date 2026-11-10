@@ -119,6 +119,43 @@ public class WordingHonestyTests
         Assert.Contains("已知限制", section);
     }
 
+    /// <summary>
+    /// 真机缺口要写进 README 的「已知限制」（第一百五十六轮，简报 P0-1 降级方案的前半段）。
+    /// <para>
+    /// 存在理由：第一百五十五轮把「到期日 2026-11-20 + 降级方案」写进了 <c>docs/NOTES.md</c>，
+    /// 但降级方案的第一条是「在 <c>README.md</c> 的『已知限制』一节公开声明」——而 README 里
+    /// 一个字都没有。挂账写在开发笔记里，读的人只有维护者；使用者与初审答辩看的是 README，
+    /// 那里不写，等于「本版已在 Windows 真机验证过」这句话仍然没人反驳。
+    /// </para>
+    /// <para>
+    /// 这条断言只认 README 的「已知限制」一节（不是全文）：声明必须落在使用者会读到的那一节里，
+    /// 写在别处等于没写。缺声明、缺三档 DPI、缺到期日、缺降级指向，任一件即红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Readme_StatesTheRealMachineGap()
+    {
+        var readme = Repo.Source("README.md");
+        var start = readme.IndexOf("## 已知限制", StringComparison.Ordinal);
+        Assert.True(start >= 0, "README.md 缺少「## 已知限制」一节（真机缺口的公开声明落点）。");
+        var end = readme.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        var section = end < 0 ? readme[start..] : readme[start..end];
+
+        // ① 说清「没在真机上跑过」，而不是含糊的「部分场景未覆盖」。
+        Assert.Contains("未在 Windows 真机上运行过", section);
+        // ② 说清现有证据是什么（wine 模拟器），不把模拟器证据说成真机证据。
+        Assert.Contains("wine", section);
+        Assert.Contains("模拟器", section);
+        // ③ 说清哪几档 DPI 没复核（G-D5 的三档）。
+        Assert.Contains("100%", section);
+        Assert.Contains("125%", section);
+        Assert.Contains("200%", section);
+        // ④ 到期日与降级指向：到哪天为止、到那天怎么办。
+        Assert.Contains("2026-11-20", section);
+        Assert.Contains("降级", section);
+        Assert.Contains("docs/NOTES.md", section);
+    }
+
     [Fact]
     public void Checklist_SeparatesRealMachineFromWine()
     {
