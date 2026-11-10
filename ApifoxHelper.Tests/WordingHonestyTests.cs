@@ -42,6 +42,76 @@ public class WordingHonestyTests
         Assert.DoesNotContain("真实执行证据", tests);
     }
 
+    // ---------- 真机字样的机械门（第一百五十四轮，控制仓简报 P0-1 的降级手段） ----------
+
+    /// <summary>
+    /// 真机证据目录（截图落点）。约定：<c>docs/evidence/real-machine/</c> 下的 <c>*.png</c>。
+    /// </summary>
+    private static string RealMachineEvidenceDir => Path.Combine(Repo.Root, "docs", "evidence", "real-machine");
+
+    /// <summary>
+    /// 「真机」字样必须有出处（第一百五十四轮）。
+    /// <para>
+    /// 本仓至今没有 Windows 真机证据，所以「真机实测」是禁词（上一条断言）。但禁词只是把话说诚实，
+    /// 它挡不住另一种失真：真机真的跑过之后，NOTES.md 里写「真机已验证」却不给截图路径——
+    /// 读者仍然无法核对，G-D5 那道门槛还是被一句话跨过去。
+    /// </para>
+    /// <para>
+    /// 这条断言把两种状态都钉住：<b>没有截图</b>时「真机实测 / 真机已验证」仍禁；
+    /// <b>有截图</b>时 NOTES.md 必须出现 <c>docs/evidence/real-machine/</c> 的出处路径。
+    /// 两个方向都能红：无截图时写「真机实测」→ 红；补了截图却不写出处 → 红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RealMachineClaims_RequireEvidencePaths()
+    {
+        var shots = Directory.Exists(RealMachineEvidenceDir)
+            ? Directory.GetFiles(RealMachineEvidenceDir, "*.png")
+            : [];
+        var notes = Repo.Source("docs", "NOTES.md");
+
+        if (shots.Length == 0)
+        {
+            // 没有截图：真机字样一律禁（与上一条同口径，这里把禁词表钉全）。
+            Assert.DoesNotContain("真机实测", notes);
+            Assert.DoesNotContain("真机已验证", notes);
+            Assert.DoesNotContain("真机证据已归档", notes);
+            return;
+        }
+
+        // 有截图：真机字样必须有出处路径，否则读者无法核对。
+        Assert.Contains("docs/evidence/real-machine/", notes);
+    }
+
+    /// <summary>
+    /// 真机不可得时，挂账要写具体（第一百五十四轮）：缺哪台机器、哪几个 DPI、谁负责。
+    /// <para>
+    /// 存在理由：此前挂账只写「GUI 真机运行与 100%/200% DPI 截图仍未验证」——这句话诚实，
+    /// 但读不出「卡在哪、下一步谁做什么」，于是每一轮都原样抄一遍。这条断言要求那一节把三件事
+    /// 都写出来，缺一件即红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RealMachineGap_NamesTheMachineTheScalesAndTheOwner()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var start = notes.IndexOf("## Windows 真机验证：仍不可得", StringComparison.Ordinal);
+        Assert.True(start >= 0, "NOTES.md 缺少「## Windows 真机验证：仍不可得」一节（真机不可得时的挂账落点）。");
+        var end = notes.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        var section = end < 0 ? notes[start..] : notes[start..end];
+
+        // ① 缺哪台机器：要写清运行时与版本，不是「一台 Windows」。
+        Assert.Contains("Microsoft.WindowsDesktop.App", section);
+        // ② 哪几个 DPI：G-D5 要求的三档。
+        Assert.Contains("100%", section);
+        Assert.Contains("125%", section);
+        Assert.Contains("200%", section);
+        // ③ 谁负责：写清由谁提供机器、本环境为什么做不了。
+        Assert.Contains("负责", section);
+        // ④ 截图落点与命名约定（补上证据时照这个放，机械门才认得出）。
+        Assert.Contains("docs/evidence/real-machine/", section);
+    }
+
     [Fact]
     public void Checklist_SeparatesRealMachineFromWine()
     {

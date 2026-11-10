@@ -4,11 +4,14 @@ using Xunit;
 namespace ApifoxHelper.Tests;
 
 /// <summary>
-/// 错误响应文案的口径与 500 分支的收敛（第一百四十三轮，具名 pass：harden）。
+/// 错误响应文案的口径与 500 / 400 分支的收敛（第一百四十三轮；第一百五十四轮把 400 两条分支收成同一口径）。
 /// <para>
 /// 为什么测这个：<c>Api/ErrorHandling.cs</c> 的 500 分支此前把 <c>ex.Message</c> 原样回给前端，
 /// 而 <c>error</c> 字段会被界面原样显示在错误行里——未知异常的消息可能带内部路径、类型名或
 /// 凭据片段，方案 §4.1 的「错误脱敏」只处理已知形状，挡不住任意异常消息。
+/// 400 两条分支同族：<c>BadHttpRequestException.Message</c> 是框架生成的英文内部描述（绑定失败时
+/// 还带请求体片段），<c>JsonException.Message</c> 会带用户原文片段——脱敏挡不住任意消息体，
+/// 所以两条分支都不再回消息体：请求格式无效只回固定文案，JSON 格式无效只回结构信息（第几行第几列）。
 /// </para>
 /// <para>
 /// 断言分两层：文案本身（<see cref="ErrorCopy"/> 与测试工程共享编译，真执行）与接线
@@ -41,9 +44,20 @@ public class ErrorCopyTests
 
     /// <summary>固定文案同样受中文排版条款约束（错误路径上的那一句也是用户要读的）。</summary>
     [Fact]
-    public void InternalMessage_FollowsTheTypographyCaliber()
+    public void InternalMessage_FollowsTheTypographyCaliber() => AssertTypography(ErrorCopy.InternalMessage);
+
+    /// <summary>400 两条分支的固定文案同受排版条款约束（第一百五十四轮）。</summary>
+    [Fact]
+    public void BadRequestMessage_FollowsTheTypographyCaliber() => AssertTypography(ErrorCopy.BadRequestMessage);
+
+    /// <summary>JSON 分支的兜底文案同受排版条款约束（第一百五十四轮）。</summary>
+    [Fact]
+    public void InvalidJsonMessage_FollowsTheTypographyCaliber() => AssertTypography(ErrorCopy.InvalidJsonMessage);
+
+    /// <summary>错误路径上的每一句都按同一份口径判（不各写一份）。</summary>
+    private static void AssertTypography(string message)
     {
-        var message = ErrorCopy.InternalMessage;
+        Assert.False(string.IsNullOrWhiteSpace(message));
         foreach (var mark in CopyRules.HalfWidthMarks)
         {
             Assert.True(CopyRules.IndexOfHalfWidthMark(message, mark) < 0,
@@ -58,88 +72,123 @@ public class ErrorCopyTests
         }
     }
 
+    // ── 400 两条分支：只回结构信息，不回消息体（第一百五十四轮）──────────────
+
     /// <summary>
-    /// 输入类错误仍回具体原因：那是用户自己填错、需要照着改的那一句。
-    /// 收敛 500 不等于把所有错误都变成「出错了」——那会让用户无从下手。
+    /// 请求格式无效只回固定文案：框架消息是英文内部描述，绑定失败时还带请求体片段，
+    /// 用户照着它改不了任何东西（第一百五十四轮）。
     /// </summary>
     [Fact]
-    public void InputErrors_KeepTheReason()
+    public void BadRequest_ReturnsFixedCopyOnly()
     {
-        Assert.Equal("请求格式无效：缺少字段 name", ErrorCopy.BadRequest("缺少字段 name"));
-        Assert.Equal("JSON 格式无效：第 3 行", ErrorCopy.InvalidJson("第 3 行"));
-        // 前缀用全角冒号（中文句子里的标点）。
-        Assert.StartsWith("请求格式无效：", ErrorCopy.BadRequest("x"), StringComparison.Ordinal);
-        Assert.StartsWith("JSON 格式无效：", ErrorCopy.InvalidJson("x"), StringComparison.Ordinal);
+        Assert.Equal("请求格式无效，请检查请求内容后重试。", ErrorCopy.BadRequestMessage);
+        // 固定文案里没有拼接位：一旦留了「：」后接详情的位置，接线迟早会把它填上。
+        Assert.DoesNotContain("：", ErrorCopy.BadRequestMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("{", ErrorCopy.BadRequestMessage, StringComparison.Ordinal);
+        // 说清「怎么办」。
+        Assert.Contains("重试", ErrorCopy.BadRequestMessage, StringComparison.Ordinal);
     }
 
-    // ── 400 分支的脱敏有效性（第一百四十六轮）────────────────────────────
+    /// <summary>
+    /// 请求格式无效这条分支在结构上就没有「详情」入口：<c>ErrorCopy</c> 里不再有接受 detail 的
+    /// <c>BadRequest</c> 方法，接线也就无从把框架消息拼进去（第一百五十四轮）。
+    /// </summary>
+    [Fact]
+    public void BadRequest_HasNoDetailParameterToLeakThrough()
+    {
+        var copy = Repo.Source("Api", "ErrorCopy.cs");
+        Assert.DoesNotContain("BadRequest(string", copy, StringComparison.Ordinal);
+        Assert.DoesNotContain("InvalidJson(string", copy, StringComparison.Ordinal);
+        // 两条 400 分支的文案常量都在（单一落点）。
+        Assert.Contains("BadRequestMessage", copy, StringComparison.Ordinal);
+        Assert.Contains("InvalidJsonMessage", copy, StringComparison.Ordinal);
+    }
 
     /// <summary>
-    /// 请求格式无效这条分支：用户填错的那一句要回，但**凭据形状必须先被吃掉**。
+    /// JSON 格式无效只回结构信息（第几行第几列），**不回消息体**（第一百五十四轮）。
     /// <para>
-    /// 此前只断言了「会回具体原因」，没有一条断言证明脱敏对令牌形状仍然生效——
-    /// 而这条分支的详情来自 <c>BadHttpRequestException.Message</c>，绑定失败的消息里
-    /// 可能带着请求体片段（用户把令牌贴进了 JSON 字段）。断言的是**组合**：
-    /// <c>ErrorCopy.BadRequest(Redactor.Redact(detail))</c>，与 <c>ErrorHandling</c> 的接线同序。
+    /// 这条是「敏感片段不进错误行」的真执行断言：往 <c>JsonException.Message</c> 里注入一段假令牌
+    /// 与用户原文，输出里必须只剩行列号。变异注入（把 <c>InvalidJson</c> 改回拼 <c>ex.Message</c>）
+    /// 时这条会红。
     /// </para>
     /// </summary>
     [Fact]
-    public void BadRequest_RedactsTokenShapes()
+    public void InvalidJson_ReportsStructureOnly_NotTheMessageBody()
     {
-        var detail = "缺少字段 name；请求头 Authorization: Bearer abcdefgh12345678；"
-            + "body 里 api_key=sk-abcdefghijklmnopqrstuvwxyz；"
-            + "连接串 Server=db.example;Database=app;User Id=sa;Password=Hunter2!";
-        var message = ErrorCopy.BadRequest(Redactor.Redact(detail));
+        var ex = new JsonException(
+            "The JSON value could not be converted. 原文片段：{\"api_key\":\"sk-abcdefghijklmnopqrstuvwxyz\"}",
+            path: "$.api_key",
+            lineNumber: 2,
+            bytePositionInLine: 11,
+            innerException: null);
 
-        // 原因还在（用户照着改的那一句不能被脱敏一起吃掉）。
-        Assert.Contains("缺少字段 name", message, StringComparison.Ordinal);
-        // 令牌形状一律不原样出现。
-        Assert.DoesNotContain("abcdefgh12345678", message, StringComparison.Ordinal);
+        var message = ErrorCopy.InvalidJson(ex);
+
+        // 结构信息在，且是 1 基（用户数行从 1 开始）。
+        Assert.Equal("JSON 格式无效（第 3 行，第 12 列）。", message);
+        // 消息体不在：假令牌、字段名、英文原文一律不出现。
         Assert.DoesNotContain("sk-abcdefghijklmnopqrstuvwxyz", message, StringComparison.Ordinal);
-        Assert.DoesNotContain("Hunter2!", message, StringComparison.Ordinal);
-        // 脱敏标记如实出现（不是把整句删掉）。
-        Assert.Contains("已脱敏", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("api_key", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not", message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("原文片段", message, StringComparison.Ordinal);
     }
 
-    /// <summary>JSON 格式无效这条分支：同上，原因要回、令牌形状要被吃掉。</summary>
+    /// <summary>
+    /// 解析器真抛的那一次同样只回结构信息（不是只有手工构造的异常才这样）：
+    /// 用 <c>JsonDocument.Parse</c> 造一个真 <c>JsonException</c>，输出里只有行列号。
+    /// </summary>
     [Fact]
-    public void InvalidJson_RedactsTokenShapes()
+    public void InvalidJson_FromTheRealParser_AlsoReportsStructureOnly()
     {
-        var detail = "第 3 行第 12 列；token=APS-abcdefghijklmnopqrst；Bearer zyxwvuts98765432";
-        var message = ErrorCopy.InvalidJson(Redactor.Redact(detail));
+        JsonException? caught = null;
+        try
+        {
+            using var _ = JsonDocument.Parse("{\n  \"token\": \"APS-abcdefghijklmnopqrst\",\n  \"n\": 1,,\n}");
+        }
+        catch (JsonException ex)
+        {
+            caught = ex;
+        }
 
-        Assert.Contains("第 3 行第 12 列", message, StringComparison.Ordinal);
+        Assert.NotNull(caught);
+        var message = ErrorCopy.InvalidJson(caught!);
+        Assert.StartsWith("JSON 格式无效（第 ", message, StringComparison.Ordinal);
+        Assert.EndsWith(" 列）。", message, StringComparison.Ordinal);
         Assert.DoesNotContain("APS-abcdefghijklmnopqrst", message, StringComparison.Ordinal);
-        Assert.DoesNotContain("zyxwvuts98765432", message, StringComparison.Ordinal);
-        Assert.Contains("已脱敏", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("token", message, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 路径**不**脱敏，这是有意的口径而不是漏网：400 分支的详情是用户自己填错的那一句，
-    /// 路径往往正是他要改的那一处（「找不到 C:\\repo\\appsettings.json」删掉路径就无从下手）。
-    /// 凭据是秘密、路径不是——本用例把这条取舍钉住，免得下一轮有人「顺手把路径也遮了」
-    /// 把可操作的错误变成一句无从下手的空话。
+    /// 没有位置信息时回固定文案，不猜位置（异常不是解析器抛的、或解析器没填位置）。
     /// </summary>
     [Fact]
-    public void InputErrors_KeepTheUsersOwnPath()
+    public void InvalidJson_WithoutPosition_FallsBackToFixedCopy()
     {
-        const string detail = @"找不到文件 C:\repo\src\appsettings.json";
-        var message = ErrorCopy.BadRequest(Redactor.Redact(detail));
-        Assert.Contains(@"C:\repo\src\appsettings.json", message, StringComparison.Ordinal);
+        var ex = new JsonException("The JSON value could not be converted to System.Int32.");
+        Assert.Equal(ErrorCopy.InvalidJsonMessage, ErrorCopy.InvalidJson(ex));
+        Assert.Equal("JSON 格式无效，请检查请求内容后重试。", ErrorCopy.InvalidJsonMessage);
+        Assert.DoesNotContain("：", ErrorCopy.InvalidJsonMessage, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 接线：两条 400 分支都必须先脱敏再拼文案。只测文案不够——把 <c>Redactor.Redact</c> 从
-    /// 接线里删掉，上面两条用例照样绿（它们测的是组合，不是接线）。
+    /// 接线：两条 400 分支都从单一落点取文案，且**都不再读 <c>ex.Message</c>**。
+    /// 只测文案不够——把接线改回拼 <c>ex.Message</c>，上面几条用例照样绿（它们测的是文案本身）。
+    /// 详情不能丢：两条分支都要进日志（排查靠它）。
     /// </summary>
     [Fact]
-    public void ErrorHandling_RedactsBoth400Branches()
+    public void ErrorHandling_400BranchesTakeCopyFromTheSingleSource()
     {
         var badRequest = CatchBlock("catch (BadHttpRequestException ex)");
-        Assert.Contains("ErrorCopy.BadRequest(Redactor.Redact(ex.Message))", badRequest, StringComparison.Ordinal);
+        Assert.Contains("ErrorCopy.BadRequestMessage", badRequest, StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.Message", badRequest, StringComparison.Ordinal);
+        Assert.Contains("LogWarning(ex", badRequest, StringComparison.Ordinal);
+        Assert.Contains("context.Request.Path", badRequest, StringComparison.Ordinal);
 
         var invalidJson = CatchBlock("catch (JsonException ex)");
-        Assert.Contains("ErrorCopy.InvalidJson(Redactor.Redact(ex.Message))", invalidJson, StringComparison.Ordinal);
+        Assert.Contains("ErrorCopy.InvalidJson(ex)", invalidJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.Message", invalidJson, StringComparison.Ordinal);
+        Assert.Contains("LogWarning(ex", invalidJson, StringComparison.Ordinal);
+        Assert.Contains("context.Request.Path", invalidJson, StringComparison.Ordinal);
     }
 
     /// <summary>共享编译：脱敏口径必须进测试工程的编译清单，否则上面的断言测的是另一份代码。</summary>
@@ -178,10 +227,10 @@ public class ErrorCopyTests
     {
         var source = Repo.Source("Api", "ErrorHandling.cs");
         Assert.DoesNotContain("内部错误", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("请求格式无效：\"", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("JSON 格式无效：\"", source, StringComparison.Ordinal);
-        Assert.Contains("ErrorCopy.BadRequest(", source, StringComparison.Ordinal);
-        Assert.Contains("ErrorCopy.InvalidJson(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("请求格式无效，", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("JSON 格式无效", source, StringComparison.Ordinal);
+        Assert.Contains("ErrorCopy.BadRequestMessage", source, StringComparison.Ordinal);
+        Assert.Contains("ErrorCopy.InvalidJson(ex)", source, StringComparison.Ordinal);
         Assert.Contains("ErrorCopy.InternalMessage", source, StringComparison.Ordinal);
     }
 

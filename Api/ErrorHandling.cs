@@ -21,11 +21,15 @@ public static class ErrorHandling
             }
             catch (BadHttpRequestException ex)
             {
-                await WriteError(context, StatusCodes.Status400BadRequest, ErrorCopy.BadRequest(Redactor.Redact(ex.Message)));
+                // 只回固定文案：框架消息是英文内部描述、绑定失败时还带请求体片段（第一百五十四轮）。
+                logger.LogWarning(ex, "请求格式无法解析 {Path}", context.Request.Path);
+                await WriteError(context, StatusCodes.Status400BadRequest, ErrorCopy.BadRequestMessage);
             }
             catch (JsonException ex)
             {
-                await WriteError(context, StatusCodes.Status400BadRequest, ErrorCopy.InvalidJson(Redactor.Redact(ex.Message)));
+                // 只回结构信息（第几行第几列）：消息体会带用户原文片段（第一百五十四轮）。
+                logger.LogWarning(ex, "请求 JSON 无法解析 {Path}", context.Request.Path);
+                await WriteError(context, StatusCodes.Status400BadRequest, ErrorCopy.InvalidJson(ex));
             }
             catch (Exception ex)
             {

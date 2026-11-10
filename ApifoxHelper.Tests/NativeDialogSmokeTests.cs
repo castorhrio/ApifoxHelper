@@ -42,36 +42,81 @@ public class NativeDialogSmokeTests
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
 
-    /// <summary>冒烟清单里 <c>new XxxDialog(</c> 的类名（去重排序）。</summary>
-    private static List<string> DialogClassesInSmoke() =>
-        Regex.Matches(SmokeProgram, @"new\s+(\w+Dialog)\s*\(")
+    /// <summary>
+    /// 冒烟程序显式声明的对话框清单（<c>SmokeDialogNames</c>，第一百五十四轮）。
+    /// <para>
+    /// 此前这里用正则匹配 <c>new XxxDialog(</c> 来发现「冒烟登记了哪些对话框」。正则只认这一种写法：
+    /// 有人把某个用例改成 helper 方法包装，正则就静默漏发现——那个对话框不再被构造，
+    /// 而本文件全绿。现在清单是**数据**（<c>SmokeDialogNames</c> 常量），这里只读这份数据，
+    /// 不看用例怎么写。
+    /// </para>
+    /// </summary>
+    private static List<string> DialogClassesInSmoke()
+    {
+        var start = SmokeProgram.IndexOf("SmokeDialogNames =", StringComparison.Ordinal);
+        Assert.True(start >= 0, "ApifoxHelper.Smoke/Program.cs 里找不到 SmokeDialogNames 清单常量。");
+        var open = SmokeProgram.IndexOf('[', start);
+        var close = SmokeProgram.IndexOf("];", open, StringComparison.Ordinal);
+        Assert.True(open > start && close > open, "SmokeDialogNames 清单不是 [ … ]; 的形状，提取器失效。");
+        var names = Regex.Matches(SmokeProgram[open..close], "\"([A-Za-z]\\w*)\"")
             .Select(m => m.Groups[1].Value)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
+        // 提取器失效时断言会静默空转（比没有断言更糟）：地板与去重都在这里判。
+        Assert.True(names.Count >= 20, $"SmokeDialogNames 只提取到 {names.Count} 个类名，提取口径可能已失效。");
+        Assert.Equal(names.Count, names.Distinct(StringComparer.Ordinal).Count());
+        return names.OrderBy(n => n, StringComparer.Ordinal).ToList();
+    }
 
     [Fact]
-    public void EveryDialogClass_IsConstructedByTheSmokeProgram()
+    public void EveryDialogClass_IsDeclaredInTheSmokeList()
     {
         // 漏登记 = 那个对话框永远不会被构造，第一百二十八轮那类缺陷在它身上照样能溜过去。
+        // 判定是「磁盘类名 ↔ 清单数据」，与用例怎么写无关（helper 包装也漏不掉）。
         var onDisk = DialogClassesOnDisk();
-        var inSmoke = DialogClassesInSmoke();
-        var missing = onDisk.Except(inSmoke, StringComparer.Ordinal).ToList();
+        var declared = DialogClassesInSmoke();
+        var missing = onDisk.Except(declared, StringComparer.Ordinal).ToList();
         Assert.True(
             missing.Count == 0,
-            "以下对话框未在 ApifoxHelper.Smoke/Program.cs 的 Cases 里登记构造：" + string.Join("、", missing));
+            "以下对话框未在 ApifoxHelper.Smoke/Program.cs 的 SmokeDialogNames 里登记：" + string.Join("、", missing));
         // 地板：对话框数量掉下去说明扫描正则或目录坏了，检查会静默空转。
         Assert.True(onDisk.Count >= 20, $"只扫到 {onDisk.Count} 个对话框类，扫描口径可能已失效。");
     }
 
     [Fact]
-    public void SmokeProgram_ConstructsNoDialogThatDoesNotExist()
+    public void SmokeList_DeclaresNoDialogThatDoesNotExist()
     {
         // 反向：清单里留着已删除的类，冒烟工程根本编译不过——但这条断言让「删类忘了删清单」
         // 在 Linux 侧就报出具体名字，而不是等一次 Windows 编译。
         var onDisk = DialogClassesOnDisk();
         var stale = DialogClassesInSmoke().Except(onDisk, StringComparer.Ordinal).ToList();
         Assert.True(stale.Count == 0, "冒烟清单里有磁盘上不存在的对话框：" + string.Join("、", stale));
+    }
+
+    /// <summary>
+    /// 清单是数据，但「登记了」不等于「构造了」（第一百五十四轮，简报 P1-1）。
+    /// <para>
+    /// 这一条钉住冒烟程序自己在运行时核对两件事：清单里每个类名都真的被构造出来、
+    /// 构造出来的每个对话框都在清单里。少了它，清单可以是一份与用例脱节的死数据——
+    /// Linux 侧比对全绿，而某个对话框其实从没被 new 过。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SmokeProgram_ChecksDeclaredAgainstConstructedAtRuntime()
+    {
+        // 记录真实构造出来的类型（按控件实际类型，不按用例名）。
+        Assert.Contains("_constructedDialogs.Add(form.GetType().Name);", SmokeProgram);
+        // 核对方法本身：两个方向都要判，且判失败要落进报告与退出码。
+        var body = MethodBody(SmokeProgram, "private static void CheckDialogCoverage(");
+        Assert.Contains("SmokeDialogNames.Where(n => !_constructedDialogs.Contains(n))", body);
+        Assert.Contains("_constructedDialogs.Where(n => !declared.Contains(n))", body);
+        Assert.Contains("_failed++;", body);
+        Assert.Contains("_lines.Add(fail);", body);
+        // 必须在 Main 里真的调用，且排在结果行之前（否则失败不计入退出码）。
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var call = main.IndexOf("CheckDialogCoverage();", StringComparison.Ordinal);
+        var result = main.IndexOf("== 结果：", StringComparison.Ordinal);
+        Assert.True(call >= 0, "Main 里没有调用 CheckDialogCoverage。");
+        Assert.True(result > call, "CheckDialogCoverage 没有排在结果行之前（失败不会计入退出码）。");
     }
 
     [Fact]

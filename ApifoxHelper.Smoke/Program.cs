@@ -53,6 +53,51 @@ internal static class Program
 
     private static readonly List<string> _lines = [];
 
+    /// <summary>
+    /// 冒烟清单里登记的对话框类名（第一百五十四轮，控制仓简报 P1-1）。
+    /// <para>
+    /// 存在理由：此前「磁盘上的 <c>*Dialog</c> 类 ↔ 冒烟登记」的核对靠正则匹配
+    /// <c>new XxxDialog(</c>。正则只认这一种写法——有人把某个用例改成 helper 方法包装
+    /// （<c>yield return ("…", () =&gt; BuildProfileDialog(...))</c>），正则就静默漏发现，
+    /// 那个对话框从此不再被构造，而 Linux 侧测试全绿。
+    /// </para>
+    /// <para>
+    /// 现在这份清单是**数据**：新增对话框忘了登记、删对话框忘了删登记，两条都由
+    /// <c>ApifoxHelper.Tests/NativeDialogSmokeTests.cs</c> 拿磁盘类名与它比对判定，不再看写法。
+    /// 清单本身在运行时也被核对一次（<see cref="CheckDialogCoverage"/>）：声明了却没真的构造出来，
+    /// 冒烟当场判失败——「登记了」与「构造了」是两件事，只有后者能拦住构造期崩溃。
+    /// </para>
+    /// </summary>
+    internal static readonly string[] SmokeDialogNames =
+    [
+        "ApplyPlanDialog",
+        "BuildLogDialog",
+        "CandidatesDialog",
+        "CapabilitiesDialog",
+        "CheckResultsDialog",
+        "ContractsDialog",
+        "DecisionsDialog",
+        "EndpointTraceDialog",
+        "EvidenceDialog",
+        "GenerationDialog",
+        "JournalDialog",
+        "ManualDraftDialog",
+        "NewTaskDialog",
+        "NoticeDialog",
+        "ProfileAdvancedDialog",
+        "ProfileAnalysisDialog",
+        "ProfileDialog",
+        "PropagationDialog",
+        "ReportsDialog",
+        "ScanResultsDialog",
+        "ScanWarningsDialog",
+        "SupplementsDialog",
+        "SyncPreviewDialog",
+    ];
+
+    /// <summary>本次运行真的构造出来的对话框类名（<see cref="Run"/> 里按控件实际类型记录）。</summary>
+    private static readonly HashSet<string> _constructedDialogs = new(StringComparer.Ordinal);
+
     [STAThread]
     private static int Main(string[] args)
     {
@@ -182,6 +227,9 @@ internal static class Program
 
         Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
         RunFullJourney(services, dataRoot);
+
+        Console.WriteLine("== 冒烟清单覆盖（声明 ↔ 真实构造）==");
+        CheckDialogCoverage();
 
         Console.WriteLine($"== 结果：{_passed} 通过 / {_failed} 失败 ==");
         WriteReport();
@@ -3801,11 +3849,50 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// 冒烟清单覆盖的运行时核对（第一百五十四轮，控制仓简报 P1-1）。
+    /// <para>
+    /// 两个方向都判：清单里声明了却没构造出来（用例被删、被改成 helper 包装而没真的 new），
+    /// 以及构造了却没在清单里声明（新增对话框忘了登记）。前者是这一轮要堵的静默漏发现，
+    /// 后者会让 Linux 侧的清单比对与运行时事实脱节。
+    /// </para>
+    /// <para>
+    /// 判失败而不是抛异常：报告里要留下具体类名，退出码仍是 1。
+    /// </para>
+    /// </summary>
+    private static void CheckDialogCoverage()
+    {
+        const string name = "冒烟清单覆盖（声明 ↔ 真实构造）";
+        var declared = SmokeDialogNames.ToHashSet(StringComparer.Ordinal);
+        var missing = SmokeDialogNames.Where(n => !_constructedDialogs.Contains(n)).ToList();
+        var undeclared = _constructedDialogs.Where(n => !declared.Contains(n)).OrderBy(n => n, StringComparer.Ordinal).ToList();
+
+        if (missing.Count == 0 && undeclared.Count == 0)
+        {
+            _passed++;
+            var line = $"PASS {name}（{declared.Count} 个对话框全部构造）";
+            Console.WriteLine(line);
+            _lines.Add(line);
+            return;
+        }
+
+        _failed++;
+        var detail = new List<string>();
+        if (missing.Count > 0) detail.Add("声明了却没构造：" + string.Join("、", missing));
+        if (undeclared.Count > 0) detail.Add("构造了却没声明：" + string.Join("、", undeclared));
+        var fail = $"FAIL {name}：{string.Join("；", detail)}";
+        Console.WriteLine(fail);
+        _lines.Add(fail);
+    }
+
     private static void Run(string name, Func<Control> build)
     {
         try
         {
             using var control = build();
+            // 记下真的构造出来的对话框类型：清单声明与真实构造是两件事，
+            // 只有后者能拦住构造期崩溃（见 CheckDialogCoverage）。
+            if (control is Form form) _constructedDialogs.Add(form.GetType().Name);
             // 建句柄 + 强制一次布局：构造期事件顺序缺陷（第一百二十八轮那一类）在这里暴露。
             _ = control.Handle;
             control.CreateControl();

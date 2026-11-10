@@ -1574,3 +1574,26 @@
 - **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2272 用例全部通过**；GUI 侧本轮有**真实执行证据**（wine 10.0 + Xvfb 下 100 通过 / 0 失败、退出码 0）。**Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效；真机清单第 17 项（DPI 观感）与第 18 项（真机跑冒烟）继续留 `[ ]`。
 - **本轮未做（如实挂账）**：① 简报 P0-1 真机主链路证据与 P0-2 AI 必要性证据仍不可得（无 Windows 真机、无模型服务密钥；`Comments/ModelClient` 真实路径未走）；② 简报 P1-4（失败态四步收进共享辅助）未做——本轮只把任务页的动作门控收成一处，三屏的「提示可见 + 收起主体 + 停用动作 + 显示重试」四步仍是各屏各写；③ 本轮**未做变异验证**（「把失败态收掉即变红」的实测），时间用尽。
 - **本轮未连接或写入 Apifox，未调用任何模型服务**；不改服务层一行、不改界面布局常量与视觉令牌、不新增对话框或产品功能（改动只在任务页动作门控、冒烟器三段、测试与本文档）。
+
+## Windows 真机验证：仍不可得（第一百五十四轮，挂账写具体）
+
+> 这一节是「真机证据」的挂账落点。此前每轮只写「GUI 真机运行与 100%/200% DPI 截图仍未验证」——诚实，但读不出卡在哪、下一步谁做什么，于是被原样抄了三十多轮。现在把三件事写死，并由 `WordingHonestyTests.RealMachineGap_NamesTheMachineTheScalesAndTheOwner` 机械钉住（缺一件即红）。
+
+- **缺哪台机器**：一台 Windows 10/11 x64 桌面机，需装 .NET 8 桌面运行时（`Microsoft.WindowsDesktop.App` 8.0.x）。本会话环境是 Linux 容器，**没有** `Microsoft.WindowsDesktop.App`，WinForms 控件无法构造，因此 GUI 只能靠 wine 10.0 + Xvfb 模拟（wine 证据不等于真机证据，两者在本文档分开记）。
+- **缺哪几个 DPI**：G-D5 要求的三档——**100%**、**125%**、**200%** 各一套主界面截图（125% 是控制仓简报追加的一档，覆盖最常见的笔记本缩放）。每张按状态归档并注明对应状态表行。
+- **谁负责**：机器由**用户（答辩负责人）**提供并在真机上执行；本代理只负责「机器到位后照清单逐条核对并回写本节」。清单见「Windows 真机 / wine 模拟器验证清单」B 段与「Windows 真机全链路清单」，两处都是可勾选项。
+- **截图落点与命名约定**：`docs/evidence/real-machine/` 下的 `*.png`，文件名带 DPI 与状态（如 `main-100-empty.png`、`main-200-scanning.png`）。**这个目录一旦有截图，`WordingHonestyTests.RealMachineClaims_RequireEvidencePaths` 就要求本文档出现 `docs/evidence/real-machine/` 的出处路径**——补了证据却不写出处，断言变红。
+- **当前状态**：目录不存在、截图 0 张，故把 wine 结果说成真机的措辞仍为禁词（同上断言的另一半）。
+
+## 收口轮「冒烟清单从正则升级为数据 + 400 两条分支脱敏收口 + 真机挂账写具体」（第一百五十四轮，简报 P0-1 降级 / P1-1 / P1-2）
+
+- **接续前确认**：开局工作树干净，HEAD（014e910）为第一百五十三轮，主工程与测试工程 `dotnet build` 均 0 警告 0 错误、`dotnet test` **2282 用例全绿**，基线成立；第四十七至一百五十三轮逐字保留，未回退任何已有实现。
+- **本轮定位**：控制仓简报的 P0-1（Windows 真机主链路证据 + 三档 DPI 截图）在本会话**仍不可能完成**——Linux 容器、无 `Microsoft.WindowsDesktop.App`、无 Windows 真机（第一百二十四轮挂账决策继续有效）。按简报「拿不到真机就把挂账写具体，并把措辞断言改成机械门」，本轮做 P0-1 的降级交付 + P1-1 + P1-2，**不扩功能、不加对话框、不动服务链路语义**。
+- **已交付 ①（P0-1 降级，harden）真机字样变成机械门 + 挂账写具体**：`WordingHonestyTests` 新增两条用例——`RealMachineClaims_RequireEvidencePaths`（`docs/evidence/real-machine/` 无截图时把 wine 结果说成真机的措辞仍禁；有截图时本文档必须出现该目录的出处路径，两个方向都能红）与 `RealMachineGap_NamesTheMachineTheScalesAndTheOwner`（挂账节必须写清机器运行时、三档 DPI、负责人、截图落点，缺一件即红）。本文档新增「Windows 真机验证：仍不可得」一节，把「缺哪台机器 / 哪几个 DPI / 谁负责 / 截图怎么放」写死。
+- **已交付 ②（P1-1，harden）冒烟清单从正则升级为数据**：此前 `NativeDialogSmokeTests` 用正则匹配 `new XxxDialog(` 来发现「冒烟登记了哪些对话框」——正则只认这一种写法，有人把某个用例改成 helper 方法包装，正则就静默漏发现，那个对话框从此不再被构造而 Linux 侧全绿。现在 `ApifoxHelper.Smoke/Program.cs` 显式声明 `SmokeDialogNames`（23 个类名，数据），测试拿磁盘类名与它比对，**与用例怎么写无关**；同时冒烟程序自己在运行时核对两个方向（`CheckDialogCoverage`：声明了却没真的构造、构造了却没声明，都判失败并落进报告与退出码）——「登记了」与「构造了」是两件事，只有后者能拦住构造期崩溃。新增用例 `SmokeProgram_ChecksDeclaredAgainstConstructedAtRuntime` 钉住这条运行时核对的接线与调用顺序（必须排在结果行之前，否则失败不计入退出码）。
+- **已交付 ③（P1-2，harden）400 两条分支与 500 同口径**：`BadHttpRequestException` 分支此前回 `Redactor.Redact(ex.Message)`——框架消息是英文内部描述，绑定失败时还带请求体片段；`JsonException` 分支同族，消息体会带用户原文片段，而脱敏只处理已知形状（令牌、路径），挡不住任意消息体。现在：请求格式无效只回固定文案 `ErrorCopy.BadRequestMessage`（结构上就没有 detail 参数可漏），JSON 格式无效只回**结构信息** `ErrorCopy.InvalidJson(ex)`——「JSON 格式无效（第 X 行，第 Y 列）。」（`LineNumber`/`BytePositionInLine` 是 0 基，换算成 1 基；缺位置时回固定文案，不猜位置）。两条分支的详情都进日志（`LogWarning` + 请求路径），排查不受影响。
+- **测试 2282 → 2288 用例**（+6：`WordingHonestyTests` +2、`NativeDialogSmokeTests` +1 并改写 2 条、`ErrorCopyTests` 400 段重写为 7 条 + 排版断言提成助手后 +2）。既有断言未削弱：`ErrorHandling_TakesCopyFromTheSingleSource` 收紧为「两条 400 分支的文案字面量也不得就地出现」（为此把两条日志模板改成「请求格式无法解析 / 请求 JSON 无法解析」，避免与用户可见文案撞字）。
+- **变异验证实测可红（六处）**：① 从 `SmokeDialogNames` 删 `JournalDialog` → `EveryDialogClass_IsDeclaredInTheSmokeList` 红；② 把磁盘 `JournalDialog` 改名 → `SmokeList_DeclaresNoDialogThatDoesNotExist` 红；③ `ErrorCopy.InvalidJson` 改回拼 `ex.Message` → `InvalidJson_ReportsStructureOnly_NotTheMessageBody` 与 `InvalidJson_FromTheRealParser_AlsoReportsStructureOnly` 双红；④ 接线改成 `ErrorCopy.InvalidJsonMessage + ex.Message` → `ErrorHandling_400BranchesTakeCopyFromTheSingleSource` 红；⑤ 临时在 `docs/evidence/real-machine/` 放一张 png 并把本文档里的出处路径临时改掉 → `RealMachineClaims_RequireEvidencePaths` 红（只放 png 不红是对的：本文档已写出处；验证后已删除临时文件与目录，不留空壳）；⑥ 删掉挂账节里的「负责」一句 → `RealMachineGap_NamesTheMachineTheScalesAndTheOwner` 红。全部还原后逐字节核对干净并全绿。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build` 均 0 警告 0 错误，`dotnet test` **2288 用例全部通过**。**本轮未跑 wine**，故不据此宣称冒烟器在本轮跑过——100 通过 / 0 失败仍是第一百五十三轮的证据；`CheckDialogCoverage` 的运行时行为（声明 ↔ 真实构造）在 Linux 侧只有源码切片与数据比对，真实执行随下一次 wine/真机跑。
+- **本轮未做（如实挂账）**：① 简报 P0-1 的真机主链路证据与三档 DPI 截图仍不可得（无 Windows 真机，责任在环境供给，见上一节）；② 简报 P2-1（`ServiceCopyTests` 显式断言 `ErrorCopy` 常量名约定）未做——本轮新增的两个常量已按 `…Message` 收尾落进既有扫描面，但「以 `Message` 收尾才被扫」这条隐式契约仍未机械化；③ 简报 P2-2（`LoadFailureRetryCoverageTests` 发现口径的元测试）与 P2-3（`ApifoxCli.Parse` 环境依赖挂账）未做。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改服务层业务语义（`ErrorCopy`/`ErrorHandling` 只改错误文案来源，`Redactor` 一行未动）、不改界面布局与视觉令牌、不新增对话框或产品功能。
