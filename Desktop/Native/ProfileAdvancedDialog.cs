@@ -64,7 +64,7 @@ internal sealed class ProfileAdvancedDialog : Form
         var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);
 
         AddSection(grid, "模块范围");
-        AddHint(grid, "每行：模块名=路径前缀1、路径前缀2，例如 财务=/api/finance/；新建任务时可按模块选择范围。");
+        AddHint(grid, "每行：模块名=路径前缀 1、路径前缀 2，例如 财务=/api/finance/；新建任务时可按模块选择范围。");
         _modules.Height = 72;
         AddRow(grid, "模块", Ui.Field(_modules));
 

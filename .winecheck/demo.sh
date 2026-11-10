@@ -32,14 +32,40 @@ case "$WINEPREFIX" in
   */.wine) echo "  注意：这是默认前缀，通常没有可用的桌面环境，报告里会整片「Error creating window handle」。" ;;
 esac
 
-if [ ! -f "$SMOKE_EXE" ]; then
-  if [ "$PUBLISH" = "1" ]; then
-    dotnet publish "$REPO/ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj" \
-      -c Release -r win-x64 --self-contained -o "$(dirname "$SMOKE_EXE")" || exit 1
-  else
-    echo "冒烟器不在 $SMOKE_EXE。先按 .winecheck/README.md 发布，或设 PUBLISH=1 让本脚本发。"
-    exit 1
-  fi
+# 念出来的数必须出自当前源码。第一百六十九轮先按 mtime 判过一次，那条路不成立：发布产物是 obj 的
+# 硬链接，增量构建不刷新它的时间戳，结果「按脚本给的补救做完仍然被拦」——一个解不开的闸门比没有更糟。
+# 现按源码**内容**判：PUBLISH=1 强制重建并把指纹记在产物旁边，没给 PUBLISH 时逐字比那份指纹。
+# 测试工程不参与：它不编进这份产物，改了它不该要求重发冒烟器。
+source_fingerprint() {
+  find "$REPO" -name bin -prune -o -name obj -prune -o \
+    -name '*.cs' -not -path "$REPO/ApifoxHelper.Tests/*" -print0 \
+    | LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum | cut -d' ' -f1
+}
+
+STAMP="$(dirname "$SMOKE_EXE")/smoke-source.sha"
+PUBLISH_CMD="dotnet build $REPO/ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj -c Release -r win-x64 -t:Rebuild && dotnet publish $REPO/ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj -c Release -r win-x64 --self-contained -o $(dirname "$SMOKE_EXE") && source_fingerprint > $STAMP"
+
+if [ "$PUBLISH" = "1" ]; then
+  echo "重发冒烟器（PUBLISH=1，强制重建）：先 build -t:Rebuild，再 publish，最后记源码指纹。"
+  dotnet build "$REPO/ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj" -c Release -r win-x64 -t:Rebuild || exit 1
+  dotnet publish "$REPO/ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj" \
+    -c Release -r win-x64 --self-contained -o "$(dirname "$SMOKE_EXE")" || exit 1
+  source_fingerprint > "$STAMP" || { echo "源码指纹写不进 $STAMP（产物目录不可写？）"; exit 1; }
+elif [ ! -f "$SMOKE_EXE" ]; then
+  echo "冒烟器不在 $SMOKE_EXE。设 PUBLISH=1 让本脚本发，或按 .winecheck/README.md 先发布。"
+  exit 1
+elif [ ! -f "$STAMP" ]; then
+  echo "产物旁边没有源码指纹（$STAMP）——无法判断这一档出自哪一版源码，别拿它念当前结论。"
+  echo "解一次：PUBLISH=1 bash .winecheck/demo.sh"
+  exit 1
+elif [ "$(source_fingerprint)" != "$(cat "$STAMP")" ]; then
+  echo "冒烟器不是当前源码发出来的（源码内容指纹与 $STAMP 记的那份不一致）。"
+  echo "  发的时候记的：$(cat "$STAMP")"
+  echo "  当前源码算的：$(source_fingerprint)"
+  echo "这一档的通过数属于上一次那版代码。解法（脚本自己就会做这三步）："
+  echo "  PUBLISH=1 bash .winecheck/demo.sh"
+  echo "  手工等价：$PUBLISH_CMD"
+  exit 1
 fi
 
 # 逐屏表 → 制表符分隔的五列（# / 屏 / 讲什么 / 证据出处 / 结论口径）。

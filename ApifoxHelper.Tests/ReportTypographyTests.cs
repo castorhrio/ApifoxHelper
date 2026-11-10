@@ -603,6 +603,81 @@ public class ReportTypographyTests
     }
 
     /// <summary>
+    /// 行首行尾禁则在这一份交付面上的落地（DESIGN.md §3「中文排版附加条款」、§6「中文排版」第 ② 条）。
+    /// <para>
+    /// 为什么门在这里：§3 一直写着「行首行尾禁则」，而第一百六十八轮之前全仓没有任何东西执行它——
+    /// 唯一会折行的产物就是这份 HTML（用户会转发它、会把它截成长图发群里），浏览器默认
+    /// <c>line-break:auto</c> 允许把「。，、；」拆到行首、把「（「」拆到行尾。
+    /// 原生界面的标签不折行，所以那里没有可判的折行点（§6 同一项写清了这一取舍）。
+    /// </para>
+    /// <para>
+    /// <c>word-break</c> 也要钉：它是 <c>line-break</c> 的邻位开关，任何一处写成
+    /// <c>break-all</c>/<c>break-word</c> 都会允许在词中间硬切，等于把 strict 声明悄悄作废——
+    /// 而 <c>line-break:strict</c> 这个子串照样还在，只查它的门仍然绿。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HtmlStyle_EnforcesTheChineseLineBreakProhibition()
+    {
+        var body = Regex.Match(ReportRender.HtmlStyle, @"body\{([^}]*)\}");
+        Assert.True(body.Success, "样式里没有 body 规则。");
+        Assert.Contains("line-break:strict", body.Groups[1].Value, StringComparison.Ordinal);
+        Assert.Contains("word-break:normal", body.Groups[1].Value, StringComparison.Ordinal);
+
+        // 邻位开关不得被改成允许词中硬切（整份样式都查，不只 body 规则）。
+        foreach (var breaker in new[] { "word-break:break-all", "word-break:break-word" })
+        {
+            Assert.DoesNotContain(breaker, ReportRender.HtmlStyle, StringComparison.Ordinal);
+        }
+
+        // 声明要真的进到用户拿到的那份文件里，不是只在常量里躺着。
+        var html = ReportRender.Html(ReportRender.Markdown(Report()));
+        Assert.Contains("line-break:strict;word-break:normal", html, StringComparison.Ordinal);
+
+        // 条款与代码不能各说一套：§6「中文排版」的第 ② 项必须指着这条声明。
+        var clause = Repo.DesignSection(6).Split('\n')
+            .Single(l => l.StartsWith("| **中文排版**", StringComparison.Ordinal));
+        var item2 = clause[clause.IndexOf("**② ", StringComparison.Ordinal)..];
+        item2 = item2[..item2.IndexOf("**③ ", StringComparison.Ordinal)];
+        Assert.Contains("line-break:strict", item2, StringComparison.Ordinal);
+        Assert.Contains("行首", item2, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 中英文之间留空隙——<b>量的是渲染出来的字节</b>（DESIGN.md §6「中文排版」第 ⑤ 条）。
+    /// <para>
+    /// 界面层与服务层那两条静态门只能判作者打下的字：插值空洞里可能是中文，静态当拉丁会假红，
+    /// 所以那边把空洞剥掉了。代价是「共 {count} 处」这类拼装后才紧贴的字面判不到。
+    /// 报告这一面没有这个限制：渲染器是真执行的（<see cref="ReportRender"/> 共享编译），
+    /// 数字 substitution 之后的那一行就在下面这些字符串里，紧贴与否当场判得出来。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RenderedCopy_LeavesASpaceBetweenChineseAndLatin()
+    {
+        var markdown = ReportRender.Markdown(Report());
+        var minimal = ReportRender.Markdown(MinimalReport());
+        var handoff = ReportRender.Handoff(Report());
+        var body = Body(ReportRender.Html(markdown));
+
+        foreach (var (label, text) in new[] { ("Markdown", markdown), ("Markdown（数据位取最短）", minimal), ("交接说明", handoff) })
+        {
+            foreach (var line in text.Split('\n').Select(l => l.TrimEnd('\r')))
+            {
+                var index = CopyRules.IndexOfMissingLatinGap(line);
+                Assert.True(index < 0, $"{label} 这一行里的半角字母或数字紧挨汉字（位置 {index}）：「{line}」。");
+            }
+        }
+
+        // HTML 只查正文：样式块里的 1px/40em 那些是 CSS 数值，不是中文句子。
+        foreach (var segment in Regex.Split(body, "<[^>]*>"))
+        {
+            var index = CopyRules.IndexOfMissingLatinGap(segment);
+            Assert.True(index < 0, $"HTML 正文这一段里的半角字母或数字紧挨汉字（位置 {index}）：「{segment}」。");
+        }
+    }
+
+    /// <summary>
     /// 样式只有一份：<c>Html</c> 必须引用 <see cref="ReportRender.HtmlStyle"/>，
     /// 文件里不得再出现第二处 <c>font-family</c> 或 <c>&lt;style&gt;</c> 字面量。
     /// 否则排版断言量的是常量、用户看到的是另一份。

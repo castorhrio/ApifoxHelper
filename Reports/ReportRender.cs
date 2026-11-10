@@ -51,14 +51,17 @@ public static class ReportRender
     /// <para>
     /// 取值全部来自 DESIGN §3：字体栈 Latin → 中文 → <c>sans-serif</c> 有序回退（与界面层
     /// <c>FontStack</c> 同一顺序口径，只是 CSS 侧由浏览器自己按序探测）；正文行高 1.55；
-    /// 正文容器 40em（≤45em 上限，约 40 个中文字）；表格 <c>th</c>/<c>td</c> 发丝边 + 内边距、
+    /// 正文容器 40em（≤45em 上限，约 40 个中文字）；<c>line-break:strict</c> 落 §3「行首行尾禁则」
+    /// （§6「中文排版」第 ② 条：全仓只有这份 HTML 会折行，浏览器默认的 <c>auto</c> 允许把「。，、」
+    /// 拆到行首——在这条声明写进来之前，§3 那句禁则在用户实际拿到的那份文件上并不成立）；
+    /// 表格 <c>th</c>/<c>td</c> 发丝边 + 内边距、
     /// 表头浅灰底（灰阶铬色，不引入第二个强调色）；引用左侧发丝边。样式只此一份，
     /// 排版断言直接量这个常量，不从源码里正则抠字符串。
     /// </para>
     /// </summary>
     public const string HtmlStyle =
         "body{font-family:-apple-system,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;"
-        + "max-width:40em;margin:24px auto;padding:0 16px;line-height:1.55;color:#1f2937}"
+        + "max-width:40em;margin:24px auto;padding:0 16px;line-height:1.55;line-break:strict;word-break:normal;color:#1f2937}"
         + "h1{font-size:22px;line-height:1.4;margin:0 0 12px}"
         + "h2{font-size:18px;line-height:1.4;margin:24px 0 8px;padding-bottom:4px;border-bottom:1px solid #e5e7eb}"
         + "h3{font-size:16px;line-height:1.4;margin:16px 0 8px}"

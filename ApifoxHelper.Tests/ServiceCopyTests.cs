@@ -189,6 +189,24 @@ public class ServiceCopyTests
         }
     }
 
+    /// <summary>
+    /// 中英文之间留一个半角空隙（DESIGN.md §3、§6「中文排版」第 ⑤ 条）。
+    /// 判定与界面层共用 <see cref="CopyRules.IndexOfMissingLatinGap"/>，扫描对象也是同一批文案来源：
+    /// 这几句会原样进原生状态行与内联错误，「120秒」「3项」这种紧贴在这一面上一样读得难受。
+    /// </summary>
+    [Fact]
+    public void ServiceCopy_LeavesASpaceBetweenChineseAndLatin()
+    {
+        foreach (var (source, line, raw) in UserVisibleLiterals())
+        {
+            var text = CopyRules.LiteralText(raw);
+            var index = CopyRules.IndexOfMissingLatinGap(text);
+            Assert.True(index < 0,
+                $"{source}:{line}:「{text}」里的半角字母或数字紧挨汉字（位置 {index}）。"
+                + "中英文之间留一个半角空隙；确属标识符或单位写法须登记在 CopyRules.TechnicalSpacingExceptions 并说明理由。");
+        }
+    }
+
     [Fact]
     public void ServiceCopy_ChineseQuotesOnlyUseCornerBrackets()
     {

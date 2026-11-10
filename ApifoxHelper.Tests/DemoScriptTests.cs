@@ -223,6 +223,51 @@ public class DemoScriptTests
         Assert.Contains("G-D5 未达成（环境供给缺口）", script);
     }
 
+    /// <summary>
+    /// 念出来的数必须出自当前源码——但判据用的是<b>源码内容指纹</b>，不是 mtime。
+    /// <para>
+    /// 本轮先按 mtime 建过一次这条门，然后当场被它自己锁死：发布产物是 obj 的硬链接，增量构建不刷新
+    /// 时间戳，于是脚本打印的那句「重发再跑」做完了条件还成立——一个解不开的闸门比没有更糟，
+    /// 因为它把唯一那条诚实的路（承认这份产物不属于当前代码）也一起堵成了「绕过脚本」。
+    /// 教训不是「检查写错了」，而是<b>检查与它给的补救必须一起验</b>。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoScript_FailsWhenTheSmokeBuildIsOlderThanTheSources()
+    {
+        var script = Script;
+
+        // 判定是一份内容指纹（sha1 之 sha1），只此一处；mtime 那一种取法不得复活。
+        Assert.Contains("source_fingerprint() {", script, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(script, @"source_fingerprint\(\) \{"));
+        Assert.Contains("| LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("-newer \"$SMOKE_EXE\"", script, StringComparison.Ordinal);
+        // 测试工程不编进这份产物：改了它不该要求重发冒烟器（否则每轮都会被自己的测试改动挡住）。
+        Assert.Contains(@"-not -path ""$REPO/ApifoxHelper.Tests/*""", script, StringComparison.Ordinal);
+        // bin/obj 必须排掉，否则构建产物自己进指纹。
+        Assert.Contains("-name bin -prune", script, StringComparison.Ordinal);
+        Assert.Contains("-name obj -prune", script, StringComparison.Ordinal);
+
+        // PUBLISH=1 那一支要真的强制重建，并把指纹写到产物旁边（不写就永远比不上一致）。
+        var heal = script.IndexOf(@"if [ ""$PUBLISH"" = ""1"" ]", StringComparison.Ordinal);
+        var healEnd = script.IndexOf("\nfi\n", heal, StringComparison.Ordinal);
+        Assert.True(heal >= 0 && healEnd > heal, "PUBLISH=1 那一支切不出块边界。");
+        var healBlock = script[heal..healEnd];
+        Assert.Contains("-t:Rebuild", healBlock, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish", healBlock, StringComparison.Ordinal);
+        Assert.Contains("source_fingerprint > \"$STAMP\"", healBlock, StringComparison.Ordinal);
+
+        // 拦下来的两条分支都要给可执行补救，且非零退出。
+        Assert.Contains(@"elif [ ! -f ""$STAMP"" ]", script, StringComparison.Ordinal);
+        Assert.Contains(@"elif [ ""$(source_fingerprint)"" != ""$(cat ""$STAMP"")"" ]", script, StringComparison.Ordinal);
+        var stop = script.IndexOf(@"elif [ ""$(source_fingerprint)""", StringComparison.Ordinal);
+        var stopEnd = script.IndexOf("\nfi\n", stop, StringComparison.Ordinal);
+        var stopBlock = script[stop..stopEnd];
+        Assert.Contains("exit 1", stopBlock, StringComparison.Ordinal);
+        Assert.Contains("PUBLISH=1 bash .winecheck/demo.sh", stopBlock, StringComparison.Ordinal);
+        Assert.Contains("属于上一次那版代码", script, StringComparison.Ordinal);
+    }
+
     /// <summary>使用说明在位：README 里必须有「演示与录制口径」这一节，并点到 demo.sh 与三档讲稿。</summary>
     [Fact]
     public void Readme_DocumentsTheDemoAndTheRecordingCaliber()

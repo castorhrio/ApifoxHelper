@@ -1,13 +1,14 @@
 #!/bin/bash
 # 用途：在 wine 下启动主窗口 → 点「新建配置」→ 截图并 OCR 新建配置对话框（核对排版与字段是否可填）。
-# 依赖与前置同 run1.sh（先发布到 /tmp/ah-pub）。可覆盖环境变量：WINEPREFIX / EXE / DATA / DISPLAY / SHOT / DSHOT。
+# 依赖：wine / Xvfb / xdotool / ImageMagick / tesseract，前置（先发布到 /tmp/ah-pub）同 run_app.sh。
+# 可覆盖环境变量：WINEPREFIX / WINE_BIN / WINEDEBUG / EXE / DATA / DISPLAY / SHOT / DSHOT / LOG。
 set -u
 export WINEPREFIX=${WINEPREFIX:-$HOME/.wine-ah}
 export WINEDEBUG=${WINEDEBUG:--all}
 export DISPLAY=${DISPLAY:-:99}
 WINE_BIN=${WINE_BIN:-wine}
 EXE=${EXE:-/tmp/ah-pub/ApifoxHelper.exe}
-DATA=${DATA:-/tmp/ah-data}
+DATA=${DATA:-$HOME/ah-data}
 SHOT=${SHOT:-/tmp/ah-main.png}
 DSHOT=${DSHOT:-/tmp/ah-dialog.png}
 LOG=${LOG:-/tmp/ah-app.log}

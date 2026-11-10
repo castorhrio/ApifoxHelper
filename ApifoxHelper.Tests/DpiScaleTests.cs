@@ -147,7 +147,17 @@ public class DpiScaleTests
             + "（写死尺寸的那一屏在 ≈200% 档不会放大，第一百六十二轮量到的正是这一族）。");
     }
 
-    /// <summary>DESIGN.md §6 必须有「DPI 适配」这一条，并且它交代了挂账的那两档。</summary>
+    /// <summary>
+    /// DESIGN.md §6 必须有「DPI 适配」这一条，并且它把挂账写成<b>可被引用的两档</b>。
+    /// <para>
+    /// 第一百六十九轮补的后半（简报 P1-1 的实底）：条款里现口径那五项用 ①…⑤ 记，
+    /// 而挂账当时是一段散文、没有自己的标签，<c>docs/NOTES.md</c> 里四处「挂账第①档/第②档」
+    /// 按字面找到的其实是现口径的 ①②（「窗体一律经 `DpiScale.Apply` 出厂」与「因子算式」）——
+    /// 引用看着精确，指向的却是错的条目。这正是第一百六十七轮「§6 从来没有这一条」那一族，
+    /// 只是这一次的形态是「有条款、没标签」。原先这条门只查 <c>WM_DPICHANGED</c> 与
+    /// 「从没量过」两个子串在不在，散文形态照样绿。
+    /// </para>
+    /// </summary>
     [Fact]
     public void DesignDoc_DeclaresTheDpiRuleAndItsGap()
     {
@@ -158,6 +168,53 @@ public class DpiScaleTests
         // 挂账不许被写成已解决：多屏与运行中改缩放这两档必须点名。
         Assert.Contains("WM_DPICHANGED", section6, StringComparison.Ordinal);
         Assert.Contains("从没量过", section6, StringComparison.Ordinal);
+
+        // 两档必须有标签，且各说清是哪一种情况（标签是 NOTES 那四处引用的落点）。
+        Assert.Contains("**第 1 档 多显示器混合缩放**", section6, StringComparison.Ordinal);
+        Assert.Contains("**第 2 档 运行中改系统缩放**", section6, StringComparison.Ordinal);
+        Assert.Contains("两套序号不共用", section6, StringComparison.Ordinal);
+
+        // 引用侧逐处核：只取「挂账第…档 / 同一挂账的第…档」这一种**引用形状**，
+        // 序号必须是本条款里真实存在的第 1 档或第 2 档。
+        // 不要改成「禁掉某个子串」：第一百六十九轮第一版就是这么写的，结果它把本轮记录里
+        // 「原先写成了什么样子」那句原话一起判红——分不清真引用与对旧写法的说明的门，
+        // 下一轮只会被人放宽成没门。圈号那一形取到即红，因为它与本条款现口径的 ①…⑤ 撞号。
+        var notes = Repo.Source("docs", "NOTES.md");
+        var references = Regex.Matches(notes, @"(?:挂账|同一挂账的)第 ?([0-9①②③④⑤]) ?档");
+        Assert.True(references.Count >= 4,
+            $"docs/NOTES.md 只有 {references.Count} 处按「第 N 档」引用这条挂账（动作单两行 + B 段两条）。");
+        foreach (Match m in references)
+        {
+            var tier = m.Groups[1].Value;
+            Assert.True(tier is "1" or "2",
+                $"{m.Value}：挂账只有第 1 档（多显示器混合缩放）与第 2 档（运行中改系统缩放），"
+                + "写成 ①② 那一种会落进本条款现口径的 ①…⑤，指向的是别的条目。");
+            Assert.Contains($"**第 {tier} 档 ", section6, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 真机复核清单的第 3、4 行必须逐字对上挂账那两档（简报 P1-1 要的那一件事）。
+    /// 挂账第 1 档讲的是显示器、第 2 档讲的是运行中改缩放——两行里各引一个标签，
+    /// 且第 3 行的动作确实发生在「拖到另一块屏」上、第 4 行确实发生在「不重开窗口改缩放」上。
+    /// </summary>
+    [Fact]
+    public void RealMachineChecklist_PointsWithTheGapTierTheyMeasure()
+    {
+        var notes = Repo.Source("docs", "NOTES.md").Split('\n');
+        var rows = notes.Where(l => l.StartsWith("| [ ] | 3. ", StringComparison.Ordinal)
+                                    || l.StartsWith("| [ ] | 4. ", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, rows.Count);
+
+        var mixed = rows.Single(l => l.StartsWith("| [ ] | 3. ", StringComparison.Ordinal));
+        Assert.Contains("挂账第 1 档", mixed, StringComparison.Ordinal);
+        Assert.Contains("多显示器混合缩放", mixed, StringComparison.Ordinal);
+        Assert.Contains("拖到副屏", mixed, StringComparison.Ordinal);
+
+        var runtime = rows.Single(l => l.StartsWith("| [ ] | 4. ", StringComparison.Ordinal));
+        Assert.Contains("第 2 档", runtime, StringComparison.Ordinal);
+        Assert.Contains("运行中改系统缩放", runtime, StringComparison.Ordinal);
+        Assert.Contains("不重开窗口", runtime, StringComparison.Ordinal);
     }
 
     /// <summary>纯算式那一份必须真的被测试工程编进来，否则上面的真值表是对着一个不存在的类型跑。</summary>
