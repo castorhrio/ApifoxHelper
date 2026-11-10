@@ -3721,12 +3721,37 @@ internal static class Program
     /// </para>
     /// <para>
     /// 量法：说明行经 <c>Ui.Caption</c> 出厂（<c>AutoSize = true</c>），所以「放不下」的表现是折行
-    /// 或裁掉，不是抛异常——用 <c>TextRenderer.MeasureText</c> 按单行量出文字宽度，与控件实际宽度比。
-    /// 已排好版的控件取它自己的宽度（真实可用宽度）；尚未显示的那一页（同步预览的预览页在计划生成前
-    /// 不可见，WinForms 不排不可见子树）取对话框可用宽度（<c>ClientSize.Width − 2×Lg</c>）作为上界
-    /// ——**如实记录**：那一支量的是「按对话框宽度排版时放不放得下」，不是屏幕上已排好的宽度。
+    /// 或裁掉，不是抛异常——用 <c>TextRenderer.MeasureText</c> 按单行量出文字宽度，与**这一行真正被
+    /// 排版进去的容器**的可用宽度比（<see cref="CaptionAvailableWidth"/>）。
+    /// </para>
+    /// <para>
+    /// <b>第一百六十一轮修正（wine 实测抓到的空门）</b>：第一百六十轮那版取 <c>label.Width</c> 当可用宽度，
+    /// 而 AutoSize 标签的宽度恒等于文字宽度——自己量自己，断言永远成立。wine 实测打出的
+    /// <c>343/343px</c>、<c>283/283px</c>、<c>369/369px</c>、<c>511/511px</c> 四行等式就是证据：
+    /// 六条说明行里只有两条（Dock=Top 的底部区）真的量到了容器宽度。现在改取父容器客户区减内边距、
+    /// 以对话框可用宽度为上界；容器尚未排版（不可见子树）时退回对话框上界，并在证据行里标出是哪一支。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// 一条说明行的可用宽度（第一百六十一轮）：取它真正被排版进去的容器的客户区减内边距，
+    /// 并以对话框可用宽度（<c>ClientSize.Width − 2×Lg</c>）为上界。
+    /// <para>
+    /// 为什么不能取 <c>label.Width</c>：<c>Ui.Caption</c> 出厂是 <c>AutoSize = true</c>，未 Dock 的标签
+    /// 宽度恒等于文字宽度——拿它当可用宽度就是自己量自己，断言永远成立。第一百六十轮那版正是如此，
+    /// wine 实测打出的全是 <c>343/343px</c> 这种等式：门是绿的，但它没量过任何东西。
+    /// 容器尚未排版（不可见子树，如计划生成前的同步预览页）时退回对话框可用宽度，并在证据行里
+    /// 标出这一支量的是「按对话框宽度排版时放不放得下」。
+    /// </para>
+    /// </summary>
+    private static (int Available, string Source) CaptionAvailableWidth(Label label, int dialogUsable)
+    {
+        var parent = label.Parent;
+        if (parent is null || parent.ClientSize.Width <= 0) return (dialogUsable, "（对话框上界）");
+        var usable = parent.ClientSize.Width - parent.Padding.Horizontal;
+        if (usable <= 0) return (dialogUsable, "（对话框上界）");
+        return usable < dialogUsable ? (usable, "（容器）") : (dialogUsable, "（对话框上界）");
+    }
+
     private static void RunCaptionFit(IServiceProvider services, string dataRoot)
     {
         var tasks = services.GetRequiredService<TaskStore>();
@@ -3770,7 +3795,7 @@ internal static class Program
                 dialog.PerformLayout();
                 Application.DoEvents();
 
-                var fallback = dialog.ClientSize.Width - UiTokens.Lg * 2;
+                var dialogUsable = dialog.ClientSize.Width - UiTokens.Lg * 2;
                 var measured = new List<string>();
                 var tooWide = new List<string>();
                 foreach (var label in FindAll<Label>(dialog))
@@ -3778,14 +3803,18 @@ internal static class Program
                     if (label.Text.Length == 0) continue;
                     // 只量说明行：经 Ui.Caption 出厂的标签共用同一个 Font 实例。
                     if (!ReferenceEquals(label.Font, UiTokens.Caption.Value)) continue;
-                    var available = label.Width > 0 ? label.Width : fallback;
+                    // 可用宽度取「这一行真正被排版进去的容器」，不是标签自己的宽度：
+                    // Ui.Caption 出厂是 AutoSize，未 Dock 的标签 Width 恒等于文字宽度——拿它当可用宽度
+                    // 就是自己量自己，永远「放得下」（第一百六十轮那版实测全是 343/343px 这种等式，
+                    // 门是绿的但它是空的）。Dock=Top 的标签宽度才等于容器可用宽度。
+                    var (available, source) = CaptionAvailableWidth(label, dialogUsable);
                     var preferred = TextRenderer.MeasureText(
                         label.Text, label.Font, new Size(10000, 10000), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
-                    measured.Add($"{preferred.Width}/{available}px");
+                    measured.Add($"{preferred.Width}/{available}px{source}");
                     if (preferred.Width > available + 2)
                     {
                         var head = label.Text.Length <= 16 ? label.Text : label.Text[..16] + "…";
-                        tooWide.Add($"「{head}」（文字 {preferred.Width}px、可用 {available}px）");
+                        tooWide.Add($"「{head}」（文字 {preferred.Width}px、可用 {available}px{source}）");
                     }
                 }
 
