@@ -168,6 +168,9 @@ internal static class Program
         Console.WriteLine("== 配置表单的真实布局（新建 / 编辑）==");
         RunProfileFormLayout(services, profile);
 
+        Console.WriteLine("== 配置页读取失败态（失败 → 重试 → 恢复，真实控件）==");
+        RunProfileLoadFailure(services, dataRoot);
+
         Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
         RunFullJourney(services, dataRoot);
 
@@ -2325,6 +2328,270 @@ internal static class Program
             if (string.Equals(control.Text, text, StringComparison.Ordinal)) return grid.GetRow(control);
         }
         return -1;
+    }
+
+    /// <summary>
+    /// 配置页读取失败态的真实控件交互（第一百五十一轮，控制仓简报 P0-2）。
+    /// <para>
+    /// 存在理由：第一百五十轮把「读取失败」补成配置页的第三种状态（<see cref="ProfileLoadState"/> 单一落点 +
+    /// 清单区换成失败态 + 唯一行动按钮「重试」），但证据只到 Linux 侧的源码切片与判定真值表——
+    /// <b>真实控件上「失败 → 点重试 → 恢复」这条闭环从未跑过</b>。而这一屏是产品主链路的第一步：
+    /// 失败态里清单留不留旧行、按钮点不点得动、点完是不是真的重读、恢复后编辑与探测能不能用，
+    /// 全都可以是坏的而 Linux 侧全绿、冒烟报告照样 PASS。
+    /// </para>
+    /// <para>
+    /// 五段，全部走真实 WinForms 控件（<c>Form.Show()</c> 让页面真的可见、<c>Button.PerformClick()</c>
+    /// 走点击链路、<c>RefreshData()</c> 是工具栏「刷新」调的那个入口）：
+    /// ① 正常读取有行且不显示「重试」→ 弄坏磁盘上的配置目录 → 读取失败：清单不留旧行、标题与说明取
+    /// <see cref="ProfileLoadState"/> 口径、三颗空态按钮里只有「重试」可见、编辑与探测禁用、状态行如实给原因；
+    /// ② 磁盘仍坏时点「重试」：留在失败态（不能把「点了没反应」当成恢复）；
+    /// ③ 修好磁盘后点「重试」：清单恢复、失败态退出、状态行不再说失败；
+    /// ④ 恢复后选中一行：编辑与探测重新可用（失败态禁用过的入口真的回来了）；
+    /// ⑤ 筛选状态下读取失败：仍说「读取配置失败」，不说成「没有匹配的配置」，行动按钮仍是「重试」。
+    /// </para>
+    /// <para>
+    /// 失败是**真的**：往配置目录写一份坏 JSON，<c>ProfileStore.List</c> 逐份 <c>ReadJson</c> 时抛
+    /// <c>JsonException</c>，走的就是产品里「资料目录被占用/权限不足/文件损坏」那一类读取失败的同一个
+    /// catch 分支——不伪造异常类型、不替换服务实现。
+    /// </para>
+    /// </summary>
+    private static void RunProfileLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var compat = services.GetRequiredService<CompatService>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        var jobs = services.GetRequiredService<JobRunner>();
+        var credentials = services.GetRequiredService<CredentialStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort.json"));
+        // 坏文件落在配置目录里：ProfileStore.List 枚举 *.json 后逐份反序列化，坏 JSON 即抛。
+        var broken = Path.Combine(store.ProfilesDir, "broken.json");
+
+        Form? host = null;
+        ProjectsPage? page = null;
+        try
+        {
+            RunAction("配置页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", () =>
+            {
+                host = new Form { Width = 1100, Height = 700, Text = "配置页冒烟" };
+                page = new ProjectsPage(profiles, compat, cli, store, jobs, credentials, sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+
+                // 先正常读一次：清单里有行、失败态不显示——否则「失败态」可能只是初始状态。
+                page.RefreshData();
+                Application.DoEvents();
+                var list = ProfileList(page);
+                if (list.Items.Count == 0)
+                {
+                    throw new InvalidOperationException("正常读取后配置清单是空的：冒烟数据根里没有配置，失败态无从对照。");
+                }
+                if (ButtonOf(page, ProfileLoadState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("读取正常时「重试」按钮却可见（失败态没有随成功读取退出）。");
+                }
+                var healthy = list.Items.Count;
+
+                // 弄坏磁盘上的配置目录，再走产品路径的读取入口（工具栏「刷新」调的就是 RefreshData）。
+                File.WriteAllText(broken, "这不是 JSON");
+                page.RefreshData();
+                Application.DoEvents();
+
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"读取失败后清单还留着 {list.Items.Count} 行旧数据：这一屏刚证明磁盘上的配置读不出来，旧行等于把不可信的内容当成现状。");
+                }
+                var (title, hint) = EmptyStateLabels(page);
+                if (title.Text != ProfileLoadState.FailureTitle)
+                {
+                    throw new InvalidOperationException($"失败态标题是「{title.Text}」，期望「{ProfileLoadState.FailureTitle}」。");
+                }
+                if (hint.Text != ProfileLoadState.FailureHint)
+                {
+                    throw new InvalidOperationException($"失败态说明是「{hint.Text}」，期望「{ProfileLoadState.FailureHint}」。");
+                }
+                var visible = EmptyActionButtons(page).Where(button => button.Visible).ToArray();
+                if (visible.Length != 1 || visible[0].Text != ProfileLoadState.RetryLabel)
+                {
+                    throw new InvalidOperationException(
+                        "失败态的空态按钮不是「唯一行动按钮」：可见的是 " + string.Join("、", visible.Select(b => "「" + b.Text + "」")));
+                }
+                if (!visible[0].Enabled)
+                {
+                    throw new InvalidOperationException("失败态的「重试」按钮不可点：屏上没有任何下一步。");
+                }
+                if (ButtonOf(page, "编辑").Enabled || ButtonOf(page, "连接与写入探测").Enabled)
+                {
+                    throw new InvalidOperationException("读取失败后「编辑」或「连接与写入探测」仍可点：清单已空，它们没有可作用的对象。");
+                }
+                var status = StatusLabel(page);
+                if (!status.Text.StartsWith(ProfileLoadState.FailureTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望以「{ProfileLoadState.FailureTitle}：」开头（如实给出原因）。");
+                }
+                if (status.Text.Length <= ProfileLoadState.FailureTitle.Length + 1)
+                {
+                    throw new InvalidOperationException($"状态行只有标题没有原因：「{status.Text}」。");
+                }
+                _lines.Add($"     正常读取 {healthy} 行 → 弄坏配置目录后：标题「{title.Text}」、状态行「{status.Text}」");
+            });
+
+            RunAction("配置页：失败态下点「重试」仍失败则留在失败态（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出配置页。");
+                // 磁盘仍是坏的：点「重试」等于再读一次，读还是失败——必须留在失败态，
+                // 不能因为「点过了」就把失败态收掉（那等于把没读到的说成读到了）。
+                Click(page, ProfileLoadState.RetryLabel);
+                Application.DoEvents();
+                var list = ProfileList(page);
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException($"磁盘仍坏，重试后清单却有 {list.Items.Count} 行。");
+                }
+                var (title, _) = EmptyStateLabels(page);
+                if (title.Text != ProfileLoadState.FailureTitle)
+                {
+                    throw new InvalidOperationException($"磁盘仍坏，重试后标题变成「{title.Text}」，期望仍是「{ProfileLoadState.FailureTitle}」。");
+                }
+                if (!ButtonOf(page, ProfileLoadState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍坏，重试后「重试」按钮却不见了：用户没有第二次机会。");
+                }
+            });
+
+            RunAction("配置页：修好磁盘后点「重试」恢复清单（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出配置页。");
+                File.Delete(broken);
+                var expected = profiles.List().Count;
+                Click(page, ProfileLoadState.RetryLabel);
+                Application.DoEvents();
+                var list = ProfileList(page);
+                if (list.Items.Count != expected)
+                {
+                    throw new InvalidOperationException($"修好磁盘后重试，清单有 {list.Items.Count} 行，磁盘上有 {expected} 个配置。");
+                }
+                if (ButtonOf(page, ProfileLoadState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」按钮仍可见：失败态没有随成功读取退出。");
+                }
+                var (title, _) = EmptyStateLabels(page);
+                if (title.Text == ProfileLoadState.FailureTitle)
+                {
+                    throw new InvalidOperationException("恢复后空态标题仍是「读取配置失败」。");
+                }
+                var status = StatusLabel(page);
+                if (status.Text.StartsWith(ProfileLoadState.FailureTitle, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"恢复后状态行仍说失败：「{status.Text}」。");
+                }
+                _lines.Add($"     修好磁盘后重试：清单 {list.Items.Count} 行，状态行「{status.Text}」");
+            });
+
+            RunAction("配置页：恢复后选中行启用编辑与探测（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出配置页。");
+                var list = ProfileList(page);
+                if (list.Items.Count == 0) throw new InvalidOperationException("清单是空的，没有可选的行。");
+                list.Items[0].Selected = true;
+                list.Items[0].Focused = true;
+                Application.DoEvents();
+                if (!ButtonOf(page, "编辑").Enabled)
+                {
+                    throw new InvalidOperationException("恢复后选中一行，「编辑」仍不可点（失败态禁用过的入口没有回来）。");
+                }
+                if (!ButtonOf(page, "连接与写入探测").Enabled)
+                {
+                    throw new InvalidOperationException("恢复后选中一行，「连接与写入探测」仍不可点。");
+                }
+            });
+
+            RunAction("配置页：筛选状态下读取失败仍说失败不说筛到零行（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出配置页。");
+                var filter = FindFirst<TextBox>(page) ?? throw new InvalidOperationException("配置页里找不到筛选框。");
+                filter.Text = "冒烟";
+                Application.DoEvents();
+                File.WriteAllText(broken, "这不是 JSON");
+                page.RefreshData();
+                Application.DoEvents();
+                var (title, _) = EmptyStateLabels(page);
+                // 失败态优先：这一屏连「有没有配置」都还不知道，说成「没有匹配的配置」是把读不出来说成读到了空。
+                if (title.Text != ProfileLoadState.FailureTitle)
+                {
+                    throw new InvalidOperationException(
+                        $"筛选状态下读取失败，空态标题是「{title.Text}」，期望「{ProfileLoadState.FailureTitle}」（不得说成「{ListFilter.ProfileNoMatchTitle}」）。");
+                }
+                var visible = EmptyActionButtons(page).Where(button => button.Visible).ToArray();
+                if (visible.Length != 1 || visible[0].Text != ProfileLoadState.RetryLabel)
+                {
+                    throw new InvalidOperationException(
+                        "筛选状态下读取失败，行动按钮不是「重试」：可见的是 " + string.Join("、", visible.Select(b => "「" + b.Text + "」")));
+                }
+            });
+        }
+        finally
+        {
+            // 坏文件必须清掉：留着它，后面每一段读配置都会失败（冒烟器自己造的坑自己填）。
+            try
+            {
+                if (File.Exists(broken)) File.Delete(broken);
+            }
+            catch (IOException)
+            {
+                // 删不掉只影响后续段，不影响本段判定；不掩盖本段已经记下的失败。
+            }
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>配置页的配置清单（页面里唯一的 <c>ListView</c>）。</summary>
+    private static ListView ProfileList(Control root) =>
+        FindFirst<ListView>(root) ?? throw new InvalidOperationException("配置页里找不到配置清单。");
+
+    /// <summary>
+    /// 空态面板（清单区里叠在清单上的那一块）：从「重试」按钮往上找到那个直接装着空态布局的面板。
+    /// 按控件树定位而不是按文字找——空态标题的文字会随状态变化，位置不会。
+    /// </summary>
+    private static Panel EmptyPanel(Control root)
+    {
+        var retry = ButtonOf(root, ProfileLoadState.RetryLabel);
+        for (Control? node = retry; node is not null; node = node.Parent)
+        {
+            if (node is Panel panel && panel.Controls.OfType<TableLayoutPanel>().Any()) return panel;
+        }
+        throw new InvalidOperationException("配置页里找不到空态面板（「重试」按钮不在空态里）。");
+    }
+
+    /// <summary>
+    /// 空态里的标题与说明两行：按字号区分（标题档大于正文档），不按控件顺序——
+    /// 顺序是布局细节，字号是 DESIGN.md §3 的档位承诺。
+    /// </summary>
+    private static (Label Title, Label Hint) EmptyStateLabels(Control root)
+    {
+        var labels = FindAll<Label>(EmptyPanel(root)).ToArray();
+        if (labels.Length < 2)
+        {
+            throw new InvalidOperationException($"空态面板里只有 {labels.Length} 个文字标签，期望标题与说明两个。");
+        }
+        var title = labels.OrderByDescending(label => label.Font.SizeInPoints).First();
+        var hint = labels.First(label => !ReferenceEquals(label, title));
+        return (title, hint);
+    }
+
+    /// <summary>
+    /// 空态的行动按钮组（「新建配置」「清空筛选」「重试」三颗同在一个 Flow 里，同一时刻只显示一颗）：
+    /// 从「重试」按钮的父容器取，量的是「这一屏给了几个下一步」。
+    /// </summary>
+    private static Button[] EmptyActionButtons(Control root)
+    {
+        var retry = ButtonOf(root, ProfileLoadState.RetryLabel);
+        var flow = retry.Parent ?? throw new InvalidOperationException("「重试」按钮没有父容器。");
+        return flow.Controls.OfType<Button>().ToArray();
     }
 
     /// <summary>

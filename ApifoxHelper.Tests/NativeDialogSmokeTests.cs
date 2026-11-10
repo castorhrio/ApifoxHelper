@@ -368,6 +368,49 @@ public class NativeDialogSmokeTests
         Assert.True(supplements > candidates, "补充说明对话框交互没有排在候选对话框之后（主链路顺序：缺口 → 候选 → 补充说明）。");
     }
 
+    // ---------- 配置页读取失败态的真实控件交互（第一百五十一轮，简报 P0-2） ----------
+
+    /// <summary>
+    /// 配置页的「读取失败」是第一百五十轮补上的第三种状态，但证据只到源码切片与判定真值表——
+    /// 真实控件上「失败 → 点重试 → 恢复」这条闭环从未跑过。这一段钉住它真的跑：
+    /// 页面真的显示、读取入口真的调、按钮真的点、磁盘真的坏又真的修好。
+    /// </summary>
+    [Fact]
+    public void ProfileLoadFailureInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunProfileLoadFailure(");
+        // 真的显示页面（UserControl 没有 Show，挂在 Form 上）、真的走读取入口、真的点按钮。
+        Assert.Contains("host.Show();", body);
+        Assert.Contains("page.RefreshData();", body);
+        Assert.Contains("Click(page, ProfileLoadState.RetryLabel);", body);
+        // 失败是真的：往配置目录写坏 JSON，走 ProfileStore.List 的同一个 catch 分支。
+        Assert.Contains("File.WriteAllText(broken", body);
+        Assert.Contains("File.Delete(broken);", body);
+        // 断言取共享口径，不是第二份拼字（否则比的是冒烟器自己那份文字）。
+        Assert.Contains("ProfileLoadState.FailureTitle", body);
+        Assert.Contains("ProfileLoadState.FailureHint", body);
+        Assert.Contains("ProfileLoadState.RetryLabel", body);
+        // 「唯一行动按钮」要真的数一遍可见按钮，不是只判「重试可见」。
+        Assert.Contains("EmptyActionButtons(page)", body);
+        // 段数与断言：段数掉下去说明有人删了某一段（删段比删断言更难发现）。
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 5, $"配置页失败态交互只有 {count} 个 RunAction 段。");
+        // 页面与宿主窗体都要释放：不 Dispose 会漏窗口句柄，跑第二遍就换一只壳。
+        Assert.Contains("page?.Dispose();", body);
+        Assert.Contains("host?.Dispose();", body);
+    }
+
+    /// <summary>段写好了但没在 Main 里调用 = 永远不会跑，报告照样 PASS。</summary>
+    [Fact]
+    public void ProfileLoadFailureInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var formLayout = main.IndexOf("RunProfileFormLayout(services, profile);", StringComparison.Ordinal);
+        var failure = main.IndexOf("RunProfileLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(formLayout >= 0, "Main 里没有调用配置表单布局段。");
+        Assert.True(failure > formLayout, "配置页失败态交互没有排在配置表单布局之后（主链路顺序：配置表单 → 配置页失败态）。");
+    }
+
     // ---------- 字体栈的运行时命中（第一百三十九轮，简报 P0-1 的降级手段） ----------
 
     /// <summary>
@@ -483,7 +526,7 @@ public class NativeDialogSmokeTests
 
     /// <summary>冒烟器里三段真实控件交互用例的方法名（唯一有真实控件触达的三段）。</summary>
     private static readonly string[] InteractionMethods =
-        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction"];
+        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction", "RunProfileLoadFailure"];
 
     /// <summary>
     /// 交互断言清单：每行是「方法 + 段名 + 该段里一条判失败的等价物」。
@@ -590,6 +633,24 @@ public class NativeDialogSmokeTests
         { "RunSupplementsInteraction", "补充说明：勾选保留现状后保存（真实控件）", "!entry.KeepAsIs || entry.Value is not null" },
         { "RunSupplementsInteraction", "补充说明：关键词筛到零行（真实控件）", "hint.Text != expectedHint" },
         { "RunSupplementsInteraction", "补充说明：关键词筛到零行（真实控件）", "ButtonOf(dialog, \"保存本接口补充\").Enabled" },
+
+        // 配置页读取失败态（第一百五十一轮，简报 P0-2）：正常读取不显示重试 / 失败态换掉清单并给唯一行动按钮 /
+        // 仍失败时留在失败态 / 修好磁盘后重试恢复 / 恢复后编辑与探测回来 / 筛选状态下失败优先。
+        { "RunProfileLoadFailure", "配置页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "list.Items.Count != 0" },
+        { "RunProfileLoadFailure", "配置页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "title.Text != ProfileLoadState.FailureTitle" },
+        { "RunProfileLoadFailure", "配置页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "hint.Text != ProfileLoadState.FailureHint" },
+        { "RunProfileLoadFailure", "配置页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "visible.Length != 1 || visible[0].Text != ProfileLoadState.RetryLabel" },
+        { "RunProfileLoadFailure", "配置页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "ButtonOf(page, \"编辑\").Enabled || ButtonOf(page, \"连接与写入探测\").Enabled" },
+        { "RunProfileLoadFailure", "配置页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "status.Text.StartsWith(ProfileLoadState.FailureTitle + \"：\"" },
+        { "RunProfileLoadFailure", "配置页：失败态下点「重试」仍失败则留在失败态（真实控件）", "Click(page, ProfileLoadState.RetryLabel);" },
+        { "RunProfileLoadFailure", "配置页：失败态下点「重试」仍失败则留在失败态（真实控件）", "title.Text != ProfileLoadState.FailureTitle" },
+        { "RunProfileLoadFailure", "配置页：失败态下点「重试」仍失败则留在失败态（真实控件）", "!ButtonOf(page, ProfileLoadState.RetryLabel).Visible" },
+        { "RunProfileLoadFailure", "配置页：修好磁盘后点「重试」恢复清单（真实控件）", "list.Items.Count != expected" },
+        { "RunProfileLoadFailure", "配置页：修好磁盘后点「重试」恢复清单（真实控件）", "status.Text.StartsWith(ProfileLoadState.FailureTitle" },
+        { "RunProfileLoadFailure", "配置页：恢复后选中行启用编辑与探测（真实控件）", "!ButtonOf(page, \"编辑\").Enabled" },
+        { "RunProfileLoadFailure", "配置页：恢复后选中行启用编辑与探测（真实控件）", "!ButtonOf(page, \"连接与写入探测\").Enabled" },
+        { "RunProfileLoadFailure", "配置页：筛选状态下读取失败仍说失败不说筛到零行（真实控件）", "title.Text != ProfileLoadState.FailureTitle" },
+        { "RunProfileLoadFailure", "配置页：筛选状态下读取失败仍说失败不说筛到零行（真实控件）", "visible.Length != 1 || visible[0].Text != ProfileLoadState.RetryLabel" },
     };
 
     [Theory]

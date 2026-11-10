@@ -1530,3 +1530,20 @@
 - **验证状态**：Linux 主工程 `dotnet build -t:Rebuild` 0 警告 0 错误，`dotnet test ApifoxHelper.Tests` **2204 用例全部通过**；口径是真执行——`ProfileLoadState.cs` 经共享编译进测试程序集，断言比的是主工程同一份代码。
 - **本轮未做（如实挂账）**：① 简报 P1-1 要求的冒烟段「配置列表读取失败 → 重试 → 恢复」真实控件交互（`RunProfileLoadFailure`）本轮时间用尽，未写；② 本轮**未跑 wine**，故不据此宣称冒烟器在本轮跑过——61 通过 / 0 失败仍是第一百四十四轮的证据；③ Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得，第一百二十四轮挂账决策继续有效。
 - **本轮未连接或写入 Apifox，未调用任何模型服务**；不改服务层一行、不改界面控件布局与 `ProfileFormLayout` 常量、不新增对话框或产品功能（改动只在配置页失败态、配置对话框失败文案、新口径文件与测试）。
+
+## 配置页读取失败态的真实控件交互（2026-11-10 第一百五十一轮，简报 P0-2）
+
+- **接续前确认**：开局工作树干净，HEAD（668a959）为第一百五十轮（配置读取失败态补齐「重试」入口 + `ProfileLoadState` 单一落点），主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误、`dotnet test` 2204 用例全绿，基线成立；第四十七至一百五十轮逐字保留。
+- **本轮定位**：控制仓简报 P0-1（Windows 真机 19 项清单）与 P1（真机 DPI 截图）在本会话仍不可能完成（Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机，第一百二十四轮挂账决策继续有效）。按「能在 Linux 验证的验证、不可验证的如实记录」，本轮做简报 **P0-2：补齐 `RunProfileLoadFailure` 冒烟段**——这正是第一百五十轮自己挂账的下一件事（「失败 → 点重试 → 恢复」闭环只有源码切片证据，真实控件从未跑过）。
+- **已交付：`ApifoxHelper.Smoke` 新增 `RunProfileLoadFailure`（五段，全部真实 WinForms 控件）**。配置页是产品主链路第一步，第一百五十轮补的失败态此前只有 Linux 侧判定真值表与源码切片——清单留不留旧行、按钮点不点得动、点完是否真的重读、恢复后编辑与探测能否用，全都可以是坏的而 Linux 全绿、冒烟照样 PASS。五段：
+  1. **正常读取有行且不显示「重试」→ 弄坏磁盘 → 读取失败**：清单不留旧行（0 行）、空态标题/说明取 `ProfileLoadState.FailureTitle`/`FailureHint`、三颗空态按钮里**只有「重试」可见**（`EmptyActionButtons` 真的数一遍可见按钮，不是只判「重试可见」）、「编辑」与「连接与写入探测」禁用、状态行以「读取配置失败：」开头且带原因；
+  2. **磁盘仍坏时点「重试」**：留在失败态（清单仍 0 行、标题仍是失败、重试仍可点）——不能把「点了没反应」当成恢复；
+  3. **修好磁盘后点「重试」**：清单恢复（行数等于 `profiles.List().Count`）、「重试」隐藏、空态标题不再是失败、状态行不再说失败；
+  4. **恢复后选中一行**：「编辑」与「连接与写入探测」重新可用（失败态禁用过的入口真的回来了）；
+  5. **筛选状态下读取失败**：仍说「读取配置失败」，不说成「没有匹配的配置」，行动按钮仍是「重试」（失败态优先于筛到零行）。
+- **失败是真的，不是伪造**：往配置目录写一份坏 JSON（`broken.json`），`ProfileStore.List` 逐份 `ReadJson` 时抛 `JsonException`，走的就是产品里「资料目录被占用/权限不足/文件损坏」那一类读取失败的**同一个 catch 分支**——不替换服务实现、不伪造异常类型。`finally` 里删掉坏文件，冒烟器自己造的坑自己填。
+- **wine 实测（真实执行证据，非推断）**：`dotnet publish ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj -c Release -r win-x64 --self-contained -o /tmp/ah-smoke-pub` 后 `xvfb-run -a wine ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke-r151.txt` → **退出码 0，85 通过 / 0 失败**（第一百四十四轮是 61 通过；本轮新增五段**首次运行即全绿**）。报告里的证据行可核对：「正常读取 8 行 → 弄坏配置目录后：标题「读取配置失败」、状态行「读取配置失败：'0xE8' is an invalid start of a value. …」」「修好磁盘后重试：清单 8 行，状态行「」」。
+- **测试 2204 → 2221 用例**（+17）：`NativeDialogSmokeTests` 的交互断言清单新增 15 行（五段逐条登记「方法 + 段名 + 该段里一条判失败的等价物」）+ 2 条新用例（`ProfileLoadFailureInteraction_DrivesRealControls`、`ProfileLoadFailureInteraction_IsRegisteredInMain`）；`InteractionMethods` 增加 `RunProfileLoadFailure`，使「每个交互段都被清单覆盖」这条检查把新五段一并纳入。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2221 用例全部通过**；GUI 侧本轮有**真实执行证据**（wine 10.0 + Xvfb 下 85 通过 / 0 失败、退出码 0）。**Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效；真机清单第 17 项（DPI 观感）与第 18 项（真机跑冒烟）继续留 `[ ]`。
+- **本轮未做（如实挂账）**：① 本轮**未做变异验证**（「把失败态收掉即变红」的实测），时间用尽；② 简报 P1-2（`ApifoxCli.RunAsync` 后半段退出码语义与超时/严格 JSON 解析分支的补测）未做；③ 真机到位后按 19 项清单逐条走并拍 100%/200% DPI 截图。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改服务层一行、不改界面控件与布局、不新增对话框或产品功能（改动只在冒烟器、测试与本文档）。
