@@ -3731,6 +3731,14 @@ internal static class Program
     /// 六条说明行里只有两条（Dock=Top 的底部区）真的量到了容器宽度。现在改取父容器客户区减内边距、
     /// 以对话框可用宽度为上界；容器尚未排版（不可见子树）时退回对话框上界，并在证据行里标出是哪一支。
     /// </para>
+    /// <para>
+    /// <b>第一百六十二轮（简报 P0-2）</b>：证据行补上「这一档到底是多少缩放」。wine 实测发现
+    /// <c>Control.DeviceDpi</c> 在 <c>HKCU\Control Panel\Desktop\LogPixels</c> 改成 120 / 192 之后
+    /// <b>仍然恒报 96</b>，而说明行字体确实按 120 / 192 放大（文字宽度 487→608→…）——只写 DeviceDpi
+    /// 的话，三档 DPI 的证据行会长得一模一样，读的人分不清量到的是哪一档。故证据行同时给出
+    /// 「说明行字体高换算出的实际缩放」（<see cref="CaptionScalePercent"/>），并在量测失败时也把
+    /// 这一行写进报告（此前抛异常在前、证据行在后，200% 那一档的数字全丢了）。
+    /// </para>
     /// </summary>
     /// <summary>
     /// 一条说明行的可用宽度（第一百六十一轮）：取它真正被排版进去的容器的客户区减内边距，
@@ -3743,6 +3751,33 @@ internal static class Program
     /// 标出这一支量的是「按对话框宽度排版时放不放得下」。
     /// </para>
     /// </summary>
+    /// <summary>
+    /// 说明行字体实际按多少缩放渲染（第一百六十二轮，简报 P0-2）。
+    /// <para>
+    /// 为什么不能只看 <c>Control.DeviceDpi</c>：wine 实测把 <c>LogPixels</c> 改成 120 / 192 之后，
+    /// 说明行文字宽度确实按 1.25 / 2 倍放大（487→608→…），而 <c>DeviceDpi</c> 恒报 96——
+    /// 只写 DeviceDpi 的三档证据行会长得一模一样，读的人分不清量到的是哪一档。
+    /// </para>
+    /// <para>
+    /// 换算口径：<c>Font.Height</c> 是**行高**（含行距），不是字号像素高——直接拿它除以磅值会把
+    /// 行距算成 DPI（wine 实测 9pt 字体在 96 DPI 下行高 15px，直接换算会得出「125%」这种假数）。
+    /// 故先按字体自身的行距比还原字号像素高（<c>Height × EmHeight / LineSpacing</c>），
+    /// 再由 <c>字号像素高 = 磅值 × dpi / 72</c> 反解 dpi，最后除以 96 得百分比并取整到 5%。
+    /// 字体度量取不到时回 0，证据行如实显示「≈0%」而不是编一个数。
+    /// </para>
+    /// </summary>
+    private static int CaptionScalePercent()
+    {
+        var font = UiTokens.Caption.Value;
+        var family = font.FontFamily;
+        var em = family.GetEmHeight(font.Style);
+        var spacing = family.GetLineSpacing(font.Style);
+        if (em <= 0 || spacing <= 0 || font.Height <= 0 || font.SizeInPoints <= 0) return 0;
+        var emPixels = font.Height * (double)em / spacing;
+        var dpi = emPixels * 72.0 / font.SizeInPoints;
+        return (int)(Math.Round(dpi / 96.0 * 20) * 5);
+    }
+
     private static (int Available, string Source) CaptionAvailableWidth(Label label, int dialogUsable)
     {
         var parent = label.Parent;
@@ -3818,6 +3853,18 @@ internal static class Program
                     }
                 }
 
+                // 证据行带缩放档与对话框可用宽度（第一百六十二轮，简报 P0-2）：三档 DPI 各跑一次时，
+                // 这一行就是「可用宽度 / 说明行宽度 / 放得下结论」三件事的落点——没有缩放档就分不清
+                // 量到的是哪一档，也没法回答「对话框上界随 DPI 缩放后的真实值是多少」。
+                // 先写证据行再判失败：量测失败的那一档（wine 实测 200%）此前抛异常在前、证据行在后，
+                // 报告里只剩一句「放不下」，量到的数字全丢了。
+                var scale = CaptionScalePercent();
+                var verdict = tooWide.Count == 0 ? "全部放得下" : $"{tooWide.Count} 条放不下";
+                _lines.Add(
+                    $"     {screenName}：控件报 DPI {dialog.DeviceDpi}、说明行字体 {UiTokens.Caption.Value.Height}px" +
+                    $"（≈{scale}%），对话框可用宽度 {dialogUsable}px，{measured.Count} 条说明行，" +
+                    $"文字/可用宽度 = {string.Join("，", measured)}；结论：{verdict}");
+
                 if (measured.Count == 0)
                 {
                     throw new InvalidOperationException($"{screenName}里一条说明行都没量到：量测口径可能已失效。");
@@ -3827,7 +3874,6 @@ internal static class Program
                     throw new InvalidOperationException(
                         $"{screenName}：这些说明行放不下（会折行或被静默裁掉）：" + string.Join("、", tooWide));
                 }
-                _lines.Add($"     {screenName}：{measured.Count} 条说明行，文字/可用宽度 = {string.Join("，", measured)}");
             });
         }
     }

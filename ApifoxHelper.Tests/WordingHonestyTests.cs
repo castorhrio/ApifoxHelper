@@ -156,6 +156,87 @@ public class WordingHonestyTests
         Assert.Contains("docs/NOTES.md", section);
     }
 
+    /// <summary>
+    /// 降级答辩脚本存在即门（第一百六十二轮，简报 P0-1 的降级交付）。
+    /// <para>
+    /// 存在理由：第一百五十五轮把「到期日 + 降级方案」写进了挂账节，第一百五十六轮把公开声明写进了
+    /// README——但降级方案里那句「答辩按 wine 证据逐条讲」此前**只是一句承诺**：真到答辩那天，
+    /// 讲的人还得自己从一千六百多行开发笔记里翻「哪一屏的证据在哪一段」。承诺与可执行之间差的就是这份脚本。
+    /// </para>
+    /// <para>
+    /// 这条断言钉住脚本的骨架，缺一件即红：① 脚本节存在；② 到期日与「未达成（环境供给缺口）」写死
+    /// （G-D5 不许标「部分达成」）；③ 责任人写死；④ 逐屏表至少 12 行（地板：主链路 16 屏，
+    /// 少到这个数以下说明表被删残了）；⑤ 每行都给出证据出处（含「wine」或「源码」字样）——
+    /// 没有出处的行等于「我记得跑过」；⑥ 至少一行如实标「源码 + 编译证据」（防止把只有源码证据的屏
+    /// 说成 wine 量到，那正是本文件存在的理由）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DegradationScript_ExistsAndCoversEveryScreen()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var start = notes.IndexOf("## 降级答辩脚本", StringComparison.Ordinal);
+        Assert.True(start >= 0, "NOTES.md 缺少「## 降级答辩脚本」一节（真机不可得时的答辩落点）。");
+        var end = notes.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        var section = end < 0 ? notes[start..] : notes[start..end];
+
+        // ② 到期日与 G-D5 的如实标注。
+        Assert.Contains("2026-11-20", section);
+        Assert.Contains("未达成（环境供给缺口）", section);
+        // ③ 责任人。
+        Assert.Contains("负责", section);
+
+        // ④⑤ 逐屏表：每行都要有证据出处。
+        var rows = section.Split('\n')
+            .Where(line => line.StartsWith("| ", StringComparison.Ordinal))
+            .Where(line => !line.Contains("---", StringComparison.Ordinal))
+            .Where(line => !line.Contains("屏 / 主张", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(rows.Count >= 12, $"降级答辩脚本只有 {rows.Count} 行逐屏条目（地板 12 行）。");
+        var withoutEvidence = rows
+            .Where(row => !row.Contains("wine", StringComparison.Ordinal) && !row.Contains("源码", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(
+            withoutEvidence.Count == 0,
+            "这些逐屏条目没有给出证据出处（既没写 wine 也没写源码）："
+            + string.Join(" / ", withoutEvidence.Select(r => r[..Math.Min(40, r.Length)])));
+
+        // ⑥ 至少一行如实标「源码 + 编译证据」：只有源码证据的屏不许说成 wine 量到。
+        Assert.Contains("源码 + 编译证据", section);
+    }
+
+    /// <summary>
+    /// 说明行证据行必须带「这一档是多少缩放」与结论，且写在判失败之前（第一百六十二轮，简报 P0-2）。
+    /// <para>
+    /// 存在理由：wine 实测把 <c>LogPixels</c> 改成 120 / 192 之后 <c>Control.DeviceDpi</c> 恒报 96，
+    /// 只写 DeviceDpi 的三档证据行会长得一模一样；而「放不下」抛异常在前、证据行在后时，
+    /// 失败那一档的数字全丢（200% 档报告里只剩一句「放不下」）。两件事都只有源码切片能钉住。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SmokeProgram_ReportsTheScaleAndTheVerdictInTheCaptionEvidenceLine()
+    {
+        var program = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        var start = program.IndexOf("private static void RunCaptionFit", StringComparison.Ordinal);
+        Assert.True(start >= 0, "冒烟器里找不到 RunCaptionFit 段。");
+        var end = program.IndexOf("private static void RunFullJourney", start, StringComparison.Ordinal);
+        var section = end < 0 ? program[start..] : program[start..end];
+
+        // ① 证据行带缩放档（不是只有 DeviceDpi）与结论。
+        Assert.Contains("CaptionScalePercent()", section);
+        Assert.Contains("结论：", section);
+        // ② 证据行写在判失败之前：先 _lines.Add，再 throw。
+        var addAt = section.IndexOf("_lines.Add(", StringComparison.Ordinal);
+        var throwAt = section.IndexOf("throw new InvalidOperationException", StringComparison.Ordinal);
+        Assert.True(addAt >= 0 && throwAt > addAt, "证据行必须写在判失败之前，否则失败那一档的量测数字会丢。");
+        // ③ 缩放换算必须经行距比还原字号像素高（直接拿行高除以磅值会得出「125%」这种假数）。
+        var scaleStart = program.IndexOf("private static int CaptionScalePercent", StringComparison.Ordinal);
+        Assert.True(scaleStart >= 0, "找不到 CaptionScalePercent（缩放换算的单一落点）。");
+        var scaleBody = program[scaleStart..program.IndexOf("private static (int Available, string Source) CaptionAvailableWidth", scaleStart, StringComparison.Ordinal)];
+        Assert.Contains("GetLineSpacing", scaleBody);
+        Assert.Contains("GetEmHeight", scaleBody);
+    }
+
     [Fact]
     public void Checklist_SeparatesRealMachineFromWine()
     {
