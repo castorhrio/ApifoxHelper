@@ -119,6 +119,82 @@ public class NativeDialogSmokeTests
         Assert.True(result > call, "CheckDialogCoverage 没有排在结果行之前（失败不会计入退出码）。");
     }
 
+    // ---------- 页面类进冒烟清单（第一百五十五轮，控制仓简报 P1-2） ----------
+
+    /// <summary>磁盘上 <c>Desktop/Native</c> 里所有继承 <c>UserControl</c> 的页面类名（按名字排序）。</summary>
+    private static List<string> PageClassesOnDisk() =>
+        Repo.NativeSources()
+            .SelectMany(s => Regex.Matches(s.Text, @"(?m)^\s*(?:internal|public)\s+(?:sealed\s+)?class\s+(\w+Page)\s*:\s*UserControl\b")
+                .Select(m => m.Groups[1].Value))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>冒烟程序显式声明的页面清单（<c>SmokePageNames</c>，第一百五十五轮）。</summary>
+    private static List<string> PageClassesInSmoke()
+    {
+        var start = SmokeProgram.IndexOf("SmokePageNames =", StringComparison.Ordinal);
+        Assert.True(start >= 0, "ApifoxHelper.Smoke/Program.cs 里找不到 SmokePageNames 清单常量。");
+        var open = SmokeProgram.IndexOf('[', start);
+        var close = SmokeProgram.IndexOf("];", open, StringComparison.Ordinal);
+        Assert.True(open > start && close > open, "SmokePageNames 清单不是 [ … ]; 的形状，提取器失效。");
+        var names = Regex.Matches(SmokeProgram[open..close], "\"([A-Za-z]\\w*)\"")
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+        // 提取器失效时断言会静默空转：地板与去重都在这里判。
+        Assert.True(names.Count >= 2, $"SmokePageNames 只提取到 {names.Count} 个类名，提取口径可能已失效。");
+        Assert.Equal(names.Count, names.Distinct(StringComparer.Ordinal).Count());
+        return names.OrderBy(n => n, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// 页面类与对话框同册（第一百五十五轮）：漏登记 = 那个页面永远不会被构造，
+    /// 构造期崩溃（控件树、事件接线、排序记忆文件读取）在它身上照样能溜过去。
+    /// </summary>
+    [Fact]
+    public void EveryPageClass_IsDeclaredInTheSmokeList()
+    {
+        var onDisk = PageClassesOnDisk();
+        var declared = PageClassesInSmoke();
+        var missing = onDisk.Except(declared, StringComparer.Ordinal).ToList();
+        Assert.True(
+            missing.Count == 0,
+            "以下页面未在 ApifoxHelper.Smoke/Program.cs 的 SmokePageNames 里登记：" + string.Join("、", missing));
+        // 地板：页面数量掉下去说明扫描正则或目录坏了，检查会静默空转。
+        Assert.True(onDisk.Count >= 2, $"只扫到 {onDisk.Count} 个页面类，扫描口径可能已失效。");
+    }
+
+    /// <summary>反向：清单里留着已删除的页面，Linux 侧就报出具体名字，而不是等一次 Windows 编译。</summary>
+    [Fact]
+    public void SmokeList_DeclaresNoPageThatDoesNotExist()
+    {
+        var onDisk = PageClassesOnDisk();
+        var stale = PageClassesInSmoke().Except(onDisk, StringComparer.Ordinal).ToList();
+        Assert.True(stale.Count == 0, "冒烟清单里有磁盘上不存在的页面：" + string.Join("、", stale));
+    }
+
+    /// <summary>
+    /// 页面清单同样是数据，「登记了」不等于「构造了」（第一百五十五轮）。
+    /// 这一条钉住冒烟程序在运行时核对两个方向，且核对排在结果行之前（否则失败不计入退出码）。
+    /// </summary>
+    [Fact]
+    public void SmokeProgram_ChecksPageCoverageAtRuntime()
+    {
+        // 记录真实构造出来的页面类型（按控件实际类型，不按用例名）。
+        Assert.Contains("_constructedPages.Add(page.GetType().Name);", SmokeProgram);
+        var body = MethodBody(SmokeProgram, "private static void CheckPageCoverage(");
+        Assert.Contains("SmokePageNames.Where(n => !_constructedPages.Contains(n))", body);
+        Assert.Contains("_constructedPages.Where(n => !declared.Contains(n))", body);
+        Assert.Contains("_failed++;", body);
+        Assert.Contains("_lines.Add(fail);", body);
+        // 必须在 Main 里真的调用，且排在结果行之前。
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var call = main.IndexOf("CheckPageCoverage();", StringComparison.Ordinal);
+        var result = main.IndexOf("== 结果：", StringComparison.Ordinal);
+        Assert.True(call >= 0, "Main 里没有调用 CheckPageCoverage。");
+        Assert.True(result > call, "CheckPageCoverage 没有排在结果行之前（失败不会计入退出码）。");
+    }
+
     [Fact]
     public void EveryCase_BuildsHandleAndForcesLayout()
     {

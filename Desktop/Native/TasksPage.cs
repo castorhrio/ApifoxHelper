@@ -384,26 +384,26 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _sourceStatus);
         AddDetailRow(grid, _sourceNumbers);
         AddDetailRow(grid, _scanActions);
-        AddDetailRow(grid, Ui.Caption("「查看注释缺口」「规则提取候选」「模型生成候选」「导出材料」「查看注释候选」与「注释回写」在扫描完成后可用；「注释回写」需要有已接受且未回写的候选。「模型生成候选」只在配置的草稿生成方式为 OpenAI 兼容模型服务时可用，发送材料前会先确认范围；没有模型服务时可用「导出材料」交给编码助手处理，或在「查看注释缺口」里手工填写，结果都在「查看注释候选」审阅。"));
+        AddDetailRow(grid, Ui.Caption("扫描完成后可用；「注释回写」需有已接受且未回写的候选；「模型生成候选」需配置模型服务。"));
         AddDetailRow(grid, _generatedSection);
         AddDetailRow(grid, _generatedStatus);
         AddDetailRow(grid, _generatedNumbers);
         AddDetailRow(grid, _generatedActions);
         AddDetailRow(grid, _buildStatus);
-        AddDetailRow(grid, Ui.Caption("「核对传播」需要有已接受的注释候选；核对不构建项目，XML 与 Swagger 重新生成后才会更新。工具默认不构建、不 restore、不启动服务：需要刷新 XML 文档时，「执行定向构建」确认后在任务的工作区执行 dotnet build --no-restore，结果与输出尾部在「查看构建输出」查看。"));
+        AddDetailRow(grid, Ui.Caption("需有已接受的注释候选；核对不构建项目，XML 与 Swagger 重新生成后才会更新。"));
         AddDetailRow(grid, SectionCaption("响应契约"));
         AddDetailRow(grid, _contractStatus);
         AddDetailRow(grid, _contractButton);
-        AddDetailRow(grid, Ui.Caption("契约在扫描时从返回表达式与调用链静态追踪生成；「查看响应契约」在扫描完成后可用。确认后的契约在后续 Apifox 检查中替换该接口的 200 响应体；确认或拒绝后需重新检查才会生效。"));
+        AddDetailRow(grid, Ui.Caption("扫描时静态追踪生成；确认或拒绝后需重新检查才会生效。"));
         AddDetailRow(grid, _remoteSection);
         AddDetailRow(grid, _remoteStatus);
         AddDetailRow(grid, _remoteNumbers);
         AddDetailRow(grid, _remoteActions);
-        AddDetailRow(grid, Ui.Caption("检查为只读：读取分支概览与范围内接口、模型详情，与目标比较，不写入远端；在源码扫描完成后可用，离线任务先导入作为「远端」的 OpenAPI JSON。配置了 Swagger 时首次检查先加载并冻结副本，之后的检查都基于冻结副本；源码或 Swagger 更新后用「重新加载 Swagger 并检查」重新冻结再检查。「处理差异确认」与「补充说明」在检查完成后可用：前者逐项确认高风险变化、选择说明冲突与绑定模型，后者逐接口补充接口标题、说明、参数与请求体、200 响应的说明或选择「保留现状」；两者保存后都需重新检查才会生效。「同步预览」在检查完成后可用：勾选接口生成冻结计划，查看逐动作写入内容、排除原因与保留设置；「确认同步」在计划待确认且未过期时可用，逐项写入并立即回读核对，失败即停，执行结束后可「重新核对（只读）」；离线任务不能同步。"));
+        AddDetailRow(grid, Ui.Caption("只读，不写入远端；扫描完成后可用，离线任务先导入远端 JSON 且不能同步。源码或 Swagger 更新后用「重新加载 Swagger 并检查」重新冻结。"));
         AddDetailRow(grid, SectionCaption("报告与交接"));
         AddDetailRow(grid, _reportStatus);
         AddDetailRow(grid, _reportButton);
-        AddDetailRow(grid, Ui.Caption("报告基于当前任务数据生成并脱敏：分阶段结果、接口变化与未完成事项如实列出。导出 Markdown/HTML/JSON 报告与前端交接说明后自行发给前端或测试。"));
+        AddDetailRow(grid, Ui.Caption("随时可用；基于当前任务数据生成并脱敏，导出后自行发给前端或测试。"));
         return grid;
     }
 

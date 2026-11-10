@@ -247,6 +247,27 @@ public class ErrorCopyTests
     }
 
     /// <summary>
+    /// 共享编译的前置条件（第一百五十五轮，控制仓简报 P1-1）：<c>ErrorCopy.cs</c> 用到
+    /// <c>JsonException</c>，而它此前只靠主工程 <c>GlobalUsings.cs</c> 里的 global using 拿到
+    /// <c>System.Text.Json</c>——测试工程共享编译时靠的又是自己 csproj 里的
+    /// <c>&lt;Using Include="System.Text.Json" /&gt;</c>。两边各有一份隐式来源，文件本身没有记录
+    /// 「我依赖谁」：任何一边被清理，这个文件就从「可被真执行断言」变成「编译不过」或「靠别人的
+    /// 全局设置活着」。现文件自带 using，这条断言钉住它，并同时钉住共享编译的另一半前提
+    /// （不引用 ASP.NET Core）。
+    /// </summary>
+    [Fact]
+    public void ErrorCopy_ReferencesSystemTextJsonExplicitly()
+    {
+        var copy = Repo.Source("Api", "ErrorCopy.cs");
+        Assert.Contains("using System.Text.Json;", copy, StringComparison.Ordinal);
+        // 用到的类型确实来自这个命名空间（否则上面那条 using 是装饰）。
+        Assert.Contains("JsonException", copy, StringComparison.Ordinal);
+        // 共享编译的另一半前提：不引用 ASP.NET Core。
+        Assert.DoesNotContain("Microsoft.AspNetCore", copy, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpContext", copy, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 取一个 <c>catch (…)</c> 分支的方法体（按花括号深度界定，不靠缩进猜）。
     /// 找不到就判红——提取器失效时断言会静默通过，那比没有断言更糟。
     /// </summary>

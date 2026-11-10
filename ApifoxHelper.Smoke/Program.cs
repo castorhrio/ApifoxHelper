@@ -95,8 +95,30 @@ internal static class Program
         "SyncPreviewDialog",
     ];
 
+    /// <summary>
+    /// 冒烟清单里登记的页面类名（第一百五十五轮，控制仓简报 P1-2）。
+    /// <para>
+    /// 存在理由：清单此前只覆盖 <c>*Dialog</c>，而两个主页面（<c>ProjectsPage</c> / <c>TasksPage</c>）
+    /// 同样是构造期崩溃的高发地——它们的构造函数里建了整屏控件树、装了事件、读了排序记忆文件。
+    /// 页面此前只在「读取失败态」那两段里被构造，删掉那两段就再没人构造页面，而 Linux 侧全绿。
+    /// </para>
+    /// <para>
+    /// 与对话框清单同一形状：这里是**数据**，磁盘类名与它双向比对由
+    /// <c>ApifoxHelper.Tests/NativeDialogSmokeTests.cs</c> 判定；运行时再由
+    /// <see cref="CheckPageCoverage"/> 核对「声明了」与「真的构造了」是同一批。
+    /// </para>
+    /// </summary>
+    internal static readonly string[] SmokePageNames =
+    [
+        "ProjectsPage",
+        "TasksPage",
+    ];
+
     /// <summary>本次运行真的构造出来的对话框类名（<see cref="Run"/> 里按控件实际类型记录）。</summary>
     private static readonly HashSet<string> _constructedDialogs = new(StringComparer.Ordinal);
+
+    /// <summary>本次运行真的构造出来的页面类名（<see cref="Run"/> 里按控件实际类型记录）。</summary>
+    private static readonly HashSet<string> _constructedPages = new(StringComparer.Ordinal);
 
     [STAThread]
     private static int Main(string[] args)
@@ -230,6 +252,7 @@ internal static class Program
 
         Console.WriteLine("== 冒烟清单覆盖（声明 ↔ 真实构造）==");
         CheckDialogCoverage();
+        CheckPageCoverage();
 
         Console.WriteLine($"== 结果：{_passed} 通过 / {_failed} 失败 ==");
         WriteReport();
@@ -251,6 +274,34 @@ internal static class Program
         var jobs = services.GetRequiredService<JobRunner>();
         var cli = services.GetRequiredService<ApifoxCli>();
 
+        // 两个主页面（第一百五十五轮）：页面类此前只在「读取失败态」两段里被构造，
+        // 清单里没有它们——删掉那两段就再没人构造页面，而 Linux 侧全绿。
+        // 这里按产品入口同一份构造参数真的 new 一次（建句柄 + 强制布局由 Run 统一做）。
+        yield return ("ProjectsPage（项目设置）", () => new ProjectsPage(
+            profiles,
+            services.GetRequiredService<CompatService>(),
+            cli,
+            store,
+            jobs,
+            credentials,
+            new ListSortMemory(Path.Combine(store.Root, "ui", "list-sort.json"))));
+        yield return ("TasksPage（检查任务）", () => new TasksPage(
+            tasks,
+            services.GetRequiredService<SourceScanService>(),
+            jobs,
+            profiles,
+            services.GetRequiredService<DraftService>(),
+            services.GetRequiredService<CommentPlanService>(),
+            services.GetRequiredService<PropagationService>(),
+            services.GetRequiredService<BuildService>(),
+            services.GetRequiredService<ContractReviewService>(),
+            services.GetRequiredService<CheckService>(),
+            services.GetRequiredService<DecisionService>(),
+            services.GetRequiredService<SupplementService>(),
+            services.GetRequiredService<ReportExportService>(),
+            services.GetRequiredService<SyncPlanService>(),
+            services.GetRequiredService<SyncExecutor>(),
+            new ListSortMemory(Path.Combine(store.Root, "ui", "list-sort.json"))));
         yield return ("ProfileDialog（新建配置）", () => new ProfileDialog(profiles, cli, credentials, editing: null));
         yield return ("ProfileDialog（编辑配置）", () => new ProfileDialog(profiles, cli, credentials, editing: profile));
         yield return ("NewTaskDialog（新建任务）", () => new NewTaskDialog(profiles));
@@ -3885,6 +3936,39 @@ internal static class Program
         _lines.Add(fail);
     }
 
+    /// <summary>
+    /// 页面类清单覆盖的运行时核对（第一百五十五轮，控制仓简报 P1-2）。
+    /// <para>
+    /// 与 <see cref="CheckDialogCoverage"/> 同一形状、同一理由：清单是数据，但「登记了」不等于
+    /// 「构造了」。两个方向都判——声明了却没构造（用例被删、被改成 helper 包装而没真的 new），
+    /// 以及构造了却没声明（新增页面忘了登记）。判失败而不是抛异常：报告里要留下具体类名。
+    /// </para>
+    /// </summary>
+    private static void CheckPageCoverage()
+    {
+        const string name = "冒烟清单覆盖（页面类：声明 ↔ 真实构造）";
+        var declared = SmokePageNames.ToHashSet(StringComparer.Ordinal);
+        var missing = SmokePageNames.Where(n => !_constructedPages.Contains(n)).ToList();
+        var undeclared = _constructedPages.Where(n => !declared.Contains(n)).OrderBy(n => n, StringComparer.Ordinal).ToList();
+
+        if (missing.Count == 0 && undeclared.Count == 0)
+        {
+            _passed++;
+            var line = $"PASS {name}（{declared.Count} 个页面全部构造）";
+            Console.WriteLine(line);
+            _lines.Add(line);
+            return;
+        }
+
+        _failed++;
+        var detail = new List<string>();
+        if (missing.Count > 0) detail.Add("声明了却没构造：" + string.Join("、", missing));
+        if (undeclared.Count > 0) detail.Add("构造了却没声明：" + string.Join("、", undeclared));
+        var fail = $"FAIL {name}：{string.Join("；", detail)}";
+        Console.WriteLine(fail);
+        _lines.Add(fail);
+    }
+
     private static void Run(string name, Func<Control> build)
     {
         try
@@ -3893,6 +3977,8 @@ internal static class Program
             // 记下真的构造出来的对话框类型：清单声明与真实构造是两件事，
             // 只有后者能拦住构造期崩溃（见 CheckDialogCoverage）。
             if (control is Form form) _constructedDialogs.Add(form.GetType().Name);
+            // 页面类同册（第一百五十五轮）：UserControl 不是 Form，两条记录互不冒充。
+            if (control is UserControl page) _constructedPages.Add(page.GetType().Name);
             // 建句柄 + 强制一次布局：构造期事件顺序缺陷（第一百二十八轮那一类）在这里暴露。
             _ = control.Handle;
             control.CreateControl();

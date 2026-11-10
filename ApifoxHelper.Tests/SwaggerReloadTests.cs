@@ -111,7 +111,9 @@ public class SwaggerReloadTests
     public void DetailHint_ExplainsFreezeAndReload()
     {
         // 说明行讲清冻结语义与入口用途：为什么之后检查基于副本、什么时候用重新加载。
-        Assert.Contains("配置了 Swagger 时首次检查先加载并冻结副本，之后的检查都基于冻结副本；源码或 Swagger 更新后用「重新加载 Swagger 并检查」重新冻结再检查。", Page);
+        // 第一百五十五轮（具名 pass：distill）把这一段说明行蒸馏成一行门控提示：
+        // 冻结语义与重新加载入口仍是这一行必须讲清的两件事（教程与替代路径清单已删）。
+        Assert.Contains("源码或 Swagger 更新后用「重新加载 Swagger 并检查」重新冻结。", Page);
     }
 
     [Fact]

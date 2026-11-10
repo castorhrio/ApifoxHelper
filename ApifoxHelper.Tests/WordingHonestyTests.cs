@@ -110,6 +110,13 @@ public class WordingHonestyTests
         Assert.Contains("负责", section);
         // ④ 截图落点与命名约定（补上证据时照这个放，机械门才认得出）。
         Assert.Contains("docs/evidence/real-machine/", section);
+        // ⑤ 到期日与降级方案（第一百五十五轮，简报 P0-1 的降级交付）：真机不可得时不能只写
+        // 「仍未验证」——那句话诚实，但读不出「到哪天为止、到那天怎么办」，于是被原样抄了三十多轮。
+        // 到期日写死、降级方案写死（README 公开声明 + 答辩按 wine 证据讲 + G-D5 标未达成），缺一件即红。
+        Assert.Contains("2026-11-20", section);
+        Assert.Contains("降级", section);
+        Assert.Contains("README", section);
+        Assert.Contains("已知限制", section);
     }
 
     [Fact]
