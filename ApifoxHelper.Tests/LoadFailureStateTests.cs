@@ -129,6 +129,49 @@ public class LoadFailureStateTests
         Assert.DoesNotContain(".；", picker, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 原因以「，」「；」「！」「？」收尾时的反向边界（第一百五十九轮，控制仓简报 P1-3）。
+    /// <para>
+    /// 存在理由：第一百五十八轮只钉住了「半角句点」与「中文句号」两种收尾——那是 wine 实测抓到的
+    /// 那一条真实异常消息的形状。但 <see cref="LoadFailureState"/> 的句读清单是<b>一组</b>字符
+    /// （<c>。.；;，,！!？? </c>），清单里其余六个字符此前没有任何用例：把清单改窄成只剩句号，
+    /// 全部用例照样绿，而产品路径上「原因以逗号收尾」会拼出「…不可读，。」——半句接句号。
+    /// 原因来自 <c>UserException</c> 的文案（服务层逐字写给用户看的那一句），它可以是任何标点收尾。
+    /// </para>
+    /// <para>
+    /// 口径（本轮钉住，不改行为）：原因末尾的句读一律去掉，再接<b>一个</b>「。」与说明行。
+    /// 「，」「；」去掉是必须的（否则「，。」「；。」是半句接句号）；「！」「？」也一并归一为「。」——
+    /// 说明行是独立的一句操作指引，不是感叹/疑问的延续，保留原标点会让「…磁盘已满！任务目录可能被占用…」
+    /// 读成一句话。代价是丢掉原因里的感叹语气，如实记在这里：这是有意的取舍，不是漏改。
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("，")]
+    [InlineData("；")]
+    [InlineData("！")]
+    [InlineData("？")]
+    public void FailureMessage_TrimsEverySentenceEndInTheList_NotJustThePeriod(string end)
+    {
+        var reason = "目录不可读" + end;
+        var message = LoadFailureState.FailureMessage(LoadFailureState.Tasks.Title, reason, LoadFailureState.Tasks.Hint);
+
+        // ① 末尾句读被去掉、只补一个「。」：整句与「原因本来就没有标点」时逐字相同。
+        Assert.Equal("读取任务失败：目录不可读。" + LoadFailureState.Tasks.Hint, message);
+        // ② 不出现「，。」「；。」「！。」「？。」这种半句接句号，也不出现双句号。
+        Assert.DoesNotContain(end + "。", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("。。", message, StringComparison.Ordinal);
+        // ③ 原因本身仍如实保留（去掉的只是末尾那一个句读，不是把原因吞掉）。
+        Assert.Contains("目录不可读", message, StringComparison.Ordinal);
+        // ④ 说明行照旧接在后面，且只出现一次（没有把说明行拼两遍）。
+        Assert.EndsWith(LoadFailureState.Tasks.Hint, message, StringComparison.Ordinal);
+        Assert.Equal(1, Count(message, LoadFailureState.Tasks.Hint));
+
+        // ⑤ 同一口径也管「读取项目列表」那条状态行：接的是「；」而不是「。」，同样不得出现「，；」「！；」。
+        var picker = LoadFailureState.PickerFailureStatus("读取分支失败：", "网络不可达" + end, "读取分支");
+        Assert.Equal("读取分支失败：网络不可达；可点「读取分支」重试。", picker);
+        Assert.DoesNotContain(end + "；", picker, StringComparison.Ordinal);
+    }
+
     private static int Count(string text, string value)
     {
         var count = 0;

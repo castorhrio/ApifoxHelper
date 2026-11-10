@@ -681,6 +681,58 @@ public class NativeDialogSmokeTests
         Assert.True(journal > decisions, "任务日志失败态交互没有排在差异确认之后（主链路顺序：差异确认 → 任务日志）。");
     }
 
+    // ---------- 极端数据下的详情区与列表（第一百五十九轮，简报 P1-4） ----------
+
+    /// <summary>
+    /// 主链路的正常数据都是短名字、短路径、短错误消息，而真实使用里三样都会很长。
+    /// 这一段钉住它真的在真实控件上量：页面真的显示、真的按壳的入口布置分割、真的选中那一行。
+    /// </summary>
+    [Fact]
+    public void DetailBreakInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunDetailBreak(");
+        // 页面真的显示，且走壳的真实入口（OnPageShown 才按当前宽度布置分割）。
+        Assert.Contains("host.Show();", body);
+        Assert.Contains("page.OnPageShown();", body);
+        // 极端数据是真的：超长中文任务名与超长路径前缀都落进产品数据。
+        Assert.Contains("Enumerable.Repeat(\"超长任务名\", 24)", body);
+        Assert.Contains("new string('深', 60)", body);
+        // 真的选中那一行（详情区才有内容可量）。
+        Assert.Contains("item.Selected = true;", body);
+        // 判定口径：静默裁掉即失败（换行变高或省略号才算有截断提示）。
+        Assert.Contains("AssertNoSilentClipping(grid,", body);
+        // 判定口径本身在助手方法里：换行变高或省略号才算有截断提示，静默裁掉即失败。
+        var helper = MethodBody(SmokeProgram, "private static void AssertNoSilentClipping(");
+        Assert.Contains("label.AutoEllipsis", helper);
+        Assert.Contains("var wrapped = label.Height > label.Font.Height * 1.5;", helper);
+        Assert.Contains("被静默裁掉", helper);
+        // 状态行：省略号 + 高度不撑高（固定占位）。
+        Assert.Contains("if (!status.AutoEllipsis)", body);
+        // 高度按「放文字前后是否一样」判（状态行是字号高 + 上下内边距的固定占位，本来就比一个字号高）。
+        Assert.Contains("if (status.Height != heightBefore)", body);
+        // 列宽：按 DESIGN §6 的两支独立重述，不调 ListColumns.FillWidth（否则与被测代码同源、恒真）。
+        // 只认「调用」形态（带括号）：注释里提到这个名字是说明为什么不用它，不算违规。
+        Assert.Contains("if (sum != expected)", body);
+        Assert.DoesNotContain("ListColumns.FillWidth(", body);
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 5, $"极端数据交互只有 {count} 个 RunAction 段。");
+        Assert.Contains("page?.Dispose();", body);
+        Assert.Contains("host?.Dispose();", body);
+    }
+
+    /// <summary>段写好了但没在 Main 里调用 = 永远不会跑，报告照样 PASS。</summary>
+    [Fact]
+    public void DetailBreakInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var journal = main.IndexOf("RunJournalLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        var detail = main.IndexOf("RunDetailBreak(services, dataRoot);", StringComparison.Ordinal);
+        var journey = main.IndexOf("RunFullJourney(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(journal >= 0, "Main 里没有调用任务日志失败态交互。");
+        Assert.True(detail > journal, "极端数据交互没有排在任务日志失败态之后。");
+        Assert.True(journey > detail, "极端数据交互没有排在完整旅程之前（它不该影响旅程的干净数据根）。");
+    }
+
     // ---------- 字体栈的运行时命中（第一百三十九轮，简报 P0-1 的降级手段） ----------
 
     /// <summary>
@@ -796,7 +848,7 @@ public class NativeDialogSmokeTests
 
     /// <summary>冒烟器里三段真实控件交互用例的方法名（唯一有真实控件触达的三段）。</summary>
     private static readonly string[] InteractionMethods =
-        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction", "RunProfileLoadFailure", "RunTaskLoadFailure", "RunReportsLoadFailure", "RunDecisionsLoadFailure", "RunJournalLoadFailure"];
+        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction", "RunProfileLoadFailure", "RunTaskLoadFailure", "RunReportsLoadFailure", "RunDecisionsLoadFailure", "RunJournalLoadFailure", "RunDetailBreak"];
 
     /// <summary>
     /// 交互断言清单：每行是「方法 + 段名 + 该段里一条判失败的等价物」。
@@ -979,6 +1031,14 @@ public class NativeDialogSmokeTests
         { "RunJournalLoadFailure", "任务日志：解锁后点「重试」恢复清单、计数行与关键词框（真实控件）", "if (hint.Visible)" },
         { "RunJournalLoadFailure", "任务日志：恢复后仍选中最后一条、Enter/Esc 仍是「关闭」（真实控件）", "dialog.AcceptButton is not Button accept" },
         { "RunJournalLoadFailure", "任务日志：恢复后仍选中最后一条、Enter/Esc 仍是「关闭」（真实控件）", "dialog.CancelButton is not Button cancel" },
+        { "RunDetailBreak", "任务页：超长中文任务名在详情区换行而不是被静默裁掉（真实控件）", "if (name.Text != longName)" },
+        { "RunDetailBreak", "任务页：超长中文任务名在详情区换行而不是被静默裁掉（真实控件）", "AssertNoSilentClipping(grid, \"超长中文任务名\")" },
+        { "RunDetailBreak", "任务页：超长路径的范围行在详情区换行而不是被静默裁掉（真实控件）", "if (!range.Text.Contains(longPath, StringComparison.Ordinal))" },
+        { "RunDetailBreak", "任务页：超长路径的范围行在详情区换行而不是被静默裁掉（真实控件）", "AssertNoSilentClipping(grid, \"超长路径的范围行\")" },
+        { "RunDetailBreak", "任务页：超长错误消息在状态行有省略号而不是被静默裁掉（真实控件）", "if (!status.AutoEllipsis)" },
+        { "RunDetailBreak", "任务页：超长错误消息在状态行有省略号而不是被静默裁掉（真实控件）", "if (status.Height != heightBefore)" },
+        { "RunDetailBreak", "任务页：超长任务名下列宽按「标识列吸收剩余宽度」口径落地（真实控件）", "if (sum != expected)" },
+        { "RunDetailBreak", "任务页：把分隔条拖到最右后标识列吸收剩余宽度、列合计对齐可视宽度（真实控件）", "if (widths[0] != client - fixedSum)" },
     };
 
     [Theory]

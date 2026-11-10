@@ -250,6 +250,9 @@ internal static class Program
         Console.WriteLine("== 任务日志读取失败态（失败 → 重试 → 恢复，真实控件）==");
         RunJournalLoadFailure(services, dataRoot);
 
+        Console.WriteLine("== 极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）==");
+        RunDetailBreak(services, dataRoot);
+
         Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
         RunFullJourney(services, dataRoot);
 
@@ -3455,6 +3458,253 @@ internal static class Program
         finally
         {
             dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 极端数据下的详情区与列表（第一百五十九轮，控制仓简报 P1-4，具名 pass：harden）。
+    /// <para>
+    /// 存在理由：主链路的正常数据都是短名字、短路径、短错误消息——而真实使用里三样都会很长：
+    /// 任务名是用户随手写的（可以是一整句中文）、路径前缀是仓库里的真实目录（可以嵌套很深）、
+    /// 错误消息来自 <c>Exception.Message</c>（.NET 的英文句子 + 文件全路径，动辄两三百字符）。
+    /// 详情区的标签是 <c>AutoSize = true</c> 的单行标签，放进 <c>TableLayoutPanel</c> 的百分比列里——
+    /// 文字比格子宽时 WinForms 直接裁掉，既没有换行也没有省略号，用户看到的是半句话。
+    /// 这类缺陷在 Linux 侧全绿（源码切片看不出「文字比格子宽」），只有真实控件量得出来。
+    /// </para>
+    /// <para>
+    /// 判定口径：详情区里每一行文字，要么完整显示，要么**有可见的截断提示**（换行后变高、或省略号）。
+    /// 静默裁掉即判失败——「看不见的那半句」正是用户判断这次检查覆盖了什么、失败在哪的依据。
+    /// </para>
+    /// </summary>
+    private static void RunDetailBreak(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort.json"));
+
+        // 极端数据：超长中文任务名（120 字）、超长路径前缀（两段各 60 字的中文目录名）。
+        var longName = string.Concat(Enumerable.Repeat("超长任务名", 24));
+        var longPath = "Probe.Api/" + new string('深', 60) + "/" + new string('层', 60) + "/";
+        var profile = profiles.Save(new ProjectProfile
+        {
+            Name = "极端数据配置",
+            WorkspaceRoot = dataRoot,
+            ApiProject = "Probe.Api/Probe.Api.csproj",
+            AllowedSourcePaths = [longPath],
+        }, isNew: true);
+        var task = tasks.Create(new CreateTaskRequest
+        {
+            ProfileId = profile.Id,
+            Name = longName,
+            PathPrefixes = [longPath],
+        });
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("任务页：超长中文任务名在详情区换行而不是被静默裁掉（真实控件）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "极端数据冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    profiles,
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                // 走壳的真实入口：OnPageShown 才按当前宽度布置分割（详情区取设计宽 420px）。
+                // 只调 RefreshData 的话分割距离停在 WinForms 默认 50px，详情区只剩一条缝，
+                // 量出来的「换行」是窄缝里的假象，不是产品在真机上的样子。
+                page.OnPageShown();
+                Application.DoEvents();
+
+                var list = TaskList(page);
+                var item = list.Items.Cast<ListViewItem>().FirstOrDefault(i => (i.Tag as CheckTask)?.Id == task.Id)
+                    ?? throw new InvalidOperationException("任务清单里找不到刚建的超长名字任务。");
+                item.Selected = true;
+                item.Focused = true;
+                Application.DoEvents();
+
+                var grid = DetailGrid(page);
+                var name = FindAll<Label>(grid).FirstOrDefault(l => l.Text.StartsWith("超长任务名", StringComparison.Ordinal))
+                    ?? throw new InvalidOperationException("详情区里找不到任务名那一行。");
+                if (name.Text != longName)
+                {
+                    throw new InvalidOperationException($"详情区的任务名被改写了（{name.Text.Length} 字，期望 {longName.Length} 字）：详情区不得截断数据本身。");
+                }
+                AssertNoSilentClipping(grid, "超长中文任务名");
+                _lines.Add($"     任务名 {longName.Length} 字：标签 {name.Width}×{name.Height}（单行高 {name.Font.Height}），详情网格宽 {grid.ClientSize.Width}");
+            });
+
+            RunAction("任务页：超长路径的范围行在详情区换行而不是被静默裁掉（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                var grid = DetailGrid(page);
+                var range = FindAll<Label>(grid).FirstOrDefault(l => l.Text.StartsWith(TaskSummary.RangePrefix, StringComparison.Ordinal))
+                    ?? throw new InvalidOperationException("详情区里找不到范围行。");
+                if (!range.Text.Contains(longPath, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("范围行里没有完整的路径前缀：详情区把路径截短了，用户看不出这次检查覆盖哪个目录。");
+                }
+                AssertNoSilentClipping(grid, "超长路径的范围行");
+                _lines.Add($"     范围行 {range.Text.Length} 字：标签 {range.Width}×{range.Height}（单行高 {range.Font.Height}）");
+            });
+
+            RunAction("任务页：超长错误消息在状态行有省略号而不是被静默裁掉（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                var status = StatusLabel(page);
+                if (!status.AutoEllipsis)
+                {
+                    throw new InvalidOperationException("状态行没有开 AutoEllipsis：超长错误消息会被静默裁掉，用户看不到「还有下文」。");
+                }
+                // 真的把一条超长错误消息放上去（形状与产品路径一致：标题 + 原因），量它是否被裁。
+                var longMessage = LoadFailureState.FailureStatus(
+                    LoadFailureState.Tasks.Title,
+                    "The process cannot access the file '" + new string('x', 240) + ".json' because it is being used by another process.");
+                // 直接放进状态行控件：这一段量的是「状态行遇到超长文字怎么呈现」，
+                // 不是「哪条路径会产出超长文字」（后者由失败态各段覆盖）。
+                // 高度按「放文字前后是否一样」判，不按「是否等于一个字号高」判——状态行是
+                // 字号高 + 上下 Xs 内边距的固定占位（Ui.StatusLine），本来就比一个字号高，
+                // 拿字号高当尺子会把正常高度判成「被撑高」（第一百五十九轮 wine 实测：34px 被误判）。
+                var heightBefore = status.Height;
+                status.Text = longMessage;
+                Application.DoEvents();
+                var preferred = TextRenderer.MeasureText(status.Text, status.Font, new Size(10000, 10000), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                if (preferred.Width <= status.Width)
+                {
+                    throw new InvalidOperationException($"超长错误消息（{status.Text.Length} 字）没有超过状态行宽度（{status.Width}px），这一段量不到裁切。");
+                }
+                if (status.Height != heightBefore)
+                {
+                    throw new InvalidOperationException(
+                        $"状态行被文字撑高了（{heightBefore}px → {status.Height}px）：它是固定占位的一行，撑高会推动工具栏布局。");
+                }
+                _lines.Add($"     超长错误消息 {status.Text.Length} 字：文字 {preferred.Width}px、状态行 {status.Width}×{status.Height}px、AutoEllipsis={status.AutoEllipsis}");
+            });
+
+            RunAction("任务页：超长任务名下列宽按「标识列吸收剩余宽度」口径落地（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                var list = TaskList(page);
+                // 口径（DESIGN §6「列表行」/ ListColumns）：可视宽度放得下固定列合计时，标识列吸收剩余宽度、
+                // 列合计对齐可视宽度；放不下时标识列回退自身设计宽度、横向滚动条如实出现。
+                // 这里按这两支独立重述一遍（不调 ListColumns.FillWidth，否则断言与被测代码同源、恒真）。
+                var widths = list.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
+                var fixedSum = widths.Skip(1).Sum();
+                var sum = widths.Sum();
+                var client = list.ClientSize.Width;
+                var expected = client >= fixedSum + widths[0] && client - fixedSum > widths[0]
+                    ? client
+                    : Math.Max(client, fixedSum + widths[0]);
+                if (sum != expected)
+                {
+                    throw new InvalidOperationException(
+                        $"超长任务名下列宽合计 {sum} 与口径算出的 {expected} 不一致（可视宽度 {client}、固定列合计 {fixedSum}、标识列 {widths[0]}）："
+                        + "标识列没有吸收剩余宽度，列尾被横向滚动条藏住。");
+                }
+                _lines.Add($"     清单列宽合计 {sum}（可视宽度 {client}、固定列合计 {fixedSum}、标识列 {widths[0]}，{list.Columns.Count} 列）");
+            });
+
+            RunAction("任务页：把分隔条拖到最右后标识列吸收剩余宽度、列合计对齐可视宽度（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                // 上一段量的是「放不下」那一支（默认宽度下可视宽度 770 < 固定列合计 672 + 标识列 200）。
+                // 这一支要量「放得下」：把分隔条拖到最右（详情区收到最小宽 360），列表拿到剩余宽度。
+                // 用拖分隔条而不是把窗口拉宽——窗口宽度受屏幕限制（wine 下 Xvfb 1280 宽，
+                // 第一百五十九轮实测 host.Width = 1600 被钳到 1280，列表只多出 92px，量不到这一支）；
+                // 拖分隔条是用户真能做的动作，走的也是同一条 Resize → FitColumns 接线。
+                var split = FindAll<SplitContainer>(page).FirstOrDefault()
+                    ?? throw new InvalidOperationException("任务页里找不到分割面板。");
+                var list = TaskList(page);
+                var before = list.ClientSize.Width;
+                // 先把窗口拉到屏幕工作区宽度（不写死 1280：wine 的 Xvfb 与真机屏幕不同），
+                // 再把分隔条拖到最右——两步都是用户真能做的动作。
+                if (host is not null)
+                {
+                    host.Width = Screen.PrimaryScreen?.WorkingArea.Width ?? host.Width;
+                    Application.DoEvents();
+                }
+                split.SplitterDistance = Math.Max(split.Panel1MinSize, split.Width - split.Panel2MinSize - split.SplitterWidth);
+                Application.DoEvents();
+
+                var widths = list.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
+                var fixedSum = widths.Skip(1).Sum();
+                var sum = widths.Sum();
+                var client = list.ClientSize.Width;
+                if (client <= before)
+                {
+                    throw new InvalidOperationException($"拖分隔条后列表没有变宽（{before}px → {client}px），这一段量不到「放得下」那一支。");
+                }
+                if (client < fixedSum + widths[0])
+                {
+                    throw new InvalidOperationException(
+                        $"拖分隔条后可视宽度 {client} 仍放不下固定列合计 {fixedSum} + 标识列设计宽 {widths[0]}"
+                        + $"（屏幕工作区宽 {Screen.PrimaryScreen?.WorkingArea.Width}、分割面板宽 {split.Width}）：这一段量不到「放得下」那一支。");
+                }
+                if (sum != client)
+                {
+                    throw new InvalidOperationException(
+                        $"拖分隔条后列宽合计 {sum} 与可视宽度 {client} 不一致：标识列没有吸收剩余宽度，列尾留空白或出横向滚动条。");
+                }
+                if (widths[0] != client - fixedSum)
+                {
+                    throw new InvalidOperationException(
+                        $"拖分隔条后标识列 {widths[0]}px ≠ 可视宽度 {client} − 固定列合计 {fixedSum}：剩余宽度没有全部给到标识列。");
+                }
+                _lines.Add($"     拖分隔条后：可视宽度 {client}（原 {before}）、标识列 {widths[0]}、列合计 {sum}");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>任务页详情区的网格（<c>BuildDetail</c> 出厂的单列表格：行数远多于两列字段网格）。</summary>
+    private static TableLayoutPanel DetailGrid(Control root) =>
+        FindAll<TableLayoutPanel>(root).FirstOrDefault(grid => grid.ColumnCount == 1 && grid.RowCount >= 10)
+        ?? throw new InvalidOperationException("任务页里找不到详情区网格。");
+
+    /// <summary>
+    /// 详情区里每一行文字要么完整显示、要么有可见的截断提示（换行变高或省略号）。
+    /// 静默裁掉即判失败——这是「极端数据下不撑破」的可判定形式。
+    /// </summary>
+    private static void AssertNoSilentClipping(TableLayoutPanel grid, string what)
+    {
+        var clipped = new List<string>();
+        foreach (var label in FindAll<Label>(grid))
+        {
+            if (!label.Visible || label.Text.Length == 0) continue;
+            var preferred = TextRenderer.MeasureText(
+                label.Text, label.Font, new Size(10000, 10000), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            if (preferred.Width <= label.Width + 2) continue;
+            var wrapped = label.Height > label.Font.Height * 1.5;
+            if (wrapped || label.AutoEllipsis || label.Text.EndsWith("…", StringComparison.Ordinal)) continue;
+            var head = label.Text.Length <= 12 ? label.Text : label.Text[..12] + "…";
+            clipped.Add($"「{head}」（文字 {preferred.Width}px、控件 {label.Width}px、高 {label.Height}px）");
+        }
+        if (clipped.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"{what}：详情区里这些文字被静默裁掉（既没换行也没有省略号）：" + string.Join("、", clipped));
         }
     }
 

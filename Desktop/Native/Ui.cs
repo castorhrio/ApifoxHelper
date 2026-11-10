@@ -83,10 +83,21 @@ internal static class Ui
 
     public static Label StatusText(string? text = null) => Label(UiTokens.Body.Value, UiTokens.Text, text);
 
-    /// <summary>错误/提示行：固定占位（文案变化不推动布局），错误用文字色不铺底。</summary>
+    /// <summary>
+    /// 错误/提示行：固定占位（文案变化不推动布局），错误用文字色不铺底。
+    /// <para>
+    /// <c>AutoEllipsis</c>（第一百五十九轮）：这一行装的是错误原因，而原因来自 <c>Exception.Message</c>——
+    /// .NET 的英文句子带文件全路径，动辄两三百字符，比状态行宽得多。此前没有省略号，超出的部分被
+    /// <b>静默裁掉</b>：用户看到的是半句话，既不知道「还有下文」，也读不到失败在哪（wine 实测：
+    /// 240 字符的 IOException 消息在 770px 的状态行上被切在中间）。开了之后末尾出现「…」，
+    /// 且 WinForms 的 <c>Label</c> 在文字被裁时自动把全文放进悬停提示——「有下文」与「看全文」两件事
+    /// 一起成立。高度仍是固定占位：不换行、不推动布局（§6「状态行」）。
+    /// </para>
+    /// </summary>
     public static Label StatusLine() => new()
     {
         AutoSize = false,
+        AutoEllipsis = true,
         Height = UiTokens.Body.Value.Height + UiTokens.Xs * 2,
         TextAlign = ContentAlignment.MiddleLeft,
         ForeColor = UiTokens.BadText,
