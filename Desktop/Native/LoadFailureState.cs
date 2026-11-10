@@ -34,11 +34,26 @@ public static class LoadFailureState
     public static string FailureStatus(string title, string detail) => title + "：" + detail;
 
     /// <summary>
-    /// 对话框里的失败文案：标题 + 原因 + 一句可操作说明（说明里指名那颗「重试」按钮）。
-    /// 原因末尾不带句号，故这里补一个「。」再接说明，不出现「。；」这种双标点。
+    /// 原因末尾的句读（全角与半角都算）。拼说明之前先去掉，否则会出现「.。」「。。」这种双标点。
+    /// <para>
+    /// 为什么需要它：原因来自 <c>Exception.Message</c>，形状不由我们决定——.NET 的
+    /// <c>IOException</c> 是英文句子、以半角句点收尾（「… because it is being used by another process.」），
+    /// 而中文侧的原因以「。」收尾。第一百五十八轮 wine 实测的任务日志失败提示就是
+    /// 「… another process.。任务目录可能被占用…」——两个句号挨在一起，是用户能看见的排版缺陷。
+    /// </para>
     /// </summary>
-    public static string FailureMessage(string title, string detail, string hint) =>
-        FailureStatus(title, detail) + "。" + hint;
+    private static readonly char[] SentenceEnds = ['。', '.', '；', ';', '，', ',', '！', '!', '？', '?', ' '];
+
+    /// <summary>
+    /// 对话框里的失败文案：标题 + 原因 + 一句可操作说明（说明里指名那颗「重试」按钮）。
+    /// 原因末尾的句读先去掉再补一个「。」，故不出现「.。」「。。」「。；」这种双标点；
+    /// 原因整段为空时不留一个孤零零的「：。」。
+    /// </summary>
+    public static string FailureMessage(string title, string detail, string hint)
+    {
+        var reason = detail.TrimEnd(SentenceEnds);
+        return (reason.Length == 0 ? title : FailureStatus(title, reason)) + "。" + hint;
+    }
 
     /// <summary>
     /// 对话框里「读取项目列表」「读取分支」这类失败时补的一句：指名那颗按钮本身就是重试入口。
@@ -49,10 +64,10 @@ public static class LoadFailureState
 
     /// <summary>
     /// 对话框失败态的状态行：前缀 + 失败描述 + 重试指引。
-    /// 描述末尾的句号先去掉再接「；」，否则会出现「…。；可点…」这种双标点。
+    /// 描述末尾的句读（含英文异常消息的半角句点）先去掉再接「；」，否则会出现「…。；」「….；」这种双标点。
     /// </summary>
     public static string PickerFailureStatus(string prefix, string detail, string entryLabel) =>
-        prefix + detail.TrimEnd('。', ' ') + "；" + RetryHint(entryLabel);
+        prefix + detail.TrimEnd(SentenceEnds) + "；" + RetryHint(entryLabel);
 
     /// <summary>任务目录读不出来时的共同说明：原因猜测 + 指名屏上那颗「重试」。</summary>
     public const string DirectoryHint = "任务目录可能被占用或权限不足；点「重试」再读一次。";

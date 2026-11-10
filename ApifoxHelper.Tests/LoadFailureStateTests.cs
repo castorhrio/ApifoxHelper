@@ -71,6 +71,74 @@ public class LoadFailureStateTests
         Assert.DoesNotContain("；；", message);
     }
 
+    /// <summary>
+    /// 原因自带句读时不出现双标点（第一百五十八轮，wine 实测抓到的真实缺陷）。
+    /// <para>
+    /// 存在理由：<see cref="LoadFailureState.FailureMessage"/> 此前无条件补一个「。」，而原因来自
+    /// <c>Exception.Message</c>——.NET 的 <c>IOException</c> 是英文句子、以半角句点收尾。第一百五十八轮
+    /// wine 实测的任务日志失败提示原文是「读取任务日志失败：The process cannot access the file '…'
+    /// because it is being used by another process.。任务目录可能被占用或权限不足；点「重试」再读一次。」
+    /// ——两个句号挨在一起。这一句是错误路径上用户唯一能读到的解释，排版缺陷就在最显眼处。
+    /// </para>
+    /// <para>
+    /// 断言用<b>真实异常消息</b>（<see cref="IOException"/> 在 Linux 上真跑出来的那句），不是手拼的样本：
+    /// 手拼的样本只能证明「我想到的那种形状被处理了」，真异常消息才能证明「产品路径上那种形状被处理了」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void FailureMessage_TrimsTheReasonSentenceEnd_BeforeAppendingTheHint()
+    {
+        // ① 真实英文异常消息（半角句点收尾）：不出现「.。」。
+        string english;
+        try
+        {
+            using var hold = new FileStream(
+                Path.Combine(Path.GetTempPath(), "ah-load-failure-" + Guid.NewGuid().ToString("N") + ".jsonl"),
+                FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+            using var second = new FileStream(hold.Name, FileMode.Open, FileAccess.Read, FileShare.None);
+            throw new InvalidOperationException("独占打开没有失败，本用例的前提不成立。");
+        }
+        catch (IOException ex)
+        {
+            english = ex.Message;
+        }
+        Assert.EndsWith(".", english, StringComparison.Ordinal);
+        var message = LoadFailureState.FailureMessage(LoadFailureState.Journal.Title, english, LoadFailureState.Journal.Hint);
+        Assert.DoesNotContain(".。", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("。。", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("。；", message, StringComparison.Ordinal);
+        // 原因本身仍如实保留（去掉的只是末尾那一个句读，不是把原因吞掉）。
+        Assert.Contains(english.TrimEnd('.'), message, StringComparison.Ordinal);
+        // 说明行照旧接在后面，且只补了一个「。」。
+        Assert.EndsWith(LoadFailureState.Journal.Hint, message, StringComparison.Ordinal);
+        Assert.Equal(1, Count(message, "。" + LoadFailureState.Journal.Hint));
+
+        // ② 中文原因自带「。」：不出现「。。」。
+        var chinese = LoadFailureState.FailureMessage(LoadFailureState.Tasks.Title, "目录不可读。", LoadFailureState.Tasks.Hint);
+        Assert.Equal("读取任务失败：目录不可读。" + LoadFailureState.Tasks.Hint, chinese);
+        Assert.DoesNotContain("。。", chinese, StringComparison.Ordinal);
+
+        // ③ 原因整段为空：不留一个孤零零的「：。」。
+        var empty = LoadFailureState.FailureMessage(LoadFailureState.Reports.Title, "  ", LoadFailureState.Reports.Hint);
+        Assert.Equal("报告生成失败。" + LoadFailureState.Reports.Hint, empty);
+        Assert.DoesNotContain("：。", empty, StringComparison.Ordinal);
+
+        // ④ 同一口径也管「读取项目列表」那条状态行（半角句点收尾时不出「.；」）。
+        var picker = LoadFailureState.PickerFailureStatus("读取分支失败：", "network unreachable.", "读取分支");
+        Assert.Equal("读取分支失败：network unreachable；可点「读取分支」重试。", picker);
+        Assert.DoesNotContain(".；", picker, StringComparison.Ordinal);
+    }
+
+    private static int Count(string text, string value)
+    {
+        var count = 0;
+        for (var i = text.IndexOf(value, StringComparison.Ordinal); i >= 0; i = text.IndexOf(value, i + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+        return count;
+    }
+
     [Fact]
     public void PickerFailureStatus_NamesTheEntryAndAvoidsDoublePunctuation()
     {

@@ -247,6 +247,9 @@ internal static class Program
         Console.WriteLine("== 差异确认读取失败态（两种失败 → 重试 → 恢复，真实控件）==");
         RunDecisionsLoadFailure(services, dataRoot);
 
+        Console.WriteLine("== 任务日志读取失败态（失败 → 重试 → 恢复，真实控件）==");
+        RunJournalLoadFailure(services, dataRoot);
+
         Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
         RunFullJourney(services, dataRoot);
 
@@ -3076,6 +3079,226 @@ internal static class Program
             dialog?.Dispose();
         }
     }
+
+    /// <summary>
+    /// 任务日志对话框读取失败态的真实控件交互（第一百五十八轮，控制仓简报 P1-4 的可达部分）。
+    /// <para>
+    /// 存在理由：第一百五十七轮给任务日志补了「读取失败 → 唯一行动按钮『重试』」，但证据只有
+    /// 源码切片与 Linux 侧文案断言——清单留不留旧行、按钮点不点得动、点完是否真的重读、
+    /// 恢复后计数行与关键词框是否回来，全都可以是坏的而 Linux 全绿、冒烟照样 PASS。
+    /// 本段用真实控件走完整闭环：正常读取 → 打开时键盘归属 → 读不出来 → 重试仍读不出来 → 解锁后重试恢复。
+    /// </para>
+    /// <para>
+    /// 失败是真的，不是伪造：用 <c>FileShare.None</c> 独占打开 <c>journal.jsonl</c>，产品里
+    /// <c>FileStore.ReadJsonLines</c> 的 <c>File.ReadLines</c> 会抛 <c>IOException</c>，走的就是
+    /// 「文件被占用 / 权限不足」那一类读取失败的<b>同一个 catch 分支</b>——不替换服务实现、不伪造异常类型。
+    /// 注意不能靠写坏 JSON 造失败：<c>ReadJsonLines</c> 逐行吞 <c>JsonException</c>（进程中断会留半行），
+    /// 写坏一行只会得到「没有记录」的空态，那是另一条分支。
+    /// </para>
+    /// <para>
+    /// 排序状态（简报 P1-4 的另一半）在真实路径上<b>不可达</b>：排序只能在有行时点列头设置，
+    /// 而重读只发生在打开与「重试」两处、「重试」只在失败态可见——「先排序、再失败、再重试」这条序列
+    /// 在界面上走不出来。故本段不伪造该序列，改由 <c>JournalLoadFailureTests</c> 在源码切片上钉住
+    /// 「失败态与成功读取都不重置排序状态、表头标记按建列快照重算不叠加」这条不变量。
+    /// </para>
+    /// </summary>
+    private static void RunJournalLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "任务日志失败态冒烟" });
+        var journalPath = tasks.FilePath(task.Id, TaskFiles.Journal);
+        // 日志由产品自己的写入点造（JournalLines 单一口径）：注释回写的意图与结果各一行，不手拼 JSON。
+        FileStore.AppendJsonLine(journalPath,
+            JournalLines.CommentApplyIntentLine(DateTimeOffset.Now, "p1", "Orders/OrdersController.cs", "h1", "h2"));
+        FileStore.AppendJsonLine(journalPath,
+            JournalLines.CommentApplyResultLine(DateTimeOffset.Now, "p1", "Orders/OrdersController.cs", "applied", null));
+
+        JournalDialog? dialog = null;
+        FileStream? hold = null;
+        try
+        {
+            RunAction("任务日志：正常读取有行、不显示「重试」、关键词框可用（真实控件）", () =>
+            {
+                dialog = new JournalDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var list = JournalList(dialog);
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"日志里有两行记录，清单却有 {list.Items.Count} 行。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("正常读取时「重试」可见：失败态没有随成功读取退出。");
+                }
+                if (!KeywordBox(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("正常读取时关键词框不可用：有记录可筛。");
+                }
+                _lines.Add($"     正常读取：清单 {list.Items.Count} 行，关键词框可用");
+            });
+
+            RunAction("任务日志：打开时键盘落在清单上（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出任务日志对话框。");
+                // 第八十八轮纪律：只读清单打开即选中一行，键盘也要在清单上（否则方向键动的是别的控件、
+                // Ctrl+C 复制不到那一行）。落点由 OnShown 的 Ui.KeepKeyboardOnQueue 交，本段读真实焦点。
+                var list = JournalList(dialog);
+                if (!list.Focused)
+                {
+                    throw new InvalidOperationException(
+                        "对话框打开后键盘不在清单上：方向键与 Ctrl+C 都落不到那一行（ActiveControl="
+                        + (dialog.ActiveControl?.GetType().Name ?? "null") + "）。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != list.Items.Count - 1)
+                {
+                    throw new InvalidOperationException(
+                        "打开后选中的不是最后一条：选中 " + string.Join("、", list.SelectedIndices.Cast<int>())
+                        + $"，共 {list.Items.Count} 行。");
+                }
+                _lines.Add($"     打开时键盘在清单上，选中第 {list.SelectedIndices[0] + 1} 行（共 {list.Items.Count} 行）");
+            });
+
+            RunAction("任务日志：日志读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出任务日志对话框。");
+                dialog.Dispose();
+                dialog = null;
+                // 独占打开：产品读日志时 File.ReadLines 抛 IOException，走真实失败分支。
+                hold = new FileStream(journalPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                dialog = new JournalDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("日志读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                if (!hint.Text.StartsWith(LoadFailureState.Journal.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Journal.Title}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名「{LoadFailureState.RetryLabel}」：「{hint.Text}」。");
+                }
+                // 第一百五十八轮：原因来自 Exception.Message，.NET 的 IOException 是英文句子、以半角句点收尾，
+                // 拼说明时若无条件补「。」就会出现「.。」——这一句是错误路径上用户唯一能读到的解释，
+                // 双标点就在最显眼处。这里判的是真实控件上渲染出来的那段文字，不是口径函数的返回值。
+                foreach (var doubled in new[] { ".。", "。。", "。；", "；；" })
+                {
+                    if (hint.Text.Contains(doubled, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException($"失败提示里出现双标点「{doubled}」：「{hint.Text}」。");
+                    }
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                var list = JournalList(dialog);
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException($"日志读不出来，清单却留着 {list.Items.Count} 行旧记录。");
+                }
+                if (KeywordBox(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("失败态下关键词框仍可用：整份日志都读不出来，敲字筛不到任何东西。");
+                }
+                _lines.Add($"     日志读不出来：提示「{hint.Text}」");
+            });
+
+            RunAction("任务日志：仍读不出来时点「重试」留在失败态（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出任务日志对话框。");
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Text.StartsWith(LoadFailureState.Journal.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"仍读不出来，重试后提示变成「{hint.Text}」，期望仍是失败态。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("仍读不出来，重试后「重试」按钮却不见了：用户没有第二次机会。");
+                }
+            });
+
+            RunAction("任务日志：解锁后点「重试」恢复清单、计数行与关键词框（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出任务日志对话框。");
+                hold?.Dispose();
+                hold = null;
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var list = JournalList(dialog);
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"解锁后重试，清单有 {list.Items.Count} 行，日志里有 2 行。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」按钮仍可见：失败态没有随成功读取退出。");
+                }
+                if (!KeywordBox(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("恢复后关键词框仍不可用：有记录可筛。");
+                }
+                var counts = JournalCountsLabel(dialog);
+                if (counts.Text != JournalEntries.CountsLine(2))
+                {
+                    throw new InvalidOperationException(
+                        $"恢复后计数行是「{counts.Text}」，期望「{JournalEntries.CountsLine(2)}」。");
+                }
+                var hint = HintLabel(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"恢复后提示区仍可见：「{hint.Text}」。");
+                }
+                _lines.Add($"     解锁后重试：清单 {list.Items.Count} 行，计数行「{counts.Text}」");
+            });
+
+            RunAction("任务日志：恢复后仍选中最后一条、Enter/Esc 仍是「关闭」（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出任务日志对话框。");
+                var list = JournalList(dialog);
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != list.Items.Count - 1)
+                {
+                    throw new InvalidOperationException(
+                        "恢复后选中的不是最后一条：选中 " + string.Join("、", list.SelectedIndices.Cast<int>())
+                        + $"，共 {list.Items.Count} 行。");
+                }
+                // 新增一颗「重试」不改对话框的 Enter/Esc 语义（§6「对话框 Enter=确认、Esc=取消」）。
+                if (dialog.AcceptButton is not Button accept || accept.Text != "关闭")
+                {
+                    throw new InvalidOperationException("恢复后 Enter 的落点不是「关闭」：新增按钮改动了对话框语义。");
+                }
+                if (dialog.CancelButton is not Button cancel || cancel.Text != "关闭")
+                {
+                    throw new InvalidOperationException("恢复后 Esc 的落点不是「关闭」。");
+                }
+                _lines.Add($"     恢复后选中第 {list.SelectedIndices[0] + 1} 行，Enter/Esc 仍是「关闭」");
+            });
+        }
+        finally
+        {
+            hold?.Dispose();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>任务日志对话框里的记录清单（对话框里唯一的 <c>ListView</c>）。</summary>
+    private static ListView JournalList(Control root) =>
+        FindFirst<ListView>(root) ?? throw new InvalidOperationException("任务日志对话框里找不到记录清单。");
+
+    /// <summary>任务日志对话框的计数行（铺满、右对齐的那一格）。</summary>
+    private static Label JournalCountsLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Dock == DockStyle.Fill && l.TextAlign == ContentAlignment.MiddleRight)
+        ?? throw new InvalidOperationException("任务日志对话框里找不到计数行。界面文案：" + LabelTexts(root));
 
     /// <summary>
     /// 差异确认对话框读取失败态的真实控件交互（第一百五十三轮，控制仓简报 P1-3）。

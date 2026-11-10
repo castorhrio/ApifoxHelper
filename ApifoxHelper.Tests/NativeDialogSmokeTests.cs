@@ -637,6 +637,50 @@ public class NativeDialogSmokeTests
         Assert.True(decisions > reports, "差异确认失败态交互没有排在报告之后（主链路顺序：报告 → 差异确认）。");
     }
 
+    // ---------- 任务日志读取失败态的真实控件交互（第一百五十八轮，简报 P1-4 的可达部分） ----------
+
+    /// <summary>
+    /// 第一百五十七轮给任务日志补了「读取失败 → 唯一行动按钮『重试』」，证据只到源码切片与文案断言。
+    /// 这一段钉住它真的跑：对话框真的显示、读取入口真的调、按钮真的点、磁盘真的读不出来又真的恢复。
+    /// </summary>
+    [Fact]
+    public void JournalLoadFailureInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunJournalLoadFailure(");
+        Assert.Contains("dialog.Show();", body);
+        Assert.Contains("Click(dialog, LoadFailureState.RetryLabel);", body);
+        // 失败是真的：独占打开 journal.jsonl，产品读日志时抛 IOException，走同一个 catch 分支。
+        // 不能靠写坏 JSON 造失败——ReadJsonLines 逐行吞 JsonException，那是「没有记录」的空态。
+        Assert.Contains("FileShare.None", body);
+        Assert.DoesNotContain("File.WriteAllText(journalPath", body);
+        // 断言取共享口径。
+        Assert.Contains("LoadFailureState.Journal.Title", body);
+        Assert.Contains("LoadFailureState.RetryLabel", body);
+        Assert.Contains("JournalEntries.CountsLine(2)", body);
+        // 打开时键盘归属（第八十八轮纪律）在真实控件上判一次。
+        Assert.Contains("if (!list.Focused)", body);
+        // 失败提示在真实控件上不得出现双标点（第一百五十八轮：英文异常消息以半角句点收尾）。
+        Assert.Contains("失败提示里出现双标点", body);
+        // 新增按钮不改 Enter/Esc 语义。
+        Assert.Contains("dialog.AcceptButton", body);
+        Assert.Contains("dialog.CancelButton", body);
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 6, $"任务日志失败态交互只有 {count} 个 RunAction 段。");
+        Assert.Contains("dialog?.Dispose();", body);
+        Assert.Contains("hold?.Dispose();", body);
+    }
+
+    /// <summary>段写好了但没在 Main 里调用 = 永远不会跑，报告照样 PASS。</summary>
+    [Fact]
+    public void JournalLoadFailureInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var decisions = main.IndexOf("RunDecisionsLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        var journal = main.IndexOf("RunJournalLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(decisions >= 0, "Main 里没有调用差异确认失败态交互。");
+        Assert.True(journal > decisions, "任务日志失败态交互没有排在差异确认之后（主链路顺序：差异确认 → 任务日志）。");
+    }
+
     // ---------- 字体栈的运行时命中（第一百三十九轮，简报 P0-1 的降级手段） ----------
 
     /// <summary>
@@ -752,7 +796,7 @@ public class NativeDialogSmokeTests
 
     /// <summary>冒烟器里三段真实控件交互用例的方法名（唯一有真实控件触达的三段）。</summary>
     private static readonly string[] InteractionMethods =
-        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction", "RunProfileLoadFailure", "RunTaskLoadFailure", "RunReportsLoadFailure", "RunDecisionsLoadFailure"];
+        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction", "RunProfileLoadFailure", "RunTaskLoadFailure", "RunReportsLoadFailure", "RunDecisionsLoadFailure", "RunJournalLoadFailure"];
 
     /// <summary>
     /// 交互断言清单：每行是「方法 + 段名 + 该段里一条判失败的等价物」。
@@ -919,6 +963,22 @@ public class NativeDialogSmokeTests
         { "RunDecisionsLoadFailure", "差异确认：已保存决策读不出来时指名「重试」且说明保存停用（真实控件）", "hint.Text.Contains(LoadFailureState.Decisions.SavedHint" },
         { "RunDecisionsLoadFailure", "差异确认：修好已保存决策后点「重试」退出失败态（真实控件）", "hint.Text.StartsWith(LoadFailureState.Decisions.SavedTitle" },
         { "RunDecisionsLoadFailure", "差异确认：尚未检查时不显示「重试」（重试解决不了它，真实控件）", "ButtonOf(dialog, LoadFailureState.RetryLabel).Visible" },
+
+        // 任务日志读取失败态（第一百五十八轮）：失败 → 重试仍失败 → 解锁后恢复。
+        { "RunJournalLoadFailure", "任务日志：正常读取有行、不显示「重试」、关键词框可用（真实控件）", "list.Items.Count != 2" },
+        { "RunJournalLoadFailure", "任务日志：正常读取有行、不显示「重试」、关键词框可用（真实控件）", "if (!KeywordBox(dialog).Enabled)" },
+        { "RunJournalLoadFailure", "任务日志：打开时键盘落在清单上（真实控件）", "if (!list.Focused)" },
+        { "RunJournalLoadFailure", "任务日志：打开时键盘落在清单上（真实控件）", "list.SelectedIndices[0] != list.Items.Count - 1" },
+        { "RunJournalLoadFailure", "任务日志：日志读不出来时换成失败态并给出「重试」（真实控件）", "FileShare.None" },
+        { "RunJournalLoadFailure", "任务日志：日志读不出来时换成失败态并给出「重试」（真实控件）", "LoadFailureState.Journal.Title + \"：\"" },
+        { "RunJournalLoadFailure", "任务日志：日志读不出来时换成失败态并给出「重试」（真实控件）", "失败提示里出现双标点" },
+        { "RunJournalLoadFailure", "任务日志：日志读不出来时换成失败态并给出「重试」（真实控件）", "if (list.Items.Count != 0)" },
+        { "RunJournalLoadFailure", "任务日志：日志读不出来时换成失败态并给出「重试」（真实控件）", "if (KeywordBox(dialog).Enabled)" },
+        { "RunJournalLoadFailure", "任务日志：仍读不出来时点「重试」留在失败态（真实控件）", "重试后提示变成" },
+        { "RunJournalLoadFailure", "任务日志：解锁后点「重试」恢复清单、计数行与关键词框（真实控件）", "counts.Text != JournalEntries.CountsLine(2)" },
+        { "RunJournalLoadFailure", "任务日志：解锁后点「重试」恢复清单、计数行与关键词框（真实控件）", "if (hint.Visible)" },
+        { "RunJournalLoadFailure", "任务日志：恢复后仍选中最后一条、Enter/Esc 仍是「关闭」（真实控件）", "dialog.AcceptButton is not Button accept" },
+        { "RunJournalLoadFailure", "任务日志：恢复后仍选中最后一条、Enter/Esc 仍是「关闭」（真实控件）", "dialog.CancelButton is not Button cancel" },
     };
 
     [Theory]
