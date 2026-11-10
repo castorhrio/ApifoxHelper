@@ -141,7 +141,7 @@ public class JournalFilterTests
         // 计数行只在 OnLoad 里按整份日志算一次：放进重建里就等于随关键词变化（「记录 N 条」被抹掉）。
         // （`_counts.Text = ""` 另有一处在「整份数据不可得」的提示出口里，那是收掉数字、不是算数字。）
         Assert.Single(Regex.Matches(source, @"(?m)^\s*_counts\.Text = JournalEntries\.CountsLine\(").Cast<Match>());
-        var onLoad = MethodSlice(source, "protected override void OnLoad");
+        var onLoad = MethodSlice(source, "private void LoadJournal(");
         Assert.Contains("_counts.Text = JournalEntries.CountsLine(lines.Count);", onLoad, StringComparison.Ordinal);
         var populate = MethodSlice(source, "private void PopulateList");
         Assert.DoesNotContain("_counts.Text", populate, StringComparison.Ordinal);

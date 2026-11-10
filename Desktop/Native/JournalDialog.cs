@@ -8,8 +8,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// <summary>
 /// 任务日志（只读）：按时间顺序展示任务目录 journal.jsonl 的逐条记录——注释回写与同步执行的
 /// 每一步（意图先落盘、结果随后追加），数据由 <c>CommentPlanService</c> 与 <c>SyncExecutor</c> 写入。
-/// 本对话框无任何写入动作，也不重发、不重试：它只回答「做到哪一步了」。
-/// 状态表：读取失败=内联错误与下一步；没有记录=空态说明；正常=说明行 + 计数行 + 未结束动作提示 + 记录清单
+/// 本对话框无任何写入动作，也不重发、不回滚：它只回答「做到哪一步了」。
+/// 读取失败时给一颗「重试」——那颗按钮只重新读一次磁盘上的日志，不重发任何动作（第一百五十七轮）。
+/// 状态表：读取失败=内联错误 + 唯一行动按钮「重试」；没有记录=空态说明；正常=说明行 + 计数行 + 未结束动作提示 + 记录清单
 /// （打开即选中最后一条——最后一行就是做到的那一步；只有意图、没有结果的那几行在摘要格标「结果未知」）；
 /// 筛到零行=关键词框留着并说明下一步，计数行与未结束动作那句话仍是整份日志的数字与名字
 /// （见 <see cref="PopulateList"/>）。
@@ -28,6 +29,13 @@ internal sealed class JournalDialog : Form
 
     private readonly TaskStore _tasks;
     private readonly string _taskId;
+
+    /// <summary>
+    /// 读取失败态的唯一行动按钮（<see cref="LoadFailureState"/> 口径）：动作回到 <see cref="LoadJournal"/>
+    /// 同一个入口，不复制读取逻辑。只在读取失败时出现——「没有记录」与「筛到零行」不是失败，
+    /// 重试解决不了它们（同一时刻只给一个下一步）。
+    /// </summary>
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
 
     private readonly Label _counts = Ui.Mono();
     private readonly Label _unfinished = Ui.Caption();
@@ -110,9 +118,13 @@ internal sealed class JournalDialog : Form
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
         CancelButton = closeButton;
+        _retry.Click += (_, _) => LoadJournal();
+        _retry.Visible = false;
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, 0, UiTokens.Md) };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
+        buttonRow.Controls.Add(_retry);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次未结束提示、筛选行、标题行，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -125,7 +137,17 @@ internal sealed class JournalDialog : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadJournal();
+    }
 
+    /// <summary>
+    /// 读一次磁盘上的日志并铺开界面（打开时与失败后点「重试」走同一个入口，不复制读取逻辑）。
+    /// 失败态按 <see cref="LoadFailureState"/> 口径：一句可操作文案（指名「重试」）+ 唯一行动按钮。
+    /// 此前这里写的是「请关闭后重新执行一次再试」——把「再读一次」交给用户手动重开窗口，
+    /// 屏上没有任何可点的入口，与 DESIGN.md §7「禁用不得移除下一步」相违（第一百五十七轮）。
+    /// </summary>
+    private void LoadJournal()
+    {
         List<JsonNode> lines;
         try
         {
@@ -133,11 +155,14 @@ internal sealed class JournalDialog : Form
         }
         catch (Exception ex)
         {
-            ShowHint("读取任务日志失败：" + Redactor.Redact(ex.Message) + "。请关闭后重新执行一次再试。", UiTokens.BadText);
+            ShowLoadFailure(Redactor.Redact(ex.Message));
             return;
         }
         if (lines.Count == 0)
         {
+            // 没有记录不是失败：重试解决不了它，这一屏的下一步是去执行一次（那句话由空态给出）。
+            _lines = [];
+            _list.Items.Clear();
             ShowHint(JournalEntries.EmptyText, UiTokens.Muted);
             return;
         }
@@ -146,6 +171,8 @@ internal sealed class JournalDialog : Form
         // 有记录可筛：关键词框可用（口径见 ListFilter.KeywordEnabled）。
         _keyword.Enabled = ListFilter.KeywordEnabled(true);
         _hint.Visible = false;
+        // 读成功即退出失败态：否则重试成功后仍停在失败态（清单有行、屏上却还说读取失败）。
+        _retry.Visible = false;
         _counts.Text = JournalEntries.CountsLine(lines.Count);
         var unfinished = JournalEntries.UnfinishedActions(lines);
         var unfinishedText = JournalEntries.UnfinishedCaption(unfinished);
@@ -264,11 +291,32 @@ internal sealed class JournalDialog : Form
         }
     }
 
-    private void ShowHint(string message, Color color)
+    /// <summary>
+    /// 读取失败态：清单不留旧行（这一屏刚证明「磁盘上的日志读不出来」，继续显示旧行等于把不可信的内容
+    /// 当成现状）、未结束动作那句话一起收掉（它讲的是旧数据），提示区换成失败文案并给出「重试」。
+    /// 原因仍如实给出（已脱敏），下一步由文案指名那颗按钮。
+    /// </summary>
+    private void ShowLoadFailure(string detail)
+    {
+        _lines = [];
+        _list.Items.Clear();
+        _unfinishedIds = new HashSet<string>(StringComparer.Ordinal);
+        ShowHint(
+            LoadFailureState.FailureMessage(LoadFailureState.Journal.Title, detail, LoadFailureState.Journal.Hint),
+            UiTokens.BadText,
+            canRetry: true);
+    }
+
+    /// <summary>
+    /// 提示区（空态 / 筛到零行 / 读取失败共用）。<paramref name="canRetry"/> 只在读取失败时为真：
+    /// 另外两种状态重试解决不了，显示「重试」等于给一个点了没用的按钮（同一时刻只给一个下一步）。
+    /// </summary>
+    private void ShowHint(string message, Color color, bool canRetry = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
         _hint.Visible = true;
+        _retry.Visible = LoadFailureState.RetryVisible(canRetry);
         _list.Visible = false;
         // 整份数据不可得：关键词框一起停（§7「禁用 = 控件禁用 + 一句话说明缺什么」——
         // 缺什么与下一步由上面那句话给出，框里敲字筛不到任何东西）。口径见 ListFilter.KeywordEnabled。

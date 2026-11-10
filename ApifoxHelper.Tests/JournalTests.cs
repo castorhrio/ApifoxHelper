@@ -292,7 +292,7 @@ public class JournalTests
         var selected = body.IndexOf("Ui.SelectItem(target ?? _list.Items[^1]);", StringComparison.Ordinal);
         Assert.True(filled >= 0 && selected > filled, "选中要排在清单填充之后。");
         // 空清单与读取失败两支都在 OnLoad 里返回，不索引不存在的最后一行；重建里另有一道行数守卫。
-        var onLoad = MethodSlice(source, "protected override void OnLoad");
+        var onLoad = MethodSlice(source, "private void LoadJournal(");
         var emptyBranch = onLoad.IndexOf("if (lines.Count == 0)", StringComparison.Ordinal);
         var populate = onLoad.IndexOf("PopulateList();", StringComparison.Ordinal);
         Assert.True(emptyBranch >= 0 && populate > emptyBranch, "空清单分支要排在重建之前。");

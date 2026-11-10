@@ -105,10 +105,10 @@ public class ErrorCopyTests
     }
 
     /// <summary>
-    /// JSON 格式无效只回结构信息（第几行第几列），**不回消息体**（第一百五十四轮）。
+    /// JSON 格式无效只回结构信息（第几行第几个字节），**不回消息体**（第一百五十四轮）。
     /// <para>
     /// 这条是「敏感片段不进错误行」的真执行断言：往 <c>JsonException.Message</c> 里注入一段假令牌
-    /// 与用户原文，输出里必须只剩行列号。变异注入（把 <c>InvalidJson</c> 改回拼 <c>ex.Message</c>）
+    /// 与用户原文，输出里必须只剩位置信息。变异注入（把 <c>InvalidJson</c> 改回拼 <c>ex.Message</c>）
     /// 时这条会红。
     /// </para>
     /// </summary>
@@ -124,8 +124,8 @@ public class ErrorCopyTests
 
         var message = ErrorCopy.InvalidJson(ex);
 
-        // 结构信息在，且是 1 基（用户数行从 1 开始）。
-        Assert.Equal("JSON 格式无效（第 3 行，第 12 列）。", message);
+        // 结构信息在，且是 1 基（用户数行从 1 开始）；位置按 UTF-8 字节计（第一百五十七轮）。
+        Assert.Equal("JSON 格式无效（第 3 行，第 12 个字节处）。", message);
         // 消息体不在：假令牌、字段名、英文原文一律不出现。
         Assert.DoesNotContain("sk-abcdefghijklmnopqrstuvwxyz", message, StringComparison.Ordinal);
         Assert.DoesNotContain("api_key", message, StringComparison.Ordinal);
@@ -135,7 +135,7 @@ public class ErrorCopyTests
 
     /// <summary>
     /// 解析器真抛的那一次同样只回结构信息（不是只有手工构造的异常才这样）：
-    /// 用 <c>JsonDocument.Parse</c> 造一个真 <c>JsonException</c>，输出里只有行列号。
+    /// 用 <c>JsonDocument.Parse</c> 造一个真 <c>JsonException</c>，输出里只有位置信息。
     /// </summary>
     [Fact]
     public void InvalidJson_FromTheRealParser_AlsoReportsStructureOnly()
@@ -153,9 +153,83 @@ public class ErrorCopyTests
         Assert.NotNull(caught);
         var message = ErrorCopy.InvalidJson(caught!);
         Assert.StartsWith("JSON 格式无效（第 ", message, StringComparison.Ordinal);
-        Assert.EndsWith(" 列）。", message, StringComparison.Ordinal);
+        Assert.EndsWith(" 个字节处）。", message, StringComparison.Ordinal);
         Assert.DoesNotContain("APS-abcdefghijklmnopqrst", message, StringComparison.Ordinal);
         Assert.DoesNotContain("token", message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 含中文的请求体上，位置按 **UTF-8 字节**计而不是按字符列计（第一百五十七轮，控制仓简报 P0-1）。
+    /// <para>
+    /// 存在理由：<c>JsonException.BytePositionInLine</c> 的名字与 .NET 8 的实测行为一致——它是行内
+    /// UTF-8 字节位，不是字符位。此前文案写「第 N 列」，含中文的请求体上这个数字对不上用户数出来的列
+    /// （「名」「值」各占 3 字节），而这一句恰恰是错误路径上用户唯一能照着改的那一句。
+    /// 本用例用真解析器造异常，把「字节位 ≠ 字符位」这件事钉成机械门：
+    /// 文案若改回「列」、或有人把字节位当字符位直接输出，这条即红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void InvalidJson_OnChineseBody_ReportsBytePositionNotCharacterColumn()
+    {
+        // 第 1 行第 10 个字符（1 基）是第二个逗号；它前面有「名」「值」两个三字节字符。
+        const string json = "{\"名\":\"值\",,}";
+        JsonException? caught = null;
+        try
+        {
+            using var _ = JsonDocument.Parse(json);
+        }
+        catch (JsonException ex)
+        {
+            caught = ex;
+        }
+
+        Assert.NotNull(caught);
+        var bytePosition = caught!.BytePositionInLine ?? throw new InvalidOperationException("解析器没有给出字节位。");
+        // 同一偏移按字符数是多少：把前 bytePosition 个字节按 UTF-8 解码。
+        var bytes = Encoding.UTF8.GetBytes(json);
+        var charPosition = Encoding.UTF8.GetCharCount(bytes, 0, (int)bytePosition);
+        // 前提成立才谈得上「口径」：含中文时字节位与字符位确实不同（否则这条用例什么也没钉住）。
+        Assert.True(bytePosition > charPosition,
+            $"字节位 {bytePosition} 不大于字符位 {charPosition}：这条用例的前提（含中文时两者不同）不成立。");
+
+        var message = ErrorCopy.InvalidJson(caught);
+
+        // 报的是字节位（1 基），不是字符列。
+        Assert.Equal($"JSON 格式无效（第 1 行，第 {bytePosition + 1} 个字节处）。", message);
+        // 不冒充「列」：用户按字符数出来的列与这个数字不同，说成「列」就是误导。
+        Assert.DoesNotContain("列", message, StringComparison.Ordinal);
+        // 仍然只回结构信息：原文片段不进错误行。
+        Assert.DoesNotContain("名", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("值", message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 纯 ASCII 的请求体上字节位与字符位相等——此时「第 N 个字节处」就是用户数出来的那一列，
+    /// 数字仍然精确（第一百五十七轮）。这条与上一条成对：口径改成字节不是「放弃精度」，
+    /// 而是「在两种输入上都说得对」。
+    /// </summary>
+    [Fact]
+    public void InvalidJson_OnAsciiBody_BytePositionEqualsTheCharacterColumn()
+    {
+        const string json = "{\"name\":1,,}";
+        JsonException? caught = null;
+        try
+        {
+            using var _ = JsonDocument.Parse(json);
+        }
+        catch (JsonException ex)
+        {
+            caught = ex;
+        }
+
+        Assert.NotNull(caught);
+        var bytePosition = caught!.BytePositionInLine ?? throw new InvalidOperationException("解析器没有给出字节位。");
+        var bytes = Encoding.UTF8.GetBytes(json);
+        var charPosition = Encoding.UTF8.GetCharCount(bytes, 0, (int)bytePosition);
+        Assert.Equal(charPosition, bytePosition);
+
+        var message = ErrorCopy.InvalidJson(caught);
+        Assert.Equal($"JSON 格式无效（第 1 行，第 {charPosition + 1} 个字节处）。", message);
     }
 
     /// <summary>

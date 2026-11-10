@@ -22,7 +22,7 @@ namespace ApifoxHelper.Tests;
 /// 新增一屏只要引用了口径文件就自动进入断言范围，漏接即红。
 /// </para>
 /// <para>
-/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheFourScreens"/> 把「发现到哪几屏」
+/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheFiveScreens"/> 把「发现到哪几屏」
 /// 钉成封闭清单——发现正则写坏（比如口径文件改名）会让清单变空，那条用例先红，
 /// 不会出现「一条都没发现、于是全部通过」的假绿。
 /// </para>
@@ -87,11 +87,12 @@ public class LoadFailureRetryCoverageTests
     // ---------- 发现：范围本身要钉住，否则「一条都没发现」也是绿的 ----------
 
     [Fact]
-    public void Discovery_CoversExactlyTheFourScreens()
+    public void Discovery_CoversExactlyTheFiveScreens()
     {
         // 封闭清单：新增一屏带失败态时，这里会红——提醒把新屏的接线一并补上（而不是悄悄漏掉）。
+        // 第一百五十七轮新增第五屏 JournalDialog.cs（任务日志对话框的读取失败态）。
         var names = FailureScreens().Select(s => s.Name).ToArray();
-        Assert.Equal(["DecisionsDialog.cs", "ProjectsPage.cs", "ReportsDialog.cs", "TasksPage.cs"], names);
+        Assert.Equal(["DecisionsDialog.cs", "JournalDialog.cs", "ProjectsPage.cs", "ReportsDialog.cs", "TasksPage.cs"], names);
     }
 
     // ---------- 接线：每一屏都必须有「重试」，且回到同一个读取入口 ----------

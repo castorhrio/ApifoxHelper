@@ -72,6 +72,17 @@ public static class LoadFailureState
     }
 
     /// <summary>
+    /// 任务日志对话框（<c>JournalDialog</c>）的失败态文案（第一百五十七轮）。
+    /// 这一屏此前写的是「请关闭后重新执行一次再试」——把「再读一次」交给用户手动重开窗口，
+    /// 与报告对话框、差异确认对话框第一百五十二轮修掉的是同一族缺陷。
+    /// </summary>
+    public static class Journal
+    {
+        public const string Title = "读取任务日志失败";
+        public const string Hint = DirectoryHint;
+    }
+
+    /// <summary>
     /// 差异确认对话框（<c>DecisionsDialog</c>）的两种失败态：检查结果读不出来、已保存决策读不出来。
     /// 后者仍保留「保存已停用」这句——读不到既有决策时保存会用空决策覆盖用户的选择，
     /// 这条约束不因为多了「重试」而放松。
