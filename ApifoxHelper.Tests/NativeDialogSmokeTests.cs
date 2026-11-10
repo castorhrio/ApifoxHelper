@@ -320,6 +320,54 @@ public class NativeDialogSmokeTests
         Assert.True(candidates > scanResults, "候选对话框交互没有排在缺口对话框之后（主链路顺序：缺口 → 候选）。");
     }
 
+    // ---------- 补充说明对话框的真实控件交互（第一百四十五轮） ----------
+
+    /// <summary>
+    /// 补充说明对话框是 F10 人工补充说明的唯一入口，也是原生界面里少数几个「写任务数据」的交互之一，
+    /// 此前只被「构造一次」。这一段钉住「真的打开、真的敲、真的点」：编辑位按目标结构派生、
+    /// 打开即选中第一个接口、保存后磁盘上有条目且任务版本递增、原样重复保存不递增、
+    /// 「保留现状」记 KeepAsIs 且值为空、筛到零行时保存禁用而计数行仍是整份统计。
+    /// </summary>
+    [Fact]
+    public void SupplementsInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunSupplementsInteraction(");
+        // 真的打开（Show 触发 OnLoad 读盘）、真的敲、真的点按钮。
+        Assert.Contains("dialog.Show();", body);
+        // 点按钮走 Click 助手（内部是 Button.PerformClick，WinForms 的点击链路，不是直接调事件处理器）。
+        Assert.Contains("Click(dialog, \"保存本接口补充\");", body);
+        Assert.Contains("boxes[1].Text =", body);
+        Assert.Contains("keeps[0].Checked = true;", body);
+        Assert.Contains("keyword.Text =", body);
+        // 检查结果是真实落盘的夹具（不是内存里传进去的对象）。
+        Assert.Contains("tasks.Write(task.Id, TaskFiles.Diff, fixture);", body);
+        Assert.Contains("tasks.Read<CheckResult>(task.Id, TaskFiles.Diff)", body);
+        // 断言取共享口径，不是第二份拼字（否则比的是冒烟器自己那份文字）。
+        Assert.Contains("SupplementEntries.EditorsFor(", body);
+        Assert.Contains("SupplementEntries.SavedText(true)", body);
+        Assert.Contains("SupplementEntries.SavedText(false)", body);
+        Assert.Contains("ListFilter.FilteredEmptyKeywordHint(", body);
+        // 保存结果从磁盘重读（不是内存里那一份），版本号也读磁盘。
+        Assert.Contains("tasks.Read<SupplementStore>(task.Id, TaskFiles.Supplement)", body);
+        Assert.Contains("tasks.Get(task.Id).Revision", body);
+        // 段数与断言：段数掉下去说明有人删了某一段（删段比删断言更难发现）。
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 6, $"补充说明对话框交互只有 {count} 个 RunAction 段。");
+        // Show 出来的窗体必须释放：不 Dispose 会漏窗口句柄，跑第二遍就换一只壳。
+        Assert.Contains("dialog?.Dispose();", body);
+    }
+
+    /// <summary>段写好了但没在 Main 里调用 = 永远不会跑，报告照样 PASS。</summary>
+    [Fact]
+    public void SupplementsInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var candidates = main.IndexOf("RunCandidatesInteraction(services, dataRoot);", StringComparison.Ordinal);
+        var supplements = main.IndexOf("RunSupplementsInteraction(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(candidates >= 0, "Main 里没有调用候选对话框交互。");
+        Assert.True(supplements > candidates, "补充说明对话框交互没有排在候选对话框之后（主链路顺序：缺口 → 候选 → 补充说明）。");
+    }
+
     // ---------- 字体栈的运行时命中（第一百三十九轮，简报 P0-1 的降级手段） ----------
 
     /// <summary>
@@ -435,7 +483,7 @@ public class NativeDialogSmokeTests
 
     /// <summary>冒烟器里三段真实控件交互用例的方法名（唯一有真实控件触达的三段）。</summary>
     private static readonly string[] InteractionMethods =
-        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction"];
+        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction"];
 
     /// <summary>
     /// 交互断言清单：每行是「方法 + 段名 + 该段里一条判失败的等价物」。
@@ -526,6 +574,22 @@ public class NativeDialogSmokeTests
         { "RunCandidatesInteraction", "候选对话框：筛到零行时回答框与覆盖勾选一起收掉（真实控件）", "CandidateEdit.AnswersCaptionNoSelection" },
         { "RunCandidatesInteraction", "候选对话框：撤销接受回到待审阅（真实控件）", "status.Text != CandidateEdit.UndoDoneText" },
         { "RunCandidatesInteraction", "候选对话框：撤销接受回到待审阅（真实控件）", "ReviewState != \"pending\"" },
+
+        // 补充说明对话框（第一百四十五轮）：夹具落盘 / 打开落点与编辑位 / 保存落盘与版本递增 /
+        // 重复保存不递增 / 保留现状 / 筛到零行。
+        { "RunSupplementsInteraction", "补充说明：准备检查结果（真实落盘）", "reread.Endpoints.Count != 2" },
+        { "RunSupplementsInteraction", "补充说明：准备检查结果（真实落盘）", "editors.Count != 5" },
+        { "RunSupplementsInteraction", "补充说明：打开即选中第一个接口且编辑位对得上（真实控件）", "list.SelectedIndices[0] != 0" },
+        { "RunSupplementsInteraction", "补充说明：打开即选中第一个接口且编辑位对得上（真实控件）", "boxes.Length != expected.Count" },
+        { "RunSupplementsInteraction", "补充说明：打开即选中第一个接口且编辑位对得上（真实控件）", "已保存补充 0 处" },
+        { "RunSupplementsInteraction", "补充说明：敲接口说明并保存（真实控件）", "entry.Value != \"查询探针数据，按名称过滤。\"" },
+        { "RunSupplementsInteraction", "补充说明：敲接口说明并保存（真实控件）", "after <= before" },
+        { "RunSupplementsInteraction", "补充说明：敲接口说明并保存（真实控件）", "status.Text != SupplementEntries.SavedText(true)" },
+        { "RunSupplementsInteraction", "补充说明：原样重复保存不递增（真实控件）", "status.Text != SupplementEntries.SavedText(false)" },
+        { "RunSupplementsInteraction", "补充说明：原样重复保存不递增（真实控件）", "after != before" },
+        { "RunSupplementsInteraction", "补充说明：勾选保留现状后保存（真实控件）", "!entry.KeepAsIs || entry.Value is not null" },
+        { "RunSupplementsInteraction", "补充说明：关键词筛到零行（真实控件）", "hint.Text != expectedHint" },
+        { "RunSupplementsInteraction", "补充说明：关键词筛到零行（真实控件）", "ButtonOf(dialog, \"保存本接口补充\").Enabled" },
     };
 
     [Theory]

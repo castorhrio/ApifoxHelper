@@ -158,6 +158,9 @@ internal static class Program
         Console.WriteLine("== 注释候选对话框（真实控件交互）==");
         RunCandidatesInteraction(services, dataRoot);
 
+        Console.WriteLine("== 补充说明对话框（真实控件交互）==");
+        RunSupplementsInteraction(services, dataRoot);
+
         Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
         RunFullJourney(services, dataRoot);
 
@@ -1419,6 +1422,343 @@ internal static class Program
     }
 
     /// <summary>
+    /// 补充说明对话框的真实控件交互（第一百四十五轮）：这一屏此前只被「构造一次」（<c>Cases</c> 里
+    /// <c>new</c> + 建句柄），而它是 F10 人工补充说明的唯一入口、也是原生界面里少数几个「写任务数据」的
+    /// 交互之一——只构造的话，编辑位对不对、保存按钮点不点得动、保存后磁盘上有没有、版本有没有递增、
+    /// 重复保存会不会白写一遍，全都可以是坏的而冒烟照样 PASS。
+    /// <para>
+    /// 六段：① 准备检查结果（真实落盘 diff.json 夹具）→ ② 打开即选中第一个接口且编辑位与计数对得上 →
+    /// ③ 敲接口说明并保存（真实控件）→ ④ 原样重复保存不递增（真实控件）→ ⑤ 勾选「保留现状」后保存
+    /// （真实控件）→ ⑥ 关键词筛到零行（真实控件）。断言一律读磁盘产物（<c>supplement.json</c> 与
+    /// <c>task.json</c> 的版本号）与控件文字，不读服务层返回值。
+    /// </para>
+    /// <para>
+    /// 检查结果用夹具而不是真实检查：真实检查需要 Apifox CLI 登录态与项目权限，本环境（wine）不具备。
+    /// 夹具只提供这一屏真正读的字段（接口身份、目标结构），不冒充「检查跑过」——检查本身的证据在
+    /// 只读契约检查的既有记录里。
+    /// </para>
+    /// </summary>
+    private static void RunSupplementsInteraction(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var supplementSaves = services.GetRequiredService<SupplementService>();
+
+        CheckTask? task = null;
+        EndpointCheck? first = null;
+        SupplementsDialog? dialog = null;
+        try
+        {
+            // 第一段：准备检查结果（真实落盘）——第一个接口带参数/请求体/200 响应（五个编辑位），
+            // 第二个接口只有标题与说明（两个编辑位）：编辑位数量按目标结构派生，不是固定五格。
+            RunAction("补充说明：准备检查结果（真实落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe5.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "补充说明配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe5.Api/Probe5.Api.csproj",
+                    AllowedSourcePaths = ["Probe5.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "补充说明任务" });
+                var fixture = SupplementFixture();
+                tasks.Write(task.Id, TaskFiles.Diff, fixture);
+                var reread = tasks.Read<CheckResult>(task.Id, TaskFiles.Diff)
+                    ?? throw new InvalidOperationException("diff.json 写进任务目录后读不回来。");
+                if (reread.Endpoints.Count != 2)
+                {
+                    throw new InvalidOperationException($"夹具读回 {reread.Endpoints.Count} 个接口，期望 2 个。");
+                }
+                first = reread.Endpoints[0];
+                var editors = SupplementEntries.EditorsFor(first);
+                if (editors.Count != 5)
+                {
+                    throw new InvalidOperationException($"第一个接口的编辑位有 {editors.Count} 个，期望 5 个（标题/说明/参数/请求体/200 响应）。");
+                }
+                if (SupplementEntries.EditorsFor(reread.Endpoints[1]).Count != 2)
+                {
+                    throw new InvalidOperationException("第二个接口（只有标题与说明）的编辑位不是 2 个。");
+                }
+                _lines.Add($"     夹具：2 个接口，编辑位 {editors.Count} / 2；第一个接口的编辑位：{string.Join("、", editors.Select(e => e.Label))}");
+            });
+
+            // 第二段：打开对话框（Show 触发 OnLoad 读盘），核对清单行数、打开时的选中落点、编辑位与计数行。
+            RunAction("补充说明：打开即选中第一个接口且编辑位对得上（真实控件）", () =>
+            {
+                if (task is null || first is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new SupplementsDialog(tasks, task, supplementSaves);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = SupplementList(dialog);
+                if (!list.Visible) throw new InvalidOperationException("接口清单不可见（对话框停在提示态）。");
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"清单有 {list.Items.Count} 行，检查结果有 2 个接口。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"打开后选中 {list.SelectedIndices.Count} 行（首行序号 {list.SelectedIndices.Cast<int>().FirstOrDefault()}），期望恰好第一行。");
+                }
+                var boxes = SupplementEditorBoxes(dialog);
+                var expected = SupplementEntries.EditorsFor(first);
+                if (boxes.Length != expected.Count)
+                {
+                    throw new InvalidOperationException($"编辑位输入框有 {boxes.Length} 个，期望 {expected.Count} 个。");
+                }
+                if (SupplementKeepBoxes(dialog).Length != expected.Count)
+                {
+                    throw new InvalidOperationException("「保留现状」勾选数与编辑位数不一致。");
+                }
+                if (boxes[0].Text.Length != 0)
+                {
+                    throw new InvalidOperationException($"尚未保存过补充，接口标题那一格却有内容「{boxes[0].Text}」。");
+                }
+                if (!boxes[0].PlaceholderText.StartsWith("当前：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"接口标题那一格的现状提示是「{boxes[0].PlaceholderText}」，期望以「当前：」开头。");
+                }
+                var counts = SupplementCountsLabel(dialog);
+                if (!counts.Text.Contains("共 2 个接口", StringComparison.Ordinal) || !counts.Text.Contains("已保存补充 0 处", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"计数行是「{counts.Text}」，期望「共 2 个接口 · 已保存补充 0 处」。");
+                }
+                if (!ButtonOf(dialog, "保存本接口补充").Enabled)
+                {
+                    throw new InvalidOperationException("打开后「保存本接口补充」不可点。");
+                }
+                if (ButtonOf(dialog, "放弃修改").Enabled)
+                {
+                    throw new InvalidOperationException("还没有任何输入，「放弃修改」却可点。");
+                }
+                _lines.Add($"     计数行：{counts.Text}；编辑位：{string.Join("、", expected.Select(e => e.Label))}");
+            });
+
+            // 第三段：敲接口说明并保存 → 磁盘上出现条目、任务版本递增、状态行取共享口径、清单计数跟上。
+            RunAction("补充说明：敲接口说明并保存（真实控件）", () =>
+            {
+                if (dialog is null || task is null || first is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var before = tasks.Get(task.Id).Revision;
+                var boxes = SupplementEditorBoxes(dialog);
+                boxes[1].Text = "查询探针数据，按名称过滤。";
+                Application.DoEvents();
+                if (!ButtonOf(dialog, "放弃修改").Enabled)
+                {
+                    throw new InvalidOperationException("敲了字之后「放弃修改」仍不可点（未保存修改没有被识别）。");
+                }
+                var status = StatusLabel(dialog);
+                status.Text = "";
+                Click(dialog, "保存本接口补充");
+                PumpUntilCondition(() => status.Text.Length > 0, "保存补充的状态行");
+
+                var store = tasks.Read<SupplementStore>(task.Id, TaskFiles.Supplement)
+                    ?? throw new InvalidOperationException("保存后任务目录里没有 supplement.json。");
+                var entry = store.Entries.FirstOrDefault(e => e.ResourceKey == first.Key && e.Location == "operation" && e.Field == "description");
+                if (entry is null)
+                {
+                    throw new InvalidOperationException("磁盘上的补充里没有这个接口的说明条目。");
+                }
+                if (entry.Value != "查询探针数据，按名称过滤。")
+                {
+                    throw new InvalidOperationException($"磁盘上的说明是「{entry.Value}」，期望刚敲的那一句。");
+                }
+                if (entry.KeepAsIs)
+                {
+                    throw new InvalidOperationException("填了文字的条目被记成了「保留现状」。");
+                }
+                var after = tasks.Get(task.Id).Revision;
+                if (after <= before)
+                {
+                    throw new InvalidOperationException($"保存后任务版本没有递增（{before} → {after}），旧检查与旧计划不会过期。");
+                }
+                if (status.Text != SupplementEntries.SavedText(true))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{SupplementEntries.SavedText(true)}」。");
+                }
+                var counts = SupplementCountsLabel(dialog);
+                if (!counts.Text.Contains("已保存补充 1 处", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"保存后计数行是「{counts.Text}」，期望「已保存补充 1 处」。");
+                }
+                var list = SupplementList(dialog);
+                if (list.Items[0].SubItems[2].Text != "1 处")
+                {
+                    throw new InvalidOperationException($"清单第三格是「{list.Items[0].SubItems[2].Text}」，期望「1 处」。");
+                }
+                _lines.Add($"     状态行：{status.Text}；版本 {before} → {after}");
+            });
+
+            // 第四段（反向）：原样再点一次保存 → 内容没有变化，不写文件、不递增，状态行如实说明。
+            RunAction("补充说明：原样重复保存不递增（真实控件）", () =>
+            {
+                if (dialog is null || task is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var before = tasks.Get(task.Id).Revision;
+                var status = StatusLabel(dialog);
+                status.Text = "";
+                Click(dialog, "保存本接口补充");
+                PumpUntilCondition(() => status.Text.Length > 0, "重复保存的状态行");
+                if (status.Text != SupplementEntries.SavedText(false))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{SupplementEntries.SavedText(false)}」。");
+                }
+                var after = tasks.Get(task.Id).Revision;
+                if (after != before)
+                {
+                    throw new InvalidOperationException($"内容没有变化，任务版本却从 {before} 变成 {after}（旧检查被无谓地作废）。");
+                }
+                _lines.Add($"     状态行：{status.Text}；版本保持 {after}");
+            });
+
+            // 第五段：勾选「保留现状，本次不补充」后保存 → 条目记 KeepAsIs 且值为空（与冻结页面同一口径）。
+            RunAction("补充说明：勾选保留现状后保存（真实控件）", () =>
+            {
+                if (dialog is null || task is null || first is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var before = tasks.Get(task.Id).Revision;
+                var keeps = SupplementKeepBoxes(dialog);
+                keeps[0].Checked = true;
+                Application.DoEvents();
+                var status = StatusLabel(dialog);
+                status.Text = "";
+                Click(dialog, "保存本接口补充");
+                PumpUntilCondition(() => status.Text.Length > 0, "保留现状保存的状态行");
+
+                var store = tasks.Read<SupplementStore>(task.Id, TaskFiles.Supplement)
+                    ?? throw new InvalidOperationException("保存后任务目录里没有 supplement.json。");
+                var entry = store.Entries.FirstOrDefault(e => e.ResourceKey == first.Key && e.Location == "operation" && e.Field == "name");
+                if (entry is null)
+                {
+                    throw new InvalidOperationException("勾选保留现状后，磁盘上没有这个接口标题的条目。");
+                }
+                if (!entry.KeepAsIs || entry.Value is not null)
+                {
+                    throw new InvalidOperationException($"保留现状的条目记成了 KeepAsIs={entry.KeepAsIs}、值「{entry.Value}」，期望 KeepAsIs=true 且值为空。");
+                }
+                if (tasks.Get(task.Id).Revision <= before)
+                {
+                    throw new InvalidOperationException("勾选保留现状后保存，任务版本没有递增。");
+                }
+                if (status.Text != SupplementEntries.SavedText(true))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{SupplementEntries.SavedText(true)}」。");
+                }
+                _lines.Add($"     保留现状条目：{entry.Location}/{entry.Field}，KeepAsIs={entry.KeepAsIs}，值「{entry.Value ?? "（空）"}」");
+            });
+
+            // 第六段：关键词筛到零行 → 提示语取共享口径、关键词框留着、保存禁用、计数行仍是整份统计。
+            RunAction("补充说明：关键词筛到零行（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = SupplementList(dialog);
+                var keyword = KeywordBox(dialog);
+                keyword.Text = "zzz-没有这个接口";
+                Application.DoEvents();
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException($"关键词不命中时清单还有 {list.Items.Count} 行。");
+                }
+                if (!keyword.Enabled) throw new InvalidOperationException("筛到零行时关键词框被禁用（提示语指名的下一步按不动）。");
+                var hint = HintLabel(dialog);
+                var expectedHint = ListFilter.FilteredEmptyKeywordHint(ListFilter.EndpointNoun);
+                if (!hint.Visible || hint.Text != expectedHint)
+                {
+                    throw new InvalidOperationException($"筛到零行的提示是「{(hint.Visible ? hint.Text : "（不可见）")}」，期望「{expectedHint}」。");
+                }
+                if (ButtonOf(dialog, "保存本接口补充").Enabled)
+                {
+                    throw new InvalidOperationException("没有选中接口时「保存本接口补充」仍可点。");
+                }
+                var counts = SupplementCountsLabel(dialog);
+                if (!counts.Text.Contains("共 2 个接口", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"筛到零行后计数行变成「{counts.Text}」，期望仍是整份统计。");
+                }
+                keyword.Text = "";
+                Application.DoEvents();
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"清空关键词后清单 {list.Items.Count} 行，期望 2 行。");
+                }
+                _lines.Add($"     筛到零行：提示「{expectedHint}」，清空后回到 {list.Items.Count} 行");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 补充说明对话框的检查结果夹具：两个接口，第一个带 query 参数、请求体与 200 响应（五个编辑位），
+    /// 第二个只有标题与说明（两个编辑位）。只提供这一屏真正读的字段（接口身份与目标结构），
+    /// 不冒充「检查跑过」——真实检查需要 Apifox CLI 登录态与项目权限，本环境不具备。
+    /// </summary>
+    private static CheckResult SupplementFixture()
+    {
+        var withStructure = new DocOperation
+        {
+            Key = "GET /api/probe",
+            Method = "GET",
+            Path = "/api/probe",
+            Summary = "探针查询",
+            Description = "查询探针数据。",
+            Parameters = new SortedDictionary<string, DocParameter>(StringComparer.Ordinal)
+            {
+                ["query:pageSize"] = new DocParameter { In = "query", Name = "pageSize", Description = "每页条数。" },
+            },
+            RequestBody = new DocBody { MediaType = "application/json", Description = "请求体说明。" },
+            Responses = new SortedDictionary<string, DocResponse>(StringComparer.Ordinal)
+            {
+                ["200"] = new DocResponse { Code = "200", Description = "探针数据。" },
+            },
+        };
+        var docsOnly = new DocOperation
+        {
+            Key = "POST /api/probe",
+            Method = "POST",
+            Path = "/api/probe",
+            Summary = "探针写入",
+            Description = "写入探针数据。",
+        };
+        return new CheckResult
+        {
+            ComputedAt = DateTimeOffset.Now,
+            TaskRevision = 1,
+            StructureSource = "swagger",
+            SnapshotComplete = true,
+            Endpoints =
+            [
+                new EndpointCheck
+                {
+                    Key = withStructure.Key,
+                    Method = "GET",
+                    Path = "/api/probe",
+                    InSource = true,
+                    InSwagger = true,
+                    InRemote = true,
+                    RemoteId = 11,
+                    RemoteName = "探针查询",
+                    Status = "docs",
+                    Target = withStructure,
+                },
+                new EndpointCheck
+                {
+                    Key = docsOnly.Key,
+                    Method = "POST",
+                    Path = "/api/probe",
+                    InSource = true,
+                    InSwagger = true,
+                    InRemote = false,
+                    Status = "new",
+                    Target = docsOnly,
+                },
+            ],
+        };
+    }
+
+    /// <summary>
     /// 完整旅程单次运行（第一百四十四轮）：按 README「使用流程」1–9 步里**不触碰 Apifox 写入门禁**的
     /// 只读路径，从「新建配置」一路走到「报告导出」，全程一条任务、一次连续运行。
     /// <para>
@@ -1779,6 +2119,26 @@ internal static class Program
     /// </summary>
     private static TextBox[] EditableBoxes(Control root) =>
         FindAll<TextBox>(root).Where(t => t.Multiline && !t.ReadOnly).ToArray();
+
+    /// <summary>补充说明对话框的接口清单（对话框里唯一的 <c>ListView</c>）。</summary>
+    private static ListView SupplementList(Control root) =>
+        FindFirst<ListView>(root) ?? throw new InvalidOperationException("对话框里找不到接口清单。");
+
+    /// <summary>
+    /// 补充说明的编辑位输入框（多行、非只读），按控件树先序——与 <c>SupplementEntries.EditorsFor</c>
+    /// 的编辑位顺序一致（标题、说明、参数、请求体、200 响应）。
+    /// </summary>
+    private static TextBox[] SupplementEditorBoxes(Control root) =>
+        FindAll<TextBox>(root).Where(t => t.Multiline && !t.ReadOnly).ToArray();
+
+    /// <summary>编辑位的「保留现状，本次不补充」勾选，与编辑位同序。</summary>
+    private static CheckBox[] SupplementKeepBoxes(Control root) =>
+        FindAll<CheckBox>(root).ToArray();
+
+    /// <summary>补充说明的计数行（「共 N 个接口 · 已保存补充 M 处」）。</summary>
+    private static Label SupplementCountsLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Text.StartsWith("共 ", StringComparison.Ordinal))
+        ?? throw new InvalidOperationException("对话框里找不到计数行。界面文案：" + LabelTexts(root));
 
     /// <summary>覆盖已有注释的勾选（对话框里唯一的 <c>CheckBox</c>）。</summary>
     private static CheckBox OverwriteBox(Control root) =>
