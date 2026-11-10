@@ -28,11 +28,13 @@ namespace ApifoxHelper.Desktop.Native;
 /// 而这是「加一颗入口」不该带来的布局变化（wine 实测：工具栏行高由 30px 变 100px）。
 /// </para>
 /// <para>
-/// <b>范围</b>：本轮只接两个主页面（任务页、项目配置页）——失败原因最长的那两处，
-/// 也是「读取失败 → 重试」这一族状态行的落点。其余带状态行的对话框仍只有悬停提示：磁盘上
-/// <c>Ui.StatusLine()</c> 实测 17 处调用点，扣掉两个主页面自己那一处，剩 15 处属于对话框，
-/// 其中 ProfileDialog 与 NewTaskDialog 就嵌在这两个页面文件里（同文件不同类，本轮不接）。
-/// 如实挂账在 docs/NOTES.md（对话框的状态行宽度随对话框固定，长错误同样会被截断）。
+/// <b>范围</b>：磁盘上 <c>Ui.StatusLine()</c> 的 17 处调用点全部经本宿主写状态行——两个主页面
+/// （任务页、项目配置页）与 15 处对话框（含嵌在两个页面文件里的 <c>ProfileDialog</c> /
+/// <c>NewTaskDialog</c>、嵌在 <c>ScanResultsDialog.cs</c> 里的「手工填写说明」）。
+/// 第一百六十四轮只接了两个主页面（失败原因最长的那两处），其余 15 处如实挂账到第一百六十六轮收口；
+/// 挂账期间对话框只有悬停提示——能看出「还有下文」，但读不全、不可复制。
+/// 这个覆盖范围由 <c>StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost</c> 按顶格类
+/// 逐段机械判住：新增一处状态行而不接宿主即红，接了却仍留在挂账清单里的同样判红。
 /// </para>
 /// </summary>
 internal sealed class StatusLineHost : Panel

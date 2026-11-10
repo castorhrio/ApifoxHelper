@@ -22,6 +22,9 @@ internal sealed class CapabilitiesDialog : Form
     private readonly string _scope;
 
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusHost;
     private readonly Button _recheckButton;
     private readonly Label _cliBadge = Ui.StatusText("检查中…");
     private readonly Label _cliDetail = Ui.Caption();
@@ -121,8 +124,9 @@ internal sealed class CapabilitiesDialog : Form
         _checks.Visible = false;
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, 0) };
-        _status.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_status);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusHost);
 
         // 停靠按集合倒序生效：状态行最先停靠（最底部），结果区填满剩余空间，探测区与连接检查依次在最上。
         Controls.Add(resultHost);
@@ -171,8 +175,7 @@ internal sealed class CapabilitiesDialog : Form
         if (_checking) return;
         _checking = true;
         _recheckButton.Enabled = false;
-        _status.Text = "正在检查 CLI、登录状态与项目读取…";
-        _status.ForeColor = UiTokens.Muted;
+        _statusHost.SetText("正在检查 CLI、登录状态与项目读取…", UiTokens.Muted);
         try
         {
             var report = await _compat.CapabilitiesAsync(_profile, CancellationToken.None);
@@ -290,7 +293,7 @@ internal sealed class CapabilitiesDialog : Form
         _progress.Visible = running;
         _progress.Text = "正在写入兼容探测…（逐项写入并回读核对，需要一些时间）";
         _progress.ForeColor = UiTokens.Text;
-        if (running) _status.Text = "";
+        if (running) _statusHost.SetText("", _status.ForeColor);
         RefreshRunState();
     }
 
@@ -399,8 +402,7 @@ internal sealed class CapabilitiesDialog : Form
 
     private void SetStatus(string? message)
     {
-        _status.Text = message ?? "";
-        _status.ForeColor = message is null ? UiTokens.Text : UiTokens.BadText;
+        _statusHost.SetText(message ?? "", message is null ? UiTokens.Text : UiTokens.BadText);
     }
 
     /// <summary>语义色调 → 设计令牌颜色（docs/DESIGN.md §2：语义色只承担状态且同时有文字标签）。</summary>

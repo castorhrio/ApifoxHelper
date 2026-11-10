@@ -144,6 +144,9 @@ internal sealed class SyncPreviewDialog : Form
     private readonly Button _stopButton;
     private readonly Button _closeButton;
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusHost;
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 500 };
 
     public SyncPreviewDialog(TaskStore tasks, SyncPlanService plans, SyncExecutor executor, JobRunner jobs, CheckTask task)
@@ -292,8 +295,9 @@ internal sealed class SyncPreviewDialog : Form
         var statusRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 2, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, 0), Margin = new Padding(0) };
         statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        _status.Dock = DockStyle.Fill;
-        statusRow.Controls.Add(_status, 0, 0);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusRow.Controls.Add(_statusHost, 0, 0);
         statusRow.Controls.Add(_stopButton, 1, 0);
 
         // 停靠按集合倒序生效：状态行、按钮行先停靠（底部），勾选页与预览页互斥地填满剩余空间。
@@ -755,8 +759,7 @@ internal sealed class SyncPreviewDialog : Form
         if (_job is not { } job) { _timer.Stop(); return; }
         if (job.FinishedAt is null)
         {
-            _status.Text = "正在" + job.Kind + "… " + job.Progress.ToString("P0") + " " + job.ProgressText;
-            _status.ForeColor = UiTokens.Text;
+            _statusHost.SetText("正在" + job.Kind + "… " + job.Progress.ToString("P0") + " " + job.ProgressText, UiTokens.Text);
             return;
         }
         _timer.Stop();
@@ -850,7 +853,7 @@ internal sealed class SyncPreviewDialog : Form
     /// </summary>
     private void ShowPlan(SyncPlan plan)
     {
-        _status.Text = "";
+        _statusHost.SetText("", UiTokens.Text);
         _plan = plan;
         // 这一页是不是刚出现：只在「由隐藏变可见」那一次交键盘，重建路径不交（见方法注释）。
         var opening = !_page2.Visible;
@@ -1096,7 +1099,7 @@ internal sealed class SyncPreviewDialog : Form
         _page1.Visible = true;
         _backButton.Visible = false;
         _generateButton.Visible = true;
-        _status.Text = "";
+        _statusHost.SetText("", UiTokens.Text);
         SetBusy(false);
     }
 
@@ -1126,8 +1129,7 @@ internal sealed class SyncPreviewDialog : Form
 
     private void SetStatus(string message, Color color)
     {
-        _status.Text = message;
-        _status.ForeColor = color;
+        _statusHost.SetText(message, color);
     }
 
     /// <summary>语义色调 → 设计令牌颜色（docs/DESIGN.md §2：语义色只承担状态且同时有文字标签）。</summary>

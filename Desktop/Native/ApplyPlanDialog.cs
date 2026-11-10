@@ -50,6 +50,9 @@ internal sealed class ApplyPlanDialog : Form
     private readonly Button _patchButton;
     private readonly Button _regenButton;
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusHost;
     private readonly Label _hint = new()
     {
         Dock = DockStyle.Fill,
@@ -211,8 +214,9 @@ internal sealed class ApplyPlanDialog : Form
         diffHost.Controls.Add(_diffCaption);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, 0) };
-        _status.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_status);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusHost);
 
         var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 5, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -251,7 +255,7 @@ internal sealed class ApplyPlanDialog : Form
         if (_busy) return;
         SetBusy(true);
         _hint.Visible = false;
-        _status.Text = "";
+        _statusHost.SetText("", UiTokens.Text);
         _planStatus.Text = "正在生成注释回写预览…（读取项目并核对文件指纹）";
         _planStatus.ForeColor = UiTokens.Text;
         CommentPlan plan;
@@ -536,8 +540,7 @@ internal sealed class ApplyPlanDialog : Form
         if (plan is null || _busy || !_applyButton.Enabled) return;
         if (!ConfirmApply(plan)) return;
         SetBusy(true);
-        _status.Text = "正在回写注释…";
-        _status.ForeColor = UiTokens.Text;
+        _statusHost.SetText("正在回写注释…", UiTokens.Text);
         CommentPlan applied;
         try
         {
@@ -654,8 +657,7 @@ internal sealed class ApplyPlanDialog : Form
 
     private void SetStatus(string message, Color color)
     {
-        _status.Text = message;
-        _status.ForeColor = color;
+        _statusHost.SetText(message, color);
     }
 
     private static Color ToneColor(string tone) => tone switch

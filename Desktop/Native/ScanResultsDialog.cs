@@ -55,6 +55,9 @@ internal sealed class ScanResultsDialog : Form
     private readonly FlowLayoutPanel _navRow;
     private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusHost;
     private readonly Label _hint = new()
     {
         Dock = DockStyle.Fill,
@@ -169,8 +172,9 @@ internal sealed class ScanResultsDialog : Form
         detailHost.Height = 96;
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Xs, 0, 0) };
-        _status.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_status);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusHost);
 
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, 0, UiTokens.Md) };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
@@ -557,8 +561,7 @@ internal sealed class ScanResultsDialog : Form
 
     private void SetStatus(string message, Color color)
     {
-        _status.Text = message;
-        _status.ForeColor = color;
+        _statusHost.SetText(message, color);
     }
 
     private static Color ToneColor(string tone) => tone switch
@@ -580,6 +583,9 @@ internal sealed class ManualDraftDialog : Form
     private readonly DocSlot _slot;
     private readonly TextBox _text = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusHost;
 
     /// <summary>确认后的候选请求；Action 恒为 set，删除失效标签走 ScanResultsDialog 的直通入口。</summary>
     public ManualCandidateRequest Request { get; private set; } = new();
@@ -620,8 +626,9 @@ internal sealed class ManualDraftDialog : Form
         buttons.Controls.Add(cancelButton);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, 0, UiTokens.Xl, 0) };
-        _status.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_status);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusHost);
 
         Controls.Add(grid);
         Controls.Add(statusHost);
@@ -640,8 +647,7 @@ internal sealed class ManualDraftDialog : Form
         // 与生成、导入同一份文字校验口径；拒绝文案原样内联显示。
         if (DraftService.ValidateText(_text.Text) is { } error)
         {
-            _status.Text = error + "。";
-            _status.ForeColor = UiTokens.BadText;
+            _statusHost.SetText(error + "。", UiTokens.BadText);
             return;
         }
         Request = new ManualCandidateRequest { SlotId = _slot.Id, Text = _text.Text, Action = "set" };

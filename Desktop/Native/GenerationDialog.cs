@@ -28,6 +28,9 @@ internal sealed class GenerationDialog : Form
     private readonly TextBox _key = Ui.Input(password: true);
     private readonly Button _saveKeyButton;
     private readonly Label _statusLine = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusLineHost;
     /// <summary>字段标识 → 描边面板：解析失败按 UserException.Field 定位描红（DESIGN.md §6 校验失败描边）。</summary>
     private readonly Dictionary<string, Ui.FieldBox> _fields = [];
 
@@ -37,6 +40,8 @@ internal sealed class GenerationDialog : Form
         _profiles = profiles;
         _profile = profile;
         _profileExists = profileExists;
+        // 状态行宿主先建：下面未落盘门控那一句就要写状态行，构造早期就得有宿主。
+        _statusLineHost = new StatusLineHost(_statusLine);
 
         Text = "模型服务";
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -54,8 +59,7 @@ internal sealed class GenerationDialog : Form
         {
             // 与冻结页面同一门控：新建配置未落盘前不能保存密钥（密钥按配置 ID 存储）。
             _saveKeyButton.Enabled = false;
-            _statusLine.Text = GenerationEntries.KeyNeedsProfile;
-            _statusLine.ForeColor = UiTokens.Muted;
+            _statusLineHost.SetText(GenerationEntries.KeyNeedsProfile, UiTokens.Muted);
         }
 
         var applyButton = Ui.Primary("确定");
@@ -88,8 +92,8 @@ internal sealed class GenerationDialog : Form
         buttons.Controls.Add(cancelButton);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _statusLine.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, 0, UiTokens.Xl, 0) };
-        _statusLine.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_statusLine);
+        _statusLineHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusLineHost);
 
         var gridScroll = Ui.ScrollHost();
         gridScroll.BackColor = UiTokens.Panel;
@@ -242,7 +246,6 @@ internal sealed class GenerationDialog : Form
 
     private void SetStatus(string message, Color color)
     {
-        _statusLine.Text = message;
-        _statusLine.ForeColor = color;
+        _statusLineHost.SetText(message, color);
     }
 }

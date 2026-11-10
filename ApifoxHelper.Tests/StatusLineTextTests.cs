@@ -90,8 +90,8 @@ public class StatusLineTextTests
     public void BothPages_WriteStatusThroughTheHost()
     {
         // 判定范围是页面类那一段，不是整份文件：两个页面文件末尾还各嵌着一个对话框
-        // （ProfileDialog / NewTaskDialog），它们的状态行本轮没有接宿主、仍是悬停提示
-        // （挂账在 docs/NOTES.md）。拿整份文件判「不得直接写标签」等于把没做的范围算成已做。
+        // （ProfileDialog / NewTaskDialog），它们从第一百六十六轮起同样接了宿主，
+        // 由 EveryStatusLine_OnDisk_IsWrittenThroughTheHost 按类逐段判——本断言只管页面类这一段的接线形状。
         foreach (var (file, className) in new[]
                  {
                      ("TasksPage.cs", "TasksPage"),
@@ -107,6 +107,76 @@ public class StatusLineTextTests
             Assert.DoesNotContain("_status.ForeColor =", text);
             Assert.Contains("_statusHost.SetText(", text);
         }
+    }
+
+    /// <summary>
+    /// 没接「查看完整错误」入口的状态行（封闭清单，逐条登记理由）。
+    /// <para>
+    /// 第一百六十五轮之前这里等价于「磁盘上除两个主页面以外的 15 处」；第一百六十六轮全部接入，
+    /// 清单收空。清单的作用不是列已做的，而是让「没做的那一处」必须留下名字与理由——
+    /// 新增一处 <c>Ui.StatusLine()</c> 而不接宿主，它会自动出现在判定里并判红；
+    /// 反过来，登记了却已经不存在的条目同样判红（清单不许留死条目）。
+    /// </para>
+    /// </summary>
+    private static readonly (string File, string Class, string Why)[] StatusLinesWithoutHost = [];
+
+    /// <summary>
+    /// 磁盘上所有状态行调用点要么经 <see cref="StatusLineHost"/>、要么在挂账清单里登记理由。
+    /// <para>
+    /// 按<b>顶格类声明</b>切段判定，不按文件：一个文件里可以既有页面又有对话框（<c>TasksPage.cs</c>
+    /// 与 <c>ProjectsPage.cs</c> 各嵌着一个对话框，<c>ScanResultsDialog.cs</c> 嵌着「手工填写说明」），
+    /// 拿整份文件判「有宿主就算过」会把没接的那个类算成已做。
+    /// </para>
+    /// <para>
+    /// 地板 17 处是防「扫描本身空转」：判定条件写错、切段切空、正则不匹配时，covered 会掉到 0，
+    /// 而「没接的都在清单里」在清单为空时恒真——两条加起来仍然全绿。第一百六十二轮的「空门」同族。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryStatusLine_OnDisk_IsWrittenThroughTheHost()
+    {
+        var wired = 0;
+        var unwired = new List<string>();
+        foreach (var source in Repo.NativeSources())
+        {
+            // 注释行先去掉：宿主类自己的文档注释里引用「Ui.StatusLine()」是在交代理由，不是第二处调用点。
+            foreach (var (name, body) in ClassSegments(CodeOnly(source.Text)))
+            {
+                if (!body.Contains("Ui.StatusLine()", StringComparison.Ordinal)) continue;
+                var hostsIt = body.Contains("new StatusLineHost(", StringComparison.Ordinal)
+                    && body.Contains("SetText(", StringComparison.Ordinal);
+                if (hostsIt) wired++;
+                else unwired.Add(source.Name + "." + name);
+            }
+        }
+        Assert.True(wired >= 17, $"经宿主写状态行的只有 {wired} 处（地板 17，第一百六十六轮接入 15 处对话框后共 17 处）：扫描或切段本身失效了。");
+        // 左：挂账清单登记的（应为空）；右：磁盘上确实没接宿主的。两侧对不上只有两种情况——
+        // 新出现一处没接宿主的（右多），或清单里的条目已经接上了/那处状态行没了（左多，死条目）。
+        var ledger = string.Join("、", StatusLinesWithoutHost.Select(e => e.File + "." + e.Class).Order(StringComparer.Ordinal));
+        var unwiredIds = string.Join("、", unwired.Order(StringComparer.Ordinal));
+        Assert.Equal(ledger, unwiredIds);
+    }
+
+    /// <summary>
+    /// 原生界面不得再有直接写状态行标签的代码行：文字与入口显隐必须同一次更新。
+    /// 接了宿主却还留着一条旁路写标签，就是「文字换了、按钮还留着」的半截状态。
+    /// </summary>
+    [Fact]
+    public void NoSource_WritesTheStatusLabelDirectly()
+    {
+        var offenders = new List<string>();
+        foreach (var source in Repo.NativeSources().Where(s => s.Name != "StatusLineHost.cs"))
+        {
+            var lines = CodeOnly(source.Text).Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (Regex.IsMatch(lines[i], @"^\s*_status(Line)?\.(Text|ForeColor)\s*[!=]"))
+                {
+                    offenders.Add($"{source.Name}:{i + 1}");
+                }
+            }
+        }
+        Assert.True(offenders.Count == 0, $"这些行直接写状态行标签而不是走宿主 SetText：{string.Join("、", offenders)}。");
     }
 
     [Fact]
@@ -159,6 +229,22 @@ public class StatusLineTextTests
     {
         Assert.Contains("状态行", Repo.DesignSection(6));
         Assert.Contains("固定占位", Repo.DesignSection(6));
+    }
+
+    /// <summary>
+    /// 按顶格类型声明把一份源码切段：每段是「类型名 + 从本声明起到下一个顶格声明止的正文」。
+    /// 顶格 = 命名空间下的类型，缩进的成员声明不会被当成边界（与 <see cref="PageClassText"/> 同一取向），
+    /// 这样「一个文件里既有页面又有对话框」「一个文件里有两个对话框」都能各自判到自己的那一段。
+    /// </summary>
+    private static IEnumerable<(string Name, string Body)> ClassSegments(string code)
+    {
+        // 只认顶格声明（行首不许缩进）：与 PageClassText 同一取向，嵌套类型不会被当成边界。
+        var starts = Regex.Matches(code, @"^(?:internal|public|private)\w*\s+(?:\w+\s+)*class\s+(\w+)", RegexOptions.Multiline);
+        for (var i = 0; i < starts.Count; i++)
+        {
+            var next = i + 1 < starts.Count ? starts[i + 1].Index : code.Length;
+            yield return (starts[i].Groups[1].Value, code[starts[i].Index..next]);
+        }
     }
 
     /// <summary>

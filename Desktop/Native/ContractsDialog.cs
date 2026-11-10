@@ -32,6 +32,9 @@ internal sealed class ContractsDialog : Form
     private readonly Button _resetButton;
     private readonly Button _evidenceButton;
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusHost;
     private readonly Label _hint = new()
     {
         Dock = DockStyle.Fill,
@@ -111,7 +114,9 @@ internal sealed class ContractsDialog : Form
         detailGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddCaptionRow(detailGrid, "选中契约的分支、未解析点与证据");
         AddBoxRow(detailGrid, Ui.Hairline(_detail), 190);
-        AddCaptionRow(detailGrid, _status);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        AddCaptionRow(detailGrid, _statusHost);
 
         var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 6, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -462,8 +467,7 @@ internal sealed class ContractsDialog : Form
 
     private void SetStatus(string message, Color color)
     {
-        _status.Text = message;
-        _status.ForeColor = color;
+        _statusHost.SetText(message, color);
     }
 
     private static Color ToneColor(string tone) => tone switch

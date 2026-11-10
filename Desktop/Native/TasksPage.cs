@@ -1381,6 +1381,8 @@ internal sealed class NewTaskDialog : Form
     private readonly TextBox _note = Ui.Input();
     private readonly CheckBox _offline = new() { Text = "离线模式（本次任务不访问 Apifox，仅源码阶段）", AutoSize = true };
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与外层页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    private readonly StatusLineHost _statusHost;
 
     /// <summary>对话框确认后的创建请求；StartScan 表示创建后立即开始扫描。</summary>
     public CreateTaskRequest Request { get; private set; } = new();
@@ -1446,8 +1448,9 @@ internal sealed class NewTaskDialog : Form
         buttons.Controls.Add(cancelButton);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, 0, UiTokens.Xl, 0) };
-        _status.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_status);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusHost);
 
         var gridScroll = Ui.ScrollHost();
         gridScroll.BackColor = UiTokens.Panel;
@@ -1522,9 +1525,5 @@ internal sealed class NewTaskDialog : Form
         DialogResult = DialogResult.OK;
     }
 
-    private void SetStatus(string message)
-    {
-        _status.Text = message;
-        _status.ForeColor = UiTokens.BadText;
-    }
+    private void SetStatus(string message) => _statusHost.SetText(message, UiTokens.BadText);
 }

@@ -257,6 +257,9 @@ internal static class Program
         Console.WriteLine("== 状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）==");
         RunStatusFullText(services, dataRoot);
 
+        Console.WriteLine("== 对话框状态行的完整错误入口（三屏各四段：嵌入页面文件的 / 独立文件的 / 真实保存失败的，真实控件）==");
+        RunDialogStatusFullText(services, dataRoot);
+
         Console.WriteLine("== 说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）==");
         RunCaptionFit(services, dataRoot);
 
@@ -3953,6 +3956,316 @@ internal static class Program
             page?.Dispose();
             host?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 第一百六十六轮接入的 15 处对话框状态行——挑三处代表性屏走同一套四段（真实控件）。
+    /// <para>
+    /// <b>挑哪三屏、各代表什么</b>：① <c>ProfileDialog</c>——它嵌在 <c>ProjectsPage.cs</c> 里，
+    /// 与外层页面同文件不同类（上一轮挂账点名的就是这一类）；② <c>ProfileAdvancedDialog</c>——
+    /// 独立文件、宽 700px 的一屏；③ <c>SupplementsDialog</c>——长文案来自真实保存失败（磁盘上的
+    /// 任务文件读不出来），不是拼出来的长句。
+    /// </para>
+    /// <para>
+    /// <b>短句与长句都走产品自己的分支</b：同一颗按钮，换个输入状态就是 gate 短句（「请先填写项目 ID」
+    /// 「请输入接口 ID」「已还原为本接口已保存的内容。」），填上值就是失败长句（<c>Exception.Message</c>
+    /// 经脱敏后再拼上「点『…』再试一次」）。不手写一句超长文字——那样量到的是冒烟器的想象力。
+    /// </para>
+    /// <para>
+    /// <b>放不下那一支量不到时如实写</b>：对话框比页面工具栏宽得多，某些档上真实失败原因确实放得下；
+    /// 那一段就记「这一档放得下，四段里的『点开读全』在本屏这一档没量到」，不改判、不伪造。
+    /// 三档缩放（96/120/192）各跑一次，合起来看哪一支在哪一档量到。
+    /// </para>
+    /// </summary>
+    private static void RunDialogStatusFullText(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        var credentials = services.GetRequiredService<CredentialStore>();
+        var supplementSaves = services.GetRequiredService<SupplementService>();
+        var store = services.GetRequiredService<FileStore>();
+        // 工作区必须先落盘：ProfileStore.Validate 拒绝不存在的 API 项目，而这一句在 RunAction 之外——
+        // 让它抛出来，整个冒烟进程会以未处理异常终止，后面每一段都不会跑（wine 实测踩过）。
+        CreateProbeWorkspace(Path.Combine(dataRoot, "Probe10.Api"));
+        var profile = profiles.Save(new ProjectProfile
+        {
+            Name = "状态行入口配置",
+            WorkspaceRoot = dataRoot,
+            ApiProject = "Probe10.Api/Probe10.Api.csproj",
+            AllowedSourcePaths = ["Probe10.Api/"],
+        }, isNew: true);
+
+        // ── 通用四段：一屏一次，短句不给 → 长失败给 → 点开读全 → 回短句收起 ──
+        void Steps(
+            string screen,
+            Func<Form> open,
+            Action<Form> shortFirst,
+            Action<Form> shortAgain,
+            Action<Form> toLong,
+            Action? cleanup = null)
+        {
+            Form? dialog = null;
+            var shortText = "";
+            var longOffered = false;
+            try
+            {
+                RunAction($"对话框状态行：{screen}——短句放得下，不给「查看完整错误」入口（真实控件）", () =>
+                {
+                    dialog = open();
+                    dialog.Show();
+                    Application.DoEvents();
+                    shortFirst(dialog);
+                    Application.DoEvents();
+                    var status = StatusLabel(dialog);
+                    shortText = status.Text;
+                    if (shortText.Length == 0)
+                    {
+                        throw new InvalidOperationException("短句这一支量不到：状态行是空的（这一步没有落到状态行上）。");
+                    }
+                    var entry = ButtonOf(dialog, StatusLineText.FullTextButton);
+                    var (preferred, available, shouldOffer) = StatusEntryRule(status);
+                    if (entry.Visible != shouldOffer)
+                    {
+                        throw new InvalidOperationException(
+                            $"短句「{shortText}」（文字 {preferred}px、入口不占位时这一行 {available}px）下入口可见={entry.Visible}，"
+                            + $"按口径该「{(shouldOffer ? "给" : "不给")}」：点开看到的是同一句话时不该给入口。");
+                    }
+                    if (shouldOffer)
+                    {
+                        throw new InvalidOperationException(
+                            $"短句「{shortText}」在这一行（{available}px）就判放不下（文字 {preferred}px）：入口会在最不该出现的时候出现。");
+                    }
+                    _lines.Add($"     短句「{shortText}」：文字 {preferred}px、入口不占位时这一行 {available}px、入口可见=False");
+                });
+
+                RunAction($"对话框状态行：{screen}——真实失败长句按同一口径重判（放不下才给入口）", () =>
+                {
+                    if (dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                    toLong(dialog);
+                    var status = StatusLabel(dialog);
+                    if (status.Text == shortText)
+                    {
+                        throw new InvalidOperationException($"换了输入状态，状态行却还是那一句「{shortText}」：失败没有落到状态行上。");
+                    }
+                    var entry = ButtonOf(dialog, StatusLineText.FullTextButton);
+                    var (preferred, available, shouldOffer) = StatusEntryRule(status);
+                    if (entry.Visible != shouldOffer)
+                    {
+                        throw new InvalidOperationException(
+                            $"失败原因 {status.Text.Length} 字（文字 {preferred}px、入口不占位时这一行 {available}px）下入口可见={entry.Visible}，"
+                            + $"按口径该「{(shouldOffer ? "给" : "不给")}」：读不到全文时不该没有入口。");
+                    }
+                    longOffered = shouldOffer;
+                    _lines.Add($"     真实失败原因 {status.Text.Length} 字：文字 {preferred}px、入口不占位时这一行 {available}px、"
+                        + $"入口可见={entry.Visible}"
+                        + (shouldOffer ? "" : "——这一档这一屏放得下，四段里的「点开读全」在本档这一屏没量到（不伪造一个放不下的数字）"));
+                });
+
+                RunAction($"对话框状态行：{screen}——点入口读全，正文与状态行逐字相同", () =>
+                {
+                    if (dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                    if (!longOffered)
+                    {
+                        _lines.Add("     本档这一屏没有入口可点（上一段已如实记下宽度数字），这一段跳过");
+                        return;
+                    }
+                    ReadFullTextAndCheck(dialog);
+                });
+
+                RunAction($"对话框状态行：{screen}——回到短句后按同一口径重判，入口收得回来", () =>
+                {
+                    if (dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                    shortAgain(dialog);
+                    Application.DoEvents();
+                    var status = StatusLabel(dialog);
+                    var entry = ButtonOf(dialog, StatusLineText.FullTextButton);
+                    var (preferred, available, shouldOffer) = StatusEntryRule(status);
+                    if (entry.Visible != shouldOffer)
+                    {
+                        throw new InvalidOperationException(
+                            $"回到短句「{status.Text}」（文字 {preferred}px、入口不占位时这一行 {available}px）后入口可见={entry.Visible}，"
+                            + $"按口径该「{(shouldOffer ? "给" : "不给")}」。");
+                    }
+                    if (longOffered && shouldOffer)
+                    {
+                        throw new InvalidOperationException(
+                            $"同一屏长失败给过入口、回到短句后仍挂着（文字 {preferred}px / 这一行 {available}px）：判定收不回来。");
+                    }
+                    _lines.Add($"     回到短句「{status.Text}」：文字 {preferred}px、入口不占位时这一行 {available}px、入口可见={entry.Visible}"
+                        + (longOffered ? "（同一屏长失败给过、回短句后不给——入口收得回来）" : ""));
+                });
+            }
+            finally
+            {
+                // 坏磁盘那一段必须还原：留着它，后面每一段读任务都会失败（冒烟器自己造的坑自己填）。
+                cleanup?.Invoke();
+                dialog?.Dispose();
+            }
+        }
+
+        var profilesDir = store.ProfilesDir;
+        var profileJson = Path.Combine(profilesDir, profile.Id + ".json");
+        var profileBackup = File.ReadAllText(profileJson);
+
+        // 屏 1：嵌在页面文件里的 ProfileDialog——短句走入口自己的门控（项目 ID 没填），
+        // 长句走真实磁盘失败（配置文件读不出来，_profiles.Get 在产品代码里抛出并落进状态行）。
+        // 不走 CLI：本容器里 node 在 PATH 上但没有登录态，CLI 子进程会挂住（wine 实测：60 秒等不到结果）。
+        // 门与失败读的都是「Apifox 项目 ID」那一格（与「读取项目列表」同行），不是「分支」那一格：
+        // BranchGate 按 _projectId.Text 判，填错一格门永远开着，等到的只是那句门控文案（wine 实测踩过）。
+        Steps("新建/编辑配置对话框（嵌在 ProjectsPage.cs 里）",
+            () => new ProfileDialog(profiles, cli, credentials, editing: profile),
+            dialog =>
+            {
+                ComboInRowOf(dialog, "读取项目列表").Text = "";
+                Click(dialog, "读取分支");
+            },
+            dialog =>
+            {
+                ComboInRowOf(dialog, "读取项目列表").Text = "";
+                Click(dialog, "读取分支");
+            },
+            dialog =>
+            {
+                File.WriteAllText(profileJson, "这不是 JSON");
+                ComboInRowOf(dialog, "读取项目列表").Text = "123456";
+                Click(dialog, "读取分支");
+                PumpUntilCondition(
+                    () => StatusLabel(dialog).Text.StartsWith(ApifoxPicker.BranchesFailedPrefix, StringComparison.Ordinal),
+                    "读取分支的真实失败原因");
+            },
+            cleanup: () => File.WriteAllText(profileJson, profileBackup));
+
+        // 屏 2：独立文件的补充说明对话框——长句来自真实保存失败（任务文件读不出来）。
+        // 短句两支不同：打开时那一句本来就是短开场白；失败之后回到短句走「放弃修改」。
+        // 「放弃修改」的门控是「本接口有未保存修改」（MarkDirty 只在编辑位文字与已保存内容不同
+        // 时置位）——不先真的改一笔，保存失败后那颗钮仍是禁用的，第四段就没有回到短句的真实出口。
+        CheckTask? supplementTask = null;
+        var taskJson = "";
+        var taskJsonBackup = "";
+        Steps("补充说明对话框（独立文件，长文案来自真实保存失败）",
+            () =>
+            {
+                supplementTask = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "状态行入口任务" });
+                tasks.Write(supplementTask.Id, TaskFiles.Diff, SupplementFixture());
+                taskJson = tasks.FilePath(supplementTask.Id, TaskStore.TaskFile);
+                taskJsonBackup = File.ReadAllText(taskJson);
+                return new SupplementsDialog(tasks, supplementTask, supplementSaves);
+            },
+            dialog => { /* 打开时的那句就是这一屏的真实短句，不为了「有动作」多点一下 */ },
+            dialog => Click(dialog, "放弃修改"),
+            dialog =>
+            {
+                // 先真的改一笔：编辑位文字经 TextChanged → MarkDirty 置为未保存修改，
+                // 「放弃修改」随之可用（第四段回到短句要靠它）。
+                var editor = FindAll<TextBox>(dialog).FirstOrDefault(t => t.Multiline)
+                    ?? throw new InvalidOperationException("补充说明对话框里没有找到编辑位输入框。");
+                editor.Text = editor.Text + "本轮补一句";
+                File.WriteAllText(taskJson, "这不是 JSON");
+                Click(dialog, "保存本接口补充");
+                PumpUntilCondition(
+                    () => StatusLabel(dialog).Text.StartsWith("保存补充失败：", StringComparison.Ordinal),
+                    "保存补充的真实失败原因");
+            },
+            cleanup: () =>
+            {
+                // 坏文件必须还原：留着它，后面每一段读任务都会失败。
+                if (taskJsonBackup.Length > 0) File.WriteAllText(taskJson, taskJsonBackup);
+            });
+
+        // 屏 3：宽度受限的一屏（模型服务 620×470，状态行可用宽度只有约 566px）。
+        // 短句走同一颗「确定」的字段校验拒绝，长句走真实磁盘失败（保存密钥先核对配置存在）。
+        Steps("模型服务对话框（独立文件，620px 宽 = 状态行最窄的一屏）",
+            () => new GenerationDialog(credentials, profiles, profile, profileExists: true),
+            dialog =>
+            {
+                BoxInRowLabeled(dialog, "超时秒数").Text = "abc";
+                Click(dialog, "确定");
+            },
+            dialog =>
+            {
+                BoxInRowLabeled(dialog, "超时秒数").Text = "abc";
+                Click(dialog, "确定");
+            },
+            dialog =>
+            {
+                BoxInRowLabeled(dialog, "超时秒数").Text = "";
+                File.WriteAllText(profileJson, "这不是 JSON");
+                Click(dialog, "保存密钥");
+                PumpUntilCondition(
+                    () => StatusLabel(dialog).Text.StartsWith("保存密钥失败：", StringComparison.Ordinal),
+                    "保存密钥的真实失败原因");
+            },
+            cleanup: () => File.WriteAllText(profileJson, profileBackup));
+    }
+
+    /// <summary>某个控件所在行里的那个下拉框（按同一行里的按钮文字定位那一行）。</summary>
+    private static ComboBox ComboInRowOf(Control root, string buttonLabel) =>
+        FindFirst<ComboBox>(ButtonOf(root, buttonLabel).Parent
+            ?? throw new InvalidOperationException($"找不到「{buttonLabel}」所在行。"))
+        ?? throw new InvalidOperationException($"「{buttonLabel}」所在行里没有下拉框。");
+
+
+    /// <summary>
+    /// 按行标签找那一行里的输入框。字段网格（<c>Ui.FieldGrid</c>）是「标签在第 0 列、字段在第 1 列
+    /// 的同一行」——标签的 <c>Parent</c> 是整张网格，按父容器找会取到网格里的<b>第一个</b>输入框
+    /// （模型服务对话框即「服务地址」），填错格子等于绕过校验（wine 实测：状态行留空）。
+    /// 故按单元格定位取同一行的下一列控件；行内包裹型布局（父容器就是那一行）仍按父容器取。
+    /// </summary>
+    private static TextBox BoxInRowLabeled(Control root, string label)
+    {
+        var caption = FindAll<Label>(root).FirstOrDefault(l => string.Equals(l.Text, label, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"找不到「{label}」这一行。");
+        var cell = caption.Parent is TableLayoutPanel grid
+            ? grid.GetControlFromPosition(grid.GetCellPosition(caption).Column + 1, grid.GetCellPosition(caption).Row)
+            : caption.Parent;
+        return FindFirst<TextBox>(cell
+            ?? throw new InvalidOperationException($"「{label}」那一行右边没有控件。"))
+            ?? throw new InvalidOperationException($"「{label}」所在行里没有输入框。");
+    }
+    /// <summary>
+    /// 真的点一下「查看完整错误」，在模态窗泵起来的消息循环里核对正文与状态行逐字相同，再点它那颗「关闭」。
+    /// 关它不直接调 <c>Close()</c>——那绕过了产品路径。
+    /// </summary>
+    private static void ReadFullTextAndCheck(Form dialog)
+    {
+        var status = StatusLabel(dialog);
+        var expected = status.Text;
+        var openedTitle = "";
+        var openedBody = "";
+        using var probe = new System.Windows.Forms.Timer { Interval = 30 };
+        var dismissed = false;
+        probe.Tick += (_, _) =>
+        {
+            if (dismissed) return;
+            var shown = Application.OpenForms.OfType<StatusTextDialog>().FirstOrDefault();
+            if (shown is null) return;
+            openedTitle = shown.Text;
+            openedBody = shown.Message;
+            ButtonOf(shown, "关闭").PerformClick();
+            dismissed = true;
+        };
+        probe.Start();
+        try
+        {
+            Click(dialog, StatusLineText.FullTextButton);
+        }
+        finally
+        {
+            probe.Stop();
+        }
+        Application.DoEvents();
+        if (!dismissed) throw new InvalidOperationException("点了入口却没等到完整错误对话框（没打开、或打开的不是这一型）。");
+        if (openedBody != expected)
+        {
+            throw new InvalidOperationException(
+                $"对话框正文与状态行不逐字相同（正文 {openedBody.Length} 字 / 状态行 {expected.Length} 字）：读全这一步给出的是另一句话或半句话。");
+        }
+        if (openedTitle != StatusLineText.FullTextHeading)
+        {
+            throw new InvalidOperationException($"对话框标题是「{openedTitle}」，取的不是口径文件那一份。");
+        }
+        _lines.Add($"     点开读全：标题「{openedTitle}」、正文 {openedBody.Length} 字与状态行逐字相同");
     }
 
     /// <summary>

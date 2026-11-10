@@ -27,6 +27,9 @@ internal sealed class ReportsDialog : Form
     // 行里只剩「重试」与「关闭」两颗可点，用户不必去猜「重开窗口」。
     private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusHost;
     private readonly Label _hint = new()
     {
         Dock = DockStyle.Fill,
@@ -69,8 +72,9 @@ internal sealed class ReportsDialog : Form
         headRow.Controls.Add(Ui.Caption("预览为 Markdown 源文，与「导出 Markdown」内容一致；HTML/JSON 与前端交接说明由同一份报告生成。"));
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, 0) };
-        _status.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_status);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusHost);
 
         var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 7, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -189,9 +193,5 @@ internal sealed class ReportsDialog : Form
         _handoffButton.Enabled = false;
     }
 
-    private void SetStatus(string message, Color color)
-    {
-        _status.Text = message;
-        _status.ForeColor = color;
-    }
+    private void SetStatus(string message, Color color) => _statusHost.SetText(message, color);
 }

@@ -2,6 +2,41 @@
 
 本目录是独立小工具，与 PNOS 业务项目无引用关系，不加入 PNOS 解决方案。
 
+## 本仓验收口径（可勾选）
+
+> **为什么要有这一节**：本产品**没有对应的 DoD 文件**——第一百六十五轮核对 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（2026-10-31 版），正文 9 份与豁免名单都没有 ApifoxHelper。DoD 缺席时，验收口径此前散在 `docs/方案.md` §2.2/§8、`README.md`「使用流程」「写入安全」、`docs/DESIGN.md` 与本文件的多处，**没有一份能逐项勾选的表**——任何一轮都可以自行定义「缺口」。本节把这些既有口径机械可读化：**不新增任何产品功能、不新增任何判定**。
+>
+> **勾选口径**：`[x]` = 达成，且必须有本仓可核对的断言把它钉住；`[ ]` = 未达成，「当前结论」一列写清缺在哪、由哪一条挂账接续。
+>
+> **证据口径**：每条「证据出处」里的引用都必须能落到实物——反引号内的 `文件名.cs` 必须在仓库里存在，`类名.断言名` 必须在 `ApifoxHelper.Tests` 里存在。这条由 `ApifoxHelper.Tests/AcceptanceChecklistTests.cs` 机械钉住：**编一个不存在的断言名即红，删掉一行的证据出处即红**。「GUI 证据」一列只写 wine 轮次；**wine 结果不是真机结果**（同一纪律见 `WordingHonestyTests`）。
+
+### 一、形态门槛（`docs/方案.md` §2.2 验收门槛表）
+
+| 勾选 | 门槛 | 当前结论 | 证据出处（文件 + 断言名） | GUI 证据（wine 轮次） |
+| --- | --- | --- | --- | --- |
+| [x] | G-D1 形态：主工作流全程在原生窗口，无「在浏览器中打开」入口 | 达成（配置 → 任务 → 审阅 → 检查 → 计划 → 同步 → 报告十站均在原生壳；`--web` 只是显式回退） | `Desktop/DesktopApp.cs`、`ApifoxHelper.Tests/LaunchOptionsTests.cs` 的 `LaunchOptionsTests.Defaults_SelectNativeShell`、`LaunchOptionsTests.WebFlag_SelectsTransitionShell` | 第一百六十六轮三档全量复跑 135 通过 / 0 失败 ×3 |
+| [x] | G-D2 设计基线：单一视觉来源，颜色/字号/间距只从令牌取 | 达成（机械抽检在，无就地发明值） | `docs/DESIGN.md`、`Desktop/Native/UiTokens.cs`、`TokenWiringTests.ColorTokens_MatchDesignDoc`、`TokenWiringTests.NativeSources_NoColorLiteralsOutsideUiTokens`、`TokenWiringTests.SpacingTiers_MatchDesignDoc` | 第一百六十二轮三档缩放实测 |
+| [x] | G-D3 状态完备：每屏有状态表，空态/加载/执行中/错误/禁用/部分完成逐态定义 | 达成（读取失败态每屏都有「重试」；长内容区一律经滚动工厂；状态行放不下给入口） | `ApifoxHelper.Tests/LoadFailureRetryCoverageTests.cs` 的 `LoadFailureRetryCoverageTests.EveryFailureScreen_HasOneRetryButtonFromTheSharedLabel`、`ScrollHostTests.DesignDoc_DeclaresLongContentHost`、`StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost` | 第一百六十六轮三屏四段（本节第二段） |
+| [x] | G-D4 中文排版：对照共享审查清单 A 节机械检查 | 达成（可源码判定的条目全绿）；行首行尾禁则、正文行长、中英文空隙属渲染期属性，随 G-D5 真机复核 | `TypographyTests.NoFakeItalic`、`TypographyTests.FontStack_MatchesDesignDocOrder`、`TypographyTests.Copy_ChineseQuotesOnlyUseCornerBrackets`、`TypographyTests.FontFloor_Is12Px`、`TypographyTests.Copy_AvoidsEmptySloganWords` | 第一百六十六轮 `RunFontStackRuntime`（三档全量复跑内） |
+| [ ] | G-D5 真机观感：100% 与 200% DPI 截图各一套并按状态归档，观感由人复核 | **未达成（环境供给缺口）**：真机 0 台，`docs/evidence/real-machine/` 不存在；现有 GUI 证据全部来自 Linux 容器内 wine 10.0 + Xvfb。到期日 2026-11-20，届时仍不可得按「降级答辩脚本」逐屏答辩 | `ApifoxHelper.Tests/WordingHonestyTests.cs` 的 `WordingHonestyTests.RealMachineClaims_RequireEvidencePaths`、`WordingHonestyTests.DegradationScript_ExistsAndCoversEveryScreen`、`WordingHonestyTests.Readme_StatesTheRealMachineGap`、本节下方的「降级答辩脚本」 | 第一百六十六轮 wine 三档 135/0 ×3（**模拟器，不是真机**） |
+| [ ] | G-D6 退场：原 Web 页面从用户路径移除 | **未达成**：页面层已冻结、默认入口已翻转为原生（见 G-D1），但 `--web` 回退仍在，退场清单未执行——按决定，最终移除排在 G-D5 真机复核之后 | `Desktop/DesktopApp.cs`、`LaunchOptionsTests.WebFlag_SelectsTransitionShell`（回退入口存在即「未退场」，这条断言钉的是回退行为不是退场完成） | 不经界面（入口路由判定） |
+
+### 二、SHARED 写入安全不变量（`docs/方案.md` §8 产品红线）
+
+> 这九条是产品红线，任何交互层改动（含原生重构与潜在插件宿主）不得放松。逐条给结论时区分「服务层实现 + 单元路径在」与「端到端对真实 Apifox 验证过」——后者本仓从未有过。
+
+| 勾选 | 不变量 | 当前结论 | 证据出处（文件 + 断言名） | GUI 证据（wine 轮次） |
+| --- | --- | --- | --- | --- |
+| [x] | SHARED-1 两阶段独立确认：源码回写与远端同步分别预览、分别确认 | 达成（原生侧两次独立确认，任一动作不隐含另一个；确认框默认按钮一律在「取消」） | `ApifoxHelper.Tests/ApplyPlanConfirmTests.cs` 的 `ApplyPlanConfirmTests.RunApply_AsksBeforeWriting`、`ConfirmBoxConsistencyTests.EveryConfirmBox_DefaultsToCancel` | 第一百六十六轮 `RunWriteBackEndToEnd`（三档全量复跑内） |
+| [x] | SHARED-2 预览先行：确认绑定计划，选择/目标/CLI 版本变化后原确认失效 | 达成（确认同步只在计划待确认且未过期时可用） | `SyncExecutionTests.CanExecute_OnlyFreshAwaitingConfirmPlan`、`ApplyPlanConfirmTests.ConfirmText_TakesThePlansOwnNumbers` | 不经界面（门禁真值表） |
+| [ ] | SHARED-3 写入边界：只写计划内资源、整段构造嵌套对象、受保护设置不开放相关写入 | **已实现（待验证）**：勾选与排除口径在，端到端写入从未对任何 Apifox 项目执行 | `SyncSelectionTests.SyncableNow_ExcludesPendingAndNonSyncable`、`SyncSelectionTests.PendingCount_OnlyUnconfirmedNeedsDecisionItems` | 不经界面（勾选真值表） |
+| [ ] | SHARED-4 冲突检测：计划生成时与执行前逐资源重读并核对指纹 | **已实现（待验证）**：指纹与最终状态有落盘记录；本地锁不承诺跨客户端原子性（README 已知限制） | `JournalTests.PlanLines_CarryTheFingerprintAndTheFinalStatus` | 不经界面（写入形状断言） |
+| [x] | SHARED-5 部分失败如实：首个失败即停、部分完成不显示成全部成功、不谎报回滚 | 达成（结果口径单一落点） | `SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess`、`SyncExecutionTests.ResultText_InterruptedPointsToVerifyFirst` | 不经界面（结果文案真值表） |
+| [x] | SHARED-6 审计记录：执行意图与逐项结果追加写任务日志，中断后不自动重放 | 达成（日志读写单一口径；未结束动作在清单上就地标出） | `JournalTests.EveryEventLine_HasUniqueJsonNames`、`JournalTests.UnfinishedActions_FindsIntentsWithoutAResult` | 第一百六十六轮 `RunJournalLoadFailure` 六段（三档全量复跑内） |
+| [ ] | SHARED-7 创建防重：创建前复查同身份资源，未取得 ID 时按身份回读 | **已实现（待验证）**：防重与 ID 回绑在服务层，从未对真实 Apifox 执行过创建 | `Sync/SyncExecutor.cs`（实现落点；本条无界面断言，端到端未验证即不得勾成达成） | 不经界面 |
+| [ ] | SHARED-8 不删除、不自动发布：不自动删除远端资源，高风险未逐项确认不进计划 | **部分达成**：不进计划的门禁在并验证过；「不删除」是能力缺失式保证（原生无删除入口），无端到端验证 | `SyncSelectionTests.Selectable_OnlySyncableStatusesAndOnline`、`CompatEntriesTests.ResultHeadline_FailedKeepsWriteClosedAndNeverClaimsPassed` | 不经界面 |
+| [x] | SHARED-9 本地安全：只监听回环并校验 Host/Origin/会话令牌；凭据加密不入日志与导出；共享报告脱敏 | 达成（脱敏为单一编译口径；密钥按配置 ID 存 DPAPI，导出天然不含凭据——Linux 侧以真实异常路径验证拒绝） | `ErrorCopyTests.Redactor_IsSharedCompiledIntoTheTestProject`、`ProfileStoreTests.Save_RejectsEmptyName_WithFieldId`（保存校验与不落半份状态） | 不经界面 |
+
 ## 已核实的环境事实（2026-10-31）
 
 - 本机 SDK：9.0.312、10.0.x；存在 net8.0 targeting pack（8.0.33），工具目标框架 net8.0。
@@ -1690,7 +1725,9 @@
 >
 > 到期日：**2026-11-20**。责任人：**用户（答辩负责人）**提供机器并在真机执行；本代理负责机器到位后照「Windows 真机 / wine 模拟器验证清单」B 段逐条核对并回写本节。G-D5（真机观感）在验收表上如实标为**「未达成（环境供给缺口）」**，不标「部分达成」。
 >
-> 复现命令（三档缩放各跑一次，报告落 `/tmp` 或任意路径）：`dotnet publish ApifoxHelper.Smoke -c Release -r win-x64 --self-contained -o /tmp/ah-smoke-pub` → `wine reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d <96|120|192> /f` → `xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=<路径>`。
+> 复现命令（三档缩放各跑一次，报告落 `/tmp` 或任意路径）：`dotnet publish ApifoxHelper.Smoke -c Release -r win-x64 --self-contained -o /tmp/ah-smoke-pub` → `export WINEPREFIX=$HOME/.wine-ah` → `wine reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d <96|120|192> /f` → `xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=<路径>`。
+>
+> **前缀必须是 `~/.wine-ah`（第一百六十六轮实测）**：不带 `WINEPREFIX` 走默认的 `~/.wine` 时，**每一扇窗口都构造不出来**——报告里 115 段失败全是 `Win32Exception：Error creating window handle`（三档一样，只有 20 段不经窗口的通过）。这与产品无关，是那份前缀没有可用的桌面环境。误用它会把一次正常的环境差异读成「对话框接入把自己搞崩了」的回归，故写进命令里。
 
 | # | 屏 / 主张 | 讲什么 | 证据出处（可核对） | 结论口径 |
 | --- | --- | --- | --- | --- |
@@ -1707,17 +1744,17 @@
 | 11 | 同步预览与执行 | 勾选、冻结计划、确认同步、写入后回读核对、失败即停 | 构造冒烟 + `SyncPlanService`/`SyncExecutor` 用例；真实 Apifox 写入本环境不可得 | 源码 + 编译证据 |
 | 12 | 报告与交接 | 四格式导出（md/html/json/handoff）与预览 | wine 冒烟 `RunFullJourney` 第 8 段（四种格式的真实字节数） | wine 量到 |
 | 13 | 任务日志对话框 | 读取失败 → 重试 → 恢复，失败态不留旧行 | wine 冒烟 `RunJournalLoadFailure` 六段 | wine 量到 |
-| 14 | 说明行放得下（三屏） | 96/120/192 三档全部放得下（第一百六十二轮在 ≈200% 档量到两屏放不下，第一百六十三轮按窗体缩放修掉根因） | wine 冒烟 `RunCaptionFit` 三档实测：对话框可用宽度 988 / 1243 / 1576px，最长一条 973/1576、1168/1576、469/1576；本轮全量三档 123 通过 / 0 失败 ×3 | wine 量到；真机未复核 |
+| 14 | 说明行放得下（三屏） | 96/120/192 三档全部放得下（第一百六十二轮在 ≈200% 档量到两屏放不下，第一百六十三轮按窗体缩放修掉根因） | wine 冒烟 `RunCaptionFit` 三档实测：对话框可用宽度 988 / 1243 / 1576px，最长一条 973/1576、1168/1576、469/1576；第一百六十五轮全量三档 123 通过 / 0 失败 ×3，第一百六十六轮接入 15 处对话框状态行并新增三屏四段后复跑 **135 通过 / 0 失败 ×3**（说明行那段未改判） | wine 量到；真机未复核 |
 | 15 | 字体栈 | 回退命中、界面控件/进程默认字体/对话框三处同一份实际渲染名 | wine 冒烟 `RunFontStackRuntime` | wine 量到 |
 | 16 | 完整旅程 | 配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告，一条任务走完 | wine 冒烟 `RunFullJourney` 八段 | wine 量到 |
-| 17 | 状态行的完整错误入口（两个主页面） | 短句放得下不给入口；真实失败长句放不下就给；点开后正文与状态行逐字相同、可选中复制；关掉回到原处，修好磁盘后入口收起，工具栏那一行高全程不变 | wine 冒烟 `RunStatusFullText` 四段（证据行给窗口实际宽、文字宽、入口不占位时的行宽）+ `StatusTextDialog` 在冒烟构造清单内 | wine 量到；真机未复核；120% 档起这一页的工具栏不给这一行留宽度（恒 194px，17 字计数句在该档 202px 也放不下），「放得下不给入口」那一支在该档没量到，见 NOTES 挂账 |
+| 17 | 状态行的完整错误入口（全部 17 处：两个主页面 + 15 处对话框） | 短句放得下不给入口；真实失败长句放不下就给；点开后正文与状态行逐字相同、可选中复制；关掉回到原处，恢复短句后入口收起，工具栏那一行高全程不变 | 页面侧：wine 冒烟 `RunStatusFullText` 四段 + `StatusTextDialog` 在冒烟构造清单内。对话框侧：`RunDialogStatusFullText` 三屏各四段（嵌在 `ProjectsPage.cs` 的「新建/编辑配置」、独立文件的「补充说明」、宽度最窄的「模型服务」620px），长句全部来自真实磁盘失败而不是拼出来的长句；覆盖范围由 `StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost` 按顶格类逐段机械判住 | wine 量到；真机未复核。**哪一档量到了「点开读全」要说清**：「新建/编辑配置」在 ≈100% 与 ≈130% 两档都给了入口并读全（806/626px、855/796px），≈200% 档判放得下（806/1306px）；「模型服务」（状态行最窄的一屏）只在 ≈100% 档给并读全（643/566px），≈130% 档 680/721px 已放得下；「补充说明」三档都放得下（643/922、680/1162、643/1570px），这一屏「点开读全」一次都没量到——报告逐档写明，不伪造一个放不下的数字。**≈200% 档的「放得下」不可当成真机结论**：该档状态行文字宽与 96 档报同一个数（806、643px），行宽却放到了 1306/1570/1186px，属 wine 给裸 Form 与调过 `DpiScale.Apply` 的窗体不是同一个 DPI 上下文这一族现象。页面侧 120% 档起工具栏不给这一行留宽度（恒 194px），「放得下不给入口」那一支在该档没量到，见 NOTES 挂账 |
 
 **答辩时主动交代的四件事（不回避）**：
 
 1. **G-D5 未达成**：三档 DPI 的真机截图 0 张，`docs/evidence/real-machine/` 目录不存在。真机到位后按该目录命名约定补图，并同步改 `WordingHonestyTests`（那时真机字样才有出处）。
 2. **≈200% 档的说明行（已按根因修掉，本轮全量复跑三档）**：第一百六十二轮量到说明行在 ≈200% 档两屏放不下（同步预览 1021/988px、报告与交接 1168/888px），根因不是文案太长而是**对话框不随缩放放大**；第一百六十三轮改为按系统字体缩放比显式 `Scale` 一次（`DpiScale.Apply`）。本轮把三档各跑一遍全量冒烟：对话框可用宽度 988 / 1243 / 1576px（96/120/192），三屏说明行**三档全部放得下**，全量结果 123 通过 / 0 失败 ×3（第一百六十二轮的 116/2 不再复现）。
 3. **只有源码与编译证据的屏**（第 6/7/8/11 行）：这些屏的交互依赖真实 Apifox CLI 登录态、项目权限或本机 .NET SDK，本环境不具备。讲的时候说「代码与用例在，真实端到端未跑」，不说「已验证」。
-4. **一次没复现的 ≈200% 档观察（如实记，不写成缺陷）**：本轮第一次在 `LogPixels=192` 全量复跑时（那一次页面构造即崩、23 段失败），「配置表单：新建对话框的行高没有死空白」判失败——7 行行高 76px 超阈值 58px，实测 Label 高 68px 而该档正文行高 34px，疑似**字体派生的高度被再乘一次缩放因子**。把构造期崩溃修掉之后，同一档又跑了两次（含最终一轮），该段**都是 0 失败、没有复现**。所以这一条记为「一次没复现的观察」，不写成已确认缺陷、也不写成已排除：真机到位后按 `RunProfileFormLayout` 那段在 200% 档复量一次即可判定。
+4. **一次没复现的 ≈200% 档观察（如实记，不写成缺陷，已有两次复量数字）**：第一百六十五轮第一次在 `LogPixels=192` 全量复跑时（那一次页面构造即崩、23 段失败），「配置表单：新建对话框的行高没有死空白」判失败——7 行行高 76px 超阈值 58px，实测 Label 高 68px 而该档正文行高 34px，疑似**字体派生的高度被再乘一次缩放因子**。把构造期崩溃修掉之后，同一档又跑了两次（含第一百六十五轮最终一轮），该段**都是 0 失败、没有复现**。第一百六十六轮三档全量复跑再次量到同一段的真实行高：**≈200% 档最高行 54px（仓库根目录 / Apifox 项目 ID / 分支 / 第16行，阈值 58px），对照 ≈100% 档同名行 37px**（≈130% 档 42px），那条 76px 的观察**第三次没复现**，且本轮拿到的是逐行数字而不只是「通过」。所以这一条仍记为「一次没复现的观察」，不写成已确认缺陷、也不写成已排除：真机到位后按 `RunProfileFormLayout` 那段在 200% 档复量一次即可判定。
 
 ## 说明行量测按缩放档收口 + 降级答辩脚本（第一百六十二轮，简报 P0-1 / P0-2）
 
@@ -1756,3 +1793,26 @@
 - **变异验证实测可红**：① `ShouldOfferFullText` 的 `>` 改 `>=` → 边界两条 Theory 红（正好放下的那一格与 0 宽那一格）；② 在 `Ui.cs` 加一行代码 `Ui.Ghost("查看完整错误")` → `ButtonText_IsWrittenInOnePlaceOnly` 红（证明 `CodeOnly` 没把门改成摆设，注释豁免、代码不豁免）；③ 删掉 `StatusLineHost` 的 `Height = label.Height` → `Host_KeepsTheStatusLineHeight` 红。三处均还原并逐字节核对一致。**构造顺序与判定基准这两处缺陷的拦截证据是 wine 冒烟本身**（Linux 侧无法构造控件，这是本仓一贯的分工：形状与几何靠冒烟，判据靠真值表）。
 - **本轮未做（如实挂账）**：① 简报 P0-1 的**真机**运行与三档真机截图仍不可得（无 Windows 机器，环境供给缺口）；② 简报 P1-3 的逐屏表「答辩时怎么讲」加列未做——现有表的「讲什么」与「结论口径」两列已经承担这个用途，加列要同步改 `DegradationScript_ExistsAndCoversEveryScreen` 的提取口径，那正是简报警告的「门钉一种写法」老毛病，本轮判定不动；③ 上面挂账 ①②③⑤ 未做。
 - **本轮未连接或写入 Apifox，未调用任何模型服务**；不改服务层业务语义、不改写入安全不变量、不改视觉令牌与间距档位、不新增产品功能以外的门；界面侧改动只有状态行宿主（含构造顺序与判定基准两处修复）、两个页面写状态行的那一条路径，以及 `DpiScale` 与口径文件的注释文字。
+
+## 接续轮「15 处对话框状态行接入 + 本仓验收口径可勾选表 + wine 三档真跑抓出冒烟段自身四处缺陷」（2026-11-11 第一百六十六轮，简报 P0-1 / P0-2 / P0-3）
+
+- **接续前确认**：开局工作树**不干净**——`git status` 显示 18 份文件已改未提交（`Desktop/Native/` 14 份对话框与页面 + `StatusLineHost.cs`、`ApifoxHelper.Smoke/Program.cs`、`ApifoxHelper.Tests/StatusLineTextTests.cs`、`README.md`、`docs/NOTES.md`），另有 1 份未入库新测试 `ApifoxHelper.Tests/AcceptanceChecklistTests.cs`。这正是本轮简报建议的 P0-1 + P0-2 那片实现，**写到一半停在「Linux 侧全绿、wine 一次没跑」**——与第一百六十四/一百六十五轮同一族、同一停点。HEAD（726cc8b，第一百六十五轮）本身 2364 用例全绿。按「保留并接续已有实现，不覆盖未完成工作」，本轮**不重写**那片实现，只做它缺的那一半：**在 wine 下真跑，并把跑出来的东西判对**。开局复核：`dotnet build` 0 警告 0 错误、`dotnet test` **2370 全绿**（+6 = `AcceptanceChecklistTests` 4 条 + `StatusLineTextTests` 新增 2 条），接入覆盖磁盘实测 17 处 `Ui.StatusLine()` 全部有 `new StatusLineHost(` 与 `SetText(`、直接写标签的代码行 0 处残留（`grep` 逐文件对数）。
+- **本轮定位**：严格按简报「本轮只做 P0-1 + P0-2 + P0-3，其余挂账」。P0-1 与 P0-2 的代码与文档已在树里，本轮的**增量是验证与收口**：跑三档全量冒烟、修掉它跑出来的四处失败、把验收口径表里的 GUI 证据轮次换成实际复跑的数字、把复现命令里那个会把下一轮带进沟里的环境前提写下来。**未新增任何产品功能**，未动 `StatusLineText` 判定口径、未动 `StatusLineHost` 判定基准（简报明令不许动）、未动服务层与写入安全语义。
+- **P0-1 落成的东西（复核确认，非本轮新写）**：`docs/NOTES.md` 顶部新增「本仓验收口径（可勾选）」——形态门槛 G-D1…G-D6 六行 + SHARED 写入安全不变量九行，每行给「勾选 / 门槛 / 当前结论 / 证据出处（文件 + 断言名）/ GUI 证据（wine 轮次）」五列。`AcceptanceChecklistTests` 四条断言把它钉住：本节必须排在正文第一处 `## ` 之前（否则口径表被埋进几百行日志）、行数必须与方案 §2.2 与 §8 的实际条目数相等（6 与 9，少一行就是漏口径）、**每条反引号引用都必须落到实物**（`.cs`/`.md` 必须在仓库里存在，`类名.断言名` 必须在测试工程里真的有这一条）、勾成 `[x]` 的行必须至少被一条断言钉住（只指到源文件不算达成）、G-D5 必须留 `[ ]` 且结论里写「未达成」+ GUI 列必须点名模拟器。真机 0 台因此**在结构上勾不上**——这一条不依赖某一句措辞会不会漂。
+- **已交付 ①（wine 三档真跑抓出的四处失败，全部是新冒烟段自己的缺陷，不是产品缺陷）**：首跑 `LogPixels=96` 报 **131 通过 / 4 失败**，四处都在新增的 `RunDialogStatusFullText` 里，逐条查到底层才判对：
+  - **「新建/编辑配置」对话框长句那一段 `TimeoutException`**：冒烟器把项目 ID 填进了**「分支」那一格**（`ComboInRowOf(dialog, "读取分支")` 取的是同一行里的 `_branch`），而 `ApifoxPicker.BranchGate` 判的是 `_projectId.Text`——门永远开着，`PumpUntilCondition` 等的那句失败原因根本没机会出现。改为填「读取项目列表」那一行的下拉框（`_projectId` 与它同行）：门过去之后，产品代码先 `_profiles.Get(_profile.Id)` 读磁盘（`ProjectsPage.cs:875`，坏 JSON 当场抛出，**在调 CLI 之前**），第四段这才真的走到「真实失败原因落进状态行」。
+  - **「补充说明」对话框回到短句那一段「『放弃修改』按钮不可点」**：不是禁用缺陷——`_discardButton.Enabled = _dirty && !_saving`（`SupplementsDialog.cs:431`），而冒烟器**从没编辑过任何内容**，`_dirty` 本就是 false。改为在长句一支里先把第一个多行编辑位真的改一笔（`TextChanged → MarkDirty`），失败后产品的 catch 分支调 `MarkDirty()` 恢复门控，这颗钮才成为回到短句的**真实出口**（回到「已还原为本接口已保存的内容。」204px / 922px，不给入口）。
+  - **「模型服务」对话框短句那一段「状态行是空的」**：根因是 `BoxInRowLabeled` 拿 `caption.Parent` 当「那一行」——但 `Ui.FieldGrid` 是**标签在第 0 列、字段在第 1 列的同一行**，标签的 Parent 是**整张网格**，于是 `FindFirst<TextBox>` 取到网格里第一个输入框（「服务地址」），把 `"abc"` 填进了一个自由文本字段：校验通过、`DialogResult=OK`、状态行留空。**填错格子等于绕过校验**，这一条如果不追到底就会被读成「产品没把校验写进状态行」。改为按单元格定位（`GetCellPosition` + `GetControlFromPosition(col+1, row)`），短句一支实量到「超时秒数应为数字。」134px / 566px 不给入口。
+  - **同一屏第四段「判定收不回来」**：第三段的连带——第三段的「短句」根本没成立，第四段拿到的仍是那句 94 字长失败（643px / 566px 判放不下），于是报「给过入口又还挂着」。第三段修好后第四段一次转绿。
+  - **四处都是冒烟器把控件认错/把门控读漏**，产品的判定口径一行没改。这与第一百六十二轮「空门」、第一百六十五轮「构造顺序」同一族：**Linux 侧 2370 条全绿拦不住任何一处，只有真构造拦得住**。
+- **已交付 ②（本轮实测证据，wine 10.0 + Xvfb 1600×1000，同一份发布产物按 `LogPixels` 96 / 120 / 192 各跑一次）**：**135 通过 / 0 失败 ×3，退出码 0 / 0 / 0**（第一百六十五轮是 123 段；+12 = 三屏各四段）。关键证据行原文：
+  - 96 档：「新建/编辑配置」真实失败 105 字 806px / 这一行 626px → **给入口**，点开读全「标题『完整错误信息』、正文 105 字与状态行逐字相同」，回短句「请先填写项目 ID」112px / 626px → 不给（同一屏给过、回来收起）。「补充说明」短句 498px / 922px 不给，长失败 94 字 643px / 922px **放得下**→ 按实记「这一档这一屏没量到点开读全」并跳过那一段；回短句 204px / 922px 不给。「模型服务」短句 134px / 566px 不给，长失败 94 字 643px / 566px **给**并读全，回短句 134px 收起。
+  - 120 档：三屏行宽随窗体放大（796 / 1162 / 721px），配置对话框 855px > 796px 仍**给**并读全；补充说明与模型服务两屏 680px ≤ 721/1162px **放得下**，证据行按实写「不伪造一个放不下的数字」。
+  - 192 档：三屏都放得下（1306 / 1570 / 1186px），「点开读全」这一支在这一档三屏都没量到，逐段如实记录；页面侧 `RunStatusFullText` 同步复跑未改判。
+- **量到的边界与没量到的（不冒充）**：① **对话框的「点开读全」量到了哪一格**：配置对话框在 96 与 120 两档都给并读全（806/626、855/796），模型服务只在 96 档给（643/566，120 档 680/721 已放得下），补充说明三档都放得下、这一支一次没量到；192 档三屏都判放得下。这是**量到的边界**，不是漏跑，证据行逐档写明——写这段的理由是它容易被读反：「三屏四段全绿」不等于「四段的每一支在每一档都量到」。② 192 档**状态行文字宽**与 96 档报同一个数（806 / 643px），而对话框行宽从 626 跳到 1306——第一百六十五轮记过的「wine 给裸 Form 与调过 `DpiScale.Apply` 的窗体不是同一个 DPI 上下文」**本轮再次出现**，页面在主壳里的真实缩放仍未量到，随真机复核。③ 三屏只是 15 处对话框里的**代表**（一个嵌在页面文件里、一个独立文件、一个宽度最窄），其余 12 处由 `EveryStatusLine_OnDisk_IsWrittenThroughTheHost` 的接线门覆盖，**没有逐屏走四段**——这一点在 README「已知限制」与本节都按实写。④ 真机 0 台。
+- **已交付 ③（环境事实两条，都写进可复现路径）**：① **wine 前缀**：不带 `WINEPREFIX` 走默认 `~/.wine` 时每一扇窗都构造不出来（`Win32Exception：Error creating window handle`，20 通过 / 115 失败，三档一样），本仓一直在用的是 `~/.wine-ah`。首跑那一份 115 失败差点被读成「对话框接入把自己搞崩了」的产品回归——已把前缀写进「降级答辩脚本」的复现命令与 `.winecheck/README.md`，并说明误用会看到什么。② **根分区写满**：本轮中段 `/dev/vda3` 到 100%（剩 121M），`git`/`dotnet`/`ls` 一度全部返回空输出——共享服务器上的环境供给问题，未删除任何其他项目的产物，只用后清理了自己的 `/tmp` 发布目录与临时 worktree。
+- **已交付 ④（P0-3 纪律项，每轮重述）**：**真机 0 台，G-D5 未达成（环境供给缺口）**，到期日 **2026-11-20**，责任人为答辩负责人（提供机器并执行）。本轮三档 GUI 证据全部来自 Linux 容器内 wine 10.0 + Xvfb 模拟器，**不是真机结果**；验收表上 G-D5 留 `[ ]` 且由 `AcceptanceChecklistTests.Checklist_RealMachineGate_IsStillUnmetAndSaysSo` 钉住（勾上即红）。这一条按简报要求每轮重述，不因「上轮已写」省略。
+- **挂账（下一轮第一件事的候选，按可交付性排序；简报明确本轮不做的原样续挂）**：① **真机三档截图与主链路演示**（G-D5，到期 2026-11-20）；② **简报 P1-1**：多显示器混合缩放的最小可验证路径（`MonitorFromWindow` + `GetDpiForMonitor` 只读查询写进证据行）——本轮**未做**，`DpiScale` 行为一行未动；③ **简报 P1-2**：≈200% 档「配置表单行高」的针对性复量动作——本轮**未新增该段**，但三档全量复跑顺带量到了真实数字（≈200% 档最高行 54px、阈值 58px，对照 96 档同名行 37px），那条 76px 的观察**第三次没复现**，已写进答辩脚本第 4 件事；④ **简报 P2-1**：`docs/DESIGN.md` §6 的 distill 结构重排——本轮**未动**（要先确认令牌一致性门的解析方式）；⑤ **简报 P2-2**：工具栏不给状态行让位的口径记录——本轮**未动**；⑥ 其余 12 处对话框没有逐屏走四段（只由接线门覆盖），若要逐屏量，需先决定「代表性三屏」够不够答辩。
+- **测试 2364 → 2370 用例**（+6，全部来自那片未提交的原生接入与验收口径表；本轮**未削弱任何既有断言**，判定口径与宿主基准一字未改）。`dotnet build` 主工程 / 测试工程 / 冒烟工程 **0 警告 0 错误**。
+- **变异验证实测可红（五处，全部还原后逐字节核对 `md5sum` 一致）**：① 把验收表 G-D2 行里一个断言名改成磁盘上不存在的名字 → `AcceptanceChecklistTests` 红（编出处即红）；② 把 G-D6 行「证据出处」整格换成没有反引号引用的白话 → 红（删出处即红）；③ 新增一处 `Ui.StatusLine()` 而不接宿主（临时探针类）→ `EveryStatusLine_OnDisk_IsWrittenThroughTheHost` 红（没接的必须登记，登记不了就判红）；④ 往封闭挂账清单里塞一条磁盘上不存在的死条目 → 红（清单不许留死条目）；⑤ 把切段正则改坏让扫描空转 → 地板断言（17 处）红（第一百六十二轮「空门」同族防线仍然有牙）。
+- **本轮未做（如实挂账）**：① 真机运行与三档真机截图仍不可得（无 Windows 机器，环境供给缺口）；② 上面挂账 ②④⑤⑥ 未做；③ 未连接或写入 Apifox，未调用任何模型服务；④ 不改服务层业务语义、不改写入安全不变量、不改视觉令牌与间距档位、不动 `StatusLineText` 与 `StatusLineHost` 的判定口径。界面侧本轮**零改动**——14 份对话框/页面的接入是接续的那片，本轮改的只有冒烟器（`ApifoxHelper.Smoke/Program.cs` 四处定位与一支编辑动作）、两份文档（`docs/NOTES.md` 口径表数字与复现命令、`.winecheck/README.md`）与测试。

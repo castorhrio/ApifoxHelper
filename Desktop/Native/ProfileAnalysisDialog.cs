@@ -33,6 +33,9 @@ internal sealed class ProfileAnalysisDialog : Form
     private readonly TextBox _nodePath = Ui.Input();
     private readonly TextBox _cliPath = Ui.Input();
     private readonly Label _statusLine = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusLineHost;
     /// <summary>字段标识 → 描边面板：解析失败按 UserException.Field 定位描红（DESIGN.md §6 校验失败描边）。</summary>
     private readonly Dictionary<string, Ui.FieldBox> _fields = [];
 
@@ -100,8 +103,9 @@ internal sealed class ProfileAnalysisDialog : Form
         buttons.Controls.Add(cancelButton);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _statusLine.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, 0, UiTokens.Xl, 0) };
-        _statusLine.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_statusLine);
+        _statusLineHost = new StatusLineHost(_statusLine);
+        _statusLineHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusLineHost);
 
         var gridScroll = Ui.ScrollHost();
         gridScroll.BackColor = UiTokens.Panel;
@@ -241,7 +245,6 @@ internal sealed class ProfileAnalysisDialog : Form
 
     private void SetStatus(string message, Color color)
     {
-        _statusLine.Text = message;
-        _statusLine.ForeColor = color;
+        _statusLineHost.SetText(message, color);
     }
 }

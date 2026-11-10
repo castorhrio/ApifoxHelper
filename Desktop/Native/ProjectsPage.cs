@@ -450,6 +450,8 @@ internal sealed class ProfileDialog : Form
     private readonly ComboBox _projectId = new() { DropDownStyle = ComboBoxStyle.DropDown };
     private readonly ComboBox _branch = new() { DropDownStyle = ComboBoxStyle.DropDown };
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与外层页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    private readonly StatusLineHost _statusHost;
 
     /// <summary>保存成功后的配置（保存失败保持 null；调用方据此在列表中定位刚保存的行）。</summary>
     public ProjectProfile? Saved { get; private set; }
@@ -559,8 +561,9 @@ internal sealed class ProfileDialog : Form
         buttons.Controls.Add(cancelButton);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, 0, UiTokens.Xl, 0) };
-        _status.Dock = DockStyle.Fill;
-        statusHost.Controls.Add(_status);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusHost.Controls.Add(_statusHost);
 
         var gridScroll = Ui.ScrollHost();
         gridScroll.BackColor = UiTokens.Panel;
@@ -938,9 +941,5 @@ internal sealed class ProfileDialog : Form
         if (ex.Field is { } field && _fields.TryGetValue(field, out var box)) box.SetInvalid(true);
     }
 
-    private void SetStatus(string message, Color color)
-    {
-        _status.Text = message;
-        _status.ForeColor = color;
-    }
+    private void SetStatus(string message, Color color) => _statusHost.SetText(message, color);
 }

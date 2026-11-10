@@ -62,6 +62,9 @@ internal sealed class SupplementsDialog : Form
     private readonly Button _saveButton;
     private readonly Button _discardButton;
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
+    // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
+    private readonly StatusLineHost _statusHost;
 
     public SupplementsDialog(TaskStore tasks, CheckTask task, SupplementService supplementSaves)
     {
@@ -124,7 +127,9 @@ internal sealed class SupplementsDialog : Form
 
         var statusGrid = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, ColumnCount = 1, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Xs) };
         statusGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        statusGrid.Controls.Add(_status, 0, 0);
+        _statusHost = new StatusLineHost(_status);
+        _statusHost.Dock = DockStyle.Fill;
+        statusGrid.Controls.Add(_statusHost, 0, 0);
 
         var sidePanel = new Panel { Dock = DockStyle.Left, Width = 330, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Lg, UiTokens.Sm, UiTokens.Sm) };
         var sideCaption = Ui.Caption("检查结果中的接口", muted: true);
@@ -490,7 +495,6 @@ internal sealed class SupplementsDialog : Form
 
     private void SetStatus(string message, Color color)
     {
-        _status.Text = message;
-        _status.ForeColor = color;
+        _statusHost.SetText(message, color);
     }
 }

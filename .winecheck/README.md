@@ -24,8 +24,11 @@ dotnet publish ApifoxHelper.csproj -c Release -r win-x64 --self-contained -o /tm
 
 ```bash
 dotnet publish ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj -c Release -r win-x64 --self-contained -o /tmp/ah-smoke-pub
+export WINEPREFIX=$HOME/.wine-ah
 xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke-report.txt
 ```
+
+**前缀必须是 `~/.wine-ah`（第一百六十六轮实测）**：不带 `WINEPREFIX` 走默认的 `~/.wine` 时，每一扇窗口都构造不出来——报告是 20 通过 / 115 失败，失败行全是 `Win32Exception：Error creating window handle`，三档缩放一样。那是那份前缀没有可用的桌面环境，不是产品的构造缺陷；照上面这一行设好前缀再判。
 
 ## 脚本
 
