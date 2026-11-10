@@ -158,6 +158,9 @@ internal static class Program
         Console.WriteLine("== 注释候选对话框（真实控件交互）==");
         RunCandidatesInteraction(services, dataRoot);
 
+        Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
+        RunFullJourney(services, dataRoot);
+
         Console.WriteLine($"== 结果：{_passed} 通过 / {_failed} 失败 ==");
         WriteReport();
         return _failed == 0 ? 0 : 1;
@@ -1414,6 +1417,347 @@ internal static class Program
             dialog?.Dispose();
         }
     }
+
+    /// <summary>
+    /// 完整旅程单次运行（第一百四十四轮）：按 README「使用流程」1–9 步里**不触碰 Apifox 写入门禁**的
+    /// 只读路径，从「新建配置」一路走到「报告导出」，全程一条任务、一次连续运行。
+    /// <para>
+    /// 存在理由：第一百三十一至一百三十九轮把主链路拆成了若干段（配置/任务、回写、缺口对话框、候选对话框），
+    /// 每段各自造配置、各自造任务——**没有一次运行证明这些段能接在同一条任务上走完**。
+    /// 控制仓简报的 P0-1 要的正是「旅程」而不是「控件」：段与段之间的交接（扫描产物 → 规则提取 →
+    /// 审阅接受 → 计划 → 回写 → 传播核对 → 报告）此前从未被同一次运行串起来过。
+    /// </para>
+    /// <para>
+    /// 八段：① 新建配置（真实控件）→ ② 新建任务（真实控件）→ ③ 扫描 → ④ 规则提取候选 →
+    /// ⑤ 审阅接受（真实控件）→ ⑥ 确认回写（真实控件）→ ⑦ 传播核对（如实记录未生成 XML/Swagger）→
+    /// ⑧ 报告四格式导出。第 ⑤⑥ 段走真实 WinForms 控件（<c>Show()</c> 触发读盘、<c>PerformClick()</c> 走点击链路），
+    /// 其余段走服务层真实调用；断言一律读磁盘产物与控件文字，不读服务层返回值。
+    /// </para>
+    /// <para>
+    /// 不覆盖的部分如实挂账：Apifox 远端检查与同步需要真实 CLI 登录态与项目权限，本环境（wine）不具备，
+    /// 仍待 Windows 真机（见 docs/NOTES.md 的真机清单）。
+    /// </para>
+    /// </summary>
+    private static void RunFullJourney(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var scan = services.GetRequiredService<SourceScanService>();
+        var drafts = services.GetRequiredService<DraftService>();
+        var plans = services.GetRequiredService<CommentPlanService>();
+        var propagation = services.GetRequiredService<PropagationService>();
+        var exports = services.GetRequiredService<ReportExportService>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        var credentials = services.GetRequiredService<CredentialStore>();
+
+        const string profileName = "完整旅程配置";
+        const string taskName = "完整旅程任务";
+        var projectDir = Path.Combine(dataRoot, "Journey.Api");
+        var sourcePath = Path.Combine(projectDir, "Controllers", "JourneyController.cs");
+
+        string? profileId = null;
+        string? taskId = null;
+        string? acceptedId = null;
+        string? beforeWrite = null;
+
+        // 第一段：新建配置（真实控件）→ 保存 → 配置真的落到 profiles/<id>.json。
+        RunAction("完整旅程 1/8：新建配置并保存（真实控件）", () =>
+        {
+            CreateJourneyWorkspace(projectDir);
+            var before = profiles.List().Count;
+            using var dialog = new ProfileDialog(profiles, cli, credentials, editing: null);
+            dialog.Show();
+            Application.DoEvents();
+
+            var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+            SetField(grid, "名称", profileName);
+            SetField(grid, "仓库根目录", dataRoot);
+            SetField(grid, "API 项目", "Journey.Api/Journey.Api.csproj");
+            SetField(grid, "允许回写范围", "Journey.Api/");
+            Click(dialog, "保存");
+            Application.DoEvents();
+
+            if (dialog.DialogResult != DialogResult.OK) throw new InvalidOperationException("点「保存」后对话框没有以「确定」结束。");
+            var saved = dialog.Saved ?? throw new InvalidOperationException("保存后 Saved 为空。");
+            var reread = profiles.Get(saved.Id);
+            if (reread.Name != profileName) throw new InvalidOperationException($"落盘名称是「{reread.Name}」。");
+            if (reread.ApiProject != "Journey.Api/Journey.Api.csproj") throw new InvalidOperationException($"落盘 API 项目是「{reread.ApiProject}」。");
+            if (profiles.List().Count != before + 1) throw new InvalidOperationException("配置数量没有增加一条。");
+            profileId = saved.Id;
+            _lines.Add($"     配置已落盘：{saved.Id}，名称「{reread.Name}」，回写范围「{string.Join(";", reread.AllowedSourcePaths)}」");
+        });
+
+        // 第二段：新建任务（真实控件）→ 点「仅创建」→ 任务真的落到 tasks/<id>/task.json。
+        RunAction("完整旅程 2/8：新建任务并创建（真实控件）", () =>
+        {
+            if (profileId is null) throw new InvalidOperationException("上一段没有产出配置，旅程断在这里。");
+            using var dialog = new NewTaskDialog(profiles);
+            dialog.Show();
+            Application.DoEvents();
+
+            var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+            SelectProfile(grid, profileName);
+            SetField(grid, "任务名称", taskName);
+            Click(dialog, "仅创建");
+            Application.DoEvents();
+
+            if (dialog.DialogResult != DialogResult.OK) throw new InvalidOperationException("点「仅创建」后对话框没有以「确定」结束。");
+            if (dialog.StartScan) throw new InvalidOperationException("点「仅创建」却要求立即扫描。");
+            var request = dialog.Request;
+            if (request.ProfileId != profileId) throw new InvalidOperationException("创建请求里的配置不是刚保存的那一个。");
+            var task = tasks.Create(request);
+            var reread = tasks.Get(task.Id);
+            if (reread.Name != taskName) throw new InvalidOperationException($"落盘任务名是「{reread.Name}」。");
+            if (reread.ProfileId != profileId) throw new InvalidOperationException("落盘任务的配置不是刚保存的那一个。");
+            taskId = task.Id;
+            _lines.Add($"     任务已落盘：{task.Id}，名称「{reread.Name}」");
+        });
+
+        // 第三段：扫描（真实服务）——真的加载项目、发现接口、产出注释缺口。
+        RunAction("完整旅程 3/8：源码扫描产出注释缺口（真实服务）", () =>
+        {
+            if (taskId is null) throw new InvalidOperationException("上一段没有产出任务，旅程断在这里。");
+            var job = new JobContext(new JobInfo { Id = "job-smoke-journey-scan", Scope = taskId, Kind = "scan", StartedAt = DateTimeOffset.Now });
+            Task.Run(() => scan.ScanAsync(taskId, job)).GetAwaiter().GetResult();
+
+            var output = tasks.Read<ScanOutput>(taskId, TaskFiles.Symbols)
+                ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+            if (output.Endpoints.Count == 0) throw new InvalidOperationException("扫描没有发现任何接口。");
+            var missing = output.Slots.Where(s => s.Status == "missing" && s.Editable).ToList();
+            if (missing.Count == 0) throw new InvalidOperationException("扫描没有产出可回写的缺失注释位置。");
+            _lines.Add($"     扫描：{output.Endpoints.Count} 个接口、{output.Slots.Count} 个注释位置，其中缺失且可回写 {missing.Count} 个");
+        });
+
+        // 第四段：规则提取候选（真实服务）——只生成代码可证实的约束，必须带证据编号与待确认问题。
+        RunAction("完整旅程 4/8：规则提取候选（真实服务）", () =>
+        {
+            if (taskId is null) throw new InvalidOperationException("上一段没有产出任务，旅程断在这里。");
+            Task.Run(() => drafts.GenerateRuleAsync(taskId, [], CancellationToken.None)).GetAwaiter().GetResult();
+
+            var store = drafts.Load(taskId);
+            var produced = store.Candidates.Where(c => c.Source == "rule").ToList();
+            if (produced.Count == 0)
+            {
+                throw new InvalidOperationException("规则提取没有产出任何候选（探针项目里没有可证实的约束证据）。");
+            }
+            if (produced.Any(c => c.EvidenceIds.Count == 0))
+            {
+                throw new InvalidOperationException("有规则候选没有引用任何证据编号（规则提取只允许生成代码可证实的内容）。");
+            }
+            if (produced.Any(c => c.Text.Length == 0)) throw new InvalidOperationException("有规则候选的文字为空。");
+            if (produced.All(c => c.OpenQuestions.Count == 0))
+            {
+                throw new InvalidOperationException("规则候选全都没有待确认问题（审阅那一段就没有「先回答再接受」的前提）。");
+            }
+            _lines.Add($"     规则提取：{produced.Count} 条候选，第一条「{produced[0].Text}」，证据 {produced[0].EvidenceIds.Count} 条、待确认问题 {produced[0].OpenQuestions.Count} 个");
+        });
+
+        // 第五段：审阅接受（真实控件）——打开候选对话框、填回答、点「接受并下一条」，断言磁盘状态。
+        RunAction("完整旅程 5/8：审阅接受候选（真实控件）", () =>
+        {
+            if (taskId is null) throw new InvalidOperationException("上一段没有产出任务，旅程断在这里。");
+            var task = tasks.Get(taskId);
+            using var dialog = new CandidatesDialog(drafts, tasks, task);
+            dialog.Show();
+            Application.DoEvents();
+
+            var list = CandidateList(dialog);
+            if (list.Items.Count == 0) throw new InvalidOperationException("候选清单是空的（规则提取的候选没有进队列）。");
+            if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+            {
+                throw new InvalidOperationException("打开后没有选中第一条候选。");
+            }
+            var boxes = EditableBoxes(dialog);
+            if (boxes.Length != 2) throw new InvalidOperationException($"可编辑的多行输入框有 {boxes.Length} 个，期望 2 个。");
+            // 规则候选带待确认问题：不填回答就接受会被拒（第一百三十九轮已钉住），旅程里按用户的做法先回答。
+            if (boxes[1].Enabled)
+            {
+                boxes[1].Text = "分页大小，由前端按列表页容量传入。";
+                Application.DoEvents();
+            }
+            var status = StatusLabel(dialog);
+            status.Text = "";
+            Click(dialog, "接受并下一条");
+            PumpUntilCondition(() => status.Text.Length > 0, "接受完成的状态行");
+
+            var store = drafts.Load(taskId);
+            var accepted = store.Candidates.Where(c => c.ReviewState == "accepted").ToList();
+            if (accepted.Count == 0) throw new InvalidOperationException("点「接受并下一条」后磁盘上没有已接受的候选。状态行：" + status.Text);
+            acceptedId = accepted[0].Id;
+            if (accepted[0].Text.Length == 0) throw new InvalidOperationException("已接受候选的文字为空。");
+            _lines.Add($"     审阅：已接受 {accepted.Count} 条，第一条「{accepted[0].Text}」；状态行「{status.Text}」");
+        });
+
+        // 第六段：确认回写（真实控件）——对话框自己生成计划、点「确认回写」，断言源码真的被改且只改 /// 行。
+        RunAction("完整旅程 6/8：确认回写源码（真实控件）", () =>
+        {
+            if (taskId is null) throw new InvalidOperationException("上一段没有产出任务，旅程断在这里。");
+            beforeWrite = File.ReadAllText(sourcePath);
+            using var dialog = new ApplyPlanDialog(plans, tasks, tasks.Get(taskId));
+            var confirmed = 0;
+            // 确认框是模态的，无人值守点不动：换成替身，但按钮与回写链路一字不改。
+            dialog.ConfirmApply = _ =>
+            {
+                confirmed++;
+                return true;
+            };
+            dialog.Show();
+            PumpUntil(dialog.PendingLoad);
+            Application.DoEvents();
+
+            var plan = dialog.Plan ?? throw new InvalidOperationException("对话框没有拿到注释计划。界面文案：" + LabelTexts(dialog));
+            if (plan.Files.Count == 0) throw new InvalidOperationException("计划里没有可回写的文件：" + string.Join("；", plan.Skipped.Select(s => s.Reason)));
+
+            Click(dialog, "确认回写");
+            PumpUntil(dialog.PendingApply);
+            Application.DoEvents();
+
+            if (confirmed != 1) throw new InvalidOperationException($"确认委托被调用 {confirmed} 次，期望 1 次。");
+            var after = File.ReadAllText(sourcePath);
+            if (after == beforeWrite) throw new InvalidOperationException("点「确认回写」后源码没有变化。");
+            AssertOnlyDocLinesChanged(beforeWrite, after);
+            AssertBomAndEolPreserved(sourcePath);
+            var status = FindAll<Label>(dialog).Select(l => l.Text).FirstOrDefault(t => t.Contains("已回写", StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("状态行没有出现「已回写」的结果文案。界面文案：" + LabelTexts(dialog));
+            _lines.Add($"     回写：{plan.Files.Count} 个文件、{plan.Files.Sum(f => f.Edits.Count)} 处注释；状态行「{status}」");
+        });
+
+        // 第七段：传播核对（真实服务）——未生成 XML、未配置 Swagger 时必须如实记录，不显示成完成。
+        RunAction("完整旅程 7/8：传播核对如实记录（真实服务）", () =>
+        {
+            if (taskId is null || acceptedId is null) throw new InvalidOperationException("上一段没有产出任务或已接受候选，旅程断在这里。");
+            var job = new JobContext(new JobInfo { Id = "job-smoke-journey-propagation", Scope = taskId, Kind = "propagation", StartedAt = DateTimeOffset.Now });
+            Task.Run(() => propagation.CheckAsync(taskId, job)).GetAwaiter().GetResult();
+
+            var result = tasks.Read<PropagationResult>(taskId, TaskFiles.Propagation)
+                ?? throw new InvalidOperationException("核对后没有 propagation.json。");
+            var acceptedCount = drafts.Load(taskId).Candidates.Count(c => c.ReviewState == "accepted");
+            if (result.Entries.Count != acceptedCount)
+            {
+                throw new InvalidOperationException($"核对条目 {result.Entries.Count} 条，已接受候选 {acceptedCount} 条。");
+            }
+            if (result.Entries.Any(e => e.SourceState != "written"))
+            {
+                throw new InvalidOperationException("有已回写的注释在核对里不是 written：" + string.Join("；", result.Entries.Select(e => e.Display + "=" + e.SourceState)));
+            }
+            // 探针项目没有 GenerateDocumentationFile、配置里没有 Swagger：两环必须如实标成「未启用 / 不可用」。
+            if (result.Entries.Any(e => e.XmlState == "present"))
+            {
+                throw new InvalidOperationException("没有生成 XML 文档，核对却报告 XML 已收录。");
+            }
+            if (result.Entries.Any(e => e.XmlState != "disabled"))
+            {
+                throw new InvalidOperationException("XML 状态不是 disabled：" + string.Join("；", result.Entries.Select(e => e.Display + "=" + e.XmlState)));
+            }
+            if (result.Entries.Any(e => e.SwaggerState != "unavailable"))
+            {
+                throw new InvalidOperationException("没有配置 Swagger，核对却给出了 Swagger 状态：" + string.Join("；", result.Entries.Select(e => e.Display + "=" + e.SwaggerState)));
+            }
+            if (string.IsNullOrWhiteSpace(result.SwaggerMessage)) throw new InvalidOperationException("Swagger 不可用却没有说明原因。");
+            var stage = tasks.Get(taskId).Stages.Generated;
+            if (stage.Status == "verified") throw new InvalidOperationException("XML 与 Swagger 都没核对到，阶段状态却是 verified。");
+            _lines.Add($"     核对：{result.Entries.Count} 条全部 written；XML 全部 disabled、Swagger 全部 unavailable；阶段状态「{stage.Status}」，说明「{stage.Message}」");
+        });
+
+        // 第八段：报告四格式导出（真实服务）——文件名/内容类型/字节与任务目录副本，四格式逐份核对。
+        RunAction("完整旅程 8/8：报告四格式导出（真实服务）", () =>
+        {
+            if (taskId is null) throw new InvalidOperationException("上一段没有产出任务，旅程断在这里。");
+            var md = exports.Render(taskId, "md");
+            if (md.FileName != "report.md" || md.ContentType != "text/markdown")
+            {
+                throw new InvalidOperationException($"Markdown 报告是「{md.FileName}」/「{md.ContentType}」。");
+            }
+            var mdText = new System.Text.UTF8Encoding(false).GetString(md.Bytes);
+            if (!mdText.Contains(taskName, StringComparison.Ordinal)) throw new InvalidOperationException("Markdown 报告里没有任务名。");
+            if (!File.Exists(tasks.FilePath(taskId, TaskFiles.ReportMarkdown))) throw new InvalidOperationException("Markdown 报告没有写进任务目录。");
+
+            var html = exports.Render(taskId, "html");
+            var htmlText = new System.Text.UTF8Encoding(false).GetString(html.Bytes);
+            if (html.FileName != "report.html" || html.ContentType != "text/html")
+            {
+                throw new InvalidOperationException($"HTML 报告是「{html.FileName}」/「{html.ContentType}」。");
+            }
+            if (!htmlText.Contains("<table>", StringComparison.Ordinal)) throw new InvalidOperationException("HTML 报告里没有表格（分阶段结果应当渲染成表格）。");
+            if (htmlText.Contains("| 阶段 |", StringComparison.Ordinal)) throw new InvalidOperationException("HTML 报告正文里泄漏了 Markdown 表格记号。");
+
+            var json = exports.Render(taskId, "json");
+            var jsonText = new System.Text.UTF8Encoding(false).GetString(json.Bytes);
+            if (json.FileName != "report.json" || json.ContentType != "application/json")
+            {
+                throw new InvalidOperationException($"JSON 报告是「{json.FileName}」/「{json.ContentType}」。");
+            }
+            var node = System.Text.Json.Nodes.JsonNode.Parse(jsonText) ?? throw new InvalidOperationException("JSON 报告解析为空。");
+            if (node["task"]?["name"]?.ToString() != taskName) throw new InvalidOperationException("JSON 报告里的任务名对不上。");
+
+            var handoff = exports.Render(taskId, "handoff");
+            var handoffText = new System.Text.UTF8Encoding(false).GetString(handoff.Bytes);
+            if (handoff.FileName != "handoff.md" || handoff.ContentType != "text/markdown")
+            {
+                throw new InvalidOperationException($"交接说明是「{handoff.FileName}」/「{handoff.ContentType}」。");
+            }
+            if (!handoffText.Contains("接口变更交接", StringComparison.Ordinal)) throw new InvalidOperationException("交接说明里没有标题。");
+            if (!File.Exists(tasks.FilePath(taskId, TaskFiles.Handoff))) throw new InvalidOperationException("交接说明没有写进任务目录。");
+
+            var rejected = false;
+            try
+            {
+                exports.Render(taskId, "pdf");
+            }
+            catch (UserException ex)
+            {
+                rejected = true;
+                if (ex.Message != "报告格式无效。") throw new InvalidOperationException($"未知格式的拒绝文案是「{ex.Message}」。");
+            }
+            if (!rejected) throw new InvalidOperationException("未知报告格式却导出成功。");
+            _lines.Add($"     报告：md {md.Bytes.Length} 字节、html {html.Bytes.Length} 字节、json {json.Bytes.Length} 字节、handoff {handoff.Bytes.Length} 字节；未知格式按「报告格式无效。」拒绝");
+        });
+    }
+
+    /// <summary>
+    /// 旅程探针工作区（第一百四十四轮）：一个 Web SDK 项目 + 一个带**可证实约束**的控制器。
+    /// <para>
+    /// 与 <see cref="CreateProbeWorkspace"/> 的区别：那个探针只保证「有缺口可回写」，这个探针还要保证
+    /// 「规则提取真的能产出候选」——<c>[Range(1, 100)]</c> 与 <c>[Required]</c> 是规则提取认的证据形状
+    /// （校验特性），没有它们，旅程第 4 段会以「没有产出任何候选」失败，而那是探针的问题、不是产品的问题。
+    /// 文件按 UTF-8 带 BOM + CRLF 写，回写后要能断言「BOM 与换行符一字未改」。
+    /// </para>
+    /// </summary>
+    private static void CreateJourneyWorkspace(string projectDir)
+    {
+        Directory.CreateDirectory(Path.Combine(projectDir, "Controllers"));
+        File.WriteAllText(
+            Path.Combine(projectDir, "Journey.Api.csproj"),
+            "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup></Project>");
+        File.WriteAllText(
+            Path.Combine(projectDir, "Controllers", "JourneyController.cs"),
+            JourneyControllerSource,
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    /// <summary>旅程控制器源码：<c>pageSize</c> 带 <c>[Range(1, 100)]</c>、<c>Name</c> 带 <c>[Required]</c>，两处都没有 <c>///</c>。</summary>
+    private const string JourneyControllerSource =
+        "using System.ComponentModel.DataAnnotations;\r\n" +
+        "using Microsoft.AspNetCore.Mvc;\r\n" +
+        "\r\n" +
+        "namespace Journey.Api.Controllers;\r\n" +
+        "\r\n" +
+        "[ApiController]\r\n" +
+        "[Route(\"api/journey\")]\r\n" +
+        "public class JourneyController : ControllerBase\r\n" +
+        "{\r\n" +
+        "    [HttpGet]\r\n" +
+        "    public ActionResult<JourneyResponse> Get([FromQuery, Range(1, 100)] int pageSize)\r\n" +
+        "    {\r\n" +
+        "        return Ok(new JourneyResponse { Name = \"journey\" });\r\n" +
+        "    }\r\n" +
+        "}\r\n" +
+        "\r\n" +
+        "public class JourneyResponse\r\n" +
+        "{\r\n" +
+        "    [Required]\r\n" +
+        "    public string Name { get; set; } = \"\";\r\n" +
+        "}\r\n";
 
     /// <summary>注释缺口对话框的计数行（「位置 N · 有效 …」或空态那句）。</summary>
     private static Label CountsLabel(Control root) =>

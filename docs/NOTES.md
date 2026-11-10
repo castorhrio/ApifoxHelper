@@ -1498,3 +1498,22 @@
 - **P0-1 真机证据：本轮仍不可得（环境限制，非验证手段选错）**。`docs/NOTES.md` 那张「Windows 真机全链路清单（19 项）」本轮一项都没勾，第一百三十四轮的登记原样保留；本轮**未重复 wine 试跑**，故不据此宣称冒烟器在本轮跑过——53 通过 / 0 失败仍是第一百四十轮的证据。HTML 报告的**观感**（字体是否真的回退到中文、40em 行长读起来是否合适）同样只能由人看，本轮只钉住「样式口径在位」，不冒充「好看」。
 - **下一轮候选（如实挂账，本轮未做）**：① 在 wine 下跑一遍冒烟器（`xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=<路径>`），把通过数写进本文件；② 简报 P0-2 的「长中文/极端数据撑破的界面鲁棒性」冒烟段（`RunLongTextRobustness`）；③ `ApifoxCli.Parse` 的表驱动用例。
 - **本轮未连接或写入 Apifox，未调用任何模型服务**；不改报告内容与脱敏口径、不改导出格式与文件名、不改任务与配置数据，服务层语义一行未动（样式与错误文案均为口径收口，500 分支的行为变更是本轮唯一的行为改动，方向是「少说内部细节」）。
+
+## 完整旅程单次运行（2026-11-10 第一百四十四轮）
+
+- **接续前确认**：开局工作树干净，HEAD（688458c）为第一百四十三轮（HTML 报告观感收口 + 500 分支收敛），主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误、`dotnet test` 2147 用例全绿，基线成立；第四十七至一百四十三轮逐字保留。
+- **本轮定位**：控制仓简报 P0-1（Windows 真机 19 项清单）与 P1（真机 DPI 截图）在本会话仍不可能完成（Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机，第一百二十四轮挂账决策继续有效）。按简报给出的**唯一退让路径**执行：把冒烟器从「若干段各自造配置、各自造任务」推进到**完整旅程单次运行**，并在 wine 下实测留下连续通过记录。
+- **已交付：`ApifoxHelper.Smoke` 新增 `RunFullJourney`（八段，一条任务走到底）**。此前第一百三十一至一百三十九轮把主链路拆成若干段，每段自己造配置与任务——**没有一次运行证明这些段能接在同一条任务上走完**。八段按 README「使用流程」1–9 步里不触碰 Apifox 写入门禁的只读路径串起来：
+  1. 新建配置（真实控件 `ProfileDialog`：填四个字段 → 点「保存」→ 断言 `profiles/<id>.json` 重读一致）；
+  2. 新建任务（真实控件 `NewTaskDialog`：选配置 → 填名称 → 点「仅创建」→ 断言 `tasks/<id>/task.json` 重读一致）；
+  3. 源码扫描（真实服务 `SourceScanService`）；
+  4. 规则提取候选（真实服务 `DraftService.GenerateRuleAsync`，断言候选带证据编号与待确认问题）；
+  5. 审阅接受（真实控件 `CandidatesDialog`：打开即选中第一条 → 填回答 → 点「接受并下一条」→ 断言磁盘 `accepted`）；
+  6. 确认回写（真实控件 `ApplyPlanDialog`：等它自己生成计划 → 点「确认回写」→ 断言只改 `///` 行、BOM 与 CRLF 保留）；
+  7. 传播核对（真实服务 `PropagationService.CheckAsync`，断言未生成 XML / 未配置 Swagger 时如实标成 `disabled` / `unavailable`，阶段状态不得是 `verified`）；
+  8. 报告四格式导出（真实服务 `ReportExportService.Render`：md/html/json/handoff 逐份核对文件名、内容类型、字节与任务目录副本，未知格式按「报告格式无效。」拒绝）。
+- **新增旅程探针工作区 `CreateJourneyWorkspace`**：与既有 `CreateProbeWorkspace` 的区别是控制器带**可证实的约束证据**（`[Range(1, 100)]` 参数、`[Required]` 属性）——没有它们，第 4 段会以「没有产出任何候选」失败，而那是探针的问题、不是产品的问题。
+- **wine 实测（真实执行证据，非推断）**：`dotnet publish ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj -c Release -r win-x64 --self-contained -o /tmp/ah-smoke-pub` 后 `xvfb-run -a wine ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke-journey.txt` → **退出码 0，61 通过 / 0 失败**（第一百四十轮是 53 通过；本轮多出的 8 条正是新增的旅程八段，**首次运行即全绿**）。报告里的证据行逐段可核对：配置 `p20261110132646-383317`、任务 `t20261110132646-cb9a2a`、扫描「1 个接口、5 个注释位置，其中缺失且可回写 5 个」、规则提取「1 条候选，第一条「必填。」，证据 1 条、待确认问题 1 个」、审阅「已接受 1 条…状态行「已接受。剩余待审阅 0 条。」」、回写「1 个文件、1 处注释；状态行「已回写 1 个文件、1 处注释。源码已变化，请重新扫描后再核对生成文档。」」、核对「1 条全部 written；XML 全部 disabled、Swagger 全部 unavailable；阶段状态「unavailable」」、报告「md 1514 字节、html 2821 字节、json 3071 字节、handoff 206 字节」。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2147 用例全部通过**（本轮未新增 Linux 侧用例，改动集中在冒烟器）；GUI 侧本轮有**真实执行证据**（wine 10.0 + Xvfb 下 61 通过 / 0 失败）。**Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效；真机清单第 17 项（DPI 观感）与第 18 项（真机跑冒烟）继续留 `[ ]`。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改服务层一行、不改界面控件与布局、不新增对话框或产品功能（本轮改动只在冒烟器与本文档）。
+- **下一轮候选（如实挂账，本轮未做）**：① 简报 P1-1 的剩余两条（`HtmlStyle` 的「无渐变 / 无紫粉色相」机械断言）；② 简报 P1-2（只有表头行 + 分隔行的表格状态机边界断言）；③ 旅程八段的变异验证（本轮时间用尽，未做「改坏一处即变红」的实测）。
