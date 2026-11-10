@@ -102,7 +102,9 @@ public class AsyncDisposeGuardTests
         var projects = MethodBody("ProjectsPage.cs", "private async Task LoadApifoxProjectsAsync()", "/// 读取 Apifox 分支列表");
         AssertThreeGuards(projects, "ProfileDialog.LoadApifoxProjectsAsync",
             @"(?m)^\s*var result = await _cli\.ListProjectsAsync\(saved\.Apifox, CancellationToken\.None\);\s*\n\s*if \(IsDisposed\) return;");
-        Assert.Matches(@"(?m)^\s*if \(!IsDisposed\) _loadProjectsButton\.Enabled = true;", projects);
+        // 「读取项目列表」的恢复回到门控值而不是无条件启用（第一百四十九轮）：新建配置时这一颗按钮
+        // 始终停用，读完之后若被恢复成启用，用户又会点进「请先保存配置」的死胡同。
+        Assert.Matches(@"(?m)^\s*if \(!IsDisposed\) _loadProjectsButton\.Enabled = ProfileFormLayout\.ProjectListEnabled\(_editing is not null\);", projects);
         Assert.DoesNotMatch(@"(?m)^\s*_loadProjectsButton\.Enabled = true;", projects);
 
         var branches = MethodBody("ProjectsPage.cs", "private async Task LoadApifoxBranchesAsync()", "private static void FillCombo(ComboBox combo, IEnumerable<string> items)");

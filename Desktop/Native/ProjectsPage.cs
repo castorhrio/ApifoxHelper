@@ -381,8 +381,17 @@ internal sealed class ProjectsPage : UserControl, INativePage
 /// <summary>
 /// 配置编辑对话框：核心字段 + 内联校验（ProfileStore.Save 抛出的 UserException 显示在状态行，
 /// 并按 UserException.Field 描红对应输入框，不弹窗）。
+/// <para>
+/// 表单形状按 <see cref="ProfileFormLayout"/> 分三段：<b>必填</b>（名称、仓库根目录、API 项目，连续成组，
+/// 填完就能保存）→ <b>可选设置</b>（回写范围、版本备注、Swagger、Apifox 目标与分支，留空即取缺省）→
+/// <b>高级设置</b>（模块与模板、序列化与分析、模型服务、导出配置，四个入口收在同一行）。
+/// 保存/取消固定在底栏，滚动时也点得到；「读取项目列表」在未保存时停用并就地说明下一步，
+/// 不再让用户点了才知道「要先保存」。
+/// </para>
+/// <para>
 /// 「模块与模板」入口打开高级编辑（模块范围与新接口模板），「模型服务」入口打开生成方式与密钥编辑，
 /// 改动应用到同一配置对象，随「保存」一起落盘。
+/// </para>
 /// </summary>
 internal sealed class ProfileDialog : Form
 {
@@ -448,6 +457,9 @@ internal sealed class ProfileDialog : Form
         exportButton.Enabled = _editing is not null;
         exportButton.Click += (_, _) => ExportProfile();
         _loadProjectsButton = Ui.Ghost("读取项目列表");
+        // 未保存时停用并就地说明下一步（ProfileFormLayout.ProjectListHint）：此前按钮是启用的，
+        // 点下去只得到一句「请先保存配置」，用户得自己猜「那我现在能不能保存」。
+        _loadProjectsButton.Enabled = ProfileFormLayout.ProjectListEnabled(_editing is not null);
         _loadProjectsButton.Click += async (_, _) => await LoadApifoxProjectsAsync();
         _loadBranchesButton = Ui.Ghost("读取分支");
         _loadBranchesButton.Click += async (_, _) => await LoadApifoxBranchesAsync();
@@ -478,13 +490,18 @@ internal sealed class ProfileDialog : Form
         AcceptButton = saveButton;
         CancelButton = cancelButton;
 
-        // 网格十几个字段加提示行高于可视高度：放入可滚动宿主，底部子配置入口与导出可达（DESIGN.md §6 长内容区）。
+        // 表单形状（第一百四十九轮）：必填三项连续成组、可选设置在后、四个高级入口收在同一行。
+        // 行高上限、入口间距与「读取项目列表」两态文案的口径都在 ProfileFormLayout 一处，
+        // 冒烟器逐行量真实控件（RunProfileFormLayout）——此前空标签格里放的是默认尺寸的 Panel（200×100），
+        // 七行「没有标签」的行把表单撑出 700px 死空白，四个高级入口各占一行、彼此隔着 100px。
         // 两列字段网格经工厂出厂（DESIGN.md §6「两列字段网格」）：列宽随网格当前宽度重算，
         // 不再用百分比列（第一百二十三轮修掉的真机缺陷：右列停在 32px，四个输入框填不了字）。
         var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);
+        AddSection(grid, ProfileFormLayout.CoreSectionTitle);
         AddRow(grid, "名称", Field(_name, ProfileStore.FieldName));
         AddRow(grid, "仓库根目录", Row(300, Field(_workspace, ProfileStore.FieldWorkspaceRoot), browseButton, _findButton));
         AddRow(grid, "API 项目", _apiProject);
+        AddSection(grid, ProfileFormLayout.OptionalSectionTitle);
         AddRow(grid, "允许回写范围", Field(_allowed, ProfileStore.FieldAllowedSourcePaths));
         AddRow(grid, "", Ui.Caption("相对路径前缀，用「;」分隔；留空表示只允许导出补丁。"));
         AddRow(grid, "版本备注", Ui.Field(_sourceVersion));
@@ -492,13 +509,11 @@ internal sealed class ProfileDialog : Form
         AddRow(grid, "Swagger 来源", _swaggerType);
         AddRow(grid, "Swagger 位置", Field(_swaggerLocation, ProfileStore.FieldSwaggerLocation));
         AddRow(grid, "Apifox 项目 ID", Row(220, _projectId, _loadProjectsButton));
+        AddRow(grid, "", Ui.Caption(ProfileFormLayout.ProjectListHint(_editing is not null)));
         AddRow(grid, "分支", Row(220, _branch, _loadBranchesButton));
-        AddRow(grid, "", Ui.Caption("与业务系统中的「项目」无关；读取列表需要先保存配置；分支留空表示主分支。"));
-        AddRow(grid, "", Ui.Caption("模块范围与接口模板在「模块与模板」中编辑，序列化与分析在「序列化与分析」中编辑，模型服务在「模型服务」中配置；密钥在配置保存后设置。"));
-        AddRow(grid, "", advancedButton);
-        AddRow(grid, "", analysisButton);
-        AddRow(grid, "", generationButton);
-        AddRow(grid, "", exportButton);
+        AddRow(grid, "", Ui.Caption("分支留空表示主分支。"));
+        AddSection(grid, ProfileFormLayout.AdvancedSectionTitle);
+        AddWide(grid, AdvancedEntries(advancedButton, analysisButton, generationButton, exportButton));
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，符合 Windows「主行动在右」惯例。
@@ -609,16 +624,72 @@ internal sealed class ProfileDialog : Form
         _profile.Apifox.BranchName = _branch.Text.Trim().Length == 0 ? null : _branch.Text.Trim();
     }
 
+    /// <summary>
+    /// 一行里的「字段 + 若干按钮」（仓库根目录的浏览/查找、Apifox 项目 ID 与分支的读取按钮）：
+    /// 直接返回流式容器，不再套一层 <see cref="Panel"/>——套的那一层是 <c>AutoSize = true</c> 的
+    /// 默认尺寸面板，行高被它撑到 100px（真机截图里「仓库根目录」那一行 112px 的来源）。
+    /// 行内控件自带上下留白（<see cref="UiTokens.Xs"/>），容器本身不留白，行高由最高的控件决定。
+    /// </summary>
     private static Control Row(int width, params Control[] controls)
     {
         controls[0].Width = width;
-        var panel = new Panel { AutoSize = true, Margin = new Padding(0) };
-        var flow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-        foreach (var control in controls) flow.Controls.Add(control);
-        panel.Controls.Add(flow);
-        return panel;
+        var flow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = UiTokens.Panel };
+        for (var i = 0; i < controls.Length; i++)
+        {
+            controls[i].Margin = i == 0
+                ? new Padding(0, UiTokens.Xs, 0, UiTokens.Xs)
+                : new Padding(UiTokens.Sm, 0, 0, 0);
+            flow.Controls.Add(controls[i]);
+        }
+        return flow;
     }
 
+    /// <summary>
+    /// 四个高级入口收在同一行（<see cref="ProfileFormLayout.AdvancedEntries"/>）：此前各占一整行、
+    /// 彼此隔着 100px 的空白，读起来像四颗孤立按钮，把首用视线从「填完就能保存」上拽走。
+    /// 间距取 <see cref="ProfileFormLayout.AdvancedEntryGap"/>，冒烟器量相邻两个按钮的实际间隙。
+    /// </summary>
+    private static Control AdvancedEntries(params Button[] entries)
+    {
+        var flow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = UiTokens.Panel };
+        for (var i = 0; i < entries.Length; i++)
+        {
+            entries[i].Margin = new Padding(0, 0, i == entries.Length - 1 ? 0 : ProfileFormLayout.AdvancedEntryGap, 0);
+            flow.Controls.Add(entries[i]);
+        }
+        return flow;
+    }
+
+    /// <summary>分区标题行（必填 / 可选设置 / 高级设置）：跨两列，行高只由标题自身决定。</summary>
+    private static void AddSection(TableLayoutPanel grid, string title)
+    {
+        var row = grid.RowCount;
+        grid.RowCount = row + 1;
+        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var caption = Ui.Section(title);
+        caption.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
+        caption.Anchor = AnchorStyles.Left;
+        grid.Controls.Add(caption, 0, row);
+        grid.SetColumnSpan(caption, 2);
+    }
+
+    /// <summary>跨两列的一行（高级入口那一行）：四个入口并排后比字段列宽，跨列才排得下、不出横向滚动条。</summary>
+    private static void AddWide(TableLayoutPanel grid, Control control)
+    {
+        var row = grid.RowCount;
+        grid.RowCount = row + 1;
+        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        control.Margin = new Padding(0);
+        grid.Controls.Add(control, 0, row);
+        grid.SetColumnSpan(control, 2);
+    }
+
+    /// <summary>
+    /// 一行「标签 + 字段」。没有标签的行（说明行）<b>不再放占位控件</b>：此前放的是
+    /// <c>new Panel { Margin = 0 }</c>，而 <see cref="Panel"/> 的默认尺寸是 200×100，
+    /// 于是每一行「没有标签」的行都被撑到 100px 高——七行就是 700px 的死空白。
+    /// 行高上限见 <see cref="ProfileFormLayout.MaxRowHeight"/>。
+    /// </summary>
     private static void AddRow(TableLayoutPanel grid, string label, Control field)
     {
         var row = grid.RowCount;
@@ -627,15 +698,15 @@ internal sealed class ProfileDialog : Form
         if (label.Length > 0)
         {
             var caption = Ui.Body(label);
-            caption.Margin = new Padding(0, UiTokens.Md, UiTokens.Sm, UiTokens.Xs);
+            caption.Margin = new Padding(0, UiTokens.Xs, UiTokens.Sm, UiTokens.Xs);
             caption.TextAlign = ContentAlignment.MiddleLeft;
+            caption.Anchor = AnchorStyles.Left;
             grid.Controls.Add(caption, 0, row);
         }
-        else
-        {
-            grid.Controls.Add(new Panel { Margin = new Padding(0) }, 0, row);
-        }
-        field.Margin = new Padding(0, UiTokens.Sm, 0, UiTokens.Xs);
+        // 行容器（<see cref="Row"/> / <see cref="AdvancedEntries"/>）自己排布行内留白，外层不再加：
+        // 容器里最高的控件是按钮（37px），再套 4+4 的留白就把行撑到 45px，超过
+        // <see cref="ProfileFormLayout.MaxRowHeight"/>——行高由最高的那个控件决定，不叠两层留白。
+        if (field is not FlowLayoutPanel) field.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
         grid.Controls.Add(field, 1, row);
     }
 
@@ -738,7 +809,8 @@ internal sealed class ProfileDialog : Form
         }
         finally
         {
-            if (!IsDisposed) _loadProjectsButton.Enabled = true;
+            // 读完之后回到门控值，而不是无条件启用：新建配置时这一颗按钮始终停用。
+            if (!IsDisposed) _loadProjectsButton.Enabled = ProfileFormLayout.ProjectListEnabled(_editing is not null);
         }
     }
 

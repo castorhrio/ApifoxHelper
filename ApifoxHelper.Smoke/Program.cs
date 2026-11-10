@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Text.Json.Nodes;
 using System.Windows.Forms;
 using ApifoxHelper.Apifox;
 using ApifoxHelper.Comments;
@@ -160,6 +161,12 @@ internal static class Program
 
         Console.WriteLine("== 补充说明对话框（真实控件交互）==");
         RunSupplementsInteraction(services, dataRoot);
+
+        Console.WriteLine("== 差异确认对话框（真实控件交互）==");
+        RunDecisionsInteraction(services, dataRoot);
+
+        Console.WriteLine("== 配置表单的真实布局（新建 / 编辑）==");
+        RunProfileFormLayout(services, profile);
 
         Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
         RunFullJourney(services, dataRoot);
@@ -1759,6 +1766,568 @@ internal static class Program
     }
 
     /// <summary>
+    /// 差异确认对话框的真实控件交互（第一百四十七轮）：这一屏此前只被「构造一次」（<c>Cases</c> 里
+    /// <c>new</c> + 建句柄），而它是「检查」这条路上**唯一写决策**的一屏——高风险变化逐项确认、
+    /// 说明冲突选边、模型绑定保存，决策落 <c>decisions.json</c> 并递增任务版本。
+    /// 只构造的话，「确认纳入」点不点得动、状态列会不会从「待确认」变成「已确认」、撤销会不会真把决策移除、
+    /// 版本到底涨不涨、筛到零行给不给下一步，全都可以是坏的而冒烟照样 PASS。
+    /// <para>
+    /// 六段：① 准备检查结果（真实落盘 <c>diff.json</c> 夹具）→ ② 打开即选中第一条且计数行与门控对得上
+    /// （真实控件）→ ③ 点「确认纳入」→ 决策落盘 + 版本递增 + 状态列变「已确认」（真实控件）→
+    /// ④ 点「撤销确认」→ 决策移除 + 版本再递增（真实控件）→ ⑤ 说明冲突条目上选「使用目标」→
+    /// 选择落盘（真实控件）→ ⑥ 关键词筛到零行（真实控件）。
+    /// 断言一律读磁盘产物（<c>decisions.json</c> 与 <c>task.json</c> 的版本号）与控件文字，不读服务层返回值。
+    /// </para>
+    /// <para>
+    /// 检查结果用夹具而不是真实检查：真实检查需要 Apifox CLI 登录态与项目权限，本环境（wine）不具备。
+    /// 夹具只提供这一屏真正读的字段（差异条目、说明冲突、模型候选与状态），不冒充「检查跑过」——
+    /// 检查本身的证据在只读契约检查的既有记录里。
+    /// </para>
+    /// </summary>
+    private static void RunDecisionsInteraction(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var decisionSaves = services.GetRequiredService<DecisionService>();
+
+        CheckTask? task = null;
+        DecisionsDialog? dialog = null;
+        try
+        {
+            // 第一段：准备检查结果（真实落盘）——一个高风险条目（逐项确认）、一个说明冲突（选边）、
+            // 一个待绑定模型（模型绑定）与一个共享模型更新（确认更新）：四类条目各一条，够把四种动作都走一遍。
+            RunAction("差异确认：准备检查结果（真实落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe6.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "差异确认配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe6.Api/Probe6.Api.csproj",
+                    AllowedSourcePaths = ["Probe6.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "差异确认任务" });
+                var fixture = DecisionsFixture();
+                tasks.Write(task.Id, TaskFiles.Diff, fixture);
+                var reread = tasks.Read<CheckResult>(task.Id, TaskFiles.Diff)
+                    ?? throw new InvalidOperationException("diff.json 写进任务目录后读不回来。");
+                if (reread.Items.Count != 1 || reread.Endpoints.Count != 1 || reread.Models.Count != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"夹具读回 {reread.Items.Count}/{reread.Endpoints.Count}/{reread.Models.Count}（高风险/接口/模型），期望 1/1/1。");
+                }
+                _lines.Add("     夹具：1 个高风险条目、1 个说明冲突、1 个待绑定模型、1 个共享模型更新");
+            });
+
+            // 第二段：打开对话框（Show 触发 OnLoad 读盘），核对清单行数、打开时的选中落点、计数行与动作门控。
+            RunAction("差异确认：打开即选中第一条且计数行与动作门控对得上（真实控件）", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new DecisionsDialog(tasks, task, decisionSaves);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = DecisionList(dialog);
+                if (!list.Visible) throw new InvalidOperationException("条目清单不可见（对话框停在提示态）。");
+                if (list.Items.Count != 4)
+                {
+                    throw new InvalidOperationException($"清单有 {list.Items.Count} 行，夹具是 4 个条目（高风险/说明冲突/模型绑定/共享模型）。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"打开后选中 {list.SelectedIndices.Count} 行（首行序号 {list.SelectedIndices.Cast<int>().FirstOrDefault()}），期望恰好第一行。");
+                }
+                var expectedCounts = "共 4 项 · 待处理 4 · 高风险 1 · 说明冲突 1 · 模型绑定 1 · 共享模型 1";
+                var counts = DecisionCountsLabel(dialog);
+                if (counts.Text != expectedCounts)
+                {
+                    throw new InvalidOperationException($"计数行是「{counts.Text}」，期望「{expectedCounts}」。");
+                }
+                // 第一条是高风险变化：「确认纳入」可点，「使用目标」/「保留远端」此刻必须禁用（它们只对说明冲突条目有效）。
+                if (!ButtonOf(dialog, "确认纳入").Enabled)
+                {
+                    throw new InvalidOperationException("第一条是高风险变化，「确认纳入」却是禁用的。");
+                }
+                if (ButtonOf(dialog, "使用目标").Enabled || ButtonOf(dialog, "保留远端").Enabled)
+                {
+                    throw new InvalidOperationException("第一条不是说明冲突，「使用目标」/「保留远端」却是可点的。");
+                }
+                if (ButtonOf(dialog, "撤销确认").Enabled)
+                {
+                    throw new InvalidOperationException("尚未保存任何决策，「撤销确认」却是可点的。");
+                }
+            });
+
+            // 第三段：点「确认纳入」（真实控件）→ 决策落盘、任务版本递增、状态列变「已确认」。
+            RunAction("差异确认：确认纳入后决策落盘且版本递增（真实控件）", () =>
+            {
+                if (task is null || dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var before = tasks.Get(task.Id).Revision;
+                Click(dialog, "确认纳入");
+                PumpUntilCondition(
+                    () => StatusLabel(dialog).Text.StartsWith("已保存：", StringComparison.Ordinal),
+                    "决策保存完成");
+
+                var store = tasks.Read<DecisionStore>(task.Id, TaskFiles.Decisions)
+                    ?? throw new InvalidOperationException("decisions.json 没有落盘。");
+                if (!store.Items.TryGetValue("diff-risk-1", out var value) || value != "accepted")
+                {
+                    throw new InvalidOperationException(
+                        $"decisions.json 里没有「diff-risk-1=accepted」，实际：{string.Join("、", store.Items.Select(kv => kv.Key + "=" + kv.Value))}");
+                }
+                var after = tasks.Get(task.Id).Revision;
+                if (after != before + 1)
+                {
+                    throw new InvalidOperationException($"任务版本从 {before} 变成 {after}，期望 +1（决策变了就该让旧检查与旧计划过期）。");
+                }
+                var list = DecisionList(dialog);
+                var state = list.Items[0].SubItems[3].Text;
+                if (state != "已确认")
+                {
+                    throw new InvalidOperationException($"状态列是「{state}」，期望「已确认」。");
+                }
+                if (!StatusLabel(dialog).Text.Contains("重新检查后生效", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行是「{StatusLabel(dialog).Text}」，没有说明「重新检查后生效」。");
+                }
+            });
+
+            // 第四段：点「撤销确认」（真实控件）→ 决策从磁盘移除、版本再递增、状态列回到「待确认」。
+            RunAction("差异确认：撤销确认后决策移除且版本再递增（真实控件）", () =>
+            {
+                if (task is null || dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var before = tasks.Get(task.Id).Revision;
+                Click(dialog, "撤销确认");
+                PumpUntilCondition(
+                    () => StatusLabel(dialog).Text.StartsWith("已保存：", StringComparison.Ordinal),
+                    "撤销落盘");
+
+                var store = tasks.Read<DecisionStore>(task.Id, TaskFiles.Decisions)
+                    ?? throw new InvalidOperationException("decisions.json 没有落盘。");
+                if (store.Items.ContainsKey("diff-risk-1"))
+                {
+                    throw new InvalidOperationException("撤销之后 decisions.json 里仍留着「diff-risk-1」。");
+                }
+                var after = tasks.Get(task.Id).Revision;
+                if (after != before + 1)
+                {
+                    throw new InvalidOperationException($"撤销后任务版本从 {before} 变成 {after}，期望 +1。");
+                }
+                var state = DecisionList(dialog).Items[0].SubItems[3].Text;
+                if (state != "待确认")
+                {
+                    throw new InvalidOperationException($"撤销后状态列是「{state}」，期望回到「待确认」。");
+                }
+            });
+
+            // 第五段：筛到「说明冲突」（真实控件）→ 第一条即冲突条目，「使用目标」可点；点它（真实控件）→ 选择落盘。
+            RunAction("差异确认：说明冲突选「使用目标」后选择落盘（真实控件）", () =>
+            {
+                if (task is null || dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                DecisionFilter(dialog).SelectedIndex = 3;
+                Application.DoEvents();
+
+                var list = DecisionList(dialog);
+                if (list.Items.Count != 1)
+                {
+                    throw new InvalidOperationException($"「说明冲突」筛选下有 {list.Items.Count} 行，夹具里冲突只有 1 条。");
+                }
+                if (list.Items[0].SubItems[0].Text != "说明冲突")
+                {
+                    throw new InvalidOperationException($"筛选后第一行的类型是「{list.Items[0].SubItems[0].Text}」，期望「说明冲突」。");
+                }
+                var useTarget = ButtonOf(dialog, "使用目标");
+                if (!useTarget.Enabled)
+                {
+                    throw new InvalidOperationException("说明冲突条目上「使用目标」是禁用的。");
+                }
+                var before = tasks.Get(task.Id).Revision;
+                Click(dialog, "使用目标");
+                PumpUntilCondition(
+                    () => StatusLabel(dialog).Text.StartsWith("已保存：", StringComparison.Ordinal),
+                    "冲突选择落盘");
+
+                var store = tasks.Read<DecisionStore>(task.Id, TaskFiles.Decisions)
+                    ?? throw new InvalidOperationException("decisions.json 没有落盘。");
+                if (!store.DocChoices.TryGetValue("doc-conflict-1", out var choice) || choice != "useTarget")
+                {
+                    throw new InvalidOperationException(
+                        $"decisions.json 里没有「doc-conflict-1=useTarget」，实际：{string.Join("、", store.DocChoices.Select(kv => kv.Key + "=" + kv.Value))}");
+                }
+                var after = tasks.Get(task.Id).Revision;
+                if (after != before + 1)
+                {
+                    throw new InvalidOperationException($"保存冲突选择后任务版本从 {before} 变成 {after}，期望 +1。");
+                }
+                // 选过之后「保留远端」仍可点（可以改边），而「使用目标」自己应禁用（已是这一边）。
+                if (ButtonOf(dialog, "使用目标").Enabled)
+                {
+                    throw new InvalidOperationException("已经选了「使用目标」，该按钮却仍可点。");
+                }
+                if (!ButtonOf(dialog, "保留远端").Enabled)
+                {
+                    throw new InvalidOperationException("「使用目标」已选，「保留远端」却是禁用的（改不了边）。");
+                }
+            });
+
+            // 第六段：关键词筛到零行（真实控件）→ 清单空、提示给出下一步、筛选器不被一起禁用。
+            RunAction("差异确认：关键词筛到零行且筛选器仍可用（真实控件）", () =>
+            {
+                if (task is null || dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                DecisionFilter(dialog).SelectedIndex = 0;
+                DecisionKeyword(dialog).Text = "不存在的资源";
+                Application.DoEvents();
+
+                var list = DecisionList(dialog);
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException($"关键词筛后清单还有 {list.Items.Count} 行。");
+                }
+                if (list.Visible)
+                {
+                    throw new InvalidOperationException("清单已空却仍然可见（该让提示接管这一屏）。");
+                }
+                var expectedHint = ListFilter.FilteredEmptyHint(ListFilter.DecisionNoun, hasKeyword: true);
+                var hint = DecisionHint(dialog);
+                if (hint.Text != expectedHint)
+                {
+                    throw new InvalidOperationException($"提示是「{hint.Text}」，期望「{expectedHint}」。");
+                }
+                // 筛到零行时筛选器本身就是提示语所指的恢复路径，必须保持可用（关掉就锁死了）。
+                if (!DecisionFilter(dialog).Enabled || !DecisionKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("筛到零行后筛选下拉或关键词框被一起禁用了（提示指的恢复路径不可达）。");
+                }
+            });
+        }
+        finally
+        {
+            dialog?.Close();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 差异确认对话框的检查结果夹具：一个高风险条目（逐项确认）、一个说明冲突（选边）、
+    /// 一个待绑定模型（模型绑定）与一个共享模型更新（确认更新）——四类条目各一条。
+    /// 字段只给这一屏真正读的那些，不冒充「检查跑过」。
+    /// </summary>
+    private static CheckResult DecisionsFixture()
+    {
+        var risk = new DiffItem
+        {
+            Id = "diff-risk-1",
+            ResourceKey = "GET /api/probe",
+            Location = "响应 200 的说明",
+            Category = "documentation",
+            Change = "changed",
+            Field = "description",
+            Before = JsonValue.Create("旧说明"),
+            After = JsonValue.Create("新说明"),
+            Source = "swagger",
+            Risk = "incompatible",
+            Reason = "响应字段口径变化，需要人工判断。",
+            NeedsDecision = true,
+        };
+        var conflict = new DocChange
+        {
+            Id = "doc-conflict-1",
+            Location = "请求参数说明",
+            Field = "description",
+            RemoteValue = "远端说明",
+            TargetValue = "目标说明",
+            Origin = "swagger",
+            Decision = "conflict",
+        };
+        var endpoint = new EndpointCheck
+        {
+            Key = "GET /api/probe",
+            Method = "GET",
+            Path = "/api/probe",
+            InSource = true,
+            InSwagger = true,
+            Status = "docs",
+            DocChanges = [conflict],
+        };
+        var model = new ModelCheck
+        {
+            Name = "ProbeModel",
+            MappingState = "candidate",
+            Candidates = [9001],
+            Status = "changed",
+            DocChanges = [],
+        };
+        return new CheckResult
+        {
+            ComputedAt = DateTimeOffset.Now,
+            TaskRevision = 1,
+            StructureSource = "swagger",
+            SnapshotAt = DateTimeOffset.Now,
+            SnapshotComplete = true,
+            Items = [risk],
+            Endpoints = [endpoint],
+            Models = [model],
+        };
+    }
+
+    /// <summary>
+    /// 配置表单的真实布局（第一百四十八轮）：新建配置对话框在真机截图里是「名称、仓库根目录之后
+    /// 一大段空白，四个高级按钮彼此间距极大，右侧还出滚动条」——用户原话「很抽象、没法用」。
+    /// 这一屏是产品主链路的第一步（没有配置就没有任务、没有检查），而它此前只有「构造得起来」这一条证据。
+    /// <para>
+    /// 七段，全部量真实控件：① 逐行量字段网格的行高，超过 <see cref="ProfileFormLayout.MaxRowHeight"/>
+    /// 的行即失败（空标签格里的默认尺寸 <c>Panel</c> 会把行撑到 100px）；② 网格不出横向滚动条
+    /// （七十余字的长说明把网格撑宽过）；③ 保存/取消在可视区内、不被滚动区盖住；④ 三个必填字段
+    /// 连续且都在首屏；⑤ 四个高级入口在同一行、间距不超过 <see cref="ProfileFormLayout.AdvancedEntryGap"/>；
+    /// ⑥ 未保存时「读取项目列表」停用并给出说明（不是点了才报错）；⑦ 编辑对话框字段回显一致、
+    /// 「读取项目列表」可用。
+    /// </para>
+    /// <para>
+    /// 它证明的是「这一屏排得下、点得到、说得清」，**不是「好看」**——观感与 DPI 缩放仍随 G-D5 真机复核。
+    /// </para>
+    /// </summary>
+    private static void RunProfileFormLayout(IServiceProvider services, ProjectProfile profile)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        var credentials = services.GetRequiredService<CredentialStore>();
+        var limit = ProfileFormLayout.MaxRowHeight(UiTokens.Body.Value.Height);
+
+        ProfileDialog? dialog = null;
+        try
+        {
+            RunAction("配置表单：新建对话框的行高没有死空白（真实布局）", () =>
+            {
+                dialog = new ProfileDialog(profiles, cli, credentials, editing: null);
+                dialog.Show();
+                Application.DoEvents();
+                var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+                var heights = grid.GetRowHeights();
+                _lines.Add("     行高：" + string.Join("，", heights.Select((h, i) => RowLabel(grid, i) + "=" + h + "px")));
+                var tall = new List<string>();
+                for (var row = 0; row < heights.Length; row++)
+                {
+                    if (heights[row] > limit) tall.Add($"{RowLabel(grid, row)}={heights[row]}px（{TallestInRow(grid, row)}）");
+                }
+                if (tall.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"{tall.Count} 行超过 {limit}px（正文行高 {UiTokens.Body.Value.Height} + 行内留白 {ProfileFormLayout.RowPadding}）：{string.Join("，", tall)}");
+                }
+            });
+
+            RunAction("配置表单：新建对话框不出横向滚动条（真实布局）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+                var host = FindScrollHost(dialog) ?? throw new InvalidOperationException("对话框里找不到可滚动宿主。");
+                var preferred = grid.GetPreferredSize(new Size(0, 0)).Width;
+                _lines.Add($"     网格自然宽 {preferred}px，可视宽 {host.ClientSize.Width}px");
+                if (preferred > host.ClientSize.Width)
+                {
+                    throw new InvalidOperationException(
+                        $"网格自然宽 {preferred}px 超过可视宽 {host.ClientSize.Width}px：右侧会出横向滚动条（说明行太长或控件比列宽）。");
+                }
+            });
+
+            RunAction("配置表单：保存与取消在可视区内且不被滚动区盖住（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                foreach (var text in new[] { "保存", "取消" })
+                {
+                    var button = FindButton(dialog, text) ?? throw new InvalidOperationException($"找不到「{text}」按钮。");
+                    if (!button.Visible) throw new InvalidOperationException($"「{text}」按钮不可见。");
+                    var rect = dialog.RectangleToClient(button.Parent!.RectangleToScreen(button.Bounds));
+                    if (rect.Bottom > dialog.ClientSize.Height || rect.Top < 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"「{text}」按钮落在客户区之外（{rect.Top}..{rect.Bottom}，客户区高 {dialog.ClientSize.Height}）。");
+                    }
+                    _lines.Add($"     「{text}」按钮：y {rect.Top}..{rect.Bottom}，客户区高 {dialog.ClientSize.Height}");
+                }
+            });
+
+            RunAction("配置表单：三个必填字段连续且都在首屏（真实布局）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
+                var host = FindScrollHost(dialog) ?? throw new InvalidOperationException("对话框里找不到可滚动宿主。");
+                var rows = ProfileFormLayout.CoreFields.Select(field => RowOfLabel(grid, field)).ToArray();
+                if (rows.Any(row => row < 0))
+                {
+                    throw new InvalidOperationException(
+                        "必填字段没有全部出现在网格里：" + string.Join("，", ProfileFormLayout.CoreFields.Select((f, i) => f + "=" + rows[i])));
+                }
+                for (var i = 1; i < rows.Length; i++)
+                {
+                    if (rows[i] != rows[i - 1] + 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"必填字段不连续：{ProfileFormLayout.CoreFields[i - 1]} 在第 {rows[i - 1]} 行，{ProfileFormLayout.CoreFields[i]} 在第 {rows[i]} 行。");
+                    }
+                }
+                var heights = grid.GetRowHeights();
+                var bottom = 0;
+                for (var row = 0; row <= rows[^1] && row < heights.Length; row++) bottom += heights[row];
+                _lines.Add($"     必填字段在第 {rows[0]}–{rows[^1]} 行，底部 {bottom}px，可视高 {host.ClientSize.Height}px");
+                if (bottom > host.ClientSize.Height)
+                {
+                    throw new InvalidOperationException(
+                        $"必填字段底部 {bottom}px 超过可视高 {host.ClientSize.Height}px：首用要滚动才能填完。");
+                }
+            });
+
+            RunAction("配置表单：四个高级入口收在同一行（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var buttons = ProfileFormLayout.AdvancedEntries
+                    .Select(text => FindButton(dialog, text) ?? throw new InvalidOperationException($"找不到高级入口「{text}」。"))
+                    .ToArray();
+                var parent = buttons[0].Parent ?? throw new InvalidOperationException("高级入口没有父容器。");
+                if (buttons.Any(button => button.Parent != parent))
+                {
+                    throw new InvalidOperationException("四个高级入口不在同一个容器里（各占一行）。");
+                }
+                var tops = buttons.Select(button => button.Top).Distinct().ToArray();
+                if (tops.Length != 1)
+                {
+                    throw new InvalidOperationException($"四个高级入口不在同一行：Top 分别是 {string.Join("，", tops)}。");
+                }
+                var ordered = buttons.OrderBy(button => button.Left).ToArray();
+                for (var i = 1; i < ordered.Length; i++)
+                {
+                    var gap = ordered[i].Left - ordered[i - 1].Right;
+                    if (gap > ProfileFormLayout.AdvancedEntryGap)
+                    {
+                        throw new InvalidOperationException(
+                            $"「{ordered[i - 1].Text}」与「{ordered[i].Text}」之间隔了 {gap}px（上限 {ProfileFormLayout.AdvancedEntryGap}px）。");
+                    }
+                }
+                _lines.Add("     高级入口：" + string.Join("，", ordered.Select(button => button.Text + "@" + button.Left)));
+            });
+
+            RunAction("配置表单：未保存时「读取项目列表」停用并说明下一步（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var button = FindButton(dialog, "读取项目列表") ?? throw new InvalidOperationException("找不到「读取项目列表」按钮。");
+                if (button.Enabled)
+                {
+                    throw new InvalidOperationException("新建配置时「读取项目列表」是启用的：点下去只会得到「请先保存配置」，用户得自己猜下一步。");
+                }
+                var hint = FindLabel(dialog, ProfileFormLayout.ProjectListHintUnsaved)
+                    ?? throw new InvalidOperationException($"找不到说明行「{ProfileFormLayout.ProjectListHintUnsaved}」。");
+                if (!hint.Visible) throw new InvalidOperationException("说明行不可见。");
+                _lines.Add("     说明行：" + hint.Text);
+            });
+
+            RunAction("配置表单：编辑对话框字段回显一致且「读取项目列表」可用（真实控件）", () =>
+            {
+                using var editing = new ProfileDialog(profiles, cli, credentials, editing: profile);
+                editing.Show();
+                Application.DoEvents();
+                var name = FindTextBox(editing, profile.Name)
+                    ?? throw new InvalidOperationException($"名称输入框里没有回显「{profile.Name}」。");
+                if (FindTextBox(editing, profile.WorkspaceRoot) is null)
+                {
+                    throw new InvalidOperationException($"仓库根目录输入框里没有回显「{profile.WorkspaceRoot}」。");
+                }
+                if (FindTextBox(editing, profile.ApiProject) is null)
+                {
+                    throw new InvalidOperationException($"API 项目输入框里没有回显「{profile.ApiProject}」。");
+                }
+                var button = FindButton(editing, "读取项目列表") ?? throw new InvalidOperationException("找不到「读取项目列表」按钮。");
+                if (!button.Enabled) throw new InvalidOperationException("编辑已保存的配置时「读取项目列表」是停用的。");
+                _lines.Add($"     回显：名称「{name.Text}」、仓库「{profile.WorkspaceRoot}」、API 项目「{profile.ApiProject}」");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>按文字找按钮（递归）。</summary>
+    private static Button? FindButton(Control root, string text)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is Button button && string.Equals(button.Text, text, StringComparison.Ordinal)) return button;
+            if (FindButton(child, text) is { } found) return found;
+        }
+        return null;
+    }
+
+    /// <summary>按文字找标签（递归）。</summary>
+    private static Label? FindLabel(Control root, string text)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is Label label && string.Equals(label.Text, text, StringComparison.Ordinal)) return label;
+            if (FindLabel(child, text) is { } found) return found;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 找内容等于给定文字的输入控件（递归）：<see cref="TextBox"/> 与 <see cref="ComboBox"/> 都算。
+    /// 「API 项目」是可选可填的下拉框（<c>DropDownStyle.DropDown</c>：既能手填路径，也能从「查找 API 项目」
+    /// 的结果里选），回显一致要看的是「这一格显示的是不是保存的那个值」，不是控件类型——
+    /// 只认 TextBox 会把一个正确的回显判成失败。
+    /// </summary>
+    private static Control? FindTextBox(Control root, string text)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is TextBox or ComboBox && string.Equals(child.Text, text, StringComparison.Ordinal)) return child;
+            if (FindTextBox(child, text) is { } found) return found;
+        }
+        return null;
+    }
+
+    /// <summary>找可滚动宿主（<c>Ui.ScrollHost</c> 出厂的那一个：AutoScroll 且停靠填充）。</summary>
+    private static Panel? FindScrollHost(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is Panel { AutoScroll: true } panel) return panel;
+            if (FindScrollHost(child) is { } found) return found;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 某一行里最高的那个控件（类型、高、上下留白）：行高超限时把「是谁把这一行撑高的」一并报出来，
+    /// 否则只看到一个像素数，还得再跑一轮才知道该改哪一格。
+    /// </summary>
+    private static string TallestInRow(TableLayoutPanel grid, int row)
+    {
+        Control? tallest = null;
+        foreach (Control control in grid.Controls)
+        {
+            if (grid.GetRow(control) != row) continue;
+            if (tallest is null || control.Height + control.Margin.Vertical > tallest.Height + tallest.Margin.Vertical) tallest = control;
+        }
+        if (tallest is null) return "空行";
+        var inner = tallest.Controls.Count > 0
+            ? "，内含 " + string.Join("/", tallest.Controls.Cast<Control>().Select(c => c.GetType().Name + " " + c.Height + "px"))
+            : "";
+        return $"{tallest.GetType().Name} 高 {tallest.Height}px、上下留白 {tallest.Margin.Top}+{tallest.Margin.Bottom}{inner}";
+    }
+
+    /// <summary>字段名所在的行号（找不到返回 -1）。</summary>
+    private static int RowOfLabel(TableLayoutPanel grid, string text)
+    {
+        foreach (Control control in grid.Controls)
+        {
+            if (grid.GetColumn(control) != 0) continue;
+            if (string.Equals(control.Text, text, StringComparison.Ordinal)) return grid.GetRow(control);
+        }
+        return -1;
+    }
+
+    /// <summary>
     /// 完整旅程单次运行（第一百四十四轮）：按 README「使用流程」1–9 步里**不触碰 Apifox 写入门禁**的
     /// 只读路径，从「新建配置」一路走到「报告导出」，全程一条任务、一次连续运行。
     /// <para>
@@ -2123,6 +2692,32 @@ internal static class Program
     /// <summary>补充说明对话框的接口清单（对话框里唯一的 <c>ListView</c>）。</summary>
     private static ListView SupplementList(Control root) =>
         FindFirst<ListView>(root) ?? throw new InvalidOperationException("对话框里找不到接口清单。");
+
+    /// <summary>差异确认对话框的条目清单（对话框里唯一的 <c>ListView</c>）。</summary>
+    private static ListView DecisionList(Control root) =>
+        FindFirst<ListView>(root) ?? throw new InvalidOperationException("对话框里找不到条目清单。");
+
+    /// <summary>差异确认对话框的计数行（「共 N 项 · 待处理 M · …」）。</summary>
+    private static Label DecisionCountsLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Text.StartsWith("共 ", StringComparison.Ordinal))
+        ?? throw new InvalidOperationException("对话框里找不到计数行。界面文案：" + LabelTexts(root));
+
+    /// <summary>
+    /// 差异确认对话框的分类筛选下拉（选项里有「全部」的那一个——模型绑定下拉的选项是模型名，不会撞上）。
+    /// </summary>
+    private static ComboBox DecisionFilter(Control root) =>
+        FindAll<ComboBox>(root).FirstOrDefault(c => c.Items.Contains("全部"))
+        ?? throw new InvalidOperationException("对话框里找不到分类筛选下拉。");
+
+    /// <summary>差异确认对话框的关键词框（单行输入框；详情区那个是只读多行预览框）。</summary>
+    private static TextBox DecisionKeyword(Control root) =>
+        FindAll<TextBox>(root).FirstOrDefault(t => !t.Multiline)
+        ?? throw new InvalidOperationException("对话框里找不到关键词输入框。");
+
+    /// <summary>差异确认对话框的空态提示（可见且以「这个筛选下没有」开头的那一行）。</summary>
+    private static Label DecisionHint(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Visible && l.Text.StartsWith("这个筛选下没有", StringComparison.Ordinal))
+        ?? throw new InvalidOperationException("对话框里找不到空态提示。界面文案：" + LabelTexts(root));
 
     /// <summary>
     /// 补充说明的编辑位输入框（多行、非只读），按控件树先序——与 <c>SupplementEntries.EditorsFor</c>
