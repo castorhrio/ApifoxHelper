@@ -38,6 +38,38 @@ public static class ReportRender
         "本地锁不能阻止其他用户同时修改 Apifox；执行前指纹核对后仍存在竞态窗口。",
     ];
 
+    /// <summary>
+    /// HTML 报告的内联样式（单一落点，第一百四十三轮）。
+    /// <para>
+    /// 存在理由：报告此前只有一条 body 规则（字体栈 system-ui → Microsoft YaHei → sans-serif、
+    /// 正文容器 960px、行高 1.6）
+    /// 与一条 <c>li{margin-left:18px}</c>——表格没有边框与内边距（三列数字挤在一起、列与列之间只有空白）、
+    /// 清单项行高跟着浏览器默认走、正文行长 960px 在 16px 字号下约 60 个中文字（DESIGN §3 的正文容器
+    /// 上限是 45em），字体栈里也没有中文回退（只有 <c>Microsoft YaHei</c> 一个，缺这个字体的机器上
+    /// 中文落到浏览器默认衬线）。用户拿到的是「裸标签」观感，而这份 HTML 是 F14 交付物之一。
+    /// </para>
+    /// <para>
+    /// 取值全部来自 DESIGN §3：字体栈 Latin → 中文 → <c>sans-serif</c> 有序回退（与界面层
+    /// <c>FontStack</c> 同一顺序口径，只是 CSS 侧由浏览器自己按序探测）；正文行高 1.55；
+    /// 正文容器 40em（≤45em 上限，约 40 个中文字）；表格 <c>th</c>/<c>td</c> 发丝边 + 内边距、
+    /// 表头浅灰底（灰阶铬色，不引入第二个强调色）；引用左侧发丝边。样式只此一份，
+    /// 排版断言直接量这个常量，不从源码里正则抠字符串。
+    /// </para>
+    /// </summary>
+    public const string HtmlStyle =
+        "body{font-family:-apple-system,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;"
+        + "max-width:40em;margin:24px auto;padding:0 16px;line-height:1.55;color:#1f2937}"
+        + "h1{font-size:22px;line-height:1.4;margin:0 0 12px}"
+        + "h2{font-size:18px;line-height:1.4;margin:24px 0 8px;padding-bottom:4px;border-bottom:1px solid #e5e7eb}"
+        + "h3{font-size:16px;line-height:1.4;margin:16px 0 8px}"
+        + "p{margin:8px 0}"
+        + "ul{margin:8px 0;padding-left:20px}"
+        + "li{line-height:1.55;margin:2px 0}"
+        + "table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}"
+        + "th,td{border:1px solid #e5e7eb;padding:6px 10px;text-align:left;vertical-align:top}"
+        + "th{background:#f9fafb;font-weight:600}"
+        + "blockquote{margin:12px 0;padding:8px 12px;border-left:3px solid #d1d5db;color:#4b5563}";
+
     /// <summary>报告 Markdown 源文（与 Web 下载、桌面「另存为」同一份字节）。</summary>
     public static string Markdown(JsonObject report)
     {
@@ -240,7 +272,7 @@ public static class ReportRender
         CloseTable();
         return "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
             + "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">"
-            + "<title>Apifox 助手报告</title><style>body{font-family:system-ui,'Microsoft YaHei',sans-serif;max-width:960px;margin:24px auto;line-height:1.6;color:#1f2937}h1{font-size:22px}h2{font-size:18px;border-bottom:1px solid #e5e7eb}li{margin-left:18px}</style>"
+            + "<title>Apifox 助手报告</title><style>" + HtmlStyle + "</style>"
             + "</head><body>" + body + "</body></html>";
     }
 

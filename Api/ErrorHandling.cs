@@ -21,16 +21,18 @@ public static class ErrorHandling
             }
             catch (BadHttpRequestException ex)
             {
-                await WriteError(context, StatusCodes.Status400BadRequest, "请求格式无效：" + Redactor.Redact(ex.Message));
+                await WriteError(context, StatusCodes.Status400BadRequest, ErrorCopy.BadRequest(Redactor.Redact(ex.Message)));
             }
             catch (JsonException ex)
             {
-                await WriteError(context, StatusCodes.Status400BadRequest, "JSON 格式无效：" + Redactor.Redact(ex.Message));
+                await WriteError(context, StatusCodes.Status400BadRequest, ErrorCopy.InvalidJson(Redactor.Redact(ex.Message)));
             }
             catch (Exception ex)
             {
+                // 未知异常只回固定文案（ErrorCopy.InternalMessage），详情进日志：
+                // 异常消息可能带内部路径、类型名或凭据片段，而它会被界面原样显示在错误行里。
                 logger.LogError(ex, "请求处理失败 {Path}", context.Request.Path);
-                await WriteError(context, StatusCodes.Status500InternalServerError, "内部错误：" + Redactor.Redact(ex.Message));
+                await WriteError(context, StatusCodes.Status500InternalServerError, ErrorCopy.InternalMessage);
             }
         });
     }

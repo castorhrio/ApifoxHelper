@@ -503,4 +503,127 @@ public class ReportTypographyTests
         Assert.DoesNotContain("System.Windows.Forms", render, StringComparison.Ordinal);
         Assert.DoesNotContain("System.Drawing", render, StringComparison.Ordinal);
     }
+
+    // ── HTML 观感：内联样式（第一百四十三轮，具名 pass：polish + typeset）──────
+
+    /// <summary>
+    /// 字体栈有序回退（DESIGN §3）：Latin → 中文 → <c>sans-serif</c>。
+    /// <para>
+    /// 此前只有 <c>system-ui,'Microsoft YaHei',sans-serif</c>——中文只有一个候选，缺这个字体的机器
+    /// （macOS、精简 Windows、Linux 浏览器）上中文落到浏览器默认衬线，报告的中文正文变成宋体观感。
+    /// 断言的是**顺序**而不是「有没有某个名字」：顺序错了，回退就落在错的字体上。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HtmlStyle_UsesOrderedFontStack()
+    {
+        var stack = FontStackOf(ReportRender.HtmlStyle);
+        Assert.True(stack.Count >= 4, $"字体栈只有 {stack.Count} 项：{string.Join(" → ", stack)}");
+
+        // Latin 在前：西文与数字先用 Latin 字体（中文候选里没有拉丁字形时才会被用到）。
+        Assert.Equal("-apple-system", stack[0]);
+        // 中文候选按「macOS → Windows → 开源 CJK」排列，且都在 sans-serif 之前。
+        var chinese = new[] { "'PingFang SC'", "'Microsoft YaHei'", "'Noto Sans CJK SC'" };
+        var positions = chinese.Select(name => stack.IndexOf(name)).ToList();
+        Assert.DoesNotContain(-1, positions);
+        Assert.Equal(positions.OrderBy(p => p), positions);
+        Assert.True(positions[0] > 0, "中文候选出现在 Latin 候选之前。");
+
+        // 收尾必须是通用无衬线：全不匹配时也不能落到衬线。
+        Assert.Equal("sans-serif", stack[^1]);
+        Assert.DoesNotContain("serif", stack.Take(stack.Count - 1));
+        // 刻意排除衬线中文字体（与界面层 FontStack 同一口径）。
+        foreach (var serif in new[] { "SimSun", "Songti", "NSimSun", "STSong" })
+        {
+            Assert.DoesNotContain(serif, ReportRender.HtmlStyle, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 正文行长（DESIGN §3：正文容器 ≤45em）。此前 <c>max-width:960px</c>——16px 字号下约 60 个中文字，
+    /// 一行读下来眼睛要来回扫；报告是给人读的，行长是排版条款里最直接的一条。
+    /// </summary>
+    [Fact]
+    public void HtmlStyle_ConstrainsProseWidth()
+    {
+        var maxWidth = Regex.Match(ReportRender.HtmlStyle, @"body\{[^}]*max-width:(\d+(?:\.\d+)?)em");
+        Assert.True(maxWidth.Success, "body 规则里没有以 em 计的 max-width（px 不随字号缩放，量不出字数）。");
+        var em = double.Parse(maxWidth.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(em <= 45, $"正文容器 {em}em 超过 DESIGN §3 的 45em 上限。");
+        Assert.True(em >= 30, $"正文容器 {em}em 过窄（约 {em:0} 个中文字），表格会被挤成竖排。");
+        // 居中：窄容器贴左边读起来像半张纸。
+        Assert.Contains("margin:24px auto", ReportRender.HtmlStyle, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 表格观感：<c>th</c>/<c>td</c> 必须有边框与内边距，表头有底色。
+    /// 此前表格一条样式都没有——三列文字之间只有空白，列与列的分界靠猜，表头与数据同色同重。
+    /// </summary>
+    [Fact]
+    public void HtmlStyle_GivesTablesBordersAndPadding()
+    {
+        var style = ReportRender.HtmlStyle;
+        Assert.Contains("table{border-collapse:collapse", style, StringComparison.Ordinal);
+
+        var cell = Regex.Match(style, @"th,td\{([^}]*)\}");
+        Assert.True(cell.Success, "样式里没有 th,td 规则（表格单元格没有边框与内边距）。");
+        var rule = cell.Groups[1].Value;
+        Assert.Contains("border:1px solid", rule, StringComparison.Ordinal);
+        Assert.Contains("padding:", rule, StringComparison.Ordinal);
+        Assert.Contains("text-align:left", rule, StringComparison.Ordinal);
+        Assert.Contains("vertical-align:top", rule, StringComparison.Ordinal);
+
+        // 表头与数据行要能区分：底色或字重至少一项（灰阶铬色，不引入第二个强调色）。
+        var head = Regex.Match(style, @"th\{([^}]*)\}");
+        Assert.True(head.Success, "样式里没有 th 规则（表头与数据行同色同重）。");
+        Assert.True(head.Groups[1].Value.Contains("background:", StringComparison.Ordinal)
+                    || head.Groups[1].Value.Contains("font-weight:", StringComparison.Ordinal),
+            "表头既没有底色也没有字重差异。");
+    }
+
+    /// <summary>
+    /// 清单项行高（DESIGN §3：中文行高 1.55）。此前 <c>li</c> 只有 <c>margin-left:18px</c>，
+    /// 行高跟着浏览器默认（约 1.2）走——报告里最长的「未完成事项」与「限制」两段都是清单，
+    /// 行距过紧时中文读起来是连成一片的。
+    /// </summary>
+    [Fact]
+    public void HtmlStyle_GivesListItemsLineHeight()
+    {
+        var style = ReportRender.HtmlStyle;
+        var body = Regex.Match(style, @"body\{([^}]*)\}");
+        Assert.True(body.Success);
+        Assert.Contains("line-height:1.55", body.Groups[1].Value, StringComparison.Ordinal);
+
+        var item = Regex.Match(style, @"li\{([^}]*)\}");
+        Assert.True(item.Success, "样式里没有 li 规则（清单项行高跟着浏览器默认走）。");
+        var lineHeight = Regex.Match(item.Groups[1].Value, @"line-height:(\d+(?:\.\d+)?)");
+        Assert.True(lineHeight.Success, "li 规则里没有 line-height。");
+        var value = double.Parse(lineHeight.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(value >= 1.5 && value <= 1.6, $"清单项行高 {value} 不在 1.5–1.6 之间（DESIGN §3 取 1.55）。");
+    }
+
+    /// <summary>
+    /// 样式只有一份：<c>Html</c> 必须引用 <see cref="ReportRender.HtmlStyle"/>，
+    /// 文件里不得再出现第二处 <c>font-family</c> 或 <c>&lt;style&gt;</c> 字面量。
+    /// 否则排版断言量的是常量、用户看到的是另一份。
+    /// </summary>
+    [Fact]
+    public void HtmlStyle_IsTheOnlyStyleSource()
+    {
+        var html = ReportRender.Html(ReportRender.Markdown(Report()));
+        Assert.Contains("<style>" + ReportRender.HtmlStyle + "</style>", html, StringComparison.Ordinal);
+
+        var render = Repo.Source("Reports", "ReportRender.cs");
+        Assert.Single(Regex.Matches(render, "font-family"));
+        Assert.Single(Regex.Matches(render, "<style>"));
+        Assert.Contains("+ HtmlStyle +", render, StringComparison.Ordinal);
+    }
+
+    /// <summary>字体栈解析：<c>font-family:</c> 到 <c>}</c> 之间按逗号切分、去空白。</summary>
+    private static List<string> FontStackOf(string style)
+    {
+        var match = Regex.Match(style, @"font-family:([^;]+);");
+        Assert.True(match.Success, "样式里没有 font-family。");
+        return match.Groups[1].Value.Split(',').Select(part => part.Trim()).Where(part => part.Length > 0).ToList();
+    }
 }
