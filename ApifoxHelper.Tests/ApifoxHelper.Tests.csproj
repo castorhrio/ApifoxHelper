@@ -103,6 +103,7 @@
     <Compile Include="..\Profiles\ProfileExport.cs" Link="Shared\ProfileExport.cs" />
     <Compile Include="..\Profiles\EndpointTemplateReader.cs" Link="Shared\EndpointTemplateReader.cs" />
     <Compile Include="..\Reports\ReportFormats.cs" Link="Shared\ReportFormats.cs" />
+    <Compile Include="..\Reports\ReportRender.cs" Link="Shared\ReportRender.cs" />
     <Compile Include="..\Sync\CheckModels.cs" Link="Shared\CheckModels.cs" />
     <Compile Include="..\Sync\PlanModels.cs" Link="Shared\PlanModels.cs" />
     <Compile Include="..\Contracts\DiffEngine.cs" Link="Shared\DiffEngine.cs" />

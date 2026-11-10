@@ -1448,3 +1448,25 @@
 - **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2110 用例全部通过**；GUI 侧本轮有**真实执行证据**（wine 10.0 + Xvfb 下 53 通过 / 0 失败 + 变异 52/1）。**Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效；真机清单第 17 项（DPI 观感）与第 18 项（真机跑冒烟）继续留 `[ ]`。
 - **下一轮候选（如实挂账，本轮未做）**：① 报告导出的中文排版机械检查（第一百三十七轮已探明入口：`ReportService` 依赖未共享编译的类型，须先决定源码切片还是收成 `ReportCopy`）；② `ApifoxCli.Parse` 的表驱动用例；③ 真机到位后按 19 项清单逐条走并拍 100%/200% DPI 截图。
 - **本轮未连接或写入 Apifox，未调用任何模型服务**；不改候选数据、审阅校验与写入链路，服务层一行未动，未新增对话框或功能。
+
+## 报告正文的中文排版机械自检（2026-11-10 第一百四十一轮）
+
+- **接续前确认**：开局工作树干净（仅 `.winecheck/` 未跟踪，本机 wine 试跑脚本，非产品代码，不入库），HEAD（9bd0eb2）为第一百四十轮（七段 wine 真跑 + 等宽栈兜底修复），主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误、`dotnet test` 2110 用例全绿，基线成立；第四十七至一百四十轮逐字保留。
+- **本轮定位**：控制仓简报 P0-1（Windows 真机 19 项清单）与 P1（真机 DPI 截图）在本会话仍不可能完成（Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机，第一百二十四轮挂账决策继续有效）。按「能在 Linux 验证的验证、不可验证的如实记录」，本轮做简报的 **P0-1：导出报告的中文排版机械自检**——这是第一百三十七轮起连续挂账的「报告排版无断言」缺口。
+- **已交付 ①：报告渲染收成无依赖单一落点 `Reports/ReportRender.cs`**。第一百三十七轮已探明入口但卡在「`ReportService` 依赖 `TaskStore` 与 `CommentPlan`/`PropagationResult` 等未共享编译的类型，不能像 `SlotText` 那样直接共享编译」。本轮按仓内既有做法（`ProfileExport`、`EndpointTemplateReader` 的纯行为保持提取）把 `Markdown` / `Handoff` / `Html` 三个渲染方法**原样**移到 `ReportRender`（只用 `JsonObject` + `StringBuilder` + `WebUtility`，纯 BCL），`ReportService` 三个方法各留一行委托——`ReportExportService.Render` 的字节口径不变（它调的就是这三个方法），测试工程共享编译后断言的是主工程同一份代码。
+- **已交付 ②：`ApifoxHelper.Tests/ReportTypographyTests.cs`（14 例）**，对真实渲染产出做机械检查：
+  - **行宽 ≤45em**（DESIGN §3）：中文按 1em、半角按 0.5em 折算；表格行与标题行是结构行不计，量的是「渲染器自己写的那句话」（数据位一律取最短值的合成报告）。另有一条钉住 `ReportService.Build` 的「检查覆盖范围与限制」四句（报告里最长的固定说明）。
+  - **全角标点**：复用 `CopyRules` 的「半角标点紧挨中文」与半角冒号白名单口径，Markdown 与交接说明各扫一遍。
+  - **禁假斜体**：`**` 一律不出现，`*` 不得紧挨中文。
+  - **中文引用只用「」**：弯引号与紧挨中文的半角引号都不许出现。
+  - **空话禁词与工程进度自述**：复用 `CopyRules.BannedWords` / `ProgressNarration`。
+  - **HTML 正文无 Markdown 记号泄漏**：正文里不得出现 `|`、`&gt;`、`**`、`<p>- `、`<p># `、`<p>> `。
+  - **结构记号必须变成标签**：表格成组包 `<table>`（分隔行不输出成一行）、清单项成组包 `<ul>`（裸 `<li>` 判红）、引用变 `<blockquote>`、三级标题计数与 Markdown 逐级对得上。
+  - **远端内容仍转义**：`<script>` 进报告后正文里只有 `&lt;script&gt;`。
+  - **单一落点**：`ReportService` 三个方法必须是一行委托，且文件里不得再出现 `sb.AppendLine` / `WebUtility.HtmlEncode`（第二份渲染即红）；`ReportRender.cs` 必须在测试工程共享编译清单里且不引用 WinForms/GDI+。
+- **本轮抓到的真实缺陷（产品可见面，具名 pass：harden）**：`Html` 此前只认标题与 `- ` 两种记号，报告里的**表格与引用原样落进 `<p>`**——HTML 报告正文里出现 `| 阶段 | 状态 | 说明 |` 与 `&gt; 验证边界…`，用户看到的是 Markdown 记号而不是表格与引用；`<li>` 也没有 `<ul>` 包裹（裸 `<li>` 不是合法 HTML，浏览器自己猜结构）。修法：表格成组包 `<table>`（`| --- |` 分隔行只表达「上一行是表头」，不输出）、清单项成组包 `<ul>`、`> ` 变 `<blockquote>`；远端内容仍逐格 `HtmlEncode`，不解释远端带来的记号。
+- **变异验证 3 处实测可红**（各自独立变红，还原后 `cmp` 逐字节核对与开局一致、重建 2124 全绿）：① 把 `Html` 退回改前的实现 → 4 红（`Html_DoesNotLeakMarkdownMarkers`、`Html_RendersTablesAsTables`、`Html_GroupsListItemsUnderList`、`Html_RendersBlockquoteAndHeadings`）；② 把 `- 目标：` 的半角冒号改回 `- 目标:` → `Markdown_UsesFullWidthPunctuation` 1 红；③ 往 `Build` 的 limits 里塞一句超长中文 → `BuildLimits_AreWithin45Em` 1 红。
+- **测试 2110 → 2124 用例**（+14，`ReportTypographyTests`）。
+- **验证状态**：Linux 主工程、测试工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2124 用例全部通过**；口径是真执行——`ReportRender.cs` 经共享编译进测试程序集，断言比的是主工程同一份渲染代码。**Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效；本轮未重复 wine 试跑，故不据此宣称冒烟器在本轮跑过（53 通过是第一百四十轮的证据）。
+- **下一轮候选（如实挂账，本轮未做）**：① 简报 P0-2「长中文/极端数据撑破的界面鲁棒性」冒烟段（`RunLongTextRobustness`：200+ 字符接口路径、100 个连续中文的候选文字、200 字符单行差异文本、空串与全空白）——本轮时间用尽，未写；② `ApifoxCli.Parse` 的表驱动用例；③ 真机到位后按 19 项清单逐条走并拍 100%/200% DPI 截图。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改报告内容与脱敏口径、不改导出格式与文件名、服务层语义一行未动（渲染是纯行为保持提取 + HTML 记号泄漏修复）。
