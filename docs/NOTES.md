@@ -1470,3 +1470,18 @@
 - **验证状态**：Linux 主工程、测试工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2124 用例全部通过**；口径是真执行——`ReportRender.cs` 经共享编译进测试程序集，断言比的是主工程同一份渲染代码。**Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效；本轮未重复 wine 试跑，故不据此宣称冒烟器在本轮跑过（53 通过是第一百四十轮的证据）。
 - **下一轮候选（如实挂账，本轮未做）**：① 简报 P0-2「长中文/极端数据撑破的界面鲁棒性」冒烟段（`RunLongTextRobustness`：200+ 字符接口路径、100 个连续中文的候选文字、200 字符单行差异文本、空串与全空白）——本轮时间用尽，未写；② `ApifoxCli.Parse` 的表驱动用例；③ 真机到位后按 19 项清单逐条走并拍 100%/200% DPI 截图。
 - **本轮未连接或写入 Apifox，未调用任何模型服务**；不改报告内容与脱敏口径、不改导出格式与文件名、服务层语义一行未动（渲染是纯行为保持提取 + HTML 记号泄漏修复）。
+
+## 报告 HTML 表格语义 + limits 提常量 + 序列化口径单一落点（2026-11-10 第一百四十二轮）
+
+- **接续前确认**：开局工作树干净，HEAD（3ab0aa1）为第一百四十一轮（报告渲染收成无依赖单一落点 + 14 例中文排版自检），主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误、`dotnet test` 2124 用例全绿，基线成立；第四十七至一百四十一轮逐字保留。
+- **本轮定位**：控制仓简报 P0-1（Windows 真机 19 项清单）与 P1（真机 DPI 截图）在本会话仍不可能完成（Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机，第一百二十四轮挂账决策继续有效）。按「能在 Linux 验证的验证、不可验证的如实记录」，本轮做简报点名的 P0-2、P0-3 与 P1 两项，不新增产品功能、不动对外接口与写入安全语义。
+- **已交付 ①（具名 pass：harden）报告 HTML 表格语义**：`Reports/ReportRender.cs` 的 `Html` 此前整张表全是 `<td>`——表头与数据没有区别，读屏软件读不出「这一列是什么」。现首行输出 `<thead><tr><th>`、其余行输出 `<tbody><tr><td>`，`<thead>`/`<tbody>` 成对闭合（只有表头行时也闭合，不留裸标签）。
+- **已交付 ②（harden）单元格内的竖线保护**：`|` 正是表格列分隔符，远端状态/说明/结构来源带 `|` 时会多切一格、整行列数错位。现 Markdown 侧经 `TableRow`/`EscapeCell` 转义成 `\|`（换行折成空格），`TableCells` 按未转义的 `|` 切分并还原 `\|` → `|`——列数不因数据内容而变，HTML 里用户看到的是原文。
+- **已交付 ③（具名 pass：distill）`limits` 四句提成常量**：四句固定说明从 `ReportService.Build` 的字面量提为 `ReportRender.Limits`（单一落点），`Build` 改为引用同一份；`BuildLimits_AreWithin45Em` 不再用正则从源码抠字符串（抠不到就静默通过），直接量常量，并新增 `Build_TakesLimitsFromTheSingleSource` 钉住「服务层不得再抄一份字面量」。
+- **已交付 ④（简报 P1）序列化路径一致性**：`JsonDefaults` 新增 `Apply(JsonSerializerOptions)`（中文原样 / 空值不写 / 枚举 camelCase 三项口径的唯一落点），`Create` 与 `HelperHost` 的 `ConfigureHttpJsonOptions` 都调它——此前两边各写一遍，改一边忘另一边时同一份数据经 HTTP 与经进程内序列化会得到不同 JSON，且不报错、只让比对与回读核对悄悄失配。新增 `SerializationCaliberTests` 6 例：两条路径对同一对象产出逐字节相同 JSON、三项口径本身、缩进版同口径、设置只有一处、`HelperHost` 只调单一落点、`ApiRoutes.Json` 用 `Compact`。
+- **已交付 ⑤（简报 P1）`.winecheck/` 可移植**：五个脚本此前写死个人环境绝对路径（某用户主目录下的工作区、发行版打包的 wine 路径），换机器即整段失效且看不出原因。现全部改为可覆盖的环境变量（`WINEPREFIX`/`WINE_BIN`/`EXE`/`DATA`/`DISPLAY`/`AH_WS`/`AH_PROJECT`/`SHOT`），工作区路径经 `winepath -w` 转换，并补 `set -u`；新增 `.winecheck/README.md` 写明 wine 版本（实测 wine-10.0）、Xvfb 等依赖、脚本用途、产物位置与「不能替代真机复核」的限制。新增 `WineCheckScriptsTests` 3 例钉住「无个人绝对路径」「路径取自环境变量」「使用说明在位」。
+- **测试 2124 → 2136 用例**（+12：`ReportTypographyTests` +3、`SerializationCaliberTests` 6、`WineCheckScriptsTests` 3）；既有 `Html_RendersTablesAsTables` 随真实形状更新（表头断言由 `<td>阶段</td>` 改为 `<th>阶段</th>` 并加反向断言），强度不降。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2136 用例全部通过**；口径是真执行——`ReportRender.cs`、`Core.cs` 经共享编译进测试程序集，断言比的是主工程同一份代码。
+- **P0-1 真机证据：本轮仍不可得（环境限制，非验证手段选错）**。`docs/NOTES.md` 那张「Windows 真机全链路清单（19 项）」本轮一项都没勾，第一百三十四轮的登记原样保留。本轮已把冒烟器发布到 `/tmp/ah-smoke-pub`（`dotnet publish -c Release -r win-x64 --self-contained` 成功），但**回合内未及在 wine 下执行**，故不据此宣称冒烟器在本轮跑过——53 通过 / 0 失败仍是第一百四十轮的证据。
+- **下一轮候选（如实挂账，本轮未做）**：① 在 wine 下跑一遍冒烟器（`xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke-report.txt`），把通过数写进本文件；② 简报 P0-2 的「长中文/极端数据撑破的界面鲁棒性」冒烟段（`RunLongTextRobustness`）；③ `ApifoxCli.Parse` 的表驱动用例。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改报告内容与脱敏口径、不改导出格式与文件名、不改任务与配置数据、服务层语义一行未动（渲染与序列化均为口径收口，行为保持）。

@@ -1,13 +1,28 @@
 #!/bin/bash
-export DISPLAY=:99
+# 用途：在「新建配置」对话框里按坐标点输入框并真实键入名称、仓库根目录与 API 项目路径，
+#       然后截图并 OCR 出对话框文字（核对字段是否真的填进去了）。
+# 依赖与前置同 run1.sh。工作区路径由 AH_WS 指定（默认 $HOME/ah-ws），经 winepath 转成 Windows 路径；
+# 项目相对路径由 AH_PROJECT 指定（默认 Probe.Api/Probe.Api.csproj）。
+# 注意：坐标随 DPI 与字体变化，换机器/换字号后要重新量。
+set -u
+export WINEPREFIX=${WINEPREFIX:-$HOME/.wine-ah}
+export WINEDEBUG=${WINEDEBUG:--all}
+export DISPLAY=${DISPLAY:-:99}
+WS=${AH_WS:-$HOME/ah-ws}
+PROJ=${AH_PROJECT:-Probe.Api/Probe.Api.csproj}
+SHOT=${SHOT:-/tmp/ah-dialog.png}
+WS_WIN=$(winepath -w "$WS" 2>/dev/null || echo "$WS")
+PROJ_WIN=$(winepath -w "$WS/$PROJ" 2>/dev/null || echo "$WS_WIN\\$PROJ")
+
 D=$(xdotool search --name "新建配置" | head -1)
 echo "dlg=$D"
+[ -z "$D" ] && exit 1
 xdotool windowactivate "$D"; sleep 1
 click() { xdotool mousemove --window "$D" "$1" "$2" click 1; sleep 1; }
 typ() { xdotool type --delay 40 "$1"; sleep 1; }
 click 300 32;  typ 'probe-config'
-click 300 68;  typ 'Z:\home\ubuntu\ah-ws'
-click 300 181; typ 'Z:\home\ubuntu\ah-ws\Probe.Api\Probe.Api.csproj'
+click 300 68;  typ "$WS_WIN"
+click 300 181; typ "$PROJ_WIN"
 sleep 1
-import -window "$D" /tmp/dlg2.png
-tesseract /tmp/dlg2.png stdout -l chi_sim 2>/dev/null | head -30
+import -window "$D" "$SHOT"
+tesseract "$SHOT" stdout -l chi_sim 2>/dev/null | head -30

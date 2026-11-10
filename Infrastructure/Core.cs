@@ -22,16 +22,28 @@ public static class JsonDefaults
     public static readonly JsonSerializerOptions Options = Create(indented: true);
     public static readonly JsonSerializerOptions Compact = Create(indented: false);
 
+    /// <summary>
+    /// 两条序列化路径共用的口径：中文原样保存（便于人工查看任务资料）、空值不写、
+    /// 枚举写成 camelCase 字符串。
+    /// <para>
+    /// 单一落点（第一百四十二轮）：本进程里同一份数据有两条出口——本地服务的 HTTP JSON
+    /// （<c>HelperHost</c> 的 <c>ConfigureHttpJsonOptions</c>）与进程内直接序列化
+    /// （<c>JsonDefaults.Compact</c>，桌面界面与任务资料落盘都走它）。两边此前各写一遍这三项设置，
+    /// 改了一边忘了另一边时，同一份数据经 HTTP 与经进程内序列化会得到不同的 JSON（枚举变成数字、
+    /// 空值忽有忽无），而这种差异不会报错、只会让比对与回读核对悄悄失配。现在两边都调这里。
+    /// </para>
+    /// </summary>
+    public static void Apply(JsonSerializerOptions options)
+    {
+        options.Encoder = JavaScriptEncoder.Create(UnicodeRanges.All);
+        options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+    }
+
     private static JsonSerializerOptions Create(bool indented)
     {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
-        {
-            WriteIndented = indented,
-            // 中文原样保存，便于人工查看任务资料。
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        };
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = indented };
+        Apply(options);
         return options;
     }
 

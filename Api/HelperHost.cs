@@ -38,12 +38,8 @@ public sealed class HelperHost : IAsyncDisposable
         builder.Logging.AddProvider(new FileLoggerProvider(LogDirectory));
         builder.Logging.SetMinimumLevel(LogLevel.Information);
         builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
-        builder.Services.ConfigureHttpJsonOptions(o =>
-        {
-            o.SerializerOptions.Encoder = JsonDefaults.Options.Encoder;
-            o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-            o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-        });
+        // HTTP JSON 与进程内序列化（JsonDefaults.Compact）共用同一份口径，见 JsonDefaults.Apply。
+        builder.Services.ConfigureHttpJsonOptions(o => JsonDefaults.Apply(o.SerializerOptions));
         builder.Services.AddSingleton(Security);
         builder.Services.AddSingleton(Store);
         builder.Services.AddSingleton(Desktop);

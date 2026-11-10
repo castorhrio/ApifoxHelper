@@ -144,11 +144,8 @@ public sealed class ReportService(TaskStore tasks)
                 docs = e.DocChanges.Where(c => c.Decision is "fill" or "useTarget" or "supplement").Select(c => $"{c.Location}：{c.FinalValue}").ToList(),
             })),
             ["unfinished"] = unfinished,
-            ["limits"] = new JsonArray(
-                "分析不运行 MSBuild：条件属性、Import、源生成器未评估，相关缺口见扫描警告。",
-                "动态派发、多实现 DI、反射与外部程序集中的逻辑未展开，相关结论需人工确认。",
-                "用例脚本等任意文本中的模型依赖未分析，需人工复核。",
-                "本地锁不能阻止其他用户同时修改 Apifox；执行前指纹核对后仍存在竞态窗口。"),
+            // 四句固定说明的单一落点在 ReportRender.Limits（排版检查直接量同一份文字）。
+            ["limits"] = new JsonArray(ReportRender.Limits.Select(text => (JsonNode?)JsonValue.Create(text)).ToArray()),
         };
         return (JsonObject)Redactor.RedactNode(report)!;
     }

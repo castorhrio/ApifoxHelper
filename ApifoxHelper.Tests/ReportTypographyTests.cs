@@ -29,7 +29,7 @@ public class ReportTypographyTests
     /// （不兼容/结构/说明三类条目）、未完成事项、限制清单、验证边界。
     /// 数据全部是解释产品行为的假设值，不指向真实项目。
     /// </summary>
-    private static JsonObject Report(string? changeKey = null) => new()
+    private static JsonObject Report(string? changeKey = null, string? sourceStatus = null) => new()
     {
         ["task"] = new JsonObject
         {
@@ -60,7 +60,7 @@ public class ReportTypographyTests
         {
             ["sourceComments"] = new JsonObject
             {
-                ["status"] = "completed",
+                ["status"] = sourceStatus ?? "completed",
                 ["coverage"] = new JsonObject { ["valid"] = 3, ["inheritDoc"] = 1, ["total"] = 8 },
                 ["unresolvedSymbols"] = 2,
                 ["unresolvedCalls"] = 1,
@@ -111,11 +111,8 @@ public class ReportTypographyTests
             ["docs"] = new JsonArray("接口说明已合并"),
         }),
         ["unfinished"] = new JsonArray("注释未补全：OrdersController.List summary（missing）"),
-        ["limits"] = new JsonArray(
-            "分析不运行 MSBuild：条件属性、Import、源生成器未评估，相关缺口见扫描警告。",
-            "动态派发、多实现 DI、反射与外部程序集中的逻辑未展开，相关结论需人工确认。",
-            "用例脚本等任意文本中的模型依赖未分析，需人工复核。",
-            "本地锁不能阻止其他用户同时修改 Apifox；执行前指纹核对后仍存在竞态窗口。"),
+        // 四句固定说明取主工程同一份（ReportRender.Limits），测试工程不留第二份副本。
+        ["limits"] = new JsonArray(ReportRender.Limits.Select(text => (JsonNode?)JsonValue.Create(text)).ToArray()),
     };
 
     /// <summary>
@@ -218,25 +215,42 @@ public class ReportTypographyTests
     }
 
     /// <summary>
-    /// 报告里最长的那几句固定说明是 <c>ReportService.Build</c> 的「检查覆盖范围与限制」清单
-    /// （它们不随数据变化，是产品自己写的话）。渲染器那一侧的行宽由上面那条用例钉住，
-    /// 这一条钉住 Build 里的四句——它们进 Markdown 时是列表项，同样受 45em 约束。
+    /// 报告里最长的那几句固定说明是「检查覆盖范围与限制」清单（它们不随数据变化，是产品自己写的话）。
+    /// 渲染器那一侧的行宽由上面那条用例钉住，这一条钉住那四句——它们进 Markdown 时是列表项，
+    /// 同样受 45em 约束。
+    /// <para>
+    /// 第一百四十二轮：这四句此前写在 <c>ReportService.Build</c> 里，本用例只能从源码里用正则抠
+    /// 字符串字面量——抠不到就静默通过（提取器失效时检查看起来仍然是绿的）。现在四句是
+    /// <see cref="ReportRender.Limits"/> 一份常量，本用例直接量它，另有一条钉住 Build 引用同一份。
+    /// </para>
     /// </summary>
     [Fact]
     public void BuildLimits_AreWithin45Em()
     {
-        var source = Repo.Source("Reports", "ReportService.cs");
-        var start = source.IndexOf("[\"limits\"] = new JsonArray(", StringComparison.Ordinal);
-        Assert.True(start >= 0, "ReportService.Build 里找不到 limits 清单（检查的锚点失效）。");
-        var end = source.IndexOf(')', start);
-        var block = source[start..end];
-        var literals = Regex.Matches(block, "\"((?:[^\"\\\\]|\\\\.)*)\"")
-            .Select(m => m.Groups[1].Value)
-            .Where(CopyRules.HasChinese)
-            .ToList();
-        Assert.True(literals.Count >= 4, $"limits 清单只提取到 {literals.Count} 句（提取器失效）。");
-        var tooWide = literals.Where(text => WidthEm(text) > 45).ToList();
+        Assert.True(ReportRender.Limits.Count >= 4, $"限制清单只剩 {ReportRender.Limits.Count} 句（清单被删短了）。");
+        var tooWide = ReportRender.Limits.Where(text => WidthEm(text) > 45).ToList();
         Assert.True(tooWide.Count == 0, "限制清单里这些句子超过 45em：" + string.Join("；", tooWide));
+        // 四句都真的进了报告正文（常量存在但没被渲染，等于用户看不到）。
+        var markdown = ReportRender.Markdown(Report());
+        foreach (var text in ReportRender.Limits)
+        {
+            Assert.Contains($"- {text}", markdown, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 四句固定说明只有一份：<c>ReportService.Build</c> 必须引用 <see cref="ReportRender.Limits"/>，
+    /// 不得在服务层再抄一遍字面量（抄一份就多一处会漂移的副本，而排版检查只量得到其中一份）。
+    /// </summary>
+    [Fact]
+    public void Build_TakesLimitsFromTheSingleSource()
+    {
+        var source = Repo.Source("Reports", "ReportService.cs");
+        Assert.Contains("ReportRender.Limits", source, StringComparison.Ordinal);
+        foreach (var text in ReportRender.Limits)
+        {
+            Assert.DoesNotContain(text, source, StringComparison.Ordinal);
+        }
     }
 
     // ── 中文标点与记号（复用 CopyRules 口径）────────────────────────
@@ -357,7 +371,72 @@ public class ReportTypographyTests
         // 表头 + 四行数据；分隔行只表达「上一行是表头」，不输出成一行。
         Assert.Equal(tableRows - separators, Regex.Matches(body, "<tr>").Count);
         Assert.DoesNotContain("<td>---</td>", body, StringComparison.Ordinal);
-        Assert.Contains("<td>阶段</td>", body, StringComparison.Ordinal);
+        // 表头是 <th>（第一百四十二轮），数据行才是 <td>。
+        Assert.Contains("<th>阶段</th>", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("<td>阶段</td>", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 表格语义（第一百四十二轮）：首行是表头，必须落在 <c>&lt;thead&gt;&lt;th&gt;</c> 里，
+    /// 其余行落在 <c>&lt;tbody&gt;&lt;td&gt;</c> 里。此前整张表全是 <c>&lt;td&gt;</c>，
+    /// 表头与数据没有区别——读屏软件读不出「这一列是什么」，浏览器也不会把它当表头处理。
+    /// </summary>
+    [Fact]
+    public void Html_RendersTableHeaderAsTheadTh()
+    {
+        var markdown = ReportRender.Markdown(Report());
+        var body = Body(ReportRender.Html(markdown));
+
+        // Markdown 侧的表头就是第一行表格行（分隔行只表达「上一行是表头」）。
+        var headerLine = markdown.Split('\n').First(line => line.StartsWith('|'));
+        var headerCells = headerLine.Split('|').Select(cell => cell.Trim()).Where(cell => cell.Length > 0).ToList();
+        Assert.Equal(3, headerCells.Count);
+
+        Assert.Contains("<thead>", body, StringComparison.Ordinal);
+        Assert.Contains("</thead>", body, StringComparison.Ordinal);
+        Assert.Contains("<tbody>", body, StringComparison.Ordinal);
+        Assert.Contains("</tbody>", body, StringComparison.Ordinal);
+        Assert.True(
+            body.IndexOf("<thead>", StringComparison.Ordinal) < body.IndexOf("<tbody>", StringComparison.Ordinal),
+            "HTML 报告里 <tbody> 出现在 <thead> 之前。");
+
+        // <th> 数量 == 表头列数，且逐格文字与 Markdown 源逐字一致。
+        Assert.Equal(headerCells.Count, Regex.Matches(body, "<th>").Count);
+        foreach (var cell in headerCells)
+        {
+            Assert.Contains($"<th>{cell}</th>", body, StringComparison.Ordinal);
+        }
+
+        // 数据行只出 <td>：行数 = 表格行数 − 分隔行，每行格数 = 表头列数。
+        var tableRows = markdown.Split('\n').Count(line => line.StartsWith('|'));
+        var separators = markdown.Split('\n').Count(line => line.StartsWith("| ---", StringComparison.Ordinal));
+        var dataRows = Regex.Matches(body, "<tr>(.*?)</tr>").Select(m => m.Groups[1].Value).ToList();
+        Assert.Equal(tableRows - separators, dataRows.Count);
+        foreach (var row in dataRows.Skip(1))
+        {
+            Assert.Equal(headerCells.Count, Regex.Matches(row, "<td>").Count);
+            Assert.DoesNotContain("<th>", row, StringComparison.Ordinal);
+        }
+        Assert.DoesNotContain("<td>", dataRows[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 单元格内的竖线（第一百四十二轮）：远端状态、说明与结构来源都可能带 <c>|</c>，
+    /// 而 <c>|</c> 正是表格的列分隔符——不保护就会多切出一格，整行列数错位、后面的内容被当成新列。
+    /// 保护方式：Markdown 侧转义成 <c>\|</c>（列数不变），HTML 侧还原成 <c>|</c>（用户看到原文）。
+    /// </summary>
+    [Fact]
+    public void Html_KeepsPipesInsideCells()
+    {
+        var markdown = ReportRender.Markdown(Report(sourceStatus: "completed|partial"));
+        Assert.Contains("completed\\|partial", markdown, StringComparison.Ordinal);
+
+        var body = Body(ReportRender.Html(markdown));
+        Assert.Contains("<td>completed|partial</td>", body, StringComparison.Ordinal);
+        // 那一行仍是三格（表头列数），竖线没有把行切成四格。
+        var row = Regex.Matches(body, "<tr>(.*?)</tr>").Select(m => m.Groups[1].Value)
+            .Single(cells => cells.Contains("completed|partial", StringComparison.Ordinal));
+        Assert.Equal(3, Regex.Matches(row, "<td>").Count);
     }
 
     [Fact]
