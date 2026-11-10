@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using ApifoxHelper.Reports;
 using Xunit;
 
@@ -35,6 +36,9 @@ namespace ApifoxHelper.Tests;
 /// 在同一批 17 档宽度上排版逐档相同（<see cref="ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo"/>），
 /// 所以「禁则成立」<b>不能归因给那条声明</b>。这一条既不是缺陷也不是通过，是一笔要挂的账；
 /// 浏览器缺位时门只退成「声明在位 + 挂账在位」，<b>不把没跑算成跑过</b>（与「wine 结果不等于真机结果」同一份纪律）。
+/// 从第一百七十一轮起，「挂账在位」多一项：账上必须写明<b>最近一次真跑是哪一轮、哪一天</b>
+/// （<see cref="LastRunMarker"/>）。Chrome 长期不在位时这一族门会一直静默降级，而隔二十轮再读
+/// 「本机没跑」那一句，与「上周刚跑过」在纸面上没有区别——那正是本仓反复记的「空门」的另一种形态。
 /// </para>
 /// </summary>
 public class HtmlWrapTests
@@ -75,6 +79,23 @@ public class HtmlWrapTests
     private static double Number(JsonObject node, string key) => node[key]!.GetValue<double>();
 
     /// <summary>
+    /// 「上一次真浏览器量测」那一行的标记（写在 NOTES 本节里）。浏览器长期不在位时，这一族门会一直
+    /// 走降级支而<b>没有任何东西说明最近一次真跑是哪一天</b>——挂账就此变成常态。核的是这笔账在不在纸上。
+    /// </summary>
+    private const string LastRunMarker = "**上一次真浏览器量测**";
+
+    /// <summary>
+    /// 这一族门诞生的那一天（第一百七十轮）。登记早于它，记的就是一次不可能发生过的运行。
+    /// <para>
+    /// <b>下限是固定的，不会自己往前挪</b>：本仓对时间风险的口径一直是「把到期日写成字面、由门核它在不在」
+    /// （见 <c>docs/NOTES.md</c>「降级答辩脚本」），不做自爆门——浏览器真的找不回来时，一条必然红且
+    /// 无法诚实转绿的门只会逼人把数字改大。所以这一支挡「账被抹掉」与「账指向不存在的运行」，
+    /// 「隔了多少轮没真跑」由读那一行的人判断（口径写在该节里）。
+    /// </para>
+    /// </summary>
+    private const string LastRunFloorDate = "2026-11-11";
+
+    /// <summary>
     /// 浏览器不在的时候门退成「挂账在位」——这一支不判排版，判的是「没跑这件事有没有如实登记」。
     /// 登记里必须带查找顺序与到期日，否则换机器的人只看到一条红门，不知道该设什么。
     /// </summary>
@@ -87,7 +108,43 @@ public class HtmlWrapTests
             + "等于「本机没跑」没有被记成账，那就不是降级，是静默通过。");
         Assert.Contains("2026-11-20", notes, StringComparison.Ordinal);
         Assert.Contains(ChromeLayout.LookupOrder, notes);
+        AssertLastRealBrowserRunIsRegistered(notes);
         return false;
+    }
+
+    /// <summary>
+    /// 挂账必须写明<b>最近一次真跑是哪一轮、哪一天</b>：光有「本机没有浏览器」这句话，隔二十轮之后
+    /// 读起来和「上周刚跑过」没有区别。三件事依次核——那一行在、它写成了「第X轮 · YYYY-MM-DD」、
+    /// 且这一对日期与轮次能在本文件里指到一条<b>真实存在的轮次标题</b>。
+    /// <para>
+    /// 第三条是这一支唯一有分量的：把登记改到更晚的轮次，必须先凭空写出那一轮的记录；
+    /// 而一轮凭空的记录，比一个改大的数字显眼得多（同一口径见 <see cref="AcceptanceChecklistTests"/>「引用必须落到实物」）。
+    /// </para>
+    /// </summary>
+    private static void AssertLastRealBrowserRunIsRegistered(string notes)
+    {
+        var line = NotesSection().Split('\n')
+            .FirstOrDefault(l => l.Contains(LastRunMarker, StringComparison.Ordinal));
+        Assert.True(line is not null,
+            $"「{NotesHeading}」一节里没有「{LastRunMarker}」那一行：这一族门最近一次真跑没有登记——"
+            + "浏览器在位时它是账本缺一行，浏览器不在位时它就是静默降级，两种都不许过。"
+            + $"那一行写成「{LastRunMarker}：第X轮 · 四位年-月-日 · 浏览器版本」即可。");
+
+        var match = Regex.Match(line, @"第(?<round>[零一二三四五六七八九十百]+)轮\s*·\s*(?<date>\d{4}-\d{2}-\d{2})");
+        Assert.True(match.Success,
+            $"「{LastRunMarker}」那一行没写成「第X轮 · YYYY-MM-DD」，读不出是哪一轮的哪一天：{line}");
+
+        var round = match.Groups["round"].Value;
+        var date = match.Groups["date"].Value;
+        // ISO 日期按字典序比即按时间比；早于这一族门诞生的那一天，记的就是一次不可能发生过的运行。
+        Assert.True(string.CompareOrdinal(date, LastRunFloorDate) >= 0,
+            $"登记的上一次真跑是 {date}，早于这一族门诞生的 {LastRunFloorDate}：那一天还没有真浏览器量测可记。");
+
+        // 本仓的轮次标题写法是「（YYYY-MM-DD 第X轮…）」：日期与轮次成对出现，才说明那一轮真在日志里。
+        var pair = $"{date} 第{round}轮";
+        Assert.True(notes.Split('\n').Any(l => l.StartsWith("## ", StringComparison.Ordinal) && l.Contains(pair, StringComparison.Ordinal)),
+            $"登记的「第{round}轮 · {date}」在 NOTES 里没有以「{pair}」出现的轮次标题：这一轮没被记进日志，"
+            + "量测读数也就无处对账。");
     }
 
     /// <summary>
@@ -114,6 +171,18 @@ public class HtmlWrapTests
         Assert.Equal("strict", wide["lineBreakComputed"]!.GetValue<string>());
         Assert.Equal("normal", wide["wordBreakComputed"]!.GetValue<string>());
     }
+
+    /// <summary>
+    /// 「上一次真跑」那一行<b>不分路径</b>都要核。
+    /// <para>
+    /// 为什么不只挂在降级支：降级支只在浏览器不在位时走，于是那一行被写坏（改了措辞、掉了日期、
+    /// 轮次与日期对不上任何一轮）之后会<b>一直绿到哪天真的需要读它</b>——而那天正是它唯一有用的日子。
+    /// 这条门让它在浏览器还在的时候就先红，也是这张账在验收表上可被引用的断言名。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RegisteredGap_NamesTheLastRealBrowserRun()
+        => AssertLastRealBrowserRunIsRegistered(Repo.Source("docs", "NOTES.md"));
 
     /// <summary>
     /// ① 交付的那份 HTML 在真浏览器里折行时，禁字没被拆到行首、开号没被留在行尾。

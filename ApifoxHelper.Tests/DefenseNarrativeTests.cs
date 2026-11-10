@@ -4,18 +4,23 @@ using Xunit;
 namespace ApifoxHelper.Tests;
 
 /// <summary>
-/// 初审答辩口径三块的机械门（<c>docs/NOTES.md</c>「初审答辩口径（真机不可得时）」，第一百七十轮，简报 P0-1）。
+/// 初审答辩口径四块的机械门（<c>docs/NOTES.md</c>「初审答辩口径（真机不可得时）」，第一百七十轮立，第一百七十一轮补第四块，简报 P0-1）。
 /// <para>
 /// <b>为什么要有这一节</b>：G-D5 缺的是外部供给的机器，本仓交付不了。真机到手之前，答辩现场能拿出来的
 /// 只有「一条命令复跑的 <c>.winecheck/demo.sh</c> + 一份讲得清的叙事」。脚本第一百六十七轮就有门了，
 /// 叙事此前只在各轮记录里散着——散着的东西每轮重写一遍、每轮漂一点，到答辩那天就得现场编。
-/// 这一节把它落成三块定稿：差异化、AI 必要性、可经营。
+/// 这一节把它落成四块定稿：差异化、AI 必要性、可经营、排版归因。
 /// </para>
 /// <para>
-/// <b>三块各自被什么钉住</b>：① 三块齐、每块 ≤80 字（超过 80 字就不是「当场念的一段」，是又一轮文档）；
-/// ② 三块里不得出现 <see cref="CopyRules.BannedWords"/>——空话禁词正是「去 AI 味道」这一项要防的；
+/// <b>第四块补的是哪一处软肋</b>：第一百七十轮量出「四种取值排版相同」，于是「排版禁则为什么成立」这一问
+/// 有了答案，而答案<b>不在口径里</b>——被追问时只能现场组织语言，而现场组织的语言容易把功劳记给
+/// <c>line-break:strict</c>（本机恰恰判不出它）。第四块把这句正面写下来，判的还是同三件事：字数、禁词、出处。
+/// </para>
+/// <para>
+/// <b>各块被什么钉住</b>：① 四块齐、每块 ≤80 字（超过 80 字就不是「当场念的一段」，是又一轮文档）；
+/// ② 各块里不得出现 <see cref="CopyRules.BannedWords"/>——空话禁词正是「去 AI 味道」这一项要防的；
 /// ③ 每块必须引到 <c>README.md</c> 或 <c>docs/NOTES.md</c> 里<b>真实存在的小节</b>，引用不 resolve 即红。
-/// 第 ③ 条是三块里唯一有分量的：一段没有出处的自述，写得再短也只是把「我记得」换个说法
+/// 第 ③ 条是四块里唯一有分量的：一段没有出处的自述，写得再短也只是把「我记得」换个说法
 /// （同一口径见 <see cref="AcceptanceChecklistTests"/> 对证据出处的要求）。
 /// </para>
 /// <para>
@@ -30,8 +35,8 @@ public class DefenseNarrativeTests
     /// <summary>每一块「口径」列的字符上限。简报给的数是 80。</summary>
     private const int Ceiling = 80;
 
-    /// <summary>三块的块名是封闭的：改了名字等于换了三件事，门要认的是这三件。</summary>
-    private static readonly string[] ExpectedBlocks = ["差异化", "AI 必要性", "可经营"];
+    /// <summary>四块的块名是封闭的：改了名字等于换了四件事，门要认的是这四件。</summary>
+    private static readonly string[] ExpectedBlocks = ["差异化", "AI 必要性", "可经营", "排版归因"];
 
     /// <summary>只允许这两份文件当小节出处——「引到 README 或 NOTES 的实体段落」按字面执行。</summary>
     private static readonly string[] CitableDocs = ["README.md", "docs/NOTES.md"];
@@ -63,7 +68,7 @@ public class DefenseNarrativeTests
     }
 
     [Fact]
-    public void Narrative_HasTheThreeBlocksAndEachFitsTheEightyCharacterCeiling()
+    public void Narrative_HasEveryExpectedBlockAndEachFitsTheEightyCharacterCeiling()
     {
         var rows = Blocks();
         Assert.Equal(ExpectedBlocks, rows.Select(r => r.Name));

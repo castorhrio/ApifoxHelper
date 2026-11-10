@@ -17,7 +17,7 @@
 | [x] | G-D1 形态：主工作流全程在原生窗口，无「在浏览器中打开」入口 | 达成（配置 → 任务 → 审阅 → 检查 → 计划 → 同步 → 报告十站均在原生壳；`--web` 只是显式回退） | `Desktop/DesktopApp.cs`、`ApifoxHelper.Tests/LaunchOptionsTests.cs` 的 `LaunchOptionsTests.Defaults_SelectNativeShell`、`LaunchOptionsTests.WebFlag_SelectsTransitionShell` | 第一百六十七轮 `demo.sh` 三档全量复跑 135 通过 / 0 失败 ×3 |
 | [x] | G-D2 设计基线：单一视觉来源，颜色/字号/间距只从令牌取 | 达成（机械抽检在，无就地发明值） | `docs/DESIGN.md`、`Desktop/Native/UiTokens.cs`、`TokenWiringTests.ColorTokens_MatchDesignDoc`、`TokenWiringTests.NativeSources_NoColorLiteralsOutsideUiTokens`、`TokenWiringTests.SpacingTiers_MatchDesignDoc` | 第一百六十二轮三档缩放实测 |
 | [x] | G-D3 状态完备：每屏有状态表，空态/加载/执行中/错误/禁用/部分完成逐态定义 | 达成（读取失败态每屏都有「重试」；长内容区一律经滚动工厂；状态行放不下给入口） | `ApifoxHelper.Tests/LoadFailureRetryCoverageTests.cs` 的 `LoadFailureRetryCoverageTests.EveryFailureScreen_HasOneRetryButtonFromTheSharedLabel`、`ScrollHostTests.DesignDoc_DeclaresLongContentHost`、`StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost` | 第一百六十七轮三屏四段 12 通过 / 0 失败 ×3（本节第二段） |
-| [x] | G-D4 中文排版：对照共享审查清单 A 节机械检查 | 达成（可源码判定的条目全绿）。第一百六十九轮把这一行原先挂到「渲染期属性」的三条里两条拉回可判：**中英文空隙**静态可判（还原字面量 = 剥插值空洞 + 解转义，再判紧贴），**行首行尾禁则**在唯一会折行的交付面（导出 HTML）上落成 `HtmlStyle` 的 `line-break:strict;word-break:normal`，**第一百七十轮起同一份产物交给 headless Chromium 排版量过一次**（禁字起行 0 处、开号收尾 0 处，窄容器 17 档合计 61 行）；**正文行长**同一面落成 `max-width:40em`，真浏览器里解析成 640px 而视口 1280px。**本机不可判别的那半截要说清**：`auto`/`strict`/`loose` 与不写排出来逐档相同，禁则成立不能归因给那条声明，读数与挂账见「真浏览器布局门（HTML 折行）」一节。仍随 G-D5 真机复核的只剩「界面标签在实际字体度量下到底折不折行」与字距非负。五条硬项各自的落地面见 `docs/DESIGN.md` §6「中文排版」 | `TypographyTests.NoFakeItalic`、`TypographyTests.FontStack_MatchesDesignDocOrder`、`TypographyTests.Copy_ChineseQuotesOnlyUseCornerBrackets`、`TypographyTests.FontFloor_Is12Px`、`TypographyTests.Copy_AvoidsEmptySloganWords`、`TypographyTests.ChineseCopy_LeavesASpaceBetweenChineseAndLatin`、`TypographyTests.DesignSection3_HasExactlyFourFontTiers`、`TypographyTests.DesignDoc6_DeclaresTheTypographyClauseWithFiveItems`、`ReportTypographyTests.HtmlStyle_EnforcesTheChineseLineBreakProhibition`、`ReportTypographyTests.RenderedCopy_LeavesASpaceBetweenChineseAndLatin`、`HtmlWrapTests.DeliveredHtml_KeepsForbiddenPunctuationOffTheLineStart`、`HtmlWrapTests.DeliveredHtml_WrapsInsideTheFortyEmColumnNotTheViewport`、`HtmlWrapTests.TheDetector_ReportsTheBreakItForcedInsideTheArtifactOwnSentences`、`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo`、`DefenseNarrativeTests.Narrative_EveryBlockCitesASectionThatActuallyExists` | 第一百六十九轮 wine 三档 135 通过 / 0 失败 ×3（重发冒烟器后 `.winecheck/demo.sh` 复跑；`PASS ProfileAdvancedDialog（模块与模板）` 在本轮改动之后，**构造通过不等于说明行放得下**——`RunCaptionFit` 量的是同步预览 / 报告与交接 / 代码证据三屏，这一屏的文字宽 / 可用宽随 G-D5；**模拟器，不是真机**） |
+| [x] | G-D4 中文排版：对照共享审查清单 A 节机械检查 | 达成（可源码判定的条目全绿）。第一百六十九轮把这一行原先挂到「渲染期属性」的三条里两条拉回可判：**中英文空隙**静态可判（还原字面量 = 剥插值空洞 + 解转义，再判紧贴），**行首行尾禁则**在唯一会折行的交付面（导出 HTML）上落成 `HtmlStyle` 的 `line-break:strict;word-break:normal`，**第一百七十轮起同一份产物交给 headless Chromium 排版量过一次**（禁字起行 0 处、开号收尾 0 处，窄容器 17 档合计 61 行）；**正文行长**同一面落成 `max-width:40em`，真浏览器里解析成 640px 而视口 1280px。**本机不可判别的那半截要说清**：`auto`/`strict`/`loose` 与不写排出来逐档相同，禁则成立不能归因给那条声明，读数与挂账见「真浏览器布局门（HTML 折行）」一节。**第一百七十一轮起这一节的挂账还必须写明「最近一次真跑是哪一轮、哪一天」**，并由 `HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun` 不分路径核（那一行被写坏会一直绿到真需要读它的那天）；同轮答辩口径补第四块「排版归因」，把「禁则为什么成立、功劳不记在一条属性头上」正面写进口径而不是等被追问。仍随 G-D5 真机复核的只剩「界面标签在实际字体度量下到底折不折行」与字距非负。五条硬项各自的落地面见 `docs/DESIGN.md` §6「中文排版」 | `TypographyTests.NoFakeItalic`、`TypographyTests.FontStack_MatchesDesignDocOrder`、`TypographyTests.Copy_ChineseQuotesOnlyUseCornerBrackets`、`TypographyTests.FontFloor_Is12Px`、`TypographyTests.Copy_AvoidsEmptySloganWords`、`TypographyTests.ChineseCopy_LeavesASpaceBetweenChineseAndLatin`、`TypographyTests.DesignSection3_HasExactlyFourFontTiers`、`TypographyTests.DesignDoc6_DeclaresTheTypographyClauseWithFiveItems`、`ReportTypographyTests.HtmlStyle_EnforcesTheChineseLineBreakProhibition`、`ReportTypographyTests.RenderedCopy_LeavesASpaceBetweenChineseAndLatin`、`HtmlWrapTests.DeliveredHtml_KeepsForbiddenPunctuationOffTheLineStart`、`HtmlWrapTests.DeliveredHtml_WrapsInsideTheFortyEmColumnNotTheViewport`、`HtmlWrapTests.TheDetector_ReportsTheBreakItForcedInsideTheArtifactOwnSentences`、`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo`、`DefenseNarrativeTests.Narrative_EveryBlockCitesASectionThatActuallyExists`、`HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun` | 第一百六十九轮 wine 三档 135 通过 / 0 失败 ×3（重发冒烟器后 `.winecheck/demo.sh` 复跑；`PASS ProfileAdvancedDialog（模块与模板）` 在本轮改动之后，**构造通过不等于说明行放得下**——`RunCaptionFit` 量的是同步预览 / 报告与交接 / 代码证据三屏，这一屏的文字宽 / 可用宽随 G-D5；**模拟器，不是真机**） |
 | [ ] | G-D5 真机观感：100% 与 200% DPI 截图各一套并按状态归档，观感由人复核 | **未达成（环境供给缺口）**：真机 0 台，`docs/evidence/real-machine/` 不存在；现有 GUI 证据全部来自 Linux 容器内 wine 10.0 + Xvfb。到期日 2026-11-20，届时仍不可得按「降级答辩脚本」逐屏答辩；机器一到手，第一天照下一节「G-D5 真机复核清单（可勾选）」逐条跑 | `ApifoxHelper.Tests/WordingHonestyTests.cs` 的 `WordingHonestyTests.RealMachineClaims_RequireEvidencePaths`、`WordingHonestyTests.DegradationScript_ExistsAndCoversEveryScreen`、`WordingHonestyTests.Readme_StatesTheRealMachineGap`、`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`、本节下方的「降级答辩脚本」 | 第一百六十七轮 wine 三档 135/0 ×3（`.winecheck/demo.sh` 一条命令复跑；**模拟器，不是真机**） |
 | [ ] | G-D6 退场：原 Web 页面从用户路径移除 | **未达成**：页面层已冻结、默认入口已翻转为原生（见 G-D1），但 `--web` 回退仍在，退场清单未执行——按决定，最终移除排在 G-D5 真机复核之后 | `Desktop/DesktopApp.cs`、`LaunchOptionsTests.WebFlag_SelectsTransitionShell`（回退入口存在即「未退场」，这条断言钉的是回退行为不是退场完成） | 不经界面（入口路由判定） |
 
@@ -1784,17 +1784,20 @@
 
 ## 初审答辩口径（真机不可得时）
 
-> **这一节是什么**：上一节的「降级答辩脚本」按屏讲**证据**（G-D5 未达成怎么交代），这一节讲**这个工具凭什么值得做**——初审现场要听的三句话，每块不超过 80 字，三块念完不到一分钟。两块都在 demo.sh 的讲稿之外：脚本管逐屏对账，这里管差异化、AI 必要性与可经营这三件事。
+> **这一节是什么**：上一节的「降级答辩脚本」按屏讲**证据**（G-D5 未达成怎么交代），这一节讲**这个工具凭什么值得做**——初审现场要念的四块，每块不超过 80 字，四块念完不到一分钟。都在 demo.sh 的讲稿之外：脚本管逐屏对账，这里管差异化、AI 必要性、可经营、排版归因这四件事。
+>
+> **第四块为什么在这里**：第一百七十轮的读数是「四种取值排版相同」。答辩现场若被追问「那你样式里那条 `line-break:strict` 到底起了什么作用」，没有这一块就得现场编。它给的是**正面表述**——禁则为什么成立、功劳记在谁头上——不是缺陷说明，也不是「这条属性没用」（那是 CSS 规范层面的另一件事，读数见「真浏览器布局门（HTML 折行）」一节末「不可判别的那半截」）。
 >
 > **口径**：字数只按「口径」这一列的字符数计（不含表头与本句说明）；禁词按 `CopyRules.BannedWords` 一份；引用只收两种形状——``README.md``「小节名」/ ``docs/NOTES.md``「小节名」（该小节必须真的以标题形式存在于那份文件里）与 `类名.断言名`（必须在测试工程里存在）。字数超、禁词出现、引用不 resolve，各判各的红。机械门：`ApifoxHelper.Tests/DefenseNarrativeTests.cs`。
 >
-> **这一节不新增功能**：三块讲的是已经做出来的东西的差别、必要性与可持续性；本轮按简报口径不做 P1/P2，也不动写入安全不变量与视觉令牌。
+> **这一节不新增功能**：四块讲的是已经做出来的东西的差别、必要性、可持续性与「排版为什么成立」的归因；本轮按简报口径不做 P1/P2，也不动写入安全不变量与视觉令牌。
 
 | 块 | 口径（≤80 字） | 出处（必须 resolve） |
 | --- | --- | --- |
 | 差异化 | 导入按源文件重写一遍，人工写好的说明会被覆盖；这里按比对出的差异改，已有说明与源里的说明不一致时停下让你选边，写前有可核对的预览，写完立即回读核对。 | `README.md`「写入安全」；`docs/NOTES.md`「本仓验收口径（可勾选）」；`SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess` |
 | AI 必要性 | 模型只在「生成草稿」一处出现；规则提取、材料导入、手工填写三条替代路径任走一条，整条链路照样走完，生成结果一律逐条审阅后才接受。 | `README.md`「使用流程」；`docs/NOTES.md`「原生切片「注释候选审阅」（2026-11-07 第四轮）」；`GenerationEntriesTests.Modes_ThreeValuesInFrozenPageOrder` |
 | 可经营 | 本地一个程序，没有服务端与托管数据；资料目录可整体搬走；九条写入安全不变量在原生层一条没放松，端到端写入仍未做。 | `README.md`「本地资料」；`docs/NOTES.md`「本仓验收口径（可勾选）」；`docs/NOTES.md`「G-D5 真机复核清单（可勾选）」 |
+| 排版归因 | 中文标点不落行首，是浏览器默认排版与样式表合起来的结果，不是某一条属性的功劳；本机实测四种取值排版相同，我们没把可读性押在一条声明上。 | `docs/NOTES.md`「真浏览器布局门（HTML 折行）」；`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo` |
 
 ## 说明行量测按缩放档收口 + 降级答辩脚本（第一百六十二轮，简报 P0-1 / P0-2）
 
@@ -1954,6 +1957,10 @@
 >
 > **真机关系**：这一节量的不是 Windows 真机界面，而是 HTML 文件的排版；浏览器在 Linux 容器里跑，产物字节与 Windows 上用户下载的那一份同源。G-D5（原生界面 100%/125%/200% 真机截图）仍是空框，两者不互相顶替。
 >
+> **上一次真浏览器量测**：第一百七十一轮 · 2026-11-11 · Playwright chromium-1248（Chrome for Testing 156.0.8078.4）——两档视口、17 档窄容器扫描、五组排版取值**全部是真量测读数**，不是降级支。
+>
+> **这一行由谁核、它的边界在哪**（第一百七十一轮，简报 P0-2）：浏览器不在位时，`HtmlWrapTests` 五道门退成「声明在位 + 挂账在位」，而挂账在位现在多了一项——这一行必须存在、必须写成「第X轮 · 四位年-月-日」、且这一对（日期与轮次）必须是本文件里**真实存在的轮次标题**（要把数字改大让门闭嘴，就得先凭空写出那一轮）。**它不挡「很久没真跑而没人更新这一行」**：下限钉在第一百七十轮（这一族门诞生的那一天），不会自己往前挪——这是本仓一贯的取舍（到期日写成字面而不是自爆门，见「降级答辩脚本」一节），机制挡的是账被抹掉、账指向一次不存在的运行；「最近一次真跑隔了多少轮」由读这一行的人判断，所以它必须一直写在这节里。
+>
 > **换机器时**：浏览器按 APIFOXHELPER_CHROME → $HOME/.cache/ms-playwright/chromium-*/chrome-linux*/chrome → PATH(chromium|chromium-browser|google-chrome) 的顺序找。找不到时五道门退成「声明在位 + 本节在位」，**不把没跑算成跑过**（与「wine 结果不等于真机结果」同一份纪律，见 `WordingHonestyTests`）。
 
 
@@ -1980,3 +1987,23 @@
 - **真机 0 台事实（每轮重述）**：本轮新增的是 **HTML 文件的排版证据**（headless Chromium 在 Linux 容器里排产物字节），不是 Windows 真机界面证据；两者不互相顶替。G-D5 在验收表仍留 `[ ]`，真机复核清单 7 行全部 `[ ]`，到期日 **2026-11-20**，责任人为答辩负责人。多显示器混合缩放（§6「DPI 适配」第 1 档）与运行中改系统缩放（第 2 档）两档仍挂账未动。
 - **挂账（下一轮第一件事的候选，按可交付性排序）**：① 简报 P1-1（`CopyRules.TechnicalSpacingExceptions` 的软约束）与 P1-2（`DpiScale` 副屏可测量）本轮按简报口径未做，出处在原；② **本轮新增**：真浏览器门量的是合成报告的固定文案，真实数据行（远端说明那种 334 字长句）在窄档会不会折出禁字**没量过**——要真实数据或专用测试项目，与 P2-4 端到端复核同一前置；③ 本轮新增：`ChromeProbe.js` 自身的正确性只由 C# 那三条自测覆盖，JS 层没有独立门（探针一改就靠那三条兜），换 Chromium 版本时读数会漂，`viewport >= 500` 那条 floor 是为此留的；④ 本轮新增：简报「不可判别」这一结论是本机这一 build 的读数，**不是规范结论**——CSS Text §5.4.4 上 `auto` 确实比 `strict` 宽松，只是这一台没体现，别把它写成「这条声明没用」。
 - **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**（浏览器与 node 都是本机既有）；未新增产品功能、未新增对话框、未动视觉令牌与间距档位、未动服务层业务语义与九条写入安全不变量。
+
+## 接续轮「答辩口径补上第四块『排版归因』+ 挂账多了『上一次真跑』那一行」（2026-11-11 第一百七十一轮，简报 P0-1 / P0-2）
+
+- **接续前确认**：开局工作树干净，HEAD（2b71712，第一百七十轮）`dotnet test` **2438 全绿**，基线成立；第四十七至一百七十轮逐字保留。简报本轮口径是「只做 P0-1 与 P0-2，不新增产品功能」，两条都照做，P1/P2 一律未动。
+- **本轮定位**：简报第 170 轮的判断是「G-D5 与 SHARED-3/4/7/8 缺的是外部供给，不是代码」，可推进的只剩答辩口径与挂账可见度。P0-1 补的是**唯一一处会被追问而口径里没有的软肋**（排版为什么成立、功劳记在谁头上），P0-2 补的是**「挂账变常态而无人察觉」这个机制洞**——都不是堆量。
+- **已交付 ①（P0-1，clarify）答辩口径第四块**：`docs/NOTES.md`「初审答辩口径（真机不可得时）」新增「排版归因」**67 字**（上限 80）——把「禁则成立归因于浏览器默认排版与样式表的组合、不归因于单条声明」写成正面表述，出处引到「真浏览器布局门（HTML 折行）」一节与 `HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo`。同节补一段「第四块为什么在这里」，并说明它**不是**「这条属性没用」（那是 CSS 规范层面的另一件事，本机的读数只是「判不出差别」）。`README.md`「已知限制」那条由「三句话」改为「四块」并列出新增块名。
+- **已交付 ②（P0-2，harden）「上一次真浏览器量测」登记行 + 两条门**：
+  - 「真浏览器布局门（HTML 折行）」一节新增一行账：**第一百七十一轮 · 2026-11-11 · Playwright chromium-1248（Chrome for Testing 156.0.8078.4）**，并写明它记的是「最近一次真跑」，不是「本机曾有浏览器」。格式与边界同节写清，避免下一轮把它当装饰文字删掉。
+  - 门在 `HtmlWrapTests.AssertLastRealBrowserRunIsRegistered`，核三件事：那一行在；写成了「第X轮 · YYYY-MM-DD」；**这一对日期与轮次必须能指到本文件里一条真实的 `## ` 轮次标题**（要把数字改大让门闭嘴，就得先凭空写出那一轮——凭空写一轮比改一个数字显眼得多，与 `AcceptanceChecklistTests`「引用必须落到实物」同一口径）。日期下限钉在 2026-11-11（这一族门诞生的那一天），ISO 串按字典序比即按时间比。
+  - 这条判定**不只挂在降级支**：`RequireBrowserOrRegisteredGap` 在浏览器缺位时调它（简报口径），同时新增公开断言 `RegisteredGap_NamesTheLastRealBrowserRun` **不分路径每次都跑**。理由是降级支只在 Chrome 不在位时走——那一行被写坏之后会一直绿到哪天真的需要读它，而那天正是它唯一有用的日子。
+- **机制的边界（如实写，不冒充成自走时钟）**：日期下限是**固定**的，不会随轮次往前挪，所以它挡不住「很久没真跑而没人更新这一行」，挡的是「账被抹掉」与「账指向一次不存在的运行」。本仓对时间风险一直是用字面到期日 + 门核其在（见「降级答辩脚本」2026-11-20），不做一条必然红且无法诚实转绿的自爆门——浏览器真找不回来时，那种门的唯一出路是把数字改大。隔了多少轮没真跑，由读这一行的人判断，所以这一行必须一直在那节里。
+- **环境事实（决定本轮走哪一支）**：Playwright 缓存里的 Chromium 仍在位（`$HOME/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome`，本轮实测版本 Chrome for Testing 156.0.8078.4），node v22.23.4，所以五道真量测门本轮**走的是真排版支**：宽档 computed `max-width` 按 40 × 16px = 640px 解析、body 实宽落在 40em + 两侧内边距的区间内、窄档产物有节点跨行且禁字起行 / 开号收尾均为 0、17 档窄容器扫描行数过地板、五组排版取值折点与「不写」逐项相同。降级支本轮**不只单跑那一族**：`HOME=/tmp/fakehome` 下把**全量 2439 整跑一遍**同样全绿——「换一台没有浏览器的 CI 机器」这套门的形状是「降级得下去、且只有登记在位时才下去」，而不是那一族单独能过。
+- **测试 2438 → 2439 用例**（+1：`HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun`）。既有一断言一条未削弱；`DefenseNarrativeTests` 三条门的**覆盖面**由三块扩到四块（块名封闭清单、字数上限、禁词、出处 resolve 各判各的红）。方法名去掉写死的块数（`Narrative_HasTheThreeBlocks…` → `Narrative_HasEveryExpectedBlock…`——四块之后旧名就是谎话，块数只在 `ExpectedBlocks` 一处表达）；**第一百七十轮记录里那个旧名是当时的名字，不改写历史**。
+- **变异验证实测可红 9 处（每处跑完当场以备份覆盖并核 sha1 相符；`Reports/ReportRender.cs` 还原后仍是开局的 `0f00bcfacd47`——与第一百七十轮记录里那个前缀同一个数）**：M1 第四块 67 字 → 91 字 → `Narrative_HasEveryExpectedBlockAndEachFitsTheEightyCharacterCeiling` 红在「91 字，超过 80 字上限」；M2 第四块混进「闭环」 → `Narrative_UsesNoEmptySloganWords` 红；M3 出处的小节名改一个字（折行 → 换行）→ `Narrative_EveryBlockCitesASectionThatActuallyExists` 红并点名「排版归因」这块；M4 块名改「排版说明」 → 封闭清单红（**补一块不是随便起个名字就算数**）；M5 抹掉登记行的标记 → 真量测支 **1 条红**（`RegisteredGap_NamesTheLastRealBrowserRun`：浏览器在位也拦得住，这正是把它从降级支里搬出来的理由），`HOME=/tmp/fakehome` 复跑降级支 **6 条全红**（五道门 + 登记门）；M6 登记日期改 2026-11-01 → 红在日期下限；M7 轮次改「第九百九十九轮」 → 红在「本文件里没有这一轮的标题」；M8 去掉日期只留轮次 → 红在格式（读不出哪一天）；M9 `Reports/ReportRender.cs` 的 `max-width:40em` → `60em` → `DeliveredHtml_WrapsInsideTheFortyEmColumnNotTheViewport` 红——**这一条同时是「上一次真跑 = 第一百七十一轮」那句的凭证**：只有真起了浏览器才可能红，静态门红在字符串上、它红在浏览器算出的像素上。**未拦住为空。**
+- **文档接线**：`docs/NOTES.md` 验收表 G-D4 行的证据出处补上本轮两条门，`README.md`「已知限制」的答辩块数同步。
+
+- **本轮产品源码零改动**（`git status` 只有 `docs/NOTES.md`、`README.md` 与测试工程 `HtmlWrapTests.cs`/`DefenseNarrativeTests.cs` 四份）：`Reports/ReportRender.cs` 只在 M9 变异里临时改过并按 sha1 还原。按 README 那条口径，没有产品侧改动故**未复跑 `PUBLISH=1 bash .winecheck/demo.sh`**（跑出来的数与第一百六十九轮是同一份代码的数）；**下一轮只要动产品源码仍须复跑**。
+- **真机 0 台事实（每轮重述）**：本轮新增的是答辩口径一块与一条挂账门，仍不是 Windows 真机界面证据；G-D5 在验收表仍留 `[ ]`，真机复核清单 7 行全部 `[ ]`，到期日 **2026-11-20**，责任人为答辩负责人。多显示器混合缩放与运行中改系统缩放两档仍挂账未动。
+- **简报那句「下一轮必须有一件产品侧的事」本轮仍欠着（如实记，不写成已满足）**：简报同时给了「只做 P0-1 与 P0-2、不新增产品功能」，本轮严格照那句收口，没有替自己发明产品侧的事；P1-1（`HtmlWrapTests` 补 Save 档视口）与 P1-2（`CopyRules` 三处封闭清单加新增文案者指引）都未动、出处在原。G-D5 一旦到位，下一轮直接进「G-D5 真机复核清单」第 1–7 条——那才是本仓真正的下一个里程碑。
+- **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**（Chromium 与 node 都是本机既有）；未新增产品功能、未新增对话框、未动视觉令牌与间距档位、未动服务层业务语义与九条写入安全不变量。
