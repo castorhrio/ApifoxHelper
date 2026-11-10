@@ -132,13 +132,37 @@ public class FontStackTests
     {
         var uiTokens = Repo.Source("Desktop", "Native", "UiTokens.cs");
 
-        Assert.Matches(@"FontStack\.Resolve\(stack, IsInstalled, FontFamily\.GenericSansSerif\.Name\)", uiTokens);
-        Assert.Matches(@"ResolveFamily\(FontStack\.Families\)", uiTokens);
-        Assert.Matches(@"ResolveFamily\(FontStack\.MonoFamilies\)", uiTokens);
+        Assert.Matches(@"FontStack\.Resolve\(stack, IsInstalled, fallback\)", uiTokens);
+        Assert.Matches(@"ResolveFamily\(FontStack\.Families, FontFamily\.GenericSansSerif\.Name\)", uiTokens);
+        Assert.Matches(@"ResolveFamily\(FontStack\.MonoFamilies, FontFamily\.GenericMonospace\.Name\)", uiTokens);
         // 探测只在一处：FontFamily 构造在界面层恰一次（IsInstalled 里那一次）。
         Assert.Single(Regex.Matches(uiTokens, @"new FontFamily\("));
         // 回退顺序不在界面层重写：界面层不出现 foreach 遍历字体名。
         Assert.DoesNotContain("foreach (var name in stack)", uiTokens, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 两条栈的兜底不是同一个（第一百四十轮，具名 pass：harden）：DESIGN §3 的等宽栈以
+    /// 「→ monospace」收尾，而实现里两条栈都兜到系统无衬线——缺等宽字体的机器上计数行、
+    /// 路径与差异文本渲染成比例字体，「必须等宽」这条承诺在界面上不成立。
+    /// 第一百四十轮 wine 实测把这一处打出来过（等宽请求落到系统无衬线、渲染名与正文同一个）。
+    /// </summary>
+    [Fact]
+    public void MonoStack_FallsBackToSystemMonospace_NotSansSerif()
+    {
+        var uiTokens = Repo.Source("Desktop", "Native", "UiTokens.cs");
+        // 等宽栈的兜底是系统等宽。
+        Assert.Matches(@"ResolveFamily\(FontStack\.MonoFamilies, FontFamily\.GenericMonospace\.Name\)", uiTokens);
+        // 正文栈的兜底仍是系统无衬线（两条栈不共用一个兜底名）。
+        Assert.Matches(@"ResolveFamily\(FontStack\.Families, FontFamily\.GenericSansSerif\.Name\)", uiTokens);
+        // 反面：等宽栈不得兜到系统无衬线（第一百四十轮修掉的那一处）。
+        Assert.DoesNotMatch(@"ResolveFamily\(FontStack\.MonoFamilies, FontFamily\.GenericSansSerif\.Name\)", uiTokens);
+        // 兜底名由调用方给，判定本身不写死任何一个（FontStack 不依赖 System.Drawing）。
+        var fontStack = CodeOnly(Repo.Source("Desktop", "Native", "FontStack.cs"));
+        Assert.DoesNotContain("GenericSansSerif", fontStack, StringComparison.Ordinal);
+        Assert.DoesNotContain("GenericMonospace", fontStack, StringComparison.Ordinal);
+        // DESIGN §3 的等宽栈仍以 monospace 收尾（文档与代码同一份承诺）。
+        Assert.Contains("→ monospace", Repo.DesignSection(3), StringComparison.Ordinal);
     }
 
     /// <summary>进程默认字体与界面控件同一份结果：两处入口都经 UiTokens 取字体，不再各写一个字体名。</summary>

@@ -24,7 +24,8 @@ public static class FontStack
 
     /// <summary>
     /// 按顺序取第一个「本机已装」的字体名；空栈、全不匹配、名字为空白一律回退
-    /// <paramref name="fallback"/>（调用方给系统无衬线的名字）。
+    /// <paramref name="fallback"/>（调用方给：正文栈给系统无衬线，等宽栈给系统等宽——
+    /// 两条栈的兜底不是同一个，见 docs/DESIGN.md §3 的「→ monospace」）。
     /// 空白项跳过而不是当成一个字体名去探测：配置或文档里多一个空串不该让整条栈失效。
     /// </summary>
     public static string Resolve(IReadOnlyList<string> stack, Func<string, bool> isInstalled, string fallback)

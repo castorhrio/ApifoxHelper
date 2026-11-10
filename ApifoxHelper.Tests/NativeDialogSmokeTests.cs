@@ -275,6 +275,99 @@ public class NativeDialogSmokeTests
         Assert.True(interaction > writeBack, "缺口对话框交互没有排在回写链路之后（主链路顺序：构造 → 端到端 → 回写 → 缺口对话框）。");
     }
 
+    // ---------- 注释候选对话框的真实控件交互（第一百三十九轮） ----------
+
+    /// <summary>
+    /// 注释候选对话框是真机清单第 6/7/8 项的落点，此前只被「构造一次」。
+    /// 这一段钉住「真的打开、真的点、真的敲」：计数行、打开即选中第一条、待确认问题的拒绝路径、
+    /// 「接受并下一条」的落点、提示态收掉回答框与覆盖勾选（第一百三十八轮的修法）、撤销接受。
+    /// </summary>
+    [Fact]
+    public void CandidatesInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunCandidatesInteraction(");
+        // 真的打开（Show 触发 OnLoad 读盘）、真的点按钮、真的敲回答与关键词。
+        Assert.Contains("dialog.Show();", body);
+        Assert.Contains("PerformClick()", body);
+        Assert.Contains("boxes[1].Text =", body);
+        Assert.Contains("keyword.Text =", body);
+        // 候选由真实服务产出，不手写 comment-drafts.json。
+        Assert.Contains("drafts.ImportResultAsync(", body);
+        Assert.Contains("scan.ScanAsync(", body);
+        // 断言取共享口径，不是第二份拼字（否则比的是冒烟器自己那份文字）。
+        Assert.Contains("QueueText.CandidateCountsLine(", body);
+        Assert.Contains("CandidateEdit.ReviewDoneText(", body);
+        Assert.Contains("CandidateEdit.UndoDoneText", body);
+        Assert.Contains("CandidateEdit.AnswersCaptionNoSelection", body);
+        Assert.Contains("ListFilter.FilteredEmptyHint(", body);
+        // 审阅状态从磁盘重读（不是内存里那一份）。
+        Assert.Contains("drafts.Load(task.Id)", body);
+        // 段数与断言：段数掉下去说明有人删了某一段（删段比删断言更难发现）。
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 6, $"候选对话框交互只有 {count} 个 RunAction 段。");
+        // Show 出来的窗体必须释放：不 Dispose 会漏窗口句柄，跑第二遍就换一只壳。
+        Assert.Contains("dialog?.Dispose();", body);
+    }
+
+    /// <summary>段写好了但没在 Main 里调用 = 永远不会跑，报告照样 PASS。</summary>
+    [Fact]
+    public void CandidatesInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var scanResults = main.IndexOf("RunScanResultsInteraction(services, dataRoot);", StringComparison.Ordinal);
+        var candidates = main.IndexOf("RunCandidatesInteraction(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(scanResults >= 0, "Main 里没有调用缺口对话框交互。");
+        Assert.True(candidates > scanResults, "候选对话框交互没有排在缺口对话框之后（主链路顺序：缺口 → 候选）。");
+    }
+
+    // ---------- 字体栈的运行时命中（第一百三十九轮，简报 P0-1 的降级手段） ----------
+
+    /// <summary>
+    /// 第一百三十五轮把字体栈的有序回退做成真实现，但证据只到「判定真值表」与「两处入口都调了它」——
+    /// 本机实际回退到哪个字体从未在运行时看过。这一段把「字体栈承诺」推进到运行时证据：
+    /// 回退结果等于按栈序找到的第一个已装字体、界面控件与进程默认字体是同一份结果、等宽栈同法。
+    /// </summary>
+    [Fact]
+    public void FontStackRuntime_AssertsTheActualHit()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunFontStackRuntime(");
+        // 回退结果必须与「按栈序找到的第一个已装字体」比对，而不是只判非空。
+        Assert.Contains("FontStack.Resolve(FontStack.Families, Installed, FontFamily.GenericSansSerif.Name)", body);
+        Assert.Contains("resolved != expected", body);
+        // 界面控件工厂、进程默认字体、真实对话框三处同一份「实际渲染名」
+        // （第一百三十五轮的缺陷正是两处各写一份）。
+        Assert.Contains("var rendered = uiFont.Name;", body);
+        Assert.Contains("label.Font.Name != rendered", body);
+        Assert.Contains("Control.DefaultFont.Name != rendered", body);
+        Assert.Contains("dialog.Font.Name != rendered", body);
+        Assert.Contains("UiTokens.CaptionPt", body);
+        // 等宽栈与真实对话框上的控件也取同一份。
+        Assert.Contains("FontStack.MonoFamilies", body);
+        Assert.Contains("new NoticeDialog(", body);
+        // 段在 Main 里注册（没注册 = 永远不跑）。
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        Assert.Contains("RunFontStackRuntime();", main);
+    }
+
+    /// <summary>
+    /// 第一百四十轮 wine 实测把「渲染名 == 请求名」这条断言打红过一次：请求 <c>Segoe UI</c>、
+    /// <c>Font.Name</c> 却是 <c>Noto Sans CJK SC</c>——GDI+ 在缺这个字体的机器上做字体替换，
+    /// 请求名与渲染名本来就可以不同。产品承诺是「三处取同一份」，不是「运行时不替换字体」；
+    /// 把后者写成断言等于要求环境配合，wine 与真机都会红。这条用例钉住「别把它加回来」。
+    /// </summary>
+    [Fact]
+    public void FontStackRuntime_ComparesRenderedNamesNotRequestedOnes()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunFontStackRuntime(");
+        // 反面：拿控件字体去比「请求的名字」——字体替换生效的机器上必红。
+        Assert.DoesNotContain("label.Font.Name != resolved", body);
+        Assert.DoesNotContain("Control.DefaultFont.Name != resolved", body);
+        Assert.DoesNotContain("dialog.Font.Name != resolved", body);
+        // 正面：替换事实作为证据行打印出来（不判失败，但要在报告里看得见）。
+        Assert.Contains("做了字体替换", body);
+        Assert.Contains("UiTokens.Mono.Value.Name", body);
+    }
+
     /// <summary>
     /// 冒烟器里以 <paramref name="call"/> 开头的段（从该行到下一个段或下一个方法定义之前）。
     /// 按行切而不是按括号配平：段体里含插值字符串与字符字面量，配平扫描容易把边界算错。
@@ -342,7 +435,7 @@ public class NativeDialogSmokeTests
 
     /// <summary>冒烟器里三段真实控件交互用例的方法名（唯一有真实控件触达的三段）。</summary>
     private static readonly string[] InteractionMethods =
-        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction"];
+        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction"];
 
     /// <summary>
     /// 交互断言清单：每行是「方法 + 段名 + 该段里一条判失败的等价物」。
@@ -405,6 +498,34 @@ public class NativeDialogSmokeTests
         { "RunScanResultsInteraction", "缺口对话框：关键词筛到零行与清空恢复（真实控件）", "CountsLabel(dialog).Text != SlotText.CountsLine(output.Slots)" },
         { "RunScanResultsInteraction", "缺口对话框：状态筛选按缺失计数（真实控件）", "list.Items.Count != missing" },
         { "RunScanResultsInteraction", "缺口对话框：状态筛选按缺失计数（真实控件）", "filter.SelectedIndex = 1" },
+
+        // 字体栈运行时命中（第一百三十九轮）：回退结果、界面与进程默认字体、等宽栈、真实对话框。
+        { "RunFontStackRuntime", "字体栈：回退结果在运行时命中且界面与进程默认字体一致（真实控件）", "resolved != expected" },
+        { "RunFontStackRuntime", "字体栈：回退结果在运行时命中且界面与进程默认字体一致（真实控件）", "if (!Installed(resolved))" },
+        { "RunFontStackRuntime", "字体栈：回退结果在运行时命中且界面与进程默认字体一致（真实控件）", "label.Font.Name != rendered" },
+        { "RunFontStackRuntime", "字体栈：回退结果在运行时命中且界面与进程默认字体一致（真实控件）", "Control.DefaultFont.Name != rendered" },
+        { "RunFontStackRuntime", "字体栈：回退结果在运行时命中且界面与进程默认字体一致（真实控件）", "UiTokens.Mono.Value.FontFamily.Name != monoExpected" },
+        { "RunFontStackRuntime", "字体栈：回退结果在运行时命中且界面与进程默认字体一致（真实控件）", "dialog.Font.Name != rendered" },
+
+        // 注释候选对话框（第一百三十九轮）：产物 / 打开落点与计数 / 待确认问题被拒 / 接受并下一条 /
+        // 筛到零行收掉回答框与覆盖勾选 / 撤销接受。
+        { "RunCandidatesInteraction", "候选对话框：准备候选（真实服务）", "result.Imported != 2" },
+        { "RunCandidatesInteraction", "候选对话框：准备候选（真实服务）", "store.Candidates[0].OpenQuestions.Count == 0" },
+        { "RunCandidatesInteraction", "候选对话框：打开即选中第一条且计数对得上（真实控件）", "counts.Text != expectedCounts" },
+        { "RunCandidatesInteraction", "候选对话框：打开即选中第一条且计数对得上（真实控件）", "list.SelectedIndices[0] != 0" },
+        { "RunCandidatesInteraction", "候选对话框：打开即选中第一条且计数对得上（真实控件）", "boxes.Length != 2" },
+        { "RunCandidatesInteraction", "候选对话框：打开即选中第一条且计数对得上（真实控件）", "answersCaption.Text != CandidateEdit.AnswersCaptionFor(" },
+        { "RunCandidatesInteraction", "候选对话框：待确认问题未回答时接受被拒（真实控件）", "请先填写确认结果再接受" },
+        { "RunCandidatesInteraction", "候选对话框：待确认问题未回答时接受被拒（真实控件）", "candidate.ReviewState != \"pending\"" },
+        { "RunCandidatesInteraction", "候选对话框：填回答后接受并下一条（真实控件）", "candidate.ReviewState != \"accepted\"" },
+        { "RunCandidatesInteraction", "候选对话框：填回答后接受并下一条（真实控件）", "status.Text != expectedStatus" },
+        { "RunCandidatesInteraction", "候选对话框：填回答后接受并下一条（真实控件）", "list.SelectedIndices[0] != 1" },
+        { "RunCandidatesInteraction", "候选对话框：筛到零行时回答框与覆盖勾选一起收掉（真实控件）", "hint.Text != expectedHint" },
+        { "RunCandidatesInteraction", "候选对话框：筛到零行时回答框与覆盖勾选一起收掉（真实控件）", "boxes[1].Enabled || boxes[1].Text.Length != 0" },
+        { "RunCandidatesInteraction", "候选对话框：筛到零行时回答框与覆盖勾选一起收掉（真实控件）", "overwrite.Enabled || overwrite.Checked" },
+        { "RunCandidatesInteraction", "候选对话框：筛到零行时回答框与覆盖勾选一起收掉（真实控件）", "CandidateEdit.AnswersCaptionNoSelection" },
+        { "RunCandidatesInteraction", "候选对话框：撤销接受回到待审阅（真实控件）", "status.Text != CandidateEdit.UndoDoneText" },
+        { "RunCandidatesInteraction", "候选对话框：撤销接受回到待审阅（真实控件）", "ReviewState != \"pending\"" },
     };
 
     [Theory]

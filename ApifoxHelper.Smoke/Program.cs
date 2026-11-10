@@ -152,6 +152,12 @@ internal static class Program
         Console.WriteLine("== 注释缺口对话框（真实控件交互）==");
         RunScanResultsInteraction(services, dataRoot);
 
+        Console.WriteLine("== 字体栈运行时命中（真实控件）==");
+        RunFontStackRuntime();
+
+        Console.WriteLine("== 注释候选对话框（真实控件交互）==");
+        RunCandidatesInteraction(services, dataRoot);
+
         Console.WriteLine($"== 结果：{_passed} 通过 / {_failed} 失败 ==");
         WriteReport();
         return _failed == 0 ? 0 : 1;
@@ -987,10 +993,478 @@ internal static class Program
         }
     }
 
+    /// <summary>
+    /// 字体栈的运行时命中（第一百三十九轮，控制仓简报 P0-1 的降级手段）。
+    /// <para>
+    /// 存在理由：第一百三十五轮把字体栈的有序回退从「已记录未实现」变成真实现，但证据只到
+    /// 「<c>FontStack.Resolve</c> 的判定真值表」与「两处入口都调了它」——**本机实际回退到哪个字体**
+    /// 从未在运行时看过一眼。承诺（DESIGN §3「Segoe UI → Microsoft YaHei UI → Microsoft YaHei → SimHei，
+    /// 找到即停」）与「这台机器上真的命中了哪一项」之间差的就是这一段。
+    /// </para>
+    /// <para>
+    /// 断言五件事：① 回退结果等于「按栈序找到的第一个已装字体」（或系统无衬线兜底），不是别的名字；
+    /// ② 回退结果在本机真的装得上（探测失败的名字不会被当成结果）；③ 界面控件工厂、进程默认字体
+    /// （<c>Control.DefaultFont</c>，决定 MessageBox 与菜单）与真实对话框上的控件取的是**同一份实际渲染名**、
+    /// 同一档磅值；④ 等宽栈同一份判定；⑤ 真实对话框（<c>NoticeDialog</c>）与它里面的标签也取同一份。
+    /// </para>
+    /// <para>
+    /// **比的是「实际渲染名」（<c>Font.Name</c>），不是「请求的名字」。** 第一百四十轮 wine 实测把这条
+    /// 断言打红过一次：请求 <c>Segoe UI</c>、<c>Font.Name</c> 却是 <c>Noto Sans CJK SC</c>——GDI+ 在
+    /// 缺这个字体的机器上做字体替换，请求名与渲染名本来就可以不同（Windows 上装了 Segoe UI 时两者相同）。
+    /// 产品要保证的是「三处取同一份」，不是「渲染名等于请求名」；把后者写成断言，等于要求运行时不替换字体，
+    /// 那不是 DESIGN §3 的承诺。替换事实作为证据行如实打印，不判失败。
+    /// </para>
+    /// <para>
+    /// 它**不能替代真机观感复核**：wine 的字体度量与 GDI 绘制不是 Windows 实现，文字截断、
+    /// 字距这类观感问题只有真机截图能判（真机清单第 17 项继续留空）。
+    /// </para>
+    /// </summary>
+    private static void RunFontStackRuntime()
+    {
+        RunAction("字体栈：回退结果在运行时命中且界面与进程默认字体一致（真实控件）", () =>
+        {
+            static bool Installed(string name)
+            {
+                try
+                {
+                    using var probe = new FontFamily(name);
+                    return true;
+                }
+                catch (ArgumentException)
+                {
+                    return false;
+                }
+            }
+
+            var resolved = UiTokens.ResolveFontFamily();
+            if (string.IsNullOrWhiteSpace(resolved))
+            {
+                throw new InvalidOperationException("回退结果是空字体名。");
+            }
+            // ① 回退结果必须是「按栈序找到的第一个已装字体」，或者是系统无衬线兜底——不是别的名字。
+            var expected = FontStack.Resolve(FontStack.Families, Installed, FontFamily.GenericSansSerif.Name);
+            if (resolved != expected)
+            {
+                throw new InvalidOperationException($"回退结果是「{resolved}」，按栈序应为「{expected}」（找到即停）。");
+            }
+            // ② 回退结果在本机真的装得上：探测失败的名字被当成结果，界面上会静默落到系统默认。
+            if (!Installed(resolved))
+            {
+                throw new InvalidOperationException($"回退结果「{resolved}」在本机并未安装。");
+            }
+            // ③ 界面控件工厂、进程默认字体、真实对话框取同一份「实际渲染名」。
+            //    第一百三十五轮的缺陷正是两处各写一份（一处雅黑、一处系统默认），同一只壳里两种字。
+            using var uiFont = UiTokens.Create(UiTokens.BodyPt);
+            var rendered = uiFont.Name;
+            if (string.IsNullOrWhiteSpace(rendered))
+            {
+                throw new InvalidOperationException("界面字体工厂产出的字体没有名字。");
+            }
+            using var label = new Label { Font = UiTokens.Body.Value };
+            if (label.Font.Name != rendered)
+            {
+                throw new InvalidOperationException($"界面控件字体是「{label.Font.Name}」，字体工厂产出的是「{rendered}」。");
+            }
+            if (Control.DefaultFont.Name != rendered)
+            {
+                throw new InvalidOperationException(
+                    $"进程默认字体是「{Control.DefaultFont.Name}」，界面字体是「{rendered}」（MessageBox 与菜单会与界面不同字）。");
+            }
+            if (Math.Abs(Control.DefaultFont.Size - UiTokens.CaptionPt) > 0.01f)
+            {
+                throw new InvalidOperationException(
+                    $"进程默认字体是 {Control.DefaultFont.Size}pt，期望 Caption 档 {UiTokens.CaptionPt}pt。");
+            }
+            // ④ 等宽栈同一份判定（计数、进度、ID、路径、差异文本必须等宽）。
+            //    兜底是系统等宽、不是系统无衬线：DESIGN §3 的等宽栈以「→ monospace」收尾，
+            //    两条栈兜到同一个名字时，缺等宽字体的机器上计数行与差异文本会渲染成比例字体。
+            var monoExpected = FontStack.Resolve(FontStack.MonoFamilies, Installed, FontFamily.GenericMonospace.Name);
+            if (UiTokens.Mono.Value.FontFamily.Name != monoExpected)
+            {
+                throw new InvalidOperationException(
+                    $"等宽字体是「{UiTokens.Mono.Value.FontFamily.Name}」，按栈序应为「{monoExpected}」。");
+            }
+            // 等宽承诺在界面上成立：等宽那一份的实际渲染名与正文那一份不同（同一个名字就是没等宽）。
+            var monoRendered = UiTokens.Mono.Value.Name;
+            if (monoRendered == rendered)
+            {
+                throw new InvalidOperationException(
+                    $"等宽字体与正文字体的实际渲染名都是「{rendered}」（计数行、路径与差异文本不会等宽）。");
+            }
+            // ⑤ 真实对话框上的控件也取同一份（不是只有工厂里那个 Label 对）。
+            using var dialog = new NoticeDialog("关于 Apifox 助手", "字体栈运行时核对用的提示正文。", "等宽区示例", "附注示例");
+            _ = dialog.Handle;
+            dialog.CreateControl();
+            if (dialog.Font.Name != rendered)
+            {
+                throw new InvalidOperationException($"对话框字体是「{dialog.Font.Name}」，界面字体是「{rendered}」。");
+            }
+            var nested = FindAll<Label>(dialog).FirstOrDefault(l => l.Text.Length > 0);
+            if (nested is not null && nested.Font.Name != rendered)
+            {
+                throw new InvalidOperationException($"对话框里的标签字体是「{nested.Font.Name}」，界面字体是「{rendered}」。");
+            }
+            _lines.Add($"     回退结果：{resolved}（栈序 {string.Join(" → ", FontStack.Families)}）；实际渲染：{rendered}；"
+                + $"等宽请求 {UiTokens.Mono.Value.FontFamily.Name} / 渲染 {monoRendered}");
+            if (rendered != resolved)
+            {
+                _lines.Add($"     本机对「{resolved}」做了字体替换，渲染成「{rendered}」——运行时替换，不是产品缺陷；"
+                    + "界面控件、进程默认字体与对话框取的是同一份。");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 注释候选对话框的真实控件交互（第一百三十九轮）：打开 → 计数行 → 打开即选中第一条 →
+    /// 待确认问题未回答时接受被拒 → 填回答后接受并下一条 → 筛到零行时回答框与覆盖勾选一起收掉 → 撤销接受。
+    /// <para>
+    /// 存在理由：这个对话框是真机清单第 6/7/8 项（规则提取候选 → 查看注释候选 → 接受候选）的落点，
+    /// 而它此前只被 <c>Cases</c> 里 <c>new</c> 一次 + 建句柄——计数行、打开即选中第一条、
+    /// 「接受并下一条」的落点、待确认问题的拒绝路径、提示态收掉回答框与覆盖勾选（第一百三十八轮的修法）、
+    /// 撤销接受，全都可以是坏的而冒烟照样 PASS。
+    /// </para>
+    /// <para>
+    /// 全部走真实 WinForms 控件：<c>Show()</c> 触发 <c>OnLoad</c> 读盘、<c>Button.PerformClick()</c> 走点击链路、
+    /// 回答真的敲进 <c>TextBox</c>、关键词真的敲进筛选框；断言读的是控件上的文字与清单行数，
+    /// 以及 <c>DraftService.Load</c> 从磁盘重读的审阅状态（不是内存里的那一份）。
+    /// 候选由真实服务产出：扫描探针项目后经 <c>DraftService.ImportResultAsync</c> 导入两条
+    /// （第一条带待确认问题，第二条没有），不手写 comment-drafts.json。
+    /// </para>
+    /// </summary>
+    private static void RunCandidatesInteraction(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var scan = services.GetRequiredService<SourceScanService>();
+        var drafts = services.GetRequiredService<DraftService>();
+
+        CheckTask? task = null;
+        string? questionCandidateId = null;
+        CandidatesDialog? dialog = null;
+        try
+        {
+            // 第一段：造候选（真实服务）——扫描探针项目，再导入两条编码助手结果。
+            RunAction("候选对话框：准备候选（真实服务）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe4.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "候选对话框配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe4.Api/Probe4.Api.csproj",
+                    AllowedSourcePaths = ["Probe4.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "候选对话框任务" });
+                var job = new JobContext(new JobInfo { Id = "job-smoke-scan-4", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+                Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+
+                var output = tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)
+                    ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+                var slots = output.Slots.Where(s => s.Status == "missing" && s.Editable).Take(2).ToList();
+                if (slots.Count < 2)
+                {
+                    throw new InvalidOperationException($"可回写的缺失位置只有 {slots.Count} 个，不足以验证两条候选。");
+                }
+                // 导入编码助手结果（真实服务）：第一条带待确认问题（接受前必须回答），第二条没有。
+                var json = "{\"format\":\"" + DraftService.ResultFormat + "\",\"candidates\":["
+                    + "{\"slotId\":\"" + slots[0].Id + "\",\"text\":\"按名称查询探针数据。\",\"openQuestions\":[\"返回数据的业务含义需补充。\"]},"
+                    + "{\"slotId\":\"" + slots[1].Id + "\",\"text\":\"探针名称。\"}]}";
+                var result = Task.Run(() => drafts.ImportResultAsync(task.Id, json, CancellationToken.None)).GetAwaiter().GetResult();
+                if (result.Imported != 2)
+                {
+                    throw new InvalidOperationException($"导入 {result.Imported} 条候选，期望 2 条：" + string.Join("；", result.Errors));
+                }
+                var store = drafts.Load(task.Id);
+                if (store.Candidates.Count != 2)
+                {
+                    throw new InvalidOperationException($"候选队列有 {store.Candidates.Count} 条，期望 2 条。");
+                }
+                if (store.Candidates[0].OpenQuestions.Count == 0)
+                {
+                    throw new InvalidOperationException("第一条候选没有待确认问题（「接受被拒」那一段就没有前提）。");
+                }
+                questionCandidateId = store.Candidates[0].Id;
+                _lines.Add($"     候选队列：{store.Candidates.Count} 条，第一条带 {store.Candidates[0].OpenQuestions.Count} 个待确认问题");
+            });
+
+            // 第二段：打开对话框（Show 触发 OnLoad 读盘），核对计数行、清单行数、打开时的选中落点与两格输入。
+            RunAction("候选对话框：打开即选中第一条且计数对得上（真实控件）", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                var store = drafts.Load(task.Id);
+                dialog = new CandidatesDialog(drafts, tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var counts = CandidateCountsLabel(dialog);
+                var expectedCounts = QueueText.CandidateCountsLine(store.Candidates);
+                if (counts.Text != expectedCounts)
+                {
+                    throw new InvalidOperationException($"计数行是「{counts.Text}」，期望「{expectedCounts}」。");
+                }
+                var list = CandidateList(dialog);
+                if (!list.Visible) throw new InvalidOperationException("候选清单不可见（对话框停在提示态）。");
+                if (list.Items.Count != store.Candidates.Count)
+                {
+                    throw new InvalidOperationException($"清单有 {list.Items.Count} 行，候选队列 {store.Candidates.Count} 条。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"打开后选中 {list.SelectedIndices.Count} 行（首行序号 {list.SelectedIndices.Cast<int>().FirstOrDefault()}），期望恰好第一行。");
+                }
+                var detail = DetailBox(dialog);
+                if (!detail.Text.Contains("符号：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("详情区没有显示第一条的符号行：" + detail.Text);
+                }
+                var boxes = EditableBoxes(dialog);
+                if (boxes.Length != 2)
+                {
+                    throw new InvalidOperationException($"可编辑的多行输入框有 {boxes.Length} 个，期望 2 个（候选文字 + 待确认问题的回答）。");
+                }
+                if (!boxes[0].Enabled || boxes[0].Text != store.Candidates[0].Text)
+                {
+                    throw new InvalidOperationException($"候选文字那一格是「{boxes[0].Text}」（启用 {boxes[0].Enabled}），期望第一条候选的文字。");
+                }
+                if (!boxes[1].Enabled)
+                {
+                    throw new InvalidOperationException("第一条候选有待确认问题，回答框却不可填。");
+                }
+                var answersCaption = CaptionOf(dialog, "待确认问题的回答");
+                if (answersCaption.Text != CandidateEdit.AnswersCaptionFor(store.Candidates[0]))
+                {
+                    throw new InvalidOperationException(
+                        $"回答框说明是「{answersCaption.Text}」，期望「{CandidateEdit.AnswersCaptionFor(store.Candidates[0])}」。");
+                }
+                if (!ButtonOf(dialog, "接受并下一条").Enabled)
+                {
+                    throw new InvalidOperationException("打开后「接受并下一条」不可点。");
+                }
+                _lines.Add($"     计数行：{counts.Text}");
+            });
+
+            // 第三段（反向）：待确认问题没回答就点「接受并下一条」→ 服务拒绝、状态行如实、磁盘状态不变。
+            RunAction("候选对话框：待确认问题未回答时接受被拒（真实控件）", () =>
+            {
+                if (dialog is null || task is null || questionCandidateId is null)
+                {
+                    throw new InvalidOperationException("上一段没有打开对话框。");
+                }
+                var status = StatusLabel(dialog);
+                Click(dialog, "接受并下一条");
+                PumpUntilCondition(() => status.Text.Length > 0, "接受被拒的状态行");
+                if (!status.Text.Contains("请先填写确认结果再接受", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「该候选有待确认的问题，请先填写确认结果再接受。」。");
+                }
+                var store = drafts.Load(task.Id);
+                var candidate = store.Candidates.First(c => c.Id == questionCandidateId);
+                if (candidate.ReviewState != "pending")
+                {
+                    throw new InvalidOperationException($"被拒后磁盘上的审阅状态是「{candidate.ReviewState}」，期望 pending。");
+                }
+                var list = CandidateList(dialog);
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException("被拒后选中没有留在原处（被拒不该把用户甩到别的候选上）。");
+                }
+                _lines.Add($"     拒绝文案：{status.Text}");
+            });
+
+            // 第四段：填回答后接受 → 状态行取共享口径、磁盘状态 accepted、选中交给下一条。
+            RunAction("候选对话框：填回答后接受并下一条（真实控件）", () =>
+            {
+                if (dialog is null || task is null || questionCandidateId is null)
+                {
+                    throw new InvalidOperationException("上一段没有打开对话框。");
+                }
+                var boxes = EditableBoxes(dialog);
+                boxes[1].Text = "返回列表按名称过滤。";
+                Application.DoEvents();
+                var status = StatusLabel(dialog);
+                // 清掉上一段的拒绝文案：这一段要等的是「接受完成」那一句，不是「状态行非空」。
+                status.Text = "";
+                Click(dialog, "接受并下一条");
+                PumpUntilCondition(() => status.Text.Length > 0, "接受完成的状态行");
+
+                var store = drafts.Load(task.Id);
+                var candidate = store.Candidates.First(c => c.Id == questionCandidateId);
+                if (candidate.ReviewState != "accepted")
+                {
+                    throw new InvalidOperationException($"磁盘上的审阅状态是「{candidate.ReviewState}」，期望 accepted。");
+                }
+                if (candidate.Answers != "返回列表按名称过滤。")
+                {
+                    throw new InvalidOperationException($"磁盘上的回答是「{candidate.Answers}」，期望刚填的那一句。");
+                }
+                var expectedStatus = CandidateEdit.ReviewDoneText("accepted", store.Candidates.Count(c => c.ReviewState == "pending"));
+                if (status.Text != expectedStatus)
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{expectedStatus}」。");
+                }
+                var list = CandidateList(dialog);
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"接受后选中在第 {list.SelectedIndices.Cast<int>().FirstOrDefault()} 行，期望第 1 行（接受并下一条）。");
+                }
+                _lines.Add($"     状态行：{status.Text}");
+            });
+
+            // 第五段：关键词筛到零行 → 提示语取共享口径、筛选器仍可用、计数行不变，
+            // 且第一百三十八轮的修法在真实控件上成立：回答框与覆盖勾选随提示一起收掉。
+            RunAction("候选对话框：筛到零行时回答框与覆盖勾选一起收掉（真实控件）", () =>
+            {
+                if (dialog is null || task is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var store = drafts.Load(task.Id);
+                var list = CandidateList(dialog);
+                var keyword = KeywordBox(dialog);
+                var filter = StatusFilter(dialog);
+                var total = list.Items.Count;
+                keyword.Text = "zzz-没有这个候选";
+                Application.DoEvents();
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException($"关键词不命中时清单还有 {list.Items.Count} 行。");
+                }
+                if (!filter.Enabled) throw new InvalidOperationException("筛到零行时筛选下拉被禁用（提示语指名的下一步按不动）。");
+                if (!keyword.Enabled) throw new InvalidOperationException("筛到零行时关键词框被禁用。");
+                var hint = HintLabel(dialog);
+                var expectedHint = ListFilter.FilteredEmptyHint(ListFilter.CandidateNoun, ListFilter.IsActive(keyword.Text));
+                if (!hint.Visible || hint.Text != expectedHint)
+                {
+                    throw new InvalidOperationException(
+                        $"筛到零行的提示是「{(hint.Visible ? hint.Text : "（不可见）")}」，期望「{expectedHint}」。");
+                }
+                if (CandidateCountsLabel(dialog).Text != QueueText.CandidateCountsLine(store.Candidates))
+                {
+                    throw new InvalidOperationException("筛到零行后计数行变了：" + CandidateCountsLabel(dialog).Text);
+                }
+                var boxes = EditableBoxes(dialog);
+                if (boxes[0].Enabled || boxes[0].Text.Length != 0)
+                {
+                    throw new InvalidOperationException("提示态下候选文字那一格没有收掉。");
+                }
+                if (boxes[1].Enabled || boxes[1].Text.Length != 0)
+                {
+                    throw new InvalidOperationException("提示态下回答框没有收掉（清单已藏起来，用户还能对着看不见的候选填回答）。");
+                }
+                var overwrite = OverwriteBox(dialog);
+                if (overwrite.Enabled || overwrite.Checked)
+                {
+                    throw new InvalidOperationException("提示态下覆盖勾选没有收掉。");
+                }
+                if (CaptionOf(dialog, "待确认问题的回答").Text != CandidateEdit.AnswersCaptionNoSelection)
+                {
+                    throw new InvalidOperationException(
+                        $"提示态下回答框说明是「{CaptionOf(dialog, "待确认问题的回答").Text}」，期望「{CandidateEdit.AnswersCaptionNoSelection}」。");
+                }
+                if (CaptionOf(dialog, "候选文字").Text != CandidateEdit.TextCaptionNoSelection)
+                {
+                    throw new InvalidOperationException(
+                        $"提示态下候选文字说明是「{CaptionOf(dialog, "候选文字").Text}」，期望「{CandidateEdit.TextCaptionNoSelection}」。");
+                }
+                keyword.Text = "";
+                Application.DoEvents();
+                if (list.Items.Count != total)
+                {
+                    throw new InvalidOperationException($"清空关键词后清单 {list.Items.Count} 行，期望 {total} 行。");
+                }
+                _lines.Add($"     筛到零行：提示「{expectedHint}」，回答框与覆盖勾选已收掉，清空后回到 {total} 行");
+            });
+
+            // 第六段：撤销接受 → 状态行取共享口径、磁盘状态回到 pending。
+            RunAction("候选对话框：撤销接受回到待审阅（真实控件）", () =>
+            {
+                if (dialog is null || task is null || questionCandidateId is null)
+                {
+                    throw new InvalidOperationException("上一段没有打开对话框。");
+                }
+                var list = CandidateList(dialog);
+                var index = -1;
+                for (var i = 0; i < list.Items.Count; i++)
+                {
+                    if (list.Items[i].Tag is CommentCandidate candidate && candidate.Id == questionCandidateId) index = i;
+                }
+                if (index < 0) throw new InvalidOperationException("清单里找不到刚接受的那条候选。");
+                list.Items[index].Selected = true;
+                Application.DoEvents();
+                var undo = ButtonOf(dialog, "撤销接受");
+                if (!undo.Enabled) throw new InvalidOperationException("已接受的候选「撤销接受」却不可点。");
+                var status = StatusLabel(dialog);
+                status.Text = "";
+                undo.PerformClick();
+                PumpUntilCondition(() => status.Text.Length > 0, "撤销接受的状态行");
+                if (status.Text != CandidateEdit.UndoDoneText)
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{CandidateEdit.UndoDoneText}」。");
+                }
+                var store = drafts.Load(task.Id);
+                if (store.Candidates.First(c => c.Id == questionCandidateId).ReviewState != "pending")
+                {
+                    throw new InvalidOperationException("撤销接受后磁盘上的审阅状态没有回到 pending。");
+                }
+                _lines.Add($"     状态行：{status.Text}");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
     /// <summary>注释缺口对话框的计数行（「位置 N · 有效 …」或空态那句）。</summary>
     private static Label CountsLabel(Control root) =>
         FindAll<Label>(root).FirstOrDefault(l => l.Text.StartsWith("位置 ", StringComparison.Ordinal) || l.Text == "没有注释位置")
         ?? throw new InvalidOperationException("对话框里找不到计数行。界面文案：" + LabelTexts(root));
+
+    /// <summary>注释候选对话框的计数行（「候选 N · 待审阅 …」或空态那句）。</summary>
+    private static Label CandidateCountsLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Text.StartsWith("候选 ", StringComparison.Ordinal) || l.Text == "没有候选")
+        ?? throw new InvalidOperationException("对话框里找不到候选计数行。界面文案：" + LabelTexts(root));
+
+    /// <summary>候选清单（对话框里唯一的 <c>ListView</c>）。</summary>
+    private static ListView CandidateList(Control root) =>
+        FindFirst<ListView>(root) ?? throw new InvalidOperationException("对话框里找不到候选清单。");
+
+    /// <summary>
+    /// 可编辑的多行输入框，按控件树先序：候选文字那一格在前、待确认问题的回答在后
+    /// （只读的详情预览框是 <c>Ui.Preview</c>，<c>ReadOnly</c> 为真，不在此列）。
+    /// </summary>
+    private static TextBox[] EditableBoxes(Control root) =>
+        FindAll<TextBox>(root).Where(t => t.Multiline && !t.ReadOnly).ToArray();
+
+    /// <summary>覆盖已有注释的勾选（对话框里唯一的 <c>CheckBox</c>）。</summary>
+    private static CheckBox OverwriteBox(Control root) =>
+        FindFirst<CheckBox>(root) ?? throw new InvalidOperationException("对话框里找不到覆盖勾选。");
+
+    /// <summary>按说明行的开头文字找那一行说明（「候选文字」「待确认问题的回答」）。</summary>
+    private static Label CaptionOf(Control root, string prefix) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Text.StartsWith(prefix, StringComparison.Ordinal))
+        ?? throw new InvalidOperationException($"对话框里找不到「{prefix}」那一行说明。界面文案：" + LabelTexts(root));
+
+    /// <summary>状态行（<c>Ui.StatusLine</c>：固定占位、左对齐、非 AutoSize 的那一个标签）。</summary>
+    private static Label StatusLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => !l.AutoSize && l.TextAlign == ContentAlignment.MiddleLeft)
+        ?? throw new InvalidOperationException("对话框里找不到状态行。界面文案：" + LabelTexts(root));
+
+    /// <summary>
+    /// 等一个条件成立，期间泵消息（<c>Application.DoEvents</c>）。
+    /// 对话框的异步续体（<c>async void</c> 的审阅动作）排在 WinForms 同步上下文上，
+    /// 不泵消息就永远等不到；等不到即判失败，不静默放过。
+    /// </summary>
+    private static void PumpUntilCondition(Func<bool> condition, string what, int timeoutMs = 60000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (!condition())
+        {
+            if (Environment.TickCount64 > deadline) throw new TimeoutException("等待「" + what + "」超时。");
+            Application.DoEvents();
+            Thread.Sleep(10);
+        }
+    }
 
     /// <summary>注释覆盖率行（第二十轮口径，文字取 <c>ScanOverview.CoverageText</c>）。</summary>
     private static Label CoverageLabel(Control root) =>

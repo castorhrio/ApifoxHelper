@@ -1353,7 +1353,7 @@
 | 15 | Apifox 差异 | 点「差异检查」→ 结果对话框列出与 Apifox 的差异（需真实 Apifox CLI 登录态） | `[ ]` 未验证 |
 | 16 | 同步预览 | 点「同步预览」→ 预览对话框列出待同步条目，**不执行写入**（预览态） | `[ ]` 未验证 |
 | 17 | DPI 观感 | 100% 与 200% 各截一张「新建配置」对话框图，确认右列宽度与文字不重叠、不裁切 | `[ ]` 未验证 |
-| 18 | 冒烟器 | 真机跑 `ApifoxHelper.Smoke.exe --report=<路径>` → 退出码 0，报告逐行 `PASS`（**第一百三十七轮 wine 10.0 + Xvfb 实测 46 通过 / 0 失败、退出码 0**；真机仍未跑） | `[ ]` 未验证（真机）；wine 已 46 通过 |
+| 18 | 冒烟器 | 真机跑 `ApifoxHelper.Smoke.exe --report=<路径>` → 退出码 0，报告逐行 `PASS`（**第一百四十轮 wine 10.0 + Xvfb 实测 53 通过 / 0 失败、退出码 0**；真机仍未跑） | `[ ]` 未验证（真机）；wine 已 53 通过 |
 | 19 | 无异常 | 全程无未处理异常弹窗；任务日志（`JournalDialog`）无未记录的中断 | `[ ]` 未验证 |
 
 **已知前置条件（真机到位前先备齐，否则第 5 步之后必然断链）**：① .NET 8 桌面运行时；② Roslyn 参考程序集（扫描用）；③ 真实 Apifox CLI 与登录态（第 15 步）；④ 模型服务密钥（若演示「与 AI 共生」的模型生成链路——`docs/NOTES.md` 挂账「只验证了请求构造与结果校验代码可编译」）。
@@ -1417,3 +1417,34 @@
 - **P0-1 真机证据：本轮仍不可得（环境限制，非验证手段选错）**。`docs/NOTES.md` 那张「Windows 真机全链路清单（19 项）」本轮**一项都没勾**，第一百三十四轮的登记原样保留；本轮**未重复 wine 试跑**，故不据此宣称冒烟器在本轮跑过——46 通过是第一百三十七轮的证据。
 - **下一轮候选（如实挂账，本轮未做）**：① 候选审阅对话框的真实控件交互段（打开即选中第一条、接受并下一条、待确认问题未回答时接受被拒、筛到零行）——本轮只做到「提示态收口」，交互段与断言清单登记未写；② 报告导出的中文排版机械检查（第一百三十七轮已探明入口：`ReportService` 依赖未共享编译的类型，须先决定源码切片还是收成 `ReportCopy`）；③ `ApifoxCli.Parse` 的表驱动用例。
 - **本轮未连接或写入 Apifox，未调用任何模型服务**；不改候选数据、审阅校验与写入链路，服务层一行未动。
+
+## 注释候选对话框的真实控件交互 + 字体栈运行时命中（2026-11-10 第一百三十九轮）
+
+- **接续前确认**：开局工作树干净（仅 `.winecheck/` 未跟踪，本机 wine 试跑脚本，非产品代码，不入库），HEAD（ee15991）为第一百三十八轮（候选审阅提示态收掉回答框与覆盖勾选），主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误、`dotnet test` 2082 用例全绿，基线成立；第四十七至一百三十八轮逐字保留。
+- **本轮定位**：控制仓简报的 P0-1（Windows 真机跑 19 项清单）与 P1（真机 100%/200% DPI 截图）在本会话**不可能完成**——Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机（第一百二十四轮挂账决策继续有效：责任在环境供给）。按「能在 Linux 验证的验证、不可验证的如实记录」，本轮推进**一个小范围真实原生交互**并补上简报 P0-1 的降级手段（字体栈运行时断言），不开新功能、不动服务链路语义。
+- **已交付 ①：注释候选对话框的真实控件交互段（`ApifoxHelper.Smoke` 新增 `RunCandidatesInteraction`，六段）**。这个对话框是真机清单第 6/7/8 项（规则提取候选 → 查看注释候选 → 接受候选）的落点，而它此前只被 `Cases` 里 `new` 一次 + 建句柄——计数行、打开即选中第一条、「接受并下一条」的落点、待确认问题的拒绝路径、第一百三十八轮刚修的提示态收口、撤销接受，全都可以是坏的而冒烟照样 PASS。六段全部走真实 WinForms 控件（`Show()` 触发 `OnLoad` 读盘、`Button.PerformClick()` 走点击链路、回答与关键词真的敲进 `TextBox`），断言读的是控件上的文字、清单行数与 `DraftService.Load` 从磁盘重读的审阅状态：
+  1. 准备候选（真实服务）：扫描探针项目后经 `DraftService.ImportResultAsync` 导入两条（第一条带待确认问题、第二条没有），不手写 `comment-drafts.json`；
+  2. 打开即选中第一条：计数行与 `QueueText.CandidateCountsLine` 逐字对得上、清单行数等于队列条数、详情区有「符号：」、两格输入（候选文字 / 回答）按候选取说明（`CandidateEdit.AnswersCaptionFor`）；
+  3. 反向——待确认问题没回答就点「接受并下一条」：状态行出现「请先填写确认结果再接受」、磁盘状态仍是 `pending`、选中留在原处；
+  4. 填回答后接受：磁盘状态 `accepted`、回答落盘、状态行等于 `CandidateEdit.ReviewDoneText("accepted", 剩余待审阅)`、选中交给下一条（第 1 行）；
+  5. 关键词筛到零行：提示语取 `ListFilter.FilteredEmptyHint`、筛选器与关键词框仍可用、计数行不随筛选变化，**且第一百三十八轮的修法在真实控件上成立**——回答框与覆盖勾选随提示一起收掉（清空 + 禁用 + 取消勾选），两行说明取 `AnswersCaptionNoSelection` / `TextCaptionNoSelection`；
+  6. 撤销接受：状态行等于 `CandidateEdit.UndoDoneText`、磁盘状态回到 `pending`。
+- **已交付 ②：字体栈的运行时命中（简报 P0-1 的降级手段，`RunFontStackRuntime` 一段）**。第一百三十五轮把有序回退做成真实现，但证据只到「`FontStack.Resolve` 的判定真值表」与「两处入口都调了它」——**本机实际回退到哪个字体**从未在运行时看过一眼。这一段断言四件事：① 回退结果等于「按栈序找到的第一个已装字体」（或系统无衬线兜底），不是别的名字；② 回退结果在本机真的装得上（探测失败的名字不会被当成结果）；③ 界面控件（`UiTokens.Body`）与进程默认字体（`Control.DefaultFont`，决定 MessageBox 与菜单）是同一份结果、同一档磅值（Caption 9pt）；④ 等宽栈与真实对话框（`NoticeDialog`）上的控件也取同一份。**它不能替代真机 DPI 观感复核**（wine 的字体度量与 GDI 绘制不是 Windows 实现），真机清单第 17 项继续留 `[ ]`。
+- **测试 2082 → 2108 用例**（+26）：`NativeDialogSmokeTests` 的交互断言清单新增 23 行（候选对话框 17 行 + 字体栈 6 行，逐条登记「方法 + 段名 + 该段里一条判失败的等价物」）+ 3 条新用例（`CandidatesInteraction_DrivesRealControls`、`CandidatesInteraction_IsRegisteredInMain`、`FontStackRuntime_AssertsTheActualHit`）；`InteractionMethods` 增加 `RunCandidatesInteraction`，使「每个交互段都被清单覆盖」这条检查把新六段一并纳入。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2108 用例全部通过**；口径是真执行——`QueueText` / `CandidateEdit` / `ListFilter` / `FontStack` 均经共享编译进测试程序集，断言比的是主工程同一份代码；界面接线属 WinForms 控件触达，本环境不可执行，以源码切片与行首正则钉住，不冒充跑过。
+- **P0-1 真机证据：本轮仍不可得（环境限制，非验证手段选错）**。`docs/NOTES.md` 那张「Windows 真机全链路清单（19 项）」本轮**一项都没勾**，第一百三十四轮的登记原样保留；本轮**未重复 wine 试跑**，故不据此宣称冒烟器在本轮跑过——46 通过是第一百三十七轮的证据；本轮新增的七段（候选六段 + 字体栈一段）**尚未在 wine 或真机上执行过**，如实挂账为「已写、未跑」。
+- **下一轮候选（如实挂账，本轮未做）**：① 在 wine 下跑一遍新增的七段（`xvfb-run -a wine ApifoxHelper.Smoke.exe --report=<路径>`），把通过数写进本文件；② 报告导出的中文排版机械检查（第一百三十七轮已探明入口：`ReportService` 依赖未共享编译的类型，须先决定源码切片还是收成 `ReportCopy`）；③ `ApifoxCli.Parse` 的表驱动用例。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改候选数据、审阅校验与写入链路，服务层一行未动，未新增对话框或功能。
+
+## 第一百三十九轮七段在 wine 下真跑 + 等宽栈兜底修复（2026-11-10 第一百四十轮）
+
+- **接续前确认**：开局工作树**不干净**——`ApifoxHelper.Smoke/Program.cs`、`ApifoxHelper.Tests/NativeDialogSmokeTests.cs`、`docs/NOTES.md` 三处已暂存未提交，内容是第一百三十九轮（候选对话框六段交互 + 字体栈运行时命中）。按「保留并接续已有实现、不覆盖未完成工作」先确认其状态：主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` 2108 用例全绿，方向成立；该轮自己挂账的下一件事正是「在 wine 下跑一遍新增的七段」。本轮把它跑完并修掉跑出来的缺陷，不另起一件。
+- **本轮定位**：控制仓简报 P0-1（Windows 真机 19 项清单）与 P1（真机 DPI 截图）在本会话仍不可能完成（Linux 容器、无 `Microsoft.WindowsDesktop.App` 8.0.0、无 Windows 真机，第一百二十四轮挂账决策继续有效）。按「能在 Linux 验证的验证、不可验证的如实记录」，本轮做的是**把已写的运行时断言真的跑一遍**——这是第一百三十九轮唯一缺的那一步。
+- **wine 实测（真实执行证据，非推断）**：`dotnet publish ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj -c Release -r win-x64 --self-contained -o /tmp/ah-smoke-pub` 后 `xvfb-run -a wine ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke-report.txt` → **首次跑出 52 通过 / 1 失败、退出码 1**。失败行是第一百三十九轮新写的字体栈断言：「界面控件字体是「Noto Sans CJK SC」，回退结果是「Segoe UI」」。**七段里六段一次通过**（候选对话框六段全绿，含待确认问题被拒、接受并下一条、筛到零行收掉回答框与覆盖勾选、撤销接受），失败的是断言本身。
+- **失败归属（已判定，不是产品缺陷）**：GDI+ 在缺这个字体的机器上做**字体替换**——请求 `Segoe UI`、`Font.Name` 却是 `Noto Sans CJK SC`。请求名与渲染名本来就可以不同（Windows 上装了 Segoe UI 时两者相同），而 DESIGN §3 的承诺是「界面控件、进程默认字体与对话框取同一份」，不是「运行时不替换字体」。把「渲染名 == 请求名」写成断言，等于要求环境配合，wine 与任何做了替换的真机都会红。**修法**：断言改成比「实际渲染名」（`Font.Name`）——界面字体工厂、`Control.DefaultFont`、真实对话框三处同一份；替换事实作为证据行打印，不判失败。同时补一条反向用例 `FontStackRuntime_ComparesRenderedNamesNotRequestedOnes` 钉住「别把它加回来」。
+- **跑出来的真实产品缺陷（本轮唯一一处产品代码改动，具名 pass：harden）**：证据行打出「等宽请求 Tahoma / 渲染 Tahoma」——**等宽栈兜到了系统无衬线**。DESIGN §3 的等宽栈以「→ monospace」收尾，而 `UiTokens` 的两条栈都传 `FontFamily.GenericSansSerif.Name`：缺等宽字体的机器上计数行、路径与差异文本渲染成比例字体，「计数、进度、ID、路径、差异文本必须等宽」这条承诺在界面上不成立。**修法**：两条栈各给各的兜底（正文栈系统无衬线、等宽栈系统等宽），`FontStack.Resolve` 的兜底名仍由调用方给（判定文件不依赖 System.Drawing）。修复后同一命令重跑：**53 通过 / 0 失败、退出码 0**，证据行变成「等宽请求 Liberation Mono / 渲染 Liberation Mono」，与正文的 `Noto Sans CJK SC` 不同——**修复在运行时真的改变了行为**，不是只改了源码形状。
+- **变异验证（本轮最关键的一条证据）**：把等宽兜底改回 `FontFamily.GenericSansSerif.Name` → Linux `dotnet test` **2 红**（`MonoStack_FallsBackToSystemMonospace_NotSansSerif`、`UiTokens_DelegatesTheFallbackOrderToFontStack`），wine 冒烟 **52 通过 / 1 失败、退出码 1**（失败行「等宽字体是「Tahoma」，按栈序应为「Liberation Mono」」）。还原后 `cmp` 逐字节核对与备份一致，重建 2110 全绿、wine 53 通过 / 0 失败。
+- **测试 2108 → 2110 用例**（+2）：`MonoStack_FallsBackToSystemMonospace_NotSansSerif`（两条栈兜底不同、等宽不得兜到无衬线、判定文件不写死兜底名、DESIGN §3 仍以 monospace 收尾）+ `FontStackRuntime_ComparesRenderedNamesNotRequestedOnes`（反面清单三条 + 替换事实要打印）；`UiTokens_DelegatesTheFallbackOrderToFontStack` 与交互断言清单的字体栈六行随真实形状更新，强度不降。
+- **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2110 用例全部通过**；GUI 侧本轮有**真实执行证据**（wine 10.0 + Xvfb 下 53 通过 / 0 失败 + 变异 52/1）。**Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效；真机清单第 17 项（DPI 观感）与第 18 项（真机跑冒烟）继续留 `[ ]`。
+- **下一轮候选（如实挂账，本轮未做）**：① 报告导出的中文排版机械检查（第一百三十七轮已探明入口：`ReportService` 依赖未共享编译的类型，须先决定源码切片还是收成 `ReportCopy`）；② `ApifoxCli.Parse` 的表驱动用例；③ 真机到位后按 19 项清单逐条走并拍 100%/200% DPI 截图。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改候选数据、审阅校验与写入链路，服务层一行未动，未新增对话框或功能。

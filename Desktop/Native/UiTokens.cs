@@ -37,11 +37,15 @@ internal static class UiTokens
     public const int Lg = 16;
     public const int Xl = 24;
 
-    // 字体栈（docs/DESIGN.md §3）：有序回退，找到即停，全不匹配用系统无衬线。
+    // 字体栈（docs/DESIGN.md §3）：有序回退，找到即停，全不匹配用系统兜底字体。
     // 栈本身与回退判定都在 FontStack（不依赖 WinForms、与测试工程共享编译），本文件只提供
     // 「这个名字本机装没装」这一个事实，并把结果缓存成进程内唯一的一份。
-    private static readonly Lazy<string> Family = new(() => ResolveFamily(FontStack.Families));
-    private static readonly Lazy<string> MonoFamily = new(() => ResolveFamily(FontStack.MonoFamilies));
+    //
+    // 两条栈的兜底**不是同一个**：正文栈兜到系统无衬线，等宽栈兜到系统等宽（DESIGN §3 的
+    // 「→ monospace」）。第一百四十轮 wine 实测把这一处打出来过：两条栈都兜到系统无衬线时，
+    // 缺等宽字体的机器上计数行、路径与差异文本渲染成比例字体，等宽承诺在界面上不成立。
+    private static readonly Lazy<string> Family = new(() => ResolveFamily(FontStack.Families, FontFamily.GenericSansSerif.Name));
+    private static readonly Lazy<string> MonoFamily = new(() => ResolveFamily(FontStack.MonoFamilies, FontFamily.GenericMonospace.Name));
 
     // 共享字体实例只创建不释放（与进程同生命周期），避免每控件新建。
     public static readonly Lazy<Font> Caption = new(() => Create(CaptionPt));
@@ -62,8 +66,8 @@ internal static class UiTokens
     /// </summary>
     public static string ResolveFontFamily() => Family.Value;
 
-    private static string ResolveFamily(IReadOnlyList<string> stack) =>
-        FontStack.Resolve(stack, IsInstalled, FontFamily.GenericSansSerif.Name);
+    private static string ResolveFamily(IReadOnlyList<string> stack, string fallback) =>
+        FontStack.Resolve(stack, IsInstalled, fallback);
 
     /// <summary>本机是否装了这个名字的字体：<see cref="FontFamily"/> 构造在未安装时抛 <see cref="ArgumentException"/>。</summary>
     private static bool IsInstalled(string name)
