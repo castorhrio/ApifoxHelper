@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <Using Include="System.Collections.Concurrent" />
+    <Using Include="System.Diagnostics" />
     <Using Include="System.Security.Cryptography" />
     <Using Include="System.Text" />
     <Using Include="System.Text.Encodings.Web" />
@@ -25,6 +26,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <!-- JobRunner.cs 的 ILogger<JobRunner>：主工程由 Microsoft.AspNetCore.App 框架引用带到，
+         本工程是 net8.0，共享编译它就得显式引用。 -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
@@ -100,6 +104,7 @@
     <Compile Include="..\Desktop\Native\ConfirmEntries.cs" Link="Shared\ConfirmEntries.cs" />
     <Compile Include="..\Desktop\Native\StatusLineText.cs" Link="Shared\StatusLineText.cs" />
     <Compile Include="..\Tasks\TaskModels.cs" Link="Shared\TaskModels.cs" />
+    <Compile Include="..\Tasks\TaskFiles.cs" Link="Shared\TaskFiles.cs" />
     <Compile Include="..\Source\SourceModels.cs" Link="Shared\SourceModels.cs" />
     <Compile Include="..\Comments\DraftModels.cs" Link="Shared\DraftModels.cs" />
     <Compile Include="..\Tasks\TaskStore.cs" Link="Shared\TaskStore.cs" />
@@ -117,6 +122,20 @@
     <Compile Include="..\Contracts\DocModel.cs" Link="Shared\DocModel.cs" />
     <Compile Include="..\Infrastructure\Core.cs" Link="Shared\Core.cs" />
     <Compile Include="..\Infrastructure\Redactor.cs" Link="Shared\Redactor.cs" />
+    <!-- 写入安全红线（SHARED-3/4/7/8）的端到端链路：CLI 子进程边界与同步执行器一起编进来，
+         断言走的是真实 ProcessRunner + 真实输出解析 + 真实执行器，脚本换成仓库外的本地 mock CLI。
+         这一批文件同样不引用 WinForms。 -->
+    <Compile Include="..\Infrastructure\ProcessRunner.cs" Link="Shared\ProcessRunner.cs" />
+    <Compile Include="..\Infrastructure\JobRunner.cs" Link="Shared\JobRunner.cs" />
+    <Compile Include="..\Apifox\ApifoxCli.cs" Link="Shared\ApifoxCli.cs" />
+    <Compile Include="..\Apifox\NativeUtil.cs" Link="Shared\NativeUtil.cs" />
+    <Compile Include="..\Apifox\RemoteSnapshot.cs" Link="Shared\RemoteSnapshot.cs" />
+    <Compile Include="..\Contracts\OpenApiSource.cs" Link="Shared\OpenApiSource.cs" />
+    <Compile Include="..\Sync\CompatService.cs" Link="Shared\CompatService.cs" />
+    <Compile Include="..\Sync\CheckService.cs" Link="Shared\CheckService.cs" />
+    <Compile Include="..\Sync\TargetBuilder.cs" Link="Shared\TargetBuilder.cs" />
+    <Compile Include="..\Sync\SyncPlanService.cs" Link="Shared\SyncPlanService.cs" />
+    <Compile Include="..\Sync\SyncExecutor.cs" Link="Shared\SyncExecutor.cs" />
   </ItemGroup>
 
 </Project>

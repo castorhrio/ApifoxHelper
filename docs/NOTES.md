@@ -28,13 +28,13 @@
 | 勾选 | 不变量 | 当前结论 | 证据出处（文件 + 断言名） | GUI 证据（wine 轮次） |
 | --- | --- | --- | --- | --- |
 | [x] | SHARED-1 两阶段独立确认：源码回写与远端同步分别预览、分别确认 | 达成（原生侧两次独立确认，任一动作不隐含另一个；确认框默认按钮一律在「取消」） | `ApifoxHelper.Tests/ApplyPlanConfirmTests.cs` 的 `ApplyPlanConfirmTests.RunApply_AsksBeforeWriting`、`ConfirmBoxConsistencyTests.EveryConfirmBox_DefaultsToCancel` | 第一百六十七轮 `RunWriteBackEndToEnd` 6 通过 / 0 失败 ×3（三档全量复跑内） |
-| [x] | SHARED-2 预览先行：确认绑定计划，选择/目标/CLI 版本变化后原确认失效 | 达成（确认同步只在计划待确认且未过期时可用） | `SyncExecutionTests.CanExecute_OnlyFreshAwaitingConfirmPlan`、`ApplyPlanConfirmTests.ConfirmText_TakesThePlansOwnNumbers` | 不经界面（门禁真值表） |
-| [ ] | SHARED-3 写入边界：只写计划内资源、整段构造嵌套对象、受保护设置不开放相关写入 | **已实现（待验证）**：勾选与排除口径在，端到端写入从未对任何 Apifox 项目执行 | `SyncSelectionTests.SyncableNow_ExcludesPendingAndNonSyncable`、`SyncSelectionTests.PendingCount_OnlyUnconfirmedNeedsDecisionItems` | 不经界面（勾选真值表） |
-| [ ] | SHARED-4 冲突检测：计划生成时与执行前逐资源重读并核对指纹 | **已实现（待验证）**：指纹与最终状态有落盘记录；本地锁不承诺跨客户端原子性（README 已知限制） | `JournalTests.PlanLines_CarryTheFingerprintAndTheFinalStatus` | 不经界面（写入形状断言） |
-| [x] | SHARED-5 部分失败如实：首个失败即停、部分完成不显示成全部成功、不谎报回滚 | 达成（结果口径单一落点） | `SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess`、`SyncExecutionTests.ResultText_InterruptedPointsToVerifyFirst` | 不经界面（结果文案真值表） |
+| [x] | SHARED-2 预览先行：确认绑定计划，选择/目标/CLI 版本变化后原确认失效 | 达成（确认同步只在计划待确认且未过期时可用；第一百七十三轮起 `MockApifoxCliTests.cs` 的 `Shared2_StaleConfirmedHash_IsRefusedBeforeAnyCliCall` 把「确认之后计划被重新生成、拿旧哈希执行」这一支跑到真实进程边界上——`Sync/SyncExecutor.cs` 第 22 行的拒绝发生在任何一条 CLI 命令发出之前，远端逐字节不动，计划不被推进到 `executing`；同文件 `Boundary_TheNativeConfirmPathRunsThisVeryChain` 钉住原生壳那颗按钮调的就是同一个 `ExecuteAsync`，传的正是 `plan.Hash`） | `SyncExecutionTests.CanExecute_OnlyFreshAwaitingConfirmPlan`、`ApplyPlanConfirmTests.ConfirmText_TakesThePlansOwnNumbers`、`ApifoxHelper.Tests/MockApifoxCliTests.cs`（`docs/NOTES.md`「本地 mock CLI 端到端（写入安全红线）」） | 不经界面（门禁真值表 + 本地 mock CLI 端到端） |
+| [ ] | SHARED-3 写入边界：只写计划内资源、整段构造嵌套对象、受保护设置不开放相关写入 | **已实现（本地端到端已跑，真实 Apifox 未跑）**：勾选与排除口径在；第一百七十二轮起「计划 2 个 / 远端 3 个 → 写入只命中那 2 个，计划外那个连命令都没发出」与「平台没保住受保护设置 → 判 verifyFailed、不显示成全部核对」两条已在真实进程边界上端到端跑过并常驻本仓。空框保留的理由只剩一个：真实 Apifox 服务端没跑过 | `SyncSelectionTests.SyncableNow_ExcludesPendingAndNonSyncable`、`SyncSelectionTests.PendingCount_OnlyUnconfirmedNeedsDecisionItems`、`ApifoxHelper.Tests/MockApifoxCliTests.cs`（`docs/NOTES.md`「本地 mock CLI 端到端（写入安全红线）」） | 不经界面（勾选真值表 + 本地 mock CLI 端到端） |
+| [ ] | SHARED-4 冲突检测：计划生成时与执行前逐资源重读并核对指纹 | **已实现（本地端到端已跑，真实 Apifox 未跑）**：指纹与最终状态有落盘记录；第一百七十二轮起「确认后把远端改掉 → 执行前重读抓到、判 conflict、一个写入字节都不发出、远端保持别人那一版」有了一次可复跑的端到端记录。本地锁不承诺跨客户端原子性（README 已知限制）这条不变 | `JournalTests.PlanLines_CarryTheFingerprintAndTheFinalStatus`、`ApifoxHelper.Tests/MockApifoxCliTests.cs` | 不经界面（写入形状断言 + 本地 mock CLI 端到端） |
+| [x] | SHARED-5 部分失败如实：首个失败即停、部分完成不显示成全部成功、不谎报回滚 | 达成（结果口径单一落点） | `SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess`、`SyncExecutionTests.ResultText_InterruptedPointsToVerifyFirst`、`ApifoxHelper.Tests/MockApifoxCliTests.cs` | 不经界面（结果文案真值表 + 本地 mock CLI 端到端） |
 | [x] | SHARED-6 审计记录：执行意图与逐项结果追加写任务日志，中断后不自动重放 | 达成（日志读写单一口径；未结束动作在清单上就地标出） | `JournalTests.EveryEventLine_HasUniqueJsonNames`、`JournalTests.UnfinishedActions_FindsIntentsWithoutAResult` | 第一百六十七轮 `RunJournalLoadFailure` 六段 6 通过 / 0 失败 ×3（三档全量复跑内） |
-| [ ] | SHARED-7 创建防重：创建前复查同身份资源，未取得 ID 时按身份回读 | **已实现（待验证）**：防重与 ID 回绑在服务层，从未对真实 Apifox 执行过创建 | `Sync/SyncExecutor.cs`（实现落点；本条无界面断言，端到端未验证即不得勾成达成） | 不经界面 |
-| [ ] | SHARED-8 不删除、不自动发布：不自动删除远端资源，高风险未逐项确认不进计划 | **部分达成**：不进计划的门禁在并验证过；「不删除」是能力缺失式保证（原生无删除入口），无端到端验证 | `SyncSelectionTests.Selectable_OnlySyncableStatusesAndOnline`、`CompatEntriesTests.ResultHeadline_FailedKeepsWriteClosedAndNeverClaimsPassed` | 不经界面 |
+| [ ] | SHARED-7 创建防重：创建前复查同身份资源，未取得 ID 时按身份回读 | **已实现（本地端到端已跑，真实 Apifox 未跑）**：两支都有了一次可复跑的端到端记录——同身份已存在时创建命令一次都没发出、动作判 conflict、远端同身份仍只有一条；创建未回 ID 时按「方法 + 精确路径」回读唯一一条并绑上 CreatedId、核对通过。「真实 CLI 创建后到底回不回 ID」仍未验证（方案 §4.3），所以本行留空框 | `ApifoxHelper.Tests/MockApifoxCliTests.cs`、`Sync/SyncExecutor.cs`（实现落点；端到端跑通真实服务端之前不得勾成达成） | 不经界面（本地 mock CLI 端到端） |
+| [ ] | SHARED-8 不删除、不自动发布：不自动删除远端资源，高风险未逐项确认不进计划 | **部分达成**：不进计划的门禁在并验证过；第一百七十二轮起「部分失败模拟」那一支有了端到端记录——第二个动作失败后第三个动作连命令都没发出、已完成的如实列出、失败不重发、状态行查不到「全部核对」。但「不删除」仍是能力缺失式保证（原生根本没有删除入口），且整条链对真实 Apifox 未跑过，故留空框 | `SyncSelectionTests.Selectable_OnlySyncableStatusesAndOnline`、`CompatEntriesTests.ResultHeadline_FailedKeepsWriteClosedAndNeverClaimsPassed`、`ApifoxHelper.Tests/MockApifoxCliTests.cs` | 不经界面（本地 mock CLI 端到端 + 门禁用例） |
 | [x] | SHARED-9 本地安全：只监听回环并校验 Host/Origin/会话令牌；凭据加密不入日志与导出；共享报告脱敏 | 达成（脱敏为单一编译口径；密钥按配置 ID 存 DPAPI，导出天然不含凭据——Linux 侧以真实异常路径验证拒绝） | `ErrorCopyTests.Redactor_IsSharedCompiledIntoTheTestProject`、`ProfileStoreTests.Save_RejectsEmptyName_WithFieldId`（保存校验与不落半份状态） | 不经界面 |
 
 ## G-D5 真机复核清单（可勾选）
@@ -54,7 +54,7 @@
 | [ ] | 3. 多显示器混合缩放：主屏 100% + 副屏 200%，先记下 `DpiScale.ScaleFactor()` 在创建那一刻报出的因子与该屏客户区宽，再把「新建配置」对话框从主屏拖到副屏 | 拖动之后窗体尺寸、控件宽、说明行可用宽**有没有重算**。当前实现已知**不重算**（缩放只在构造时按主屏屏幕 DC 做一次，没接 `WM_DPICHANGED`，见 `Desktop/Native/DpiScale.cs` 与 `docs/DESIGN.md` §6「DPI 适配」挂账第 1 档）——**本轮先量，不改** | `docs/evidence/real-machine/mixed-dpi/`：拖动前后各一张同屏截图 + 一行数字（因子、客户区宽、说明行宽） | 量到「不重算」即按实记录，§6 的挂账保持不删；若竟量到「重算了」，说明框架自动缩放回来了，`DpiScaleTests.TheRejectedAutoScalePath_StaysOutOfTheCode` 那一条的前提要重新核，并写清是哪一档触发的 |
 | [ ] | 4. 运行中改系统缩放：开着「新建配置」对话框，把系统缩放从 100% 改到 200% 且不重开窗口，再新建一屏对话框与它对照 | 已开着的那一屏是否跟随、新建的那一屏用的是新因子还是旧因子（同一挂账的第 2 档）。**同样先量，不改**——补它要动窗体消息处理，属改行为 | `docs/evidence/real-machine/scale-change/`：两屏对照截图 + 两屏各自的因子与宽度数字 | 量到什么写什么。两屏数字相同即说明缩放被缓存到了进程级（与 `Desktop/Native/DpiScaleFactor.cs` 的按屏取数不符），要当成缺陷记下来，不当成通过 |
 | [ ] | 5. 真机字体度量：`RunFontStackRuntime` 的等价手工核对——在真实渲染下看「计数行 / 源码路径 / 差异文本」三类文字与正文是否**明显不同字体**（等宽栈生效，`Desktop/Native/FontStack.cs`，回退顺序由 `TypographyTests.FontStack_MatchesDesignDocOrder` 钉住） | 三处取字体是否同一份实际渲染名（界面控件、进程默认字体、对话框），以及数字列在内容变化时会不会左右跳 | `docs/evidence/real-machine/fonts/`：一张含计数行与差异文本的放大截图 + 一行「渲染出的字体名」 | 三类文字肉眼可辨为等宽、且数字列在筛选/刷新后不横向漂移即通过。若真机没装 Segoe UI 而落到回退项，把**实际命中的那一项**写进本节（字体栈是有序回退，找到即停），不写成「字体不对」 |
-| [ ] | 6. SHARED-3/4/7/8 端到端（写入安全红线，本仓从未有过一条端到端记录）：先由用户指定**专用测试 Apifox 项目 + 分支 + 可写范围**（谁授权、项目 ID、分支名写在下面第一行空白处），对 1–2 个接口走完「差异检查 → 生成计划 → 确认 → 写入 → 回读核对 → 部分失败模拟」 | 逐条量：只写了计划内资源（SHARED-3，勾选口径 `SyncSelectionTests.SyncableNow_ExcludesPendingAndNonSyncable`）、执行前重读并核对指纹（SHARED-4，`JournalTests.PlanLines_CarryTheFingerprintAndTheFinalStatus`）、创建防重与 ID 回绑（SHARED-7）、未确认的高风险项不进计划且没有任何删除动作（SHARED-8，`CompatEntriesTests.ResultHeadline_FailedKeepsWriteClosedAndNeverClaimsPassed`） | `docs/evidence/real-machine/apifox-write/`：计划 JSON、任务 `journal.jsonl`、写入前后的远端详情快照各一份 | **部分失败模拟那一支是硬门**：制造一个必然失败的动作后，后续写入必须停住、已完成的如实列出、状态行不得出现「全部成功」（`SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess`）。任一条不成立即整条判失败并写清是哪一条；跑通之后才允许把验收表的 SHARED-3/4/7/8 从 `[ ]` 改成 `[x]`，并同步改本节结论 |
+| [ ] | 6. SHARED-3/4/7/8 端到端（写入安全红线。**本地那一半第一百七十二轮已经常驻本仓**：`ApifoxHelper.Tests/MockApifoxCliTests.cs` 十条在真实进程边界上把这四件事跑过并挡住变异；这一条要量的是剩下的那一半——真实 Apifox 服务端）。先由用户指定**专用测试 Apifox 项目 + 分支 + 可写范围**（谁授权、项目 ID、分支名写在下面第一行空白处），对 1–2 个接口走完「差异检查 → 生成计划 → 确认 → 写入 → 回读核对 → 部分失败模拟」 | 逐条量：只写了计划内资源（SHARED-3，勾选口径 `SyncSelectionTests.SyncableNow_ExcludesPendingAndNonSyncable`）、执行前重读并核对指纹（SHARED-4，`JournalTests.PlanLines_CarryTheFingerprintAndTheFinalStatus`）、创建防重与 ID 回绑（SHARED-7）、未确认的高风险项不进计划且没有任何删除动作（SHARED-8，`CompatEntriesTests.ResultHeadline_FailedKeepsWriteClosedAndNeverClaimsPassed`）；本地那四条的对照基线在 `ApifoxHelper.Tests/MockApifoxCliTests.cs`，真机量到与它不一致的地方逐条写清是服务端行为不同还是产品缺陷 | `docs/evidence/real-machine/apifox-write/`：计划 JSON、任务 `journal.jsonl`、写入前后的远端详情快照各一份 | **部分失败模拟那一支是硬门**：制造一个必然失败的动作后，后续写入必须停住、已完成的如实列出、状态行不得出现「全部成功」（`SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess`）。任一条不成立即整条判失败并写清是哪一条；跑通之后才允许把验收表的 SHARED-3/4/7/8 从 `[ ]` 改成 `[x]`，并同步改本节结论 |
 | [ ] | 7. 冒烟器在真机跑一次：同一份发布产物执行 `ApifoxHelper.Smoke.exe --report=<路径>`（`ApifoxHelper.Smoke/Program.cs`），与 wine 那三档逐段对照 | 报告总通过/失败数、每一段的段名是否都在（段标题带 `[RunXxx]`）、与 wine 是否出现**同一段的判断不同** | `docs/evidence/real-machine/smoke/`：真机报告原文一份 | 退出码 0 且 0 失败即通过；段数与通过数**不要求**等于 wine 的 135（那是模拟器的数，见「Windows 真机 / wine 模拟器验证清单」B 段最后一项），要求的是同一段在两处判定一致。不一致的段名列进本节并逐条查到底层 |
 
 **第 6 条的前置信息（真机到位前由用户填，空着就是「还没授权，不许写」）**：授权人 ______；测试项目 ID ______；分支名 ______；可写范围（接口/模型清单）______。
@@ -1796,7 +1796,7 @@
 | --- | --- | --- |
 | 差异化 | 导入按源文件重写一遍，人工写好的说明会被覆盖；这里按比对出的差异改，已有说明与源里的说明不一致时停下让你选边，写前有可核对的预览，写完立即回读核对。 | `README.md`「写入安全」；`docs/NOTES.md`「本仓验收口径（可勾选）」；`SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess` |
 | AI 必要性 | 模型只在「生成草稿」一处出现；规则提取、材料导入、手工填写三条替代路径任走一条，整条链路照样走完，生成结果一律逐条审阅后才接受。 | `README.md`「使用流程」；`docs/NOTES.md`「原生切片「注释候选审阅」（2026-11-07 第四轮）」；`GenerationEntriesTests.Modes_ThreeValuesInFrozenPageOrder` |
-| 可经营 | 本地一个程序，没有服务端与托管数据；资料目录可整体搬走；九条写入安全不变量在原生层一条没放松，端到端写入仍未做。 | `README.md`「本地资料」；`docs/NOTES.md`「本仓验收口径（可勾选）」；`docs/NOTES.md`「G-D5 真机复核清单（可勾选）」 |
+| 可经营 | 单机个人使用：配置可导出（不含凭据）、任务资料按目录归档搬走、报告可直接交接；不做多用户与跨机同步，密钥不随资料迁移。 | `README.md`「本地资料」；`docs/NOTES.md`「可经营清点（第一百七十二轮）」；`ProfileAnalysisTests.Export_BytesAreUtf8WithoutBomAndRoundTrip` |
 | 排版归因 | 中文标点不落行首，是浏览器默认排版与样式表合起来的结果，不是某一条属性的功劳；本机实测四种取值排版相同，我们没把可读性押在一条声明上。 | `docs/NOTES.md`「真浏览器布局门（HTML 折行）」；`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo` |
 
 ## 说明行量测按缩放档收口 + 降级答辩脚本（第一百六十二轮，简报 P0-1 / P0-2）
@@ -2007,3 +2007,146 @@
 - **真机 0 台事实（每轮重述）**：本轮新增的是答辩口径一块与一条挂账门，仍不是 Windows 真机界面证据；G-D5 在验收表仍留 `[ ]`，真机复核清单 7 行全部 `[ ]`，到期日 **2026-11-20**，责任人为答辩负责人。多显示器混合缩放与运行中改系统缩放两档仍挂账未动。
 - **简报那句「下一轮必须有一件产品侧的事」本轮仍欠着（如实记，不写成已满足）**：简报同时给了「只做 P0-1 与 P0-2、不新增产品功能」，本轮严格照那句收口，没有替自己发明产品侧的事；P1-1（`HtmlWrapTests` 补 Save 档视口）与 P1-2（`CopyRules` 三处封闭清单加新增文案者指引）都未动、出处在原。G-D5 一旦到位，下一轮直接进「G-D5 真机复核清单」第 1–7 条——那才是本仓真正的下一个里程碑。
 - **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**（Chromium 与 node 都是本机既有）；未新增产品功能、未新增对话框、未动视觉令牌与间距档位、未动服务层业务语义与九条写入安全不变量。
+
+## 本地 mock CLI 端到端（写入安全红线）
+
+> **这一节是什么**：SHARED-3/4/7/8 四条红线在验收表里一直留 `[ ]`，理由每轮都一样——「端到端从未跑过」。
+> 第一百六十八轮起「G-D5 真机复核清单」第 6 条把这件事写成真机到位第一天的动作单，可那要等机器。
+> 这一节做的是**不需要等机器的那一半**：把「确认 → 写入 → 回读核对 → 部分失败」整条链在本机跑成一次
+> 可复跑、常驻仓库、有断言名的记录。它顶替不了真机与真实 Apifox，但从此「没跑过」这句话要改成
+> 「本地跑过，真实服务端没跑过」——这两件事差多少，这一节逐条写清。
+>
+> **机械门**：`ApifoxHelper.Tests/MockApifoxCliTests.cs`（12 条：第一百七十二轮 10 条 + 第一百七十三轮 2 条）
+> + 夹具 `ApifoxHelper.Tests/MockCliRun.cs`
+> + 脚本 `ApifoxHelper.Tests/MockApifoxCli.js`。复跑：`dotnet test ApifoxHelper.Tests --filter FullyQualifiedName~MockApifoxCliTests`。
+>
+> **第一百七十三轮补的那两支**：`Shared2_StaleConfirmedHash_IsRefusedBeforeAnyCliCall`（确认哈希过期后执行必须被拒绝，
+> 且拒绝发生在任何一条 CLI 命令发出之前——`Sync/SyncExecutor.cs:22` 这条绑定此前整仓零断言）与
+> `Boundary_TheNativeConfirmPathRunsThisVeryChain`（原生壳那颗按钮调的就是这同一条链——不然上面所有的「端到端」
+> 都可能是在给一条用户不走的路径作证）。两支的变异实测见下面 M7 / M8。
+
+- **真实与假的分界（这是这一节唯一要紧的一句话）**：
+  - 真实——`Infrastructure/ProcessRunner.cs` 起真子进程；`Apifox/ApifoxCli.cs` 真解析「前导说明行 + 单个完整 JSON 对象」，
+    退出码含义与 `404000`「不存在」都按已核实协议判；`Sync/SyncExecutor.cs` **一行未改**；任务目录、`plan.json` 落盘、
+    `journal.jsonl`、`plan-payloads/`、`remote-before/`+`remote-after/` 快照、基线、模型映射、项目/分支锁文件、
+    写入兼容登记，全部是产品自己的实现在真实临时目录里跑出来的。
+  - 假——只有 Apifox 服务端。接缝本来就存在：CLI 入口路径来自配置（`ApifoxTarget.NodePath` 与 `CliScriptPath`），
+    生产填 `node` + `cli.js`，这里填 `node` + `MockApifoxCli.js`，走的仍是同一条 `Resolve → RunAsync → Parse`。
+    **产品源码零改动**；mock 不联网（`Boundary_TheMockStaysInsideTheTestProject` 当场核：脚本里没有 `http`、
+    产品源码 100+ 个 `.cs` 里没有它的名字）。
+- **跑出来的四条（对应简报 P0-1 要求的四条）**：
+  1. `Shared3_WritesHitExactlyThePlannedResources`：远端 3 个接口、计划 2 个 → mock 记下的写入正好 2 次、
+     目标就是那两个 ID，**计划外那个连命令都没发到过**（`endpoint.get` 也没有它），字节快照逐字节相同；
+     两个计划内资源写后回读，说明改到位、`script` 与 `mock` 两项受保护设置仍在。审计行数 6（计划首尾各 1 + 每动作 2）。
+  2. `Shared4_RemoteChangedAfterPlanIsBuilt_ConflictsAndNeverOverwrites`：计划确认后把远端改掉 → 执行前重读确实发生、
+     指纹不符 → 动作判 `conflict`、文案是「目标在确认后被修改，计划过期，未覆盖新修改。」、**一个写入字节都没发出**、
+     远端保持别人改过的那一版。
+  3. `Shared7_CreateWithoutReturnedId_BindsTheIdentityFromReadback` 与 `Shared7_SameIdentityAlreadyRemote_NeverCreatesTwice`：
+     创建不回 ID 时按「方法 + 精确路径」回读唯一一条、绑上 `CreatedId` 并核对通过，重新核对（只读）同一份远端仍判通过；
+     同身份已存在时**创建命令一次都没发出**，远端同身份仍只有一条。
+  4. `Shared5_SecondActionFails_ThirdNeverReachesTheCli`：第二个动作失败 → 第三个动作连命令都没发出
+     （`endpoint.update` 总共 2 次）、已完成的如实列出（`verified=1 / failed=1 / notRun=1`）、失败那一次**没有重发**、
+     计划 `partial`、任务消息是「存在未完成动作，详见同步结果。」，`SyncExecution.ResultText` 里查不到「全部核对」。
+  5. 外加三支不是简报列的、但不成立则上面四条都不可信：`Protocol_TheMockSpeaksTheRealCliShape`（仪器先证明自己看得见：
+     版本号读得到、不存在确实是 `404000`、未知命令按退出码 3、JSON 之后多一行就判「输出无法可靠解析」）、
+     `Shared2_StaleConfirmedHash_IsRefusedBeforeAnyCliCall`（确认之后计划被重新生成 → 拿旧哈希执行被拒 `409`
+     「确认的计划与当前计划不一致，请重新预览。」，**连 `endpoint.get` 都没发出去**、远端逐字节不动、
+     计划状态停在 `awaitingConfirm` 没被推进到 `executing`）与
+     `Shared3_ProtectedSettingsLost_VerifyFailsAndNeverClaimsSuccess`（平台没保住受保护设置时，回读核对抓得住，判 `verifyFailed`）。
+- **变异验证实测可红 8 处（M1–M8，逐条红在该红的那一条上，全部按原字节还原一致）**：
+  ① `UpdateEndpointAsync` 的目标 ID 改成 `RemoteId + 1` → SHARED-3 那条红（连带 SHARED-5 与受保护设置两支）；
+  ② 指纹核对 `if (NativeUtil.Hash(data) != action.BeforeHash)` 前加 `false &&` → **只有** SHARED-4 那条红；
+  ③ 创建前同身份复查 `if (existing is not null)` 前加 `false &&` → 只有「同身份已存在」那条红；
+  ④ 删掉「未回 ID 时按身份回读绑 ID」那一行 → 只有「按身份回绑」那条红；
+  ⑤ 失败后 `stop = true` 改成 `stop = false` → 只有部分失败那条红；
+  ⑥ 受保护投影比较前加 `false &&` → 只有受保护设置那条红。
+  M2–M6 各自只红一条，说明这五条断言判的是五件不同的事，不是同一句话的五个影子。
+  ⑦ `SyncExecutor.cs:22` 的哈希绑定 `if (plan.Hash != planHash)` 前加 `false &&` → **只有** `Shared2_StaleConfirmedHash_…` 红；
+  ⑧ 原生壳 `var hash = plan.Hash;` 改成 `var hash = plan.Hash + "";`（运行结果相同、但不再引用计划自己那一串）
+     → **只有** `Boundary_TheNativeConfirmPathRunsThisVeryChain` 红。
+  **M1–M6 在第一百七十三轮被独立复跑过一次**（红名逐条与上面记录一致：M1 红 3 条、M2–M6 各红 1 条），
+  这一条写在这儿是因为「变异实测」这种记录如果只有作者本人信得过，它和没做过只差一步。
+- **本轮第一次真跑抓到的是夹具自己的缺陷（产品代码一行未动）**：夹具落 `remote.json` 用了 `File.WriteAllText`，
+  它默认带 **UTF-8 BOM**，mock 的 `JSON.parse` 在第一行就崩，于是 8 条全红、消息里却显示成「CLI 失败」。
+  改成本仓既有的 `FileStore.WriteText`（UTF-8 无 BOM，与报告导出、补丁导出同一份口径）后 10 条全绿。
+  这条记在这儿有两个理由：① 端到端跑起来的第一批红多半在仪器与被测物之间，不在被测物里——把它写成账而不是悄悄改掉；
+  ② 「无 BOM」这条口径此前只在导出面有门，夹具这一面靠真实解析器自己撞出来。
+- **这一节不能说明什么（每条都按这个边界读）**：真实 Apifox 是否接受这些写入仍未验证——受保护设置在整段替换下
+  能不能保住、创建成功回不回 ID、错误与限流的完整表现形式，方案 §4.3 至今按「未知」处理，本节的 mock 只是
+  **按已核实的协议形状回答**，它对「保住」与「不回 ID」的回答都是人为设定，不构成任何一方的证据。
+  所以验收表 SHARED-3/4/7/8 **仍留 `[ ]`**，关闭它们的路径仍是「G-D5 真机复核清单」第 6 条（要授权人、
+  测试项目 ID、分支名、可写范围四样实物）。同理：本条链完全不经 WinForms，与 GUI 真机观感无关。
+- **挂账登记不分路径都要核**（`RegisteredGap_NamesTheLastLocalRun`）：node 长期在位时降级支永远不会被执行，
+  那行「上一次真跑」被写坏也会一路绿到哪天真的没有 node。判三件事——那一行在、写成「第X轮 · YYYY-MM-DD」、
+  这一对轮次与日期能在本文件里指到一条真实的 `## ` 轮次标题；这条与浏览器探针那一族同一份纪律（第一百七十一轮立的）。
+- **node 缺席时这一族门怎么降级（与浏览器探针同一份纪律：没跑不许算成跑过）**：查找顺序
+  `APIFOXHELPER_NODE → PATH(node|nodejs)`（与 `ChromeLayout.NodePath` 同一处落点，换机器设一次两处都生效）。
+  本机没有 node 时，12 条用例退成核「这一节的标题在、上面那句查找顺序原样在、下面那一行真跑登记原样在」，
+  缺任一项即红——红在「账没了」，而不是绿在「没跑也算过」。
+- **降级支不是纸上条款（第一百七十三轮真跑过，不必等一台没装 node 的机器）**：把 `PATH` 剥成一个不存在的目录、
+  取消 `APIFOXHELPER_NODE`、按绝对路径调 `dotnet test --no-build`，node 就查不到，12 条全绿走的就是降级支
+  （耗时 101ms，与真跑 1s 的量级差别本身就是「子进程一次都没起」的旁证）。再把下面那一行真跑登记删掉重跑同一条命令
+  → **9 条红**（8 条红线/协议支红在 `RequireNodeOrRegisteredGap` 里，加 `RegisteredGap_NamesTheLastLocalRun` 自己）；
+  把轮次改成没有过的「第九百九十九轮」再跑 → 红在配对那一句上（「登记的『第九百九十九轮 · 2026-11-11』在 NOTES 里
+  没有以……出现的轮次标题」）。两次实验之后 `docs/NOTES.md` 按原字节还原、`git status` 与还原前一致。
+- **上一次本地 mock CLI 端到端真跑**：第一百七十三轮 · 2026-11-11（12 条全绿；node 为本机 `/usr/bin/node`，
+  本轮另按上面那条把「本机没有 node」那一支也真跑了一遍）。
+  这一行是降级支的账本：隔很多轮再读「本机没跑」那一句，与「上周刚跑过」在纸面上必须能分辨出来。
+
+## 可经营清点（第一百七十二轮）
+
+> **这一节是什么**：`## 初审答辩口径（真机不可得时）` 第三块讲「可经营」，但那 56 个字讲不出「经营个什么、
+> 入口在哪、哪些做不到」。这一节把「可经营」在本产品里的**产品侧对应物**逐条列出来：每项给入口文件与断言名，
+> 没有入口的如实写「无入口」，判定按源码与用例，不按印象。**不新增功能、不改任何判定。**
+
+| 项 | 产品侧对应物 | 入口文件 | 断言名 / 无入口 |
+| --- | --- | --- | --- |
+| 配置导出（不含凭据） | 项目配置对话框的「导出配置（不含凭据）」ghost：导出已保存配置，未保存改动不导出；文件名与字节与 Web 下载同一份口径，配置对象本身不含密钥字段 | `Profiles/ProfileExport.cs`、`Desktop/Native/ProfileFormLayout.cs` | `ProfileAnalysisTests.Export_FileNameAndContentType`、`ProfileAnalysisTests.Export_BytesAreUtf8WithoutBomAndRoundTrip` |
+| 配置导入 | **无入口**：导出的 JSON 只能靠手工放回 `profiles/` 目录，或在新机逐项重填。本轮不新增（简报口径：不做新功能发明），列为「团队共用」需求出现时才立项的第一项 | `Infrastructure/FileStore.cs`（目录约定） | 无入口（如实标） |
+| 资料目录位置与整体搬走 | 七个子目录一处定义（`profiles/ mappings/ baselines/ tasks/ locks/ compat/ credentials/`）；`--data` 与环境变量可改根目录并解析为绝对路径；原生壳「文件 → 打开资料目录」直达；「关于」显示资料目录本身 | `Infrastructure/FileStore.cs`、`Desktop/Native/NativeShellForm.cs`、`Desktop/Native/NoticeText.cs` | `LaunchOptionsTests.DataFlag_OverridesEnvironment_AndIsResolvedToFullPath`、`LaunchOptionsTests.Data_FallsBackToDefaultFolder_WhenEnvironmentUnset`、`NoticeTextTests.AboutDataDirLine_IsCaptionPlusPath` |
+| 任务资料可归档 | 一个任务 = `tasks/<id>/` 一个自包含目录（`task.json symbols.json evidence.json diff.json decisions.json plan.json plan-payloads/ journal.jsonl remote-before/ remote-after/ report.md handoff.md`）；整目录复制即归档，无外部数据库 | `Tasks/TaskFiles.cs`、`Tasks/JournalLines.cs` | `JournalTests.EveryEventLine_HasUniqueJsonNames`、`JournalTests.PlanLines_CarryTheFingerprintAndTheFinalStatus` |
+| 交接物（报告） | Markdown / HTML / JSON / 前端交接说明四格式，同一份渲染口径，任务目录留副本；报告脱敏与界面同一份 | `Reports/ReportExportService.cs`、`Reports/ReportFormats.cs` | `ReportExportTests.TryDescribe_MatchesWebDownloadCaliber`、`ReportExportTests.TryDescribe_ReturnsNullForUnknownFormat` |
+| 跨机器迁移：可迁与不可迁 | 可迁 = 配置 JSON + 任务目录 + 报告；**不可迁 = 模型服务密钥**（DPAPI 按当前用户在本机加密，不导出、不随目录走，新机需重新录入密钥并重新运行写入探测登记） | `Profiles/CredentialStore.cs`、`Desktop/Native/GenerationEntries.cs` | `GenerationEntriesTests.KeyHint_StatesDpapiStorageAndNeverShownOrExported`、`GenerationEntriesTests.KeyNeedsProfile_GatesNewProfiles` |
+| 凭据边界 | 工具不读取 Apifox CLI 自己保存的令牌；凭据不进日志、报告与导出包；脱敏是一份编译进两边的单一口径 | `Apifox/ApifoxCli.cs`、`Infrastructure/Redactor.cs` | `ErrorCopyTests.Redactor_IsSharedCompiledIntoTheTestProject` |
+| 多用户与并发边界 | **无入口且按定位为不做**：第一版按单人本机使用设计，不建用户、角色与审批系统；本机并发只有进程内 `KeyedLocks` + 项目/分支锁文件，不承诺跨客户端原子性（README「已知限制」） | `Infrastructure/Core.cs`（`KeyedLocks`）、`Sync/SyncExecutor.cs`（锁文件） | 无入口（按方案 §1.2 与 §8.4 为不做，非缺口） |
+| 服务端与托管数据 | 无：本地 HTTP 服务只监听回环并校验 Host / Origin / 进程级会话令牌，且它只是过渡壳的实现底座，不是用户主产品 | `Api/HelperHost.cs`、`Infrastructure/LocalSecurity.cs` | 无仓内断言（属过渡壳，原生主路径不经它；如实标） |
+
+- **结论一句话（可经营 = 什么、不是什么）**：本产品的「可经营」= **单机个人使用 + 配置可导出（不含凭据）+
+  任务资料可按目录归档与搬走 + 报告可直接交接**；**不含配置导入入口、不含多用户与跨机同步，密钥不随资料迁移**。
+  这是产品定位（`docs/方案.md` §1.2「第一版按单人本机使用设计」、§8.9「凭据由 DPAPI 加密保存在本机，
+  不进入日志、报告与导出包」），不是待补的缺口。
+- **如果将来要变成「团队共用」**，第一对缺口是明确的、要一起做才成立：**配置导入入口**（否则新机只能重填）
+  与**密钥的新机登记路径 + 写入兼容重新探测**（否则配置进来了也写不了）。本轮不发明这两样，只把它们登记在这儿。
+
+## 交付轮「本地 mock CLI 端到端把四条红线第一次跑成仓内记录 + 可经营落成有入口没入口的清点」（2026-11-11 第一百七十二轮，简报 P0-1 / P0-2）
+
+- **接续前确认**：开局工作树**干净**，HEAD（30cb78f，第一百七十一轮）；`ApifoxHelper.csproj`、`ApifoxHelper.Tests`、`ApifoxHelper.Smoke` 三工程构建 0 警告 0 错误，`dotnet test` **2439 用例全绿**，基线成立。上一轮的原生桌面切片状态：近三轮（f3fb563 之后）产品源码零改动，`Desktop/Native/` 无未提交、未登记的半成品——本轮**不需要接续别人的未完成工作**，也不去动那片界面。
+- **本轮定位**：严格按简报「只做 P0-1 + P0-2，禁止再堆新门禁」执行。P0-1 是**产品能力侧**的一次真实切片（端到端证据），不是又一轮门；本轮新增的三条非红线断言（协议自检、mock 边界、无复刻检查）都是这条链自身的可见性条件，不是加门。
+- **已交付 ①（P0-1，harden）SHARED-3/4/7/8 第一次有仓内端到端记录**：`ApifoxHelper.Tests/MockApifoxCliTests.cs`（10 条）+ 夹具 `MockCliRun.cs` + 假服务端 `MockApifoxCli.js`。真实的是子进程、输出解析、`SyncExecutor`、任务目录与落盘全套；假的只有 Apifox 服务端。红线四条共六支（SHARED-3 两支、SHARED-4 一支、SHARED-7 两支、SHARED-5 一支），加协议自检一支、边界检查两支、挂账登记一支——**产品源码一行未改**（`git diff HEAD -- '*.cs' ':!ApifoxHelper.Tests'` 为空）。细节、六处变异实测与这一条链不能说明什么，全部在上面那节「本地 mock CLI 端到端（写入安全红线）」。
+- **已交付 ②（P0-2，clarify）可经营清点**：新增「可经营清点（第一百七十二轮）」一节，九项逐条给**入口文件 + 断言名**或**如实标「无入口」/「无仓内断言」**：配置导出有（`Profiles/ProfileExport.cs` + 两条导出断言）、任务目录与资料目录位置有（`Infrastructure/FileStore.cs`、`--data`、「文件 → 打开资料目录」、「关于」）、报告交接有、密钥不可迁移有、**配置导入无入口**、多用户与跨机同步按定位为不做、本地服务的访问控制属过渡壳无仓内断言。结论一句话写在同一节末：可经营 = 单机个人使用 + 配置可导出 + 任务资料可归档搬走 + 报告可交接，**不含多用户/多机同步，密钥不随资料迁移**；要转成「团队共用」的第一对缺口（配置导入入口 + 密钥新机登记与重新探测）只登记、不发明。
+- **答辩口径第三块跟着落地**：`## 初审答辩口径（真机不可得时）` 的「可经营」一块（59 字）出处改为指向这一新节，并配一条真实存在的导出断言 `ProfileAnalysisTests.Export_BytesAreUtf8WithoutBomAndRoundTrip`——由 `DefenseNarrativeTests.Narrative_EveryBlockCitesASectionThatActuallyExists` 既有机制自然覆盖（小节名不是标题即红、断言名不存在即红），本轮没有为它新增一条门。
+- **验收表四行的结论改写**：SHARED-3/4/7/8 的「端到端从未跑过」改成「本地跑过、真实服务端没跑过」，**空框一个没勾**；SHARED-5 行只补实物引用。`G-D5 真机复核清单` 第 6 条改成「本地那一半已在仓内，真机当天只量真实服务端那一半，并把本地结果当对照基线」。
+- **测试 2439 → 2449 用例**（+10），既有断言一条未削弱、未删除、未放宽。
+- **验证状态**：Linux 三工程 `dotnet build` 0 警告 0 错误，`dotnet test` **2449 全部通过**；本轮这条链**不经 WinForms**，因此它跑绿与 GUI 缺口是两件事，不许互相借光——**Windows 真机界面证据仍为 0 台**（本机缺 `Microsoft.WindowsDesktop.App` 运行时），G-D5 与三档 DPI 截图仍 `[ ]`，到期日 **2026-11-20**。
+- **本轮未做（如实挂账）**：① 简报 P1-1（降级答辩脚本补「混合缩放不重算」「运行中改缩放不跟随」两支正面口径）与 P1-2（`.winecheck/demo.sh` 末尾打印「距上次真浏览器量测 N 轮」）按简报口径**延后**，未动；② P2-1（CI 是否有 Chrome）与 P2-2（CDP `Runtime.evaluate` 受 Chrome 版本影响）登记不做；③ 真实 Apifox 写入、真实模型服务、真机 GUI 三项仍未验证，理由与关闭路径见上两节。
+- **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**（node 与 dotnet 都是本机既有；测试新增的包引用 `Microsoft.Extensions.Logging.Abstractions` 只是把主工程经由 AspNetCore 框架引用已有的类型显式带到测试工程，缓存里有，未联网取包）；未动视觉令牌、九条写入安全不变量与服务层业务语义；未新增产品功能、对话框或界面代码。
+
+## 交付轮「把这条端到端链的作用范围钉到用户实际点击的那颗按钮 + 独立复跑第一百七十二轮的每一条自述」（2026-11-11 第一百七十三轮，简报 P0-1 收尾）
+
+- **接续前确认（本轮与前几轮不同的一件事）**：开局工作树**不干净**——`git status` 是 `ApifoxHelper.Tests/ApifoxHelper.Tests.csproj` 与 `docs/NOTES.md` 两个改动，加三个未入库的新文件（`MockApifoxCliTests.cs`、`MockCliRun.cs`、`MockApifoxCli.js`），HEAD 仍是 30cb78f（第一百七十一轮）。这正是第一百七十二轮那一整片 P0-1 + P0-2 的成品：**写完了、跑过了、但没提交**。按「不覆盖未完成工作」的口径，本轮**一行未重写它的实现**，先做两件事：① 把它自述的每一项证据在自己机器上重跑一遍（下表）；② 只在这条链真正缺的那一格上加东西。`Desktop/Native/` 无未提交半成品，界面那片本轮没动。
+- **独立复跑结果（第一百七十二轮记录里最容易被当成「写了就算数」的四件事，逐条看到实物）**：
+  | 它自述 | 本轮实测 |
+  | --- | --- |
+  | 「10 条全绿」 | 复跑一致：`--filter FullyQualifiedName~MockApifoxCliTests` → 10 通过 / 0 失败；全量 2449 通过 / 0 失败 |
+  | 「六处变异实测可红（M1–M6）」 | **逐一亲手注入并复现**，红名与记录逐字一致：M1 红 3 条（`Shared3_WritesHitExactlyThePlannedResources` + `Shared5_…` + `Shared3_ProtectedSettingsLost_…`）、M2 只红 `Shared4_…`、M3 只红 `Shared7_SameIdentityAlreadyRemote_…`、M4 只红 `Shared7_CreateWithoutReturnedId_…`、M5 只红 `Shared5_…`、M6 只红 `Shared3_ProtectedSettingsLost_…`；每次注入后按 `/tmp` 备份的字节还原，`git status` 与注入前一致 |
+  | 「node 缺席时退成核账本」 | 降级支**真跑了**：`PATH` 剥成不存在的目录 + 取消 `APIFOXHELPER_NODE` + 绝对路径调 `dotnet test --no-build` → 10 条全绿、耗时 101ms（真跑是 1s 量级，子进程一次都没起） |
+  | 「产品源码零改动」 | `git diff HEAD --stat -- '*.cs' ':(exclude)ApifoxHelper.Tests'` 为空；三工程 `dotnet build` 各 0 警告 0 错误；新引用的 `Microsoft.Extensions.Logging.Abstractions 8.0.2` 确认已在 `~/.nuget/packages` 里，未联网取包 |
+- **本轮补的那一格（这条链自己的作用范围，不是新门禁）**：读 `Desktop/Native/SyncPreviewDialog.cs:715-718` 才看清——原生壳「确认同步」在点击那一刻取 `var hash = plan.Hash;`，把它交给 `_executor.ExecuteAsync(_taskId, hash, job)`。这句话有两个后果：① `Sync/SyncExecutor.cs` 第 22 行那条「确认的计划与当前计划不一致就拒绝」是**用户路径上的真实门禁**，而全仓对它的断言数是 **0**（`grep -rn "ExecuteAsync" ApifoxHelper.Tests/*.cs` 只有夹具那一处调用，没有任何一支断言判它）；② 第一百七十二轮那十条证明的「只写计划内 / 指纹不符就停 / 失败即停」，如果原生那颗按钮走的不是同一个方法，整套端到端就在给一条没人走的路径作证。两支新用例把这两格补上：
+  - `Shared2_StaleConfirmedHash_IsRefusedBeforeAnyCliCall`：确认 → 计划被另一处重新生成（哈希变了）→ 拿**旧哈希**执行 → 断言 `UserException` 的 `StatusCode == 409` 与那句原话、`WriteCalls()` 为空、`endpoint.get` 计数为 0（拒绝发生在加锁读计划那一刻，连 CLI 版本都没去问）、远端逐字节不动、落盘计划停在 `awaitingConfirm` 没被推进到 `executing`。夹具为此把 `Execute(SyncPlan)` 拆成委托 `ExecuteWithHash(string)`——**两条路径一份实现**，不存在「测试专用的那条」。
+  - `Boundary_TheNativeConfirmPathRunsThisVeryChain`：那颗按钮调的是 `_executor.ExecuteAsync(_taskId, hash, job)`、传的是 `plan.Hash`、且这一层自己一次都不直接碰 CLI 写入（`UpdateEndpointAsync` / `CreateEndpointAsync` / `UpdateSchemaAsync` / `CreateSchemaAsync` / `Process.Start` 在该文件里计数为 0——本轮实测各 0 处，写入边界的单一落点仍在服务层）。
+- **两支新用例的变异实测（M7 / M8，各只红自己）**：M7 在第 22 行的 `plan.Hash != planHash` 前加 `false &&` → 只红 `Shared2_StaleConfirmedHash_…`；M8 把原生壳改成 `var hash = plan.Hash + "";`（运行结果完全相同、但不再引用计划自己那一串）→ 只红 `Boundary_TheNativeConfirmPathRunsThisVeryChain`。两处都按 `/tmp` 备份还原，`git status` 与注入前一致。
+- **本轮第一次被门抓住的地方（记成账，不悄悄改掉）**：给 SHARED-2 行补证据时，我把两条新断言写成 `MockApifoxCliTests.Shared2_…` 这种「类名.方法名」形式，`AcceptanceChecklistTests.Checklist_EveryItemHasAnEvidenceSourceAndItResolves` 当场判红：「引用的断言不存在」。查解析规则（`AcceptanceChecklistTests.cs:93`）才看清它只认 `\bvoid\s+名称[(:]`——**`async Task` 形状的用例一律引不进去**。这不是那条门坏了，是这张表的引用面从来只覆盖 `void` 那一族；本轮按第一百七十二轮已经立的写法收口：证据列落到 `ApifoxHelper.Tests/MockApifoxCliTests.cs`，具体断言名写在结论列。同时登记一条**真实的口径缺口**（不在本轮动）：这张表目前无法把任何异步端到端断言落到「实物」级，未来若要让端到端用例进证据列，得先给那条正则补 `Task` 一支——本轮不改它，免得改完只剩作者自己信。
+- **测试 2449 → 2451 用例**（+2），既有断言一条未削弱、未删除、未放宽；`MockApifoxCliTests` 10 → 12 条，账本行「上一次本地 mock CLI 端到端真跑」随之推进到本轮。
+- **验证状态**：Linux 三工程 `dotnet build` 0 警告 0 错误，`dotnet test` **2451 全部通过**。本轮新增的两支同样**不经 WinForms**——它读的是原生壳的源码形状与真实进程边界上的行为，不是界面观感。**Windows 真机界面证据仍为 0 台**（本机缺 `Microsoft.WindowsDesktop.App` 运行时，GUI 主链路在本机不可验证，这一条如实挂着），G-D5 与三档 DPI 截图仍 `[ ]`，到期日 **2026-11-20**；真机到位当天按「G-D5 真机复核清单」第 1–7 条执行，第 6 条的对照基线就是这 12 条。
+- **本轮未做（如实挂账）**：① 简报 P1-1（降级答辩脚本补两支「真机量到问题」的正面口径）与 P1-2（`.winecheck/demo.sh` 打印「距上次真浏览器量测 N 轮」）仍未动、出处在原；② P2-1（CI 是否有 Chrome）与 P2-2（CDP `Runtime.evaluate` 受 Chrome 版本影响）登记不做；③ 真实 Apifox 写入、真实模型服务、真机 GUI 三项仍未验证，关闭路径见「本地 mock CLI 端到端（写入安全红线）」与「G-D5 真机复核清单」第 6 条；④ 上面那条「证据列只认 `void`」的口径缺口只登记不动。
+- **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖，未改任何产品源码**（两次变异注入都只在实验期间存在，均按备份字节还原并经 `git status` 与 `git diff HEAD -- '*.cs' ':(exclude)ApifoxHelper.Tests'` 核对）；未动视觉令牌、九条写入安全不变量与服务层业务语义；未新增产品功能、对话框或界面代码。
