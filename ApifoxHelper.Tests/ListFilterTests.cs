@@ -210,8 +210,9 @@ public class ListFilterTests
         Assert.Matches(@"(?m)^\s*var profiles = ListSort\.Order\(ListFilter\.Apply\(all, _filter\.Text, FilterFields\), _sortColumn, _sortDescending, SortKey\);", load);
         Assert.Matches(@"(?m)^\s*RefreshEmptyState\(\);", load);
         Assert.Matches(@"(?m)^\s*SetStatus\(ListFilter\.IsActive\(_filter\.Text\) \? \$""筛选出 \{profiles\.Count\} 个配置（共 \{all\.Count\} 个）"" : null, UiTokens\.Muted\);", load);
-        Assert.Matches(@"(?m)^\s*_emptyTitle\.Text = filtered \? ListFilter\.ProfileNoMatchTitle : EmptyTitle;", page);
-        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = filtered \? ListFilter\.ProfileNoMatchHint : EmptyHint;", page);
+        // 三态（第一百五十轮）：读取失败 > 筛到零行 > 还没有配置，失败态优先（ProfileLoadState 口径）。
+        Assert.Matches(@"(?m)^\s*_emptyTitle\.Text = _loadFailed \? ProfileLoadState\.FailureTitle : filtered \? ListFilter\.ProfileNoMatchTitle : EmptyTitle;", page);
+        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = _loadFailed \? ProfileLoadState\.FailureHint : filtered \? ListFilter\.ProfileNoMatchHint : EmptyHint;", page);
     }
 
     [Fact]

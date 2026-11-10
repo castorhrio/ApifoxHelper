@@ -46,6 +46,7 @@
     <Compile Include="..\Desktop\Native\ProfileAnalysis.cs" Link="Shared\ProfileAnalysis.cs" />
     <Compile Include="..\Desktop\Native\ProfileGridColumns.cs" Link="Shared\ProfileGridColumns.cs" />
     <Compile Include="..\Desktop\Native\ProfileFormLayout.cs" Link="Shared\ProfileFormLayout.cs" />
+    <Compile Include="..\Desktop\Native\ProfileLoadState.cs" Link="Shared\ProfileLoadState.cs" />
     <Compile Include="..\Desktop\Native\ScanOverview.cs" Link="Shared\ScanOverview.cs" />
     <Compile Include="..\Desktop\Native\EndpointTrace.cs" Link="Shared\EndpointTrace.cs" />
     <Compile Include="..\Desktop\Native\PropagationEntries.cs" Link="Shared\PropagationEntries.cs" />

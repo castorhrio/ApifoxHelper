@@ -39,6 +39,10 @@ internal sealed class ProjectsPage : UserControl, INativePage
     // 筛到零行时指向「清空筛选」——同一时刻只显示其中一个，实心主按钮始终只有工具栏那一个。
     private readonly Button _emptyCreate = Ui.Ghost(NewProfileLabel);
     private readonly Button _emptyClear = Ui.Ghost(ListFilter.ClearActionLabel);
+    // 读取失败态的唯一行动按钮（ProfileLoadState 口径）：失败时清单区不留旧行，给一句可操作文案与「重试」。
+    private readonly Button _emptyRetry = Ui.Ghost(ProfileLoadState.RetryLabel);
+    // 这一屏当前是不是读取失败态：三种状态（没有配置 / 筛到零行 / 读取失败）由它区分，行动按钮随之切换。
+    private bool _loadFailed;
     private readonly Label _status = Ui.StatusLine();
     private readonly Button _editButton;
     private readonly Button _probeButton;
@@ -115,9 +119,12 @@ internal sealed class ProjectsPage : UserControl, INativePage
         // 空态按钮是独立实例：同一控件不能同时挂在工具栏与空态面板上；动作与工具栏同一入口，不复制逻辑。
         _emptyCreate.Click += (_, _) => ShowDialog(null);
         _emptyClear.Click += (_, _) => ClearListFilter();
+        // 重试回到同一个读取入口（LoadProfiles），不复制一份读取逻辑：失败后点它等于再读一次。
+        _emptyRetry.Click += (_, _) => LoadProfiles();
         var emptyActions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = UiTokens.Bg };
         emptyActions.Controls.Add(_emptyCreate);
         emptyActions.Controls.Add(_emptyClear);
+        emptyActions.Controls.Add(_emptyRetry);
         _empty = BuildEmpty(emptyActions);
 
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Bg, ColumnCount = 2, Margin = new Padding(0) };
@@ -239,6 +246,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
             _editButton.Enabled = false;
             _probeButton.Enabled = false;
             RestoreSelection(selectedId);
+            // 读成功即退出失败态：清单区回到「有行」或「还没有配置」两态之一。
+            _loadFailed = false;
             _empty.Visible = profiles.Count == 0;
             _list.Visible = profiles.Count > 0;
             RefreshEmptyState();
@@ -247,12 +256,33 @@ internal sealed class ProjectsPage : UserControl, INativePage
         }
         catch (UserException ex)
         {
-            SetStatus(ex.Message);
+            ShowLoadFailure(ex.Message);
         }
         catch (Exception ex)
         {
-            SetStatus("读取配置失败：" + Redactor.Redact(ex.Message));
+            ShowLoadFailure(ProfileLoadState.FailureStatus(Redactor.Redact(ex.Message)));
         }
+    }
+
+    /// <summary>
+    /// 读取失败态（<see cref="ProfileLoadState"/> 口径）：清单区不留上一次的行——这一屏刚刚证明
+    /// 「磁盘上的配置读不出来」，继续显示旧行等于把不可信的内容当成现状；改为给一句可操作文案与
+    /// 唯一行动按钮「重试」（动作回到 <see cref="LoadProfiles"/> 同一个入口）。
+    /// 状态行仍如实给出脱敏后的原因：清单区讲下一步、状态行讲原因，两条通道各说一件事。
+    /// </summary>
+    private void ShowLoadFailure(string status)
+    {
+        _loadFailed = true;
+        _list.BeginUpdate();
+        _list.Items.Clear();
+        _list.EndUpdate();
+        // 清单空了，编辑与探测没有可作用的对象：与重建后「先禁用、恢复选中再启用」同一口径。
+        _editButton.Enabled = false;
+        _probeButton.Enabled = false;
+        _empty.Visible = true;
+        _list.Visible = false;
+        RefreshEmptyState();
+        SetStatus(status);
     }
 
     /// <summary>
@@ -263,10 +293,13 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private void RefreshEmptyState()
     {
         var filtered = ListFilter.IsActive(_filter.Text);
-        _emptyTitle.Text = filtered ? ListFilter.ProfileNoMatchTitle : EmptyTitle;
-        _emptyHint.Text = filtered ? ListFilter.ProfileNoMatchHint : EmptyHint;
-        _emptyCreate.Visible = !filtered;
-        _emptyClear.Visible = filtered;
+        // 三态：读取失败 > 筛到零行 > 还没有配置。失败态优先——这一屏连「有没有配置」都还不知道，
+        // 说成「筛到零行」或「还没有配置」都是把读不出来说成读到了空。
+        _emptyTitle.Text = _loadFailed ? ProfileLoadState.FailureTitle : filtered ? ListFilter.ProfileNoMatchTitle : EmptyTitle;
+        _emptyHint.Text = _loadFailed ? ProfileLoadState.FailureHint : filtered ? ListFilter.ProfileNoMatchHint : EmptyHint;
+        _emptyCreate.Visible = !_loadFailed && !filtered;
+        _emptyClear.Visible = !_loadFailed && filtered;
+        _emptyRetry.Visible = ProfileLoadState.RetryVisible(_loadFailed);
     }
 
     /// <summary>
@@ -422,6 +455,10 @@ internal sealed class ProfileDialog : Form
     private readonly Button _findButton;
     private readonly Button _loadProjectsButton;
     private readonly Button _loadBranchesButton;
+    // 两颗读取按钮的文字单一落点：失败态的重试指引指名它们（ProfileLoadState.RetryHint），
+    // 按钮文字与指引里的字面同源，改一处不会让指引指向一颗不存在的按钮。
+    private const string LoadProjectsLabel = "读取项目列表";
+    private const string LoadBranchesLabel = "读取分支";
     private List<ApifoxPicker.ProjectRow> _projectRows = [];
     private List<ApifoxPicker.BranchRow> _branchRows = [];
 
@@ -456,12 +493,12 @@ internal sealed class ProfileDialog : Form
         var exportButton = Ui.Ghost("导出配置（不含凭据）");
         exportButton.Enabled = _editing is not null;
         exportButton.Click += (_, _) => ExportProfile();
-        _loadProjectsButton = Ui.Ghost("读取项目列表");
+        _loadProjectsButton = Ui.Ghost(LoadProjectsLabel);
         // 未保存时停用并就地说明下一步（ProfileFormLayout.ProjectListHint）：此前按钮是启用的，
         // 点下去只得到一句「请先保存配置」，用户得自己猜「那我现在能不能保存」。
         _loadProjectsButton.Enabled = ProfileFormLayout.ProjectListEnabled(_editing is not null);
         _loadProjectsButton.Click += async (_, _) => await LoadApifoxProjectsAsync();
-        _loadBranchesButton = Ui.Ghost("读取分支");
+        _loadBranchesButton = Ui.Ghost(LoadBranchesLabel);
         _loadBranchesButton.Click += async (_, _) => await LoadApifoxBranchesAsync();
 
         // 从下拉列表选中一行后回填输入框与配置对象；手动输入不受影响（与冻结页面同一行为）。
@@ -790,7 +827,8 @@ internal sealed class ProfileDialog : Form
             if (IsDisposed) return;
             if (!result.Ok)
             {
-                SetStatus(ApifoxPicker.ProjectsFailedPrefix + result.Describe(), UiTokens.BadText);
+                // 失败态补一句可操作文案：这颗按钮在 finally 里已回到可用，点它就是重试（不新增第二颗按钮）。
+                SetStatus(ProfileLoadState.PickerFailureStatus(ApifoxPicker.ProjectsFailedPrefix, result.Describe(), LoadProjectsLabel), UiTokens.BadText);
                 return;
             }
             _projectRows = ApifoxPicker.ProjectRows(result.Data as JsonArray);
@@ -805,7 +843,7 @@ internal sealed class ProfileDialog : Form
         catch (Exception ex)
         {
             if (IsDisposed) return;
-            SetStatus(ApifoxPicker.ProjectsFailedPrefix + Redactor.Redact(ex.Message), UiTokens.BadText);
+            SetStatus(ProfileLoadState.PickerFailureStatus(ApifoxPicker.ProjectsFailedPrefix, Redactor.Redact(ex.Message), LoadProjectsLabel), UiTokens.BadText);
         }
         finally
         {
@@ -835,7 +873,7 @@ internal sealed class ProfileDialog : Form
             if (IsDisposed) return;
             if (!result.Ok)
             {
-                SetStatus(ApifoxPicker.BranchesFailedPrefix + result.Describe(), UiTokens.BadText);
+                SetStatus(ProfileLoadState.PickerFailureStatus(ApifoxPicker.BranchesFailedPrefix, result.Describe(), LoadBranchesLabel), UiTokens.BadText);
                 return;
             }
             _branchRows = ApifoxPicker.VisibleBranches(ApifoxPicker.BranchRows(result.Data as JsonArray));
@@ -850,7 +888,7 @@ internal sealed class ProfileDialog : Form
         catch (Exception ex)
         {
             if (IsDisposed) return;
-            SetStatus(ApifoxPicker.BranchesFailedPrefix + Redactor.Redact(ex.Message), UiTokens.BadText);
+            SetStatus(ProfileLoadState.PickerFailureStatus(ApifoxPicker.BranchesFailedPrefix, Redactor.Redact(ex.Message), LoadBranchesLabel), UiTokens.BadText);
         }
         finally
         {

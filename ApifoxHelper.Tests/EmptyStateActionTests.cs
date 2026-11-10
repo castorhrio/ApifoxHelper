@@ -96,13 +96,24 @@ public class EmptyStateActionTests
     public void EmptyStateActions_SwitchOnFilterState()
     {
         // 同一时刻只显示一个行动按钮：门控取筛选状态的单一口径，不另判一次。
+        // 配置页自第一百五十轮起有第三种状态（读取失败，ProfileLoadState 口径）：失败时另两颗按钮一起收掉，
+        // 只留「重试」——失败时给「新建配置」等于把用户往另一条路上引（见 ProfileLoadFailureTests）。
         foreach (var (page, load, refresh) in PageAnchors)
         {
             var source = Repo.Source("Desktop", "Native", page);
             var body = Slice(source, refresh, "private static string?[] FilterFields(");
             Assert.Matches(@"(?m)^\s*var filtered = ListFilter\.IsActive\(_filter\.Text\);", body);
-            Assert.Matches(@"(?m)^\s*_emptyCreate\.Visible = !filtered;", body);
-            Assert.Matches(@"(?m)^\s*_emptyClear\.Visible = filtered;", body);
+            if (page == "ProjectsPage.cs")
+            {
+                Assert.Matches(@"(?m)^\s*_emptyCreate\.Visible = !_loadFailed && !filtered;", body);
+                Assert.Matches(@"(?m)^\s*_emptyClear\.Visible = !_loadFailed && filtered;", body);
+                Assert.Matches(@"(?m)^\s*_emptyRetry\.Visible = ProfileLoadState\.RetryVisible\(_loadFailed\);", body);
+            }
+            else
+            {
+                Assert.Matches(@"(?m)^\s*_emptyCreate\.Visible = !filtered;", body);
+                Assert.Matches(@"(?m)^\s*_emptyClear\.Visible = filtered;", body);
+            }
             // 切换在重建里接线：刷新、作业结束与切页回来后按钮与文字同一轮推导。
             Assert.Matches(@"(?m)^\s*RefreshEmptyState\(\);", Slice(source, load, refresh));
         }
