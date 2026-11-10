@@ -1547,3 +1547,17 @@
 - **验证状态**：Linux 主工程、测试工程、冒烟工程 `dotnet build -t:Rebuild` 均 0 警告 0 错误，`dotnet test` **2221 用例全部通过**；GUI 侧本轮有**真实执行证据**（wine 10.0 + Xvfb 下 85 通过 / 0 失败、退出码 0）。**Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得**，第一百二十四轮挂账决策继续有效；真机清单第 17 项（DPI 观感）与第 18 项（真机跑冒烟）继续留 `[ ]`。
 - **本轮未做（如实挂账）**：① 本轮**未做变异验证**（「把失败态收掉即变红」的实测），时间用尽；② 简报 P1-2（`ApifoxCli.RunAsync` 后半段退出码语义与超时/严格 JSON 解析分支的补测）未做；③ 真机到位后按 19 项清单逐条走并拍 100%/200% DPI 截图。
 - **本轮未连接或写入 Apifox，未调用任何模型服务**；不改服务层一行、不改界面控件与布局、不新增对话框或产品功能（改动只在冒烟器、测试与本文档）。
+
+## 读取失败态重试入口推广到任务页 / 报告 / 差异确认（2026-11-10 第一百五十二轮，具名 pass：harden）
+
+- **接续前确认**：开局工作树干净，HEAD（e8f954c）为第一百五十一轮（配置页读取失败态真实控件交互五段，wine 85 通过 / 0 失败），主工程 `dotnet build -t:Rebuild` 0 警告 0 错误、`dotnet test` 2221 用例全绿，基线成立；第四十七至一百五十一轮逐字保留。
+- **本轮定位**：控制仓简报 P0-1（Windows 真机 19 项清单）与 P1（真机 DPI 截图）在本会话仍不可得（Linux 容器、无 Windows 真机，第一百二十四轮挂账决策继续有效）。按「能在 Linux 验证的验证、不可验证的如实记录」，本轮做简报 **P1-1（harden：失败态重试入口推广到任务页 / 报告页 / 差异页）**——这是「状态完备」条款的直接缺口，也是第一百五十轮 `ProfileLoadState` 的自然延伸。
+- **本轮抓到的真实缺陷（三处，同一族）**：① 任务页 `LoadTasks` 的两条 catch 只往状态行写一句红字，清单区保持上一次的样子（首次进入是整块空白），屏上没有任何可点的东西；② 报告对话框读取失败只给「处理后可关闭本窗口重新打开」；③ 差异确认对话框读取失败只给「请关闭后在任务页重新检查再试」「请关闭后重试」——三处都把「再读一次」交给用户手动重开窗口，与 DESIGN.md §7「禁用不得移除下一步」相违。
+- **已交付 ①（harden）`Desktop/Native/LoadFailureState.cs` 通用口径单一落点**：按钮文字 `RetryLabel`（「重试」全仓唯一字面）、三态门控 `RetryVisible`、状态行 `FailureStatus(title, detail)`、对话框失败文案 `FailureMessage(title, detail, hint)`（原因末尾补「。」再接说明，不出现「。；」双标点）、指名入口的 `RetryHint` / `PickerFailureStatus`，以及各屏文案 `Tasks` / `Reports` / `Decisions`（后者含「检查结果读不出来」与「已保存决策读不出来」两种）。只依赖 BCL，经共享源码编入测试工程。`ProfileLoadState` 的通用机制改为委托到这里（`RetryLabel` 等仍是 const，旧签名与旧断言全部成立），配置页文案不动。
+- **已交付 ②（harden）任务页三态空态**：新增 `_loadFailed` 与 `_emptyRetry`（ghost，动作回到 `LoadTasks` 同一个入口，不复制读取逻辑）；两条 catch 都进 `ShowLoadFailure`——清单不留旧行、`_selectedTask`/`_selectedId` 清空并 `RefreshDetail()`（详情区回到「没有选中任务」的提示）、清单区换成失败态、状态行仍如实给出脱敏后的原因；读成功即 `_loadFailed = false` 退出失败态。`RefreshEmptyState` 由两态扩成三态（读取失败 > 筛到零行 > 还没有任务），失败态优先。
+- **已交付 ③（harden）报告对话框**：`OnLoad` 的读取体提成 `LoadPreview()`，打开与点「重试」走同一入口；底部动作行新增「重试」（失败时才出现，四个导出入口一起停用——预览都没生成出来，导出的只会是同一份失败）；失败文案取 `LoadFailureState.FailureMessage(Reports.Title, …, Reports.Hint)`，不再说「关闭本窗口重新打开」。
+- **已交付 ④（harden）差异确认对话框**：`OnLoad` 的读取体提成 `LoadAll()`，打开与点「重试」走同一入口；底部动作行新增「重试」；`ShowHint` 多一个 `canRetry` 门控（缺省不显示）——两种失败态（检查结果、已保存决策）传 `canRetry: true`，而「尚未检查」与「没有需要处理的差异确认」不显示「重试」（重试解决不了它们，下一步在任务页与筛选器上，同一时刻只给一个下一步）。「读取不到已保存决策时保存停用」这条约束原样保留。
+- **测试 2221 → 2233 用例**（+12，`LoadFailureStateTests`）：按钮字面四屏同源且说明行点名它、`RetryVisible` 两态、`FailureStatus` 与 `FailureMessage` 的拼装与无双标点、`PickerFailureStatus` 旧签名仍成立、全部新文案过中文排版口径（半角标点/弯引号/空话禁词/进度自述）、任务页接线（按钮取自单一落点 + 动作回到 `LoadTasks` + 三态门控 + 失败态清清单与详情 + 两条 catch + 读成功退出失败态 + 页面不就地拼「读取任务失败」）、报告对话框接线（`LoadPreview` 单一入口 + 失败态停用四个导出 + 不再说「重开窗口」）、差异确认接线（`LoadAll` 单一入口 + 两处 `canRetry: true` + 「尚未检查」不显示重试 + 不再说「关闭后重试」）、口径文件在共享编译清单且不依赖 WinForms。既有 `EmptyStateActionTests`（任务页进三态分支）、`ListFilterTests.TasksPage_WiresListFilter`（空态文字三态）、`FilteredEmptyStateTests.HintExit`（提示出口多一个门控）随签名更新，强度不降。
+- **验证状态**：Linux 主工程 `dotnet build -t:Rebuild` 0 警告 0 错误，`dotnet test ApifoxHelper.Tests` **2233 用例全部通过**；口径是真执行——`LoadFailureState.cs` 经共享编译进测试程序集，断言比的是主工程同一份代码。
+- **本轮未做（如实挂账）**：① 简报 P1-1 要求的冒烟段（任务页「读取失败 → 重试 → 恢复」真实控件交互，`RunTaskLoadFailure`）本轮时间用尽，未写；② 本轮**未跑 wine**，故不据此宣称冒烟器在本轮跑过——85 通过 / 0 失败仍是第一百五十一轮的证据；③ 报告与差异确认两个对话框的「重试」只有源码切片与 Linux 侧断言，真实控件点击未走；④ Windows 真机（19 项清单、100%/200% DPI 截图）仍不可得，第一百二十四轮挂账决策继续有效。
+- **本轮未连接或写入 Apifox，未调用任何模型服务**；不改服务层一行、不改界面布局常量与视觉令牌、不新增对话框或产品功能（改动只在三屏失败态、新口径文件与测试）。

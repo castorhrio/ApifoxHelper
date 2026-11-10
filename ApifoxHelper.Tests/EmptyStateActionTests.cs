@@ -98,6 +98,7 @@ public class EmptyStateActionTests
         // 同一时刻只显示一个行动按钮：门控取筛选状态的单一口径，不另判一次。
         // 配置页自第一百五十轮起有第三种状态（读取失败，ProfileLoadState 口径）：失败时另两颗按钮一起收掉，
         // 只留「重试」——失败时给「新建配置」等于把用户往另一条路上引（见 ProfileLoadFailureTests）。
+        // 任务页自第一百五十二轮起同一口径（LoadFailureState）：失败态优先于「筛到零行」与「还没有任务」。
         foreach (var (page, load, refresh) in PageAnchors)
         {
             var source = Repo.Source("Desktop", "Native", page);
@@ -108,6 +109,12 @@ public class EmptyStateActionTests
                 Assert.Matches(@"(?m)^\s*_emptyCreate\.Visible = !_loadFailed && !filtered;", body);
                 Assert.Matches(@"(?m)^\s*_emptyClear\.Visible = !_loadFailed && filtered;", body);
                 Assert.Matches(@"(?m)^\s*_emptyRetry\.Visible = ProfileLoadState\.RetryVisible\(_loadFailed\);", body);
+            }
+            else if (page == "TasksPage.cs")
+            {
+                Assert.Matches(@"(?m)^\s*_emptyCreate\.Visible = !_loadFailed && !filtered;", body);
+                Assert.Matches(@"(?m)^\s*_emptyClear\.Visible = !_loadFailed && filtered;", body);
+                Assert.Matches(@"(?m)^\s*_emptyRetry\.Visible = LoadFailureState\.RetryVisible\(_loadFailed\);", body);
             }
             else
             {

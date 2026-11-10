@@ -27,33 +27,36 @@ public static class ProfileLoadState
     /// </summary>
     public const string FailureHint = "资料目录可能被占用或权限不足；点「重试」再读一次。";
 
-    /// <summary>失败态的唯一行动按钮：与空态的「新建配置」「清空筛选」同一形状（ghost），动作回到同一个读取入口。</summary>
-    public const string RetryLabel = "重试";
+    /// <summary>
+    /// 失败态的唯一行动按钮：与空态的「新建配置」「清空筛选」同一形状（ghost），动作回到同一个读取入口。
+    /// 字面取自 <see cref="LoadFailureState.RetryLabel"/>——配置页、任务页与两个对话框同一颗按钮、同一字面。
+    /// </summary>
+    public const string RetryLabel = LoadFailureState.RetryLabel;
 
     /// <summary>
     /// 失败态是否显示「重试」按钮：只在读取失败时显示。
     /// 三种状态（没有配置 / 筛到零行 / 读取失败）同一时刻只显示一个行动按钮——
     /// 失败时给「新建配置」等于把用户往另一条路上引，而这一屏真正缺的是「再读一次」。
     /// </summary>
-    public static bool RetryVisible(bool failed) => failed;
+    public static bool RetryVisible(bool failed) => LoadFailureState.RetryVisible(failed);
 
     /// <summary>
     /// 配置页状态行：失败原因（已脱敏）跟在标题后面，形状与「读取配置失败：…」一致。
     /// 状态行讲原因、清单区讲下一步，两条通道各说一件事（DESIGN.md §2/§6 双通道）。
     /// </summary>
-    public static string FailureStatus(string detail) => FailureTitle + "：" + detail;
+    public static string FailureStatus(string detail) => LoadFailureState.FailureStatus(FailureTitle, detail);
 
     /// <summary>
     /// 对话框里「读取项目列表」「读取分支」失败时补的一句：指名那颗按钮本身就是重试入口。
     /// 对话框不新增第二个「重试」按钮——同一屏两颗做同一件事的按钮违反「唯一行动按钮」，
     /// 而那颗按钮在失败后已经回到可用（<c>finally</c> 里按门控复位），点它就是重试。
     /// </summary>
-    public static string RetryHint(string entryLabel) => "可点「" + entryLabel + "」重试。";
+    public static string RetryHint(string entryLabel) => LoadFailureState.RetryHint(entryLabel);
 
     /// <summary>
     /// 对话框失败态的状态行：前缀 + 失败描述 + 重试指引。
     /// 描述末尾的句号先去掉再接「；」，否则会出现「…。；可点…」这种双标点。
     /// </summary>
     public static string PickerFailureStatus(string prefix, string detail, string entryLabel) =>
-        prefix + detail.TrimEnd('。', ' ') + "；" + RetryHint(entryLabel);
+        LoadFailureState.PickerFailureStatus(prefix, detail, entryLabel);
 }

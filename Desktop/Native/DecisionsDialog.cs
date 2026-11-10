@@ -75,6 +75,9 @@ internal sealed class DecisionsDialog : Form
     private readonly Button _clearButton;
     private readonly ComboBox _bindingCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
     private readonly Button _bindingSaveButton;
+    // 读取失败态的唯一行动按钮（LoadFailureState 口径）：动作回到 LoadAll 同一个入口。
+    // 放在底部动作行：失败时其余动作一起停用，行里只剩「重试」与「关闭」两颗可点。
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
     private readonly Label _status = Ui.StatusLine();
     private readonly Label _hint = new()
     {
@@ -124,6 +127,8 @@ internal sealed class DecisionsDialog : Form
             if (Current() is { Kind: EntryKind.Binding } entry) UpdateBindingSaveEnabled(entry);
         };
 
+        _retry.Click += (_, _) => LoadAll();
+        _retry.Visible = false;
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
@@ -151,9 +156,10 @@ internal sealed class DecisionsDialog : Form
         AddBoxRow(detailGrid, Ui.Hairline(_detail), 190);
         AddCaptionRow(detailGrid, _status);
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 8, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 9, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         for (var i = 0; i < 6; i++) actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _useTargetButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _keepRemoteButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
@@ -168,7 +174,9 @@ internal sealed class DecisionsDialog : Form
         actionRow.Controls.Add(_bindingCombo, 4, 0);
         actionRow.Controls.Add(_bindingSaveButton, 5, 0);
         actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 6, 0);
-        actionRow.Controls.Add(closeButton, 7, 0);
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        actionRow.Controls.Add(_retry, 7, 0);
+        actionRow.Controls.Add(closeButton, 8, 0);
 
         // 停靠按集合倒序生效：筛选行最先停靠（顶部），其次按钮行（最底部）、详情区，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -180,6 +188,20 @@ internal sealed class DecisionsDialog : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 读取检查结果与已保存决策（打开时与失败后点「重试」走同一个入口，不复制读取逻辑）。
+    /// 两种失败态按 <see cref="LoadFailureState"/> 口径：一句可操作文案（指名「重试」）+ 唯一行动按钮。
+    /// 此前这里写的是「请关闭后在任务页重新检查再试」「请关闭后重试」——把「再读一次」交给用户
+    /// 手动重开窗口，屏上没有任何可点的入口，与 DESIGN.md §7「禁用不得移除下一步」相违。
+    /// 「尚未检查」与「没有需要处理的差异确认」不是失败态：重试解决不了它们，下一步在任务页与筛选器上，
+    /// 故这两种状态不显示「重试」（同一时刻只给一个下一步）。
+    /// </summary>
+    private void LoadAll()
+    {
+        _retry.Visible = false;
         CheckResult? result;
         try
         {
@@ -189,7 +211,10 @@ internal sealed class DecisionsDialog : Form
         {
             _filter.Enabled = false;
             _keyword.Enabled = false;
-            ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新检查再试。", UiTokens.BadText);
+            ShowHint(
+                LoadFailureState.FailureMessage(LoadFailureState.Decisions.Title, Redactor.Redact(ex.Message), LoadFailureState.Decisions.Hint),
+                UiTokens.BadText,
+                canRetry: true);
             return;
         }
         if (result is null)
@@ -204,7 +229,10 @@ internal sealed class DecisionsDialog : Form
             // 读取不到已保存决策时不提供保存动作，避免用空决策覆盖既有选择。
             _filter.Enabled = false;
             _keyword.Enabled = false;
-            ShowHint("读取已保存决策失败：" + error + "。为避免覆盖已有决策，保存已停用；请关闭后重试。", UiTokens.BadText);
+            ShowHint(
+                LoadFailureState.FailureMessage(LoadFailureState.Decisions.SavedTitle, error, LoadFailureState.Decisions.SavedHint),
+                UiTokens.BadText,
+                canRetry: true);
             return;
         }
         _entries = BuildEntries(result);
@@ -367,12 +395,14 @@ internal sealed class DecisionsDialog : Form
     /// （打开期无数据时先禁用再提示；运行期筛选为空时必须保持可用，见 ApplyFilter）。
     /// <c>keepAggregate</c> 为真表示「条目还在，只是当前筛选一条都不命中」：计数行的聚合数字留着——
     /// 「共 5 项 · 待处理 0」正是清完队列的凭据，与两页「筛选出 0 个任务（共 42 个）」同一如实口径。</summary>
-    private void ShowHint(string message, Color color, bool keepAggregate = false)
+    private void ShowHint(string message, Color color, bool keepAggregate = false, bool canRetry = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
+        // 失败态的唯一行动按钮：文案里指名的那颗按钮必须真的在屏上（第四十二轮纪律）。
+        _retry.Visible = canRetry;
         EnableActions(null);
         if (!keepAggregate) _counts.Text = "";
         _detail.Text = "";

@@ -22,6 +22,10 @@ internal sealed class ReportsDialog : Form
     private readonly Button _htmlButton;
     private readonly Button _jsonButton;
     private readonly Button _handoffButton;
+    // 读取失败态的唯一行动按钮（LoadFailureState 口径）：动作回到 LoadPreview 同一个入口。
+    // 放在底部动作行而不是提示区：这一屏的动作本来就在底部一行，失败时四个导出入口一起停用，
+    // 行里只剩「重试」与「关闭」两颗可点，用户不必去猜「重开窗口」。
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
     private readonly Label _status = Ui.StatusLine();
     private readonly Label _hint = new()
     {
@@ -54,6 +58,8 @@ internal sealed class ReportsDialog : Form
         _jsonButton.Click += (_, _) => ExportReport("json");
         _handoffButton = Ui.Primary("前端交接说明");
         _handoffButton.Click += (_, _) => ExportReport("handoff");
+        _retry.Click += (_, _) => LoadPreview();
+        _retry.Visible = false;
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
@@ -66,12 +72,13 @@ internal sealed class ReportsDialog : Form
         _status.Dock = DockStyle.Fill;
         statusHost.Controls.Add(_status);
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 6, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 7, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _mdButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _htmlButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
@@ -83,7 +90,9 @@ internal sealed class ReportsDialog : Form
         actionRow.Controls.Add(_htmlButton, 2, 0);
         actionRow.Controls.Add(_jsonButton, 3, 0);
         actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 4, 0);
-        actionRow.Controls.Add(closeButton, 5, 0);
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        actionRow.Controls.Add(_retry, 5, 0);
+        actionRow.Controls.Add(closeButton, 6, 0);
 
         var previewHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm) };
         previewHost.Controls.Add(Ui.Hairline(_preview));
@@ -100,19 +109,40 @@ internal sealed class ReportsDialog : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadPreview();
+    }
+
+    /// <summary>
+    /// 生成预览（打开时与失败后点「重试」走同一个入口，不复制渲染逻辑）。
+    /// 失败态按 <see cref="LoadFailureState"/> 口径：一句可操作文案（指名「重试」）+ 唯一行动按钮，
+    /// 四个导出入口一起停用——预览都没生成出来，导出的只会是同一份失败。
+    /// 此前这里写的是「处理后可关闭本窗口重新打开」：把「再读一次」交给用户手动重开窗口，
+    /// 屏上没有任何可点的入口，与 DESIGN.md §7「禁用不得移除下一步」相违。
+    /// </summary>
+    private void LoadPreview()
+    {
         try
         {
             _preview.Text = _exports.Preview(_taskId).Markdown;
             _preview.SelectionStart = 0;
             _preview.SelectionLength = 0;
+            // 读成功即退出失败态：否则重试成功后仍停在失败态（预览有内容、屏上却还说生成失败）。
+            _preview.Visible = true;
+            _hint.Visible = false;
+            _retry.Visible = false;
+            _mdButton.Enabled = true;
+            _htmlButton.Enabled = true;
+            _jsonButton.Enabled = true;
+            _handoffButton.Enabled = true;
         }
         catch (UserException ex)
         {
-            ShowHint(ex.Message + " 处理后可关闭本窗口重新打开。", UiTokens.WarnText);
+            // UserException 的文案本身就是给用户看的那一句，不再脱敏；仍进失败态。
+            ShowHint(LoadFailureState.FailureMessage(LoadFailureState.Reports.Title, ex.Message, LoadFailureState.Reports.Hint), UiTokens.WarnText);
         }
         catch (Exception ex)
         {
-            ShowHint("报告生成失败：" + Redactor.Redact(ex.Message) + "。处理后可关闭本窗口重新打开。", UiTokens.BadText);
+            ShowHint(LoadFailureState.FailureMessage(LoadFailureState.Reports.Title, Redactor.Redact(ex.Message), LoadFailureState.Reports.Hint), UiTokens.BadText);
         }
     }
 
@@ -151,6 +181,8 @@ internal sealed class ReportsDialog : Form
         _hint.ForeColor = color;
         _hint.Visible = true;
         _preview.Visible = false;
+        // 失败态的唯一行动按钮：文案里指名的那颗按钮必须真的在屏上（第四十二轮纪律）。
+        _retry.Visible = true;
         _mdButton.Enabled = false;
         _htmlButton.Enabled = false;
         _jsonButton.Enabled = false;

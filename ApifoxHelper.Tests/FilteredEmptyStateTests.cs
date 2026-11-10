@@ -313,7 +313,8 @@ public class FilteredEmptyStateTests
             "DecisionsDialog.cs" => Slice(source, "private void ShowHint", "/// <summary>计数行按全部条目统计"),
             _ => Slice(source, "private void ShowHint", "private void ShowDetail"),
         };
-        Assert.Matches(@"(?m)^\s*private void ShowHint\(string message, Color color(?:, bool keepAggregate = false)?\)$", body);
+        // 第一百五十二轮起差异确认对话框的提示出口多一个「是否显示重试」门控（缺省不显示）。
+        Assert.Matches(@"(?m)^\s*private void ShowHint\(string message, Color color(?:, bool keepAggregate = false)?(?:, bool canRetry = false)?\)$", body);
         return body;
     }
 

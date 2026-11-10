@@ -65,6 +65,10 @@ internal sealed class TasksPage : UserControl, INativePage
     // 同一时刻只显示其中一个，实心主按钮始终只有工具栏那一个。
     private readonly Button _emptyCreate = Ui.Ghost(NewTaskLabel);
     private readonly Button _emptyClear = Ui.Ghost(ListFilter.ClearActionLabel);
+    // 读取失败态的唯一行动按钮（LoadFailureState 口径）：动作回到 LoadTasks 同一个入口，不复制读取逻辑。
+    private readonly Button _emptyRetry = Ui.Ghost(LoadFailureState.RetryLabel);
+    // 读取失败门控：失败态优先于「筛到零行」与「还没有任务」——这一屏连「有没有任务」都还不知道。
+    private bool _loadFailed;
     private readonly Label _status = Ui.StatusLine();
     // 详情区固定设计宽（FixedPanel = Panel2）：窗口缩放时详情不变、列表吸收剩余宽度，
     // 与「标识列吸收剩余可视宽度」（ListColumns）同一方向；缺省 None 会让详情区随窗口按比例放大、偏离设计宽。
@@ -306,9 +310,11 @@ internal sealed class TasksPage : UserControl, INativePage
         // 空态按钮是独立实例：同一控件不能同时挂在工具栏与空态面板上；动作与工具栏同一入口，不复制逻辑。
         _emptyCreate.Click += (_, _) => ShowNewTaskDialog();
         _emptyClear.Click += (_, _) => ClearListFilter();
+        _emptyRetry.Click += (_, _) => LoadTasks();
         var emptyActions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = UiTokens.Bg };
         emptyActions.Controls.Add(_emptyCreate);
         emptyActions.Controls.Add(_emptyClear);
+        emptyActions.Controls.Add(_emptyRetry);
         _empty = BuildEmpty(emptyActions);
 
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Bg, ColumnCount = 2, Margin = new Padding(0) };
@@ -530,6 +536,8 @@ internal sealed class TasksPage : UserControl, INativePage
             _list.EndUpdate();
             RefreshSortHeaders();
             FitColumns();
+            // 读成功即退出失败态：否则重试成功后仍停在失败态（清单有行、屏上却还说读不出来）。
+            _loadFailed = false;
             _empty.Visible = tasks.Count == 0;
             _list.Visible = tasks.Count > 0;
             RefreshEmptyState();
@@ -546,26 +554,51 @@ internal sealed class TasksPage : UserControl, INativePage
         }
         catch (UserException ex)
         {
-            SetStatus(ex.Message);
+            // UserException 的文案本身就是给用户看的那一句，不再脱敏；仍进失败态（清单不留旧行）。
+            ShowLoadFailure(ex.Message);
         }
         catch (Exception ex)
         {
-            SetStatus("读取任务失败：" + Redactor.Redact(ex.Message));
+            ShowLoadFailure(LoadFailureState.FailureStatus(LoadFailureState.Tasks.Title, Redactor.Redact(ex.Message)));
         }
     }
 
     /// <summary>
-    /// 空态两态（DESIGN.md §7「空态不留白」「空态=说明现在有什么可做 + 唯一行动按钮」）：
-    /// 没有任务时给首次使用的下一步与「新建任务」，筛到零行时说明是筛选结果并给「清空筛选」——
-    /// 不把筛选结果说成没有任务，也不给筛到零行的用户一个「新建」当作下一步。
+    /// 读取失败态（<see cref="LoadFailureState"/> 口径，与配置页同一形状）：清单区不留上一次的行——
+    /// 这一屏刚刚证明「磁盘上的任务读不出来」，继续显示旧行等于把不可信的内容当成现状；
+    /// 改为给一句可操作文案与唯一行动按钮「重试」（动作回到 <see cref="LoadTasks"/> 同一个入口）。
+    /// 状态行仍如实给出脱敏后的原因：清单区讲下一步、状态行讲原因，两条通道各说一件事。
+    /// </summary>
+    private void ShowLoadFailure(string status)
+    {
+        _loadFailed = true;
+        _list.BeginUpdate();
+        _list.Items.Clear();
+        _list.EndUpdate();
+        // 清单空了，详情区没有可作用的对象：与「没有选中任务」同一呈现（提示标签 + 收起详情）。
+        _selectedTask = null;
+        _selectedId = null;
+        RefreshDetail();
+        _empty.Visible = true;
+        _list.Visible = false;
+        RefreshEmptyState();
+        SetStatus(status);
+    }
+
+    /// <summary>
+    /// 空态三态（DESIGN.md §7「空态不留白」「空态=说明现在有什么可做 + 唯一行动按钮」，与配置页同一口径）：
+    /// 没有任务时给首次使用的下一步与「新建任务」，筛到零行时说明是筛选结果并给「清空筛选」，
+    /// 读取失败时给「重试」——不把筛选结果说成没有任务，也不给筛到零行的用户一个「新建」当作下一步。
+    /// 失败态优先：这一屏连「有没有任务」都还不知道，说成「筛到零行」或「还没有任务」都是把读不出来说成读到了空。
     /// </summary>
     private void RefreshEmptyState()
     {
         var filtered = ListFilter.IsActive(_filter.Text);
-        _emptyTitle.Text = filtered ? ListFilter.TaskNoMatchTitle : EmptyTitle;
-        _emptyHint.Text = filtered ? ListFilter.TaskNoMatchHint : EmptyHint;
-        _emptyCreate.Visible = !filtered;
-        _emptyClear.Visible = filtered;
+        _emptyTitle.Text = _loadFailed ? LoadFailureState.Tasks.Title : filtered ? ListFilter.TaskNoMatchTitle : EmptyTitle;
+        _emptyHint.Text = _loadFailed ? LoadFailureState.Tasks.Hint : filtered ? ListFilter.TaskNoMatchHint : EmptyHint;
+        _emptyCreate.Visible = !_loadFailed && !filtered;
+        _emptyClear.Visible = !_loadFailed && filtered;
+        _emptyRetry.Visible = LoadFailureState.RetryVisible(_loadFailed);
     }
 
     /// <summary>

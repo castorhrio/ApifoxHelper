@@ -186,9 +186,9 @@ public class ListFilterTests
         Assert.True(clear >= 0, "TasksPage:缺少列表清空。");
         Assert.True(capture < clear, "TasksPage:选中 Id 必须在清空列表之前取局部。");
         Assert.Matches(@"(?m)^\s*_selectedId = _selectedTask\?\.Id;", page);
-        // 空态文字按筛选状态切换，不把筛选结果说成没有任务。
-        Assert.Matches(@"(?m)^\s*_emptyTitle\.Text = filtered \? ListFilter\.TaskNoMatchTitle : EmptyTitle;", page);
-        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = filtered \? ListFilter\.TaskNoMatchHint : EmptyHint;", page);
+        // 空态文字按筛选状态切换，不把筛选结果说成没有任务；读取失败态优先（第一百五十二轮，LoadFailureState 口径）。
+        Assert.Matches(@"(?m)^\s*_emptyTitle\.Text = _loadFailed \? LoadFailureState\.Tasks\.Title : filtered \? ListFilter\.TaskNoMatchTitle : EmptyTitle;", page);
+        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = _loadFailed \? LoadFailureState\.Tasks\.Hint : filtered \? ListFilter\.TaskNoMatchHint : EmptyHint;", page);
     }
 
     [Fact]
