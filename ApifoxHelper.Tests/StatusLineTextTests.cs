@@ -260,7 +260,6 @@ public class StatusLineTextTests
         return CodeOnly(next < 0 ? source[from..] : source[from..next]);
     }
 
-    /// <summary>只留代码行（去掉 <c>//</c> 与 <c>///</c> 注释行）：注释里引用写法是说明理由，不是第二份实现。</summary>
-    private static string CodeOnly(string source) =>
-        string.Join('\n', source.Split('\n').Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+    /// <summary>只留代码行（注释口径全仓一份，含 <c>//</c> 与 <c>/* … */</c>）：注释里引用写法是说明理由，不是第二份实现。</summary>
+    private static string CodeOnly(string source) => CodeScan.Text(source);
 }

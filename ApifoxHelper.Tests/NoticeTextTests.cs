@@ -100,12 +100,8 @@ public class NoticeTextTests
         Assert.Contains("Ui.Ghost(\"关闭\")", source, StringComparison.Ordinal);
         Assert.Contains("AcceptButton = closeButton", source, StringComparison.Ordinal);
         Assert.Contains("CancelButton = closeButton", source, StringComparison.Ordinal);
-        // 不退回系统弹窗（注释里点名 MessageBox 是在说明它被替掉了，按代码行判）。
-        foreach (var line in source.Split('\n'))
-        {
-            if (line.TrimStart().StartsWith("///", StringComparison.Ordinal)) continue;
-            Assert.DoesNotContain("MessageBox", line, StringComparison.Ordinal);
-        }
+        // 不退回系统弹窗（注释里点名 MessageBox 是在说明它被替掉了，按代码行判——注释口径全仓只有一份）。
+        Assert.DoesNotContain("MessageBox", CodeScan.Text(source), StringComparison.Ordinal);
     }
 
     [Fact]

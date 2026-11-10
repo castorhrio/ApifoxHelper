@@ -470,12 +470,5 @@ public class SyncSelectTests
     }
 
     /// <summary>出现该字面量的代码行（注释行跳过：注释里引用这句话是说明理由，不是第二套拼写）。</summary>
-    private static List<string> CodeLines(string text, string fragment) =>
-        text.Split('\n').Where(l =>
-        {
-            var trimmed = l.TrimStart();
-            return trimmed.Contains(fragment, StringComparison.Ordinal)
-                && !trimmed.StartsWith("//", StringComparison.Ordinal)
-                && !trimmed.StartsWith("*", StringComparison.Ordinal);
-        }).ToList();
+    private static List<string> CodeLines(string text, string fragment) => CodeScan.LinesContaining(text, fragment);
 }

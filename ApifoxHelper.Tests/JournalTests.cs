@@ -388,9 +388,8 @@ public class JournalTests
     /// <summary>写入点写出的那一行 → 序列化 → 解析：读法跑的是真实落盘形状，不是手搓的 JSON。</summary>
     private static JsonNode Node(object line) => JsonNode.Parse(JsonSerializer.Serialize(line, JsonDefaults.Compact))!;
 
-    /// <summary>源码里的代码行（去掉 /// 文档注释行）：注释里点名写入点是说明理由，不是界面在调用它。</summary>
-    private static string CodeLines(string source) =>
-        string.Join('\n', source.Split('\n').Where(line => !line.TrimStart().StartsWith("///", StringComparison.Ordinal)));
+    /// <summary>源码里的代码行（注释一律不算，口径在 CodeScan 一份）：注释里点名写入点是说明理由，不是界面在调用它。</summary>
+    private static string CodeLines(string source) => CodeScan.Text(source);
 
     private static string MethodSlice(string source, string start)
     {

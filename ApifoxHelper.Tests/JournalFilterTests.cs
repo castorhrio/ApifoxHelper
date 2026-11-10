@@ -250,6 +250,5 @@ public class JournalFilterTests
         return source[from..to];
     }
 
-    private static string CodeLines(string source) =>
-        string.Join('\n', source.Split('\n').Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+    private static string CodeLines(string source) => CodeScan.Text(source);
 }

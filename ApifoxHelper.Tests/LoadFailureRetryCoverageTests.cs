@@ -81,8 +81,7 @@ public class LoadFailureRetryCoverageTests
     }
 
     /// <summary>去掉注释行后的源码：断言「屏上不出现某字面」时不能把注释里的引述一起算。</summary>
-    private static string CodeOnly(string source) =>
-        string.Join('\n', source.Split('\n').Where(l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+    private static string CodeOnly(string source) => CodeScan.Text(source);
 
     // ---------- 发现：范围本身要钉住，否则「一条都没发现」也是绿的 ----------
 

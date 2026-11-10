@@ -148,4 +148,146 @@ public class AcceptanceChecklistTests
             $"这些行以勾选框开头却不是 5 列（应为 勾选 / 门槛 / 当前结论 / 证据出处 / GUI 证据），"
             + $"它们不会进 Rows()，等于从口径表里悄悄消失：{string.Join(" ／ ", misshaped.Select(c => $"{c.Count} 列「{c[1]}」"))}。");
     }
+
+    // ---------- G-D5 真机复核清单（第一百六十八轮，简报 P0-1） ----------
+
+    private const string RealMachineHeading = "## G-D5 真机复核清单（可勾选）";
+
+    /// <summary>真机动作单的一行：勾选 / 动作 / 量什么 / 归档到哪里 / 判定标准。</summary>
+    private readonly record struct ActionRow(string Check, string Action, string Measure, string Archive, string Standard);
+
+    /// <summary>真机证据的归档根（截图落点）。目录里一张 <c>*.png</c> 都没有时，本表的每一条都必须是空框。</summary>
+    private static string RealMachineEvidenceDir => Path.Combine(Repo.Root, "docs", "evidence", "real-machine");
+
+    private static bool RealMachineEvidenceArchived() =>
+        Directory.Exists(RealMachineEvidenceDir) && Directory.GetFiles(RealMachineEvidenceDir, "*.png", SearchOption.AllDirectories).Length > 0;
+
+    /// <summary>本节全部行（标题行到下一个 <c>## </c> 之前）。本节必须排在验收口径之后——口径表在前，动作单才有「哪几条缺口由它关闭」的落点。</summary>
+    private static string[] RealMachineSectionLines()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == RealMachineHeading);
+        Assert.True(start >= 0, $"docs/NOTES.md 缺「{RealMachineHeading}」一节（真机到位后第一天的动作单）。");
+        var acceptance = Array.FindIndex(lines, l => l.TrimEnd() == Heading);
+        Assert.True(acceptance >= 0 && start > acceptance,
+            $"「{RealMachineHeading}」必须排在「{Heading}」之后：那张表说清哪几条没达成，这一节才是关闭它们的路径。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    private static List<ActionRow> RealMachineRows()
+    {
+        var rows = new List<ActionRow>();
+        foreach (var line in RealMachineSectionLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (cells[0] != "[x]" && cells[0] != "[ ]") continue;
+            // 与验收表同一族负向门：格式错的勾选行不许被解析器静默跳过，否则那一格没有任何断言看过。
+            Assert.True(cells.Count == 5,
+                $"真机清单有一行是勾选框却不是 5 列（实际 {cells.Count} 列，应为 勾选 / 动作 / 量什么 / 归档到哪里 / 判定标准）：{cells[1]}");
+            rows.Add(new ActionRow(cells[0], cells[1], cells[2], cells[3], cells[4]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>运行期数据文件名的后缀：它们写在这节里是「要归档/要读的东西」，不是仓内实物，也不许冒充「类名.断言名」。</summary>
+    private static readonly string[] DataFileExtensions = ["json", "jsonl", "txt", "log", "png", "html", "csv"];
+
+    /// <summary>反引号里认定为「实物」的三类引用：仓内文件、测试断言、冒烟段名。命中即核对存在。</summary>
+    private static int ResolvableCitations(string text, List<string> unresolved)
+    {
+        var resolved = 0;
+        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        foreach (var citation in Regex.Matches(text, @"`([^`]+)`").Select(m => m.Groups[1].Value))
+        {
+            if (citation.EndsWith(".cs", StringComparison.Ordinal) || citation.EndsWith(".md", StringComparison.Ordinal)
+                || citation.EndsWith(".sh", StringComparison.Ordinal) || citation.EndsWith(".ps1", StringComparison.Ordinal))
+            {
+                if (File.Exists(Path.Combine(Repo.Root, citation.Replace('\\', '/')))) resolved++;
+                else unresolved.Add(citation + "（文件不存在）");
+                continue;
+            }
+
+            if (Regex.IsMatch(citation, @"^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$"))
+            {
+                var parts = citation.Split('.');
+                if (DataFileExtensions.Contains(parts[1], StringComparer.OrdinalIgnoreCase)) continue;
+                var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
+                if (!File.Exists(testFile))
+                {
+                    unresolved.Add(citation + "（测试类不存在）");
+                    continue;
+                }
+
+                if (Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]")) resolved++;
+                else unresolved.Add(citation + "（断言不存在）");
+                continue;
+            }
+
+            if (Regex.IsMatch(citation, @"^Run[A-Za-z0-9]+$"))
+            {
+                if (smoke.Contains($"private static void {citation}(", StringComparison.Ordinal)) resolved++;
+                else unresolved.Add(citation + "（冒烟器里没有这一段）");
+            }
+
+            // 其余是运行期数据文件名（task.json 之类）与归档目标目录：这一节写的正是「还没归档」的东西，不核它存在。
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// 真机复核清单存在、排在验收口径之后、每一条都引用实物、且覆盖到所有只能由真机关闭的项
+    /// （第一百六十八轮，简报 P0-1）。
+    /// <para>
+    /// <b>为什么是 P0</b>：G-D5 与 SHARED-3/4/7/8 是这张验收表上唯一剩下的硬缺口，而它们缺的只有同一件事——
+    /// 机器与专用测试项目。真机到手那天如果还要现场设计「跑什么、量什么、东西放哪」，这一天就废了。
+    /// 这一节把动作单钉成机械可判：<b>编一个不存在的断言名即红，漏掉一条只能由真机关闭的项也即红</b>。
+    /// </para>
+    /// <para>
+    /// <b>它不许被悄悄勾上</b>：归档根里没有截图时，本表每一条都必须是空框——与
+    /// <see cref="Checklist_RealMachineGate_IsStillUnmetAndSaysSo"/> 同一口径，钉的是结构不是措辞。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RealMachineChecklist_ExistsAndCoversEveryGate()
+    {
+        var rows = RealMachineRows();
+        Assert.True(rows.Count >= 6, $"真机清单只有 {rows.Count} 行动作（地板 6：首程四站 / 三档截图 / 混合缩放 / 运行中改缩放 / 字体度量 / 写入端到端）。");
+        Assert.True(rows.All(r => r.Check == "[ ]") || RealMachineEvidenceArchived(),
+            $"归档根 {RealMachineEvidenceDir} 里一张截图都没有，这一节却有勾上的行——wine 的证据不能替真机打勾。");
+
+        var section = string.Join('\n', RealMachineSectionLines());
+        var unresolved = new List<string>();
+        ResolvableCitations(section, unresolved);
+        Assert.True(unresolved.Count == 0, "这一节引用了不存在的东西：" + string.Join(" ／ ", unresolved));
+
+        foreach (var row in rows)
+        {
+            var cellUnresolved = new List<string>();
+            var cited = ResolvableCitations(string.Join('\n', row.Action, row.Measure, row.Archive, row.Standard), cellUnresolved);
+            Assert.True(cellUnresolved.Count == 0, $"第 {row.Action[..Math.Min(18, row.Action.Length)]}… 这一行引用了不存在的东西：" + string.Join(" ／ ", cellUnresolved));
+            Assert.True(cited >= 1, $"这一行没有引用任何实物（文件 / 断言名 / 冒烟段名），读的人无从核对：{row.Action[..Math.Min(40, row.Action.Length)]}…");
+            Assert.True(row.Measure.Length >= 12 && row.Archive.Length >= 8 && row.Standard.Length >= 12,
+                $"这一行的「量什么 / 归档到哪里 / 判定标准」有空格：{row.Action[..Math.Min(40, row.Action.Length)]}…");
+        }
+
+        // 覆盖：只能由真机关闭的项，一条都不许从这张动作单里漏掉。
+        foreach (var required in new[]
+                 {
+                     "G-D5", "SHARED-3", "SHARED-4", "SHARED-7", "SHARED-8",
+                     "100%", "125%", "200%",
+                     "新建配置", "补充说明", "模型服务",
+                     "多显示器混合缩放", "运行中改系统缩放", "字体", "部分失败",
+                     "docs/evidence/real-machine/",
+                 })
+        {
+            Assert.Contains(required, section, StringComparison.Ordinal);
+        }
+
+        // README 的「已知限制」要点名这一节：缺口公开声明的落点在那儿，动作单藏在 1800 行日志里等于没有。
+        Assert.Contains("G-D5 真机复核清单（可勾选）", Repo.Source("README.md"), StringComparison.Ordinal);
+    }
 }

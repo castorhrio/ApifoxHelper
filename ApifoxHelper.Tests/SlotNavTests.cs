@@ -254,8 +254,7 @@ public class SlotNavTests
     // ---------- 辅助 ----------
 
     /// <summary>只算代码行：注释里引用「界面不就地写『上一条』」是在说明理由，不算第二套文案。</summary>
-    private static string CodeLines(string source) =>
-        string.Join('\n', source.Split('\n').Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+    private static string CodeLines(string source) => CodeScan.Text(source);
 
     private static string Slice(string source, string start, string end)
     {

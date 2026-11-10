@@ -221,14 +221,7 @@ public class FilterEscapeTests
         return row;
     }
 
-    private static List<string> CodeLines(string text, string fragment) =>
-        text.Split('\n')
-            .Select(l => l.TrimStart())
-            .Where(l => l.Contains(fragment, StringComparison.Ordinal)
-                && !l.StartsWith("//", StringComparison.Ordinal)
-                && !l.StartsWith("*", StringComparison.Ordinal)
-                && !l.StartsWith("///", StringComparison.Ordinal))
-            .ToList();
+    private static List<string> CodeLines(string text, string fragment) => CodeScan.LinesContaining(text, fragment);
 
     private static string Slice(string source, string start, string end)
     {

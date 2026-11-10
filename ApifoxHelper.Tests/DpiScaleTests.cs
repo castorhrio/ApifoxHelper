@@ -176,18 +176,7 @@ public class DpiScaleTests
         return source[start..end];
     }
 
-    private static int IndexOfCode(string body, string code)
-    {
-        for (var i = 0; i < body.Length; i++)
-        {
-            if (!body.AsSpan(i).StartsWith(code.AsSpan(), StringComparison.Ordinal)) continue;
-            var lineStart = body.LastIndexOf('\n', Math.Max(0, i - 1)) + 1;
-            // 注释行里引用这段代码不算接线。
-            if (!body[lineStart..].TrimStart().StartsWith("//", StringComparison.Ordinal)) return i;
-        }
-        return -1;
-    }
+    private static int IndexOfCode(string body, string code) => CodeScan.IndexOfLine(body, code);
 
-    private static IEnumerable<string> CodeLines(string source) =>
-        source.Split('\n').Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal));
+    private static IEnumerable<string> CodeLines(string source) => CodeScan.Lines(source);
 }

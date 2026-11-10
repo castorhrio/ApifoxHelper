@@ -264,8 +264,7 @@ public class NativeDialogSmokeTests
         // 冒烟器只解析服务层、不起 Kestrel、不注册本机能力桥——它不是第二个调度器，
         // 也不得在跑冒烟时对外开端口。
         // 只看代码行：注释里写「不起 Kestrel」是说明理由，不是起服务端。
-        var code = string.Join('\n', SmokeProgram.Split('\n')
-            .Where(l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+        var code = CodeScan.Text(SmokeProgram);
         Assert.DoesNotContain("WebApplication", code);
         Assert.DoesNotContain("Kestrel", code);
         Assert.DoesNotContain("AddHostedService", code);

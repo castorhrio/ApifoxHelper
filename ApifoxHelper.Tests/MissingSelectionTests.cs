@@ -371,10 +371,7 @@ public class MissingSelectionTests
         CodeLines(text).Split('\n').Count(l => l.Contains(fragment, StringComparison.Ordinal));
 
     /// <summary>只留代码行：注释里引用一句话是说明改动理由，不算第二套拼写（与第五十九轮同一口径）。</summary>
-    private static string CodeLines(string text) =>
-        string.Join('\n', text.Split('\n')
-            .Select(l => l.TrimStart())
-            .Where(l => !l.StartsWith("//", StringComparison.Ordinal) && !l.StartsWith("*", StringComparison.Ordinal)));
+    private static string CodeLines(string text) => CodeScan.Text(text);
 
     /// <summary>
     /// 取一个方法体的切片：起点是方法签名，终点是它自己的收尾大括号（独占一行、四格缩进）——

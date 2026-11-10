@@ -167,9 +167,51 @@ public class DemoScriptTests
     }
 
     /// <summary><paramref name="source"/> 里是否存在以这行代码打头的**代码行**（注释行不算）。</summary>
-    private static bool HasCodeLine(string source, string code) =>
-        source.Split('\n').Any(line =>
-            !line.TrimStart().StartsWith("//", StringComparison.Ordinal) && line.Contains(code, StringComparison.Ordinal));
+    private static bool HasCodeLine(string source, string code) => CodeScan.HasLine(source, code);
+
+    /// <summary>
+    /// 上面那一行的自测（第一百六十八轮，简报 P0-2）：第一百六十七轮只把「行首 <c>//</c>」判掉了，
+    /// <c>/* … */</c> 区间里的同一行代码照样骗得过子串匹配——这一族第三次犯的正是这件事。
+    /// 判定不许靠「反正没人这么写」：这里就写一份给他判。
+    /// </summary>
+    [Fact]
+    public void HasCodeLine_IgnoresBlockCommentedLines()
+    {
+        Assert.False(HasCodeLine("/* Console.WriteLine(line); */", "Console.WriteLine(line);"));
+        Assert.False(HasCodeLine("/*\nConsole.WriteLine(line);\n*/", "Console.WriteLine(line);"));
+        Assert.False(HasCodeLine("// Console.WriteLine(line);", "Console.WriteLine(line);"));
+        Assert.True(HasCodeLine("Console.WriteLine(line);", "Console.WriteLine(line);"));
+        // 注释收尾之后的代码仍然算代码：判掉的是那一段注释，不是这一行从此作废。
+        Assert.True(HasCodeLine("/* 说明 */ _lines.Add(line);", "_lines.Add(line);"));
+    }
+
+    /// <summary>
+    /// 「屏单只有一份」钉到<b>实现形状</b>（第一百六十八轮，简报 P1-1）。
+    /// <para>
+    /// <see cref="DemoScript_TakesItsScreenListFromTheTableInsteadOfCopyingIt"/> 判的是结果（脚本里没有第二个屏名），
+    /// 屏名与表恰好一致时分不出「读表」与「抄了一份还没改」。这一条判机制：
+    /// 必须真有一段 <c>awk</c> 从 <c>$NOTES</c> 读行，且必须真有一个制表符分隔的 <c>while read</c> 行循环在消费它。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoScript_ActuallyReadsTheTableInsteadOfListingScreens()
+    {
+        var script = Script;
+        var readsTheTable = 0;
+        for (var open = script.IndexOf("awk '", StringComparison.Ordinal); open >= 0;
+             open = script.IndexOf("awk '", open + 5, StringComparison.Ordinal))
+        {
+            // awk 程序是一段单引号串（本仓这两段内部都不用单引号），收尾引号之后紧跟的就是它读的文件。
+            var close = script.IndexOf('\'', open + 5);
+            var stop = script.IndexOf(')', close);
+            if (close < 0 || stop < 0) continue;
+            if (script[open..stop].Contains("$NOTES", StringComparison.Ordinal)) readsTheTable++;
+        }
+
+        Assert.True(readsTheTable >= 1, "脚本里没有任何一段 awk 是从 $NOTES 读行的——那份屏单是抄的，表改了不会红。");
+        Assert.Contains(@"while IFS=$'\t' read -r", script);
+        Assert.Contains("<<<\"$ROWS\"", script);
+    }
 
     /// <summary>脚本结尾那句固定话：模拟器证据不是真机结果，到期日与 G-D5 缺口都要念出来。</summary>
     [Fact]

@@ -236,10 +236,7 @@ public class ListChecksTests
         }
     }
 
-    private static string CodeLines(string text) =>
-        string.Join('\n', text.Split('\n')
-            .Select(l => l.TrimStart())
-            .Where(l => !l.StartsWith("//", StringComparison.Ordinal) && !l.StartsWith("*", StringComparison.Ordinal)));
+    private static string CodeLines(string text) => CodeScan.Text(text);
 
     // ---------- 行文字口径 ----------
 

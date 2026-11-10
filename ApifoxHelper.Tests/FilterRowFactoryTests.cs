@@ -258,12 +258,5 @@ public class FilterRowFactoryTests
     private static int Occurrences(string haystack, string needle) => haystack.Split(needle).Length - 1;
 
     /// <summary>出现该字面量的代码行数（注释行跳过：注释里引用是说明理由，不是第二套拼写）。</summary>
-    private static int CodeLinesContaining(string text, string fragment) =>
-        text.Split('\n').Count(l =>
-        {
-            var trimmed = l.TrimStart();
-            return trimmed.Contains(fragment, StringComparison.Ordinal)
-                && !trimmed.StartsWith("//", StringComparison.Ordinal)
-                && !trimmed.StartsWith("*", StringComparison.Ordinal);
-        });
+    private static int CodeLinesContaining(string text, string fragment) => CodeScan.CountContaining(text, fragment);
 }

@@ -348,12 +348,7 @@ public class LoadFailureStateTests
     /// 去掉注释行后的源码：断言「不再出现某句旧文案」时不能连注释里对旧文案的引述一起算
     /// （第五十二、六十三轮同一教训：切法不算注释，检查就会把说明文字当成违规）。
     /// </summary>
-    private static string CodeOnly(string source) =>
-        string.Join('\n', source.Split('\n').Where(line =>
-        {
-            var trimmed = line.TrimStart();
-            return !trimmed.StartsWith("//", StringComparison.Ordinal);
-        }));
+    private static string CodeOnly(string source) => CodeScan.Text(source);
 
     /// <summary>取 [start, end) 之间的源码段：把断言限定在方法体内。</summary>
     private static string Slice(string source, string start, string end)

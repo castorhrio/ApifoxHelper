@@ -144,14 +144,8 @@ public class JournalLoadFailureTests
         Assert.Contains("CancelButton = closeButton;", source, StringComparison.Ordinal);
     }
 
-    /// <summary>去掉整行注释（<c>///</c> 与 <c>//</c>）：断言「代码里不就地拼字面量」时不该被文档引用绊住。</summary>
-    private static string CodeOnly(string source) =>
-        string.Join('\n', source.Split('\n').Where(line =>
-        {
-            var trimmed = line.TrimStart();
-            return !trimmed.StartsWith("///", StringComparison.Ordinal)
-                && !trimmed.StartsWith("//", StringComparison.Ordinal);
-        }));
+    /// <summary>去掉注释（<c>//</c>、<c>///</c> 与 <c>/* … */</c> 区间，口径在 CodeScan 一份）：断言「代码里不就地拼字面量」时不该被文档引用绊住。</summary>
+    private static string CodeOnly(string source) => CodeScan.Text(source);
 
     private static int Count(string text, string fragment)
     {
