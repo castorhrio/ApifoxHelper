@@ -691,6 +691,10 @@ internal sealed class TasksPage : UserControl, INativePage
         {
             _detailScroll.Visible = false;
             _detailHint.Visible = true;
+            // 没有选中任务时详情区的动作入口一律停用：否则它们留着上一次选中时的可用状态——
+            // 读取失败后详情区收起、屏上写着「读取任务失败」，而「查看报告与导出」等入口仍是可点的样子
+            // （状态与屏上说的不一致，一旦详情区因任何原因重新显示，就出现对着空详情可点的入口）。
+            RefreshDetailActions(null);
             return;
         }
         _detailScroll.Visible = true;
@@ -812,7 +816,12 @@ internal sealed class TasksPage : UserControl, INativePage
     }
 
     /// <summary>扫描区按作业状态切换：按钮（空闲）或进度 + 取消（执行中）。控件位置固定，不跳位。</summary>
-    private void ShowJobState(JobInfo? job)
+    /// <summary>
+    /// 详情区动作入口的可用状态（单一落点）：<see cref="ShowJobState"/> 与「没有选中任务」分支共用同一份判定，
+    /// 不出现第二处门控。没有选中任务时全部停用——屏上写着「没有选中任务 / 读取任务失败」，
+    /// 入口却还是上一次选中时的可用状态，等于把不可作用的东西说成可作用。
+    /// </summary>
+    private void RefreshDetailActions(JobInfo? job)
     {
         // 缺口清单、候选审阅、规则提取、注释回写、传播核对、响应契约与远端检查都基于扫描落盘产物：扫描完成后可用，
         // 作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）；后台作业的进度与取消共用同一套固定占位控件。
@@ -848,6 +857,11 @@ internal sealed class TasksPage : UserControl, INativePage
         _journalButton.Enabled = _selectedTask is not null && File.Exists(_tasks.FilePath(_selectedTask.Id, TaskFiles.Journal));
         // 报告随时可看（与冻结页面一致，不要求先扫描）；作业执行中任务文件在被改写，禁用避免读到半份结果。
         _reportButton.Enabled = _selectedTask is not null && job is null;
+    }
+
+    private void ShowJobState(JobInfo? job)
+    {
+        RefreshDetailActions(job);
         if (job is not null)
         {
             _runningShown = true;

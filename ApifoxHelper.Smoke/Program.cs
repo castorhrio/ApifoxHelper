@@ -171,6 +171,15 @@ internal static class Program
         Console.WriteLine("== 配置页读取失败态（失败 → 重试 → 恢复，真实控件）==");
         RunProfileLoadFailure(services, dataRoot);
 
+        Console.WriteLine("== 任务页读取失败态（失败 → 重试 → 恢复，真实控件）==");
+        RunTaskLoadFailure(services, dataRoot);
+
+        Console.WriteLine("== 报告对话框读取失败态（失败 → 重试 → 恢复，真实控件）==");
+        RunReportsLoadFailure(services, dataRoot);
+
+        Console.WriteLine("== 差异确认读取失败态（两种失败 → 重试 → 恢复，真实控件）==");
+        RunDecisionsLoadFailure(services, dataRoot);
+
         Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
         RunFullJourney(services, dataRoot);
 
@@ -2592,6 +2601,539 @@ internal static class Program
         var retry = ButtonOf(root, ProfileLoadState.RetryLabel);
         var flow = retry.Parent ?? throw new InvalidOperationException("「重试」按钮没有父容器。");
         return flow.Controls.OfType<Button>().ToArray();
+    }
+
+    /// <summary>
+    /// 任务页读取失败态的真实控件交互（第一百五十三轮，控制仓简报 P1-3）。
+    /// <para>
+    /// 存在理由：第一百五十二轮把「读取失败 → 唯一行动按钮「重试」」推广到任务页 / 报告 / 差异确认三屏，
+    /// 但证据只到 Linux 侧判定真值表与源码切片——清单留不留旧行、详情区收不收、按钮点不点得动、
+    /// 点完是否真的重读、恢复后详情动作能否用，全都可以是坏的而 Linux 全绿、冒烟照样 PASS。
+    /// 本段与第一百五十一轮的 <see cref="RunProfileLoadFailure"/> 同一形状（失败 → 重试 → 恢复闭环），
+    /// 只是换成任务页：任务页是主链路第二步，它的失败态此前从未被真实控件走过。
+    /// </para>
+    /// </summary>
+    private static void RunTaskLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort.json"));
+        // 坏任务目录：TaskStore.List 枚举任务目录后逐份读 task.json，坏 JSON 即抛。
+        // 走的是产品里「任务目录被占用/权限不足/文件损坏」那一类读取失败的同一个 catch 分支。
+        var brokenDir = Path.Combine(store.TasksDir, "broken-task");
+        var brokenFile = Path.Combine(brokenDir, "task.json");
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("任务页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "任务页冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    services.GetRequiredService<ProfileStore>(),
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+
+                // 先正常读一次：清单里有行、失败态不显示——否则「失败态」可能只是初始状态。
+                page.RefreshData();
+                Application.DoEvents();
+                var list = TaskList(page);
+                if (list.Items.Count == 0)
+                {
+                    throw new InvalidOperationException("正常读取后任务清单是空的：冒烟数据根里没有任务，失败态无从对照。");
+                }
+                if (ButtonOf(page, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("读取正常时「重试」按钮却可见（失败态没有随成功读取退出）。");
+                }
+                var healthy = list.Items.Count;
+
+                // 弄坏磁盘上的任务目录，再走产品路径的读取入口（工具栏「刷新」调的就是 RefreshData）。
+                Directory.CreateDirectory(brokenDir);
+                File.WriteAllText(brokenFile, "这不是 JSON");
+                page.RefreshData();
+                Application.DoEvents();
+
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"读取失败后清单还留着 {list.Items.Count} 行旧数据：这一屏刚证明磁盘上的任务读不出来，旧行等于把不可信的内容当成现状。");
+                }
+                var (title, hint) = EmptyStateLabels(page);
+                if (title.Text != LoadFailureState.Tasks.Title)
+                {
+                    throw new InvalidOperationException($"失败态标题是「{title.Text}」，期望「{LoadFailureState.Tasks.Title}」。");
+                }
+                if (hint.Text != LoadFailureState.Tasks.Hint)
+                {
+                    throw new InvalidOperationException($"失败态说明是「{hint.Text}」，期望「{LoadFailureState.Tasks.Hint}」。");
+                }
+                var visible = EmptyActionButtons(page).Where(button => button.Visible).ToArray();
+                if (visible.Length != 1 || visible[0].Text != LoadFailureState.RetryLabel)
+                {
+                    throw new InvalidOperationException(
+                        "失败态的空态按钮不是「唯一行动按钮」：可见的是 " + string.Join("、", visible.Select(b => "「" + b.Text + "」")));
+                }
+                if (!visible[0].Enabled)
+                {
+                    throw new InvalidOperationException("失败态的「重试」按钮不可点：屏上没有任何下一步。");
+                }
+                // 清单空了，详情区没有可作用的对象：报告入口必须跟着停用（不能对着空详情导出报告）。
+                if (ButtonOf(page, "查看报告与导出").Enabled)
+                {
+                    throw new InvalidOperationException("读取失败后「查看报告与导出」仍可点：清单已空，它没有可作用的任务。");
+                }
+                var status = StatusLabel(page);
+                if (!status.Text.StartsWith(LoadFailureState.Tasks.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望以「{LoadFailureState.Tasks.Title}：」开头（如实给出原因）。");
+                }
+                if (status.Text.Length <= LoadFailureState.Tasks.Title.Length + 1)
+                {
+                    throw new InvalidOperationException($"状态行只有标题没有原因：「{status.Text}」。");
+                }
+                _lines.Add($"     正常读取 {healthy} 行 → 弄坏任务目录后：标题「{title.Text}」、状态行「{status.Text}」");
+            });
+
+            RunAction("任务页：失败态下点「重试」仍失败则留在失败态（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                // 磁盘仍是坏的：点「重试」等于再读一次，读还是失败——必须留在失败态，
+                // 不能因为「点过了」就把失败态收掉（那等于把没读到的说成读到了）。
+                Click(page, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var list = TaskList(page);
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException($"磁盘仍坏，重试后清单却有 {list.Items.Count} 行。");
+                }
+                var (title, _) = EmptyStateLabels(page);
+                if (title.Text != LoadFailureState.Tasks.Title)
+                {
+                    throw new InvalidOperationException($"磁盘仍坏，重试后标题变成「{title.Text}」，期望仍是「{LoadFailureState.Tasks.Title}」。");
+                }
+                if (!ButtonOf(page, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍坏，重试后「重试」按钮却不见了：用户没有第二次机会。");
+                }
+            });
+
+            RunAction("任务页：修好磁盘后点「重试」恢复清单（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                Directory.Delete(brokenDir, recursive: true);
+                var expected = tasks.List().Count;
+                Click(page, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var list = TaskList(page);
+                if (list.Items.Count != expected)
+                {
+                    throw new InvalidOperationException($"修好磁盘后重试，清单有 {list.Items.Count} 行，磁盘上有 {expected} 个任务。");
+                }
+                if (ButtonOf(page, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」按钮仍可见：失败态没有随成功读取退出。");
+                }
+                var (title, _) = EmptyStateLabels(page);
+                if (title.Text == LoadFailureState.Tasks.Title)
+                {
+                    throw new InvalidOperationException("恢复后空态标题仍是「读取任务失败」。");
+                }
+                var status = StatusLabel(page);
+                if (status.Text.StartsWith(LoadFailureState.Tasks.Title, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"恢复后状态行仍说失败：「{status.Text}」。");
+                }
+                _lines.Add($"     修好磁盘后重试：清单 {list.Items.Count} 行，状态行「{status.Text}」");
+            });
+
+            RunAction("任务页：恢复后选中行启用详情动作（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                var list = TaskList(page);
+                if (list.Items.Count == 0) throw new InvalidOperationException("清单是空的，没有可选的行。");
+                list.Items[0].Selected = true;
+                list.Items[0].Focused = true;
+                Application.DoEvents();
+                if (!ButtonOf(page, "查看报告与导出").Enabled)
+                {
+                    throw new InvalidOperationException("恢复后选中一行，「查看报告与导出」仍不可点（失败态禁用过的入口没有回来）。");
+                }
+            });
+
+            RunAction("任务页：筛选状态下读取失败仍说失败不说筛到零行（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                var filter = FindFirst<TextBox>(page) ?? throw new InvalidOperationException("任务页里找不到筛选框。");
+                filter.Text = "冒烟";
+                Application.DoEvents();
+                Directory.CreateDirectory(brokenDir);
+                File.WriteAllText(brokenFile, "这不是 JSON");
+                page.RefreshData();
+                Application.DoEvents();
+                var (title, _) = EmptyStateLabels(page);
+                // 失败态优先：这一屏连「有没有任务」都还不知道，说成「没有匹配的任务」是把读不出来说成读到了空。
+                if (title.Text != LoadFailureState.Tasks.Title)
+                {
+                    throw new InvalidOperationException(
+                        $"筛选状态下读取失败，空态标题是「{title.Text}」，期望「{LoadFailureState.Tasks.Title}」（不得说成「{ListFilter.TaskNoMatchTitle}」）。");
+                }
+                var visible = EmptyActionButtons(page).Where(button => button.Visible).ToArray();
+                if (visible.Length != 1 || visible[0].Text != LoadFailureState.RetryLabel)
+                {
+                    throw new InvalidOperationException(
+                        "筛选状态下读取失败，行动按钮不是「重试」：可见的是 " + string.Join("、", visible.Select(b => "「" + b.Text + "」")));
+                }
+            });
+        }
+        finally
+        {
+            // 坏目录必须清掉：留着它，后面每一段读任务都会失败（冒烟器自己造的坑自己填）。
+            try
+            {
+                if (Directory.Exists(brokenDir)) Directory.Delete(brokenDir, recursive: true);
+            }
+            catch (IOException)
+            {
+                // 删不掉只影响后续段，不影响本段判定；不掩盖本段已经记下的失败。
+            }
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>任务页的任务清单（页面里唯一的 <c>ListView</c>）。</summary>
+    private static ListView TaskList(Control root) =>
+        FindFirst<ListView>(root) ?? throw new InvalidOperationException("任务页里找不到任务清单。");
+
+    /// <summary>
+    /// 报告对话框读取失败态的真实控件交互（第一百五十三轮，控制仓简报 P1-3）。
+    /// <para>
+    /// 存在理由：第一百五十二轮给报告对话框补了「重试」，但「四个导出入口一起停用」「预览区收起」
+    /// 「点重试真的重读」这三件事只有源码切片证据。本段用真实控件走一遍：
+    /// 正常打开 → 任务目录读不出来 → 点重试仍失败 → 修好后点重试恢复。
+    /// 失败是真的：把任务目录整个挪走，报告生成读任务时抛 <c>UserException</c>，
+    /// 走的就是产品里「任务不存在/任务目录读不出来」的同一个分支。
+    /// </para>
+    /// </summary>
+    private static void RunReportsLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var exports = services.GetRequiredService<ReportExportService>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "报告失败态冒烟" });
+        var taskDir = Path.GetDirectoryName(tasks.FilePath(task.Id, TaskFiles.Manifest))
+            ?? throw new InvalidOperationException("任务目录路径取不出来。");
+        var parked = taskDir + ".parked";
+
+        ReportsDialog? dialog = null;
+        try
+        {
+            RunAction("报告对话框：正常打开时预览可见且不显示「重试」（真实控件）", () =>
+            {
+                dialog = new ReportsDialog(exports, task);
+                dialog.Show();
+                Application.DoEvents();
+                var preview = FindFirst<TextBox>(dialog) ?? throw new InvalidOperationException("报告对话框里找不到预览区。");
+                if (!preview.Visible)
+                {
+                    throw new InvalidOperationException("正常打开时预览区不可见（对话框停在提示态）。");
+                }
+                if (preview.Text.Length == 0)
+                {
+                    throw new InvalidOperationException("正常打开时预览是空的：报告没有生成出来。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("正常打开时「重试」按钮却可见（失败态没有随成功读取退出）。");
+                }
+                foreach (var label in new[] { "导出 Markdown", "导出 HTML", "导出 JSON", "前端交接说明" })
+                {
+                    if (!ButtonOf(dialog, label).Enabled)
+                    {
+                        throw new InvalidOperationException($"正常打开时「{label}」不可点：预览已生成，导出入口应当可用。");
+                    }
+                }
+                _lines.Add($"     正常打开：预览 {preview.Text.Length} 字，四个导出入口可用");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("报告对话框：任务目录读不出来时换成失败态并停用四个导出（真实控件）", () =>
+            {
+                // 把任务目录整个挪走：任务文件读不出来，报告生成必然失败（真实失败，不伪造异常）。
+                Directory.Move(taskDir, parked);
+                dialog = new ReportsDialog(exports, task);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("任务目录读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                if (!hint.Text.StartsWith(LoadFailureState.Reports.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Reports.Title}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名「{LoadFailureState.RetryLabel}」：「{hint.Text}」。");
+                }
+                var preview = FindFirst<TextBox>(dialog) ?? throw new InvalidOperationException("报告对话框里找不到预览区。");
+                if (preview.Visible)
+                {
+                    throw new InvalidOperationException("失败态下预览区仍可见：屏上同时有「失败」和一份预览，用户不知道该信哪个。");
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                foreach (var label in new[] { "导出 Markdown", "导出 HTML", "导出 JSON", "前端交接说明" })
+                {
+                    if (ButtonOf(dialog, label).Enabled)
+                    {
+                        throw new InvalidOperationException($"失败态下「{label}」仍可点：预览都没生成出来，导出的只会是同一份失败。");
+                    }
+                }
+                _lines.Add($"     任务目录挪走后：提示「{hint.Text}」");
+            });
+
+            RunAction("报告对话框：仍读不出来时点「重试」留在失败态（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出报告对话框。");
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Text.StartsWith(LoadFailureState.Reports.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"仍读不出来，重试后提示变成「{hint.Text}」，期望仍是失败态。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("仍读不出来，重试后「重试」按钮却不见了：用户没有第二次机会。");
+                }
+            });
+
+            RunAction("报告对话框：修好任务目录后点「重试」恢复预览与导出（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出报告对话框。");
+                Directory.Move(parked, taskDir);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var preview = FindFirst<TextBox>(dialog) ?? throw new InvalidOperationException("报告对话框里找不到预览区。");
+                if (!preview.Visible || preview.Text.Length == 0)
+                {
+                    throw new InvalidOperationException("修好任务目录后重试，预览仍不可见或为空。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」按钮仍可见：失败态没有随成功读取退出。");
+                }
+                if (HintLabel(dialog).Visible)
+                {
+                    throw new InvalidOperationException("恢复后提示区仍可见：屏上还留着上一次的失败文案。");
+                }
+                foreach (var label in new[] { "导出 Markdown", "导出 HTML", "导出 JSON", "前端交接说明" })
+                {
+                    if (!ButtonOf(dialog, label).Enabled)
+                    {
+                        throw new InvalidOperationException($"恢复后「{label}」仍不可点：失败态禁用过的入口没有回来。");
+                    }
+                }
+                _lines.Add($"     修好任务目录后重试：预览 {preview.Text.Length} 字，四个导出入口恢复");
+            });
+        }
+        finally
+        {
+            // 挪走的目录必须挪回来：留着它，后面每一段读这个任务都会失败。
+            try
+            {
+                if (Directory.Exists(parked) && !Directory.Exists(taskDir)) Directory.Move(parked, taskDir);
+            }
+            catch (IOException)
+            {
+                // 挪不回来只影响后续段，不影响本段判定；不掩盖本段已经记下的失败。
+            }
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 差异确认对话框读取失败态的真实控件交互（第一百五十三轮，控制仓简报 P1-3）。
+    /// <para>
+    /// 存在理由：这一屏有两种失败态（检查结果读不出来、已保存决策读不出来）与两种「不是失败」的状态
+    /// （尚未检查、没有需要处理的条目）。第一百五十二轮给两种失败态都加了「重试」，并刻意让后两种
+    /// <b>不显示</b>「重试」（重试解决不了它们，下一步在任务页与筛选器上）。这四条门控此前只有源码切片证据，
+    /// 本段用真实控件逐条走：失败 → 重试仍失败 → 修好恢复 → 另一种失败 → 修好恢复 → 非失败态不显示重试。
+    /// </para>
+    /// </summary>
+    private static void RunDecisionsLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var decisionSaves = services.GetRequiredService<DecisionService>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "差异确认失败态冒烟" });
+        var diffPath = tasks.FilePath(task.Id, TaskFiles.Diff);
+        var decisionsPath = tasks.FilePath(task.Id, TaskFiles.Decisions);
+
+        DecisionsDialog? dialog = null;
+        try
+        {
+            RunAction("差异确认：检查结果读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                File.WriteAllText(diffPath, "这不是 JSON");
+                dialog = new DecisionsDialog(tasks, task, decisionSaves);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("检查结果读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                if (!hint.Text.StartsWith(LoadFailureState.Decisions.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Decisions.Title}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名「{LoadFailureState.RetryLabel}」：「{hint.Text}」。");
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                var filter = FindFirst<ComboBox>(dialog) ?? throw new InvalidOperationException("差异确认里找不到筛选框。");
+                if (filter.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下筛选框仍可用：清单里没有条目可筛。");
+                }
+                _lines.Add($"     检查结果读不出来：提示「{hint.Text}」");
+            });
+
+            RunAction("差异确认：仍读不出来时点「重试」留在失败态（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出差异确认对话框。");
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Text.StartsWith(LoadFailureState.Decisions.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"仍读不出来，重试后提示变成「{hint.Text}」，期望仍是失败态。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("仍读不出来，重试后「重试」按钮却不见了：用户没有第二次机会。");
+                }
+            });
+
+            RunAction("差异确认：修好检查结果后点「重试」退出失败态（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出差异确认对话框。");
+                // 一份合法的空检查结果：读得出来、没有条目——失败态必须退出，且不能把「没有条目」说成失败。
+                File.WriteAllText(diffPath, "{}");
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (hint.Text.StartsWith(LoadFailureState.Decisions.Title, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"修好检查结果后重试，提示仍是失败：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」按钮仍可见：失败态没有随成功读取退出。");
+                }
+                _lines.Add($"     修好检查结果后重试：提示「{hint.Text}」");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("差异确认：已保存决策读不出来时指名「重试」且说明保存停用（真实控件）", () =>
+            {
+                File.WriteAllText(decisionsPath, "这不是 JSON");
+                dialog = new DecisionsDialog(tasks, task, decisionSaves);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Text.StartsWith(LoadFailureState.Decisions.SavedTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"已保存决策读不出来时提示是「{hint.Text}」，期望以「{LoadFailureState.Decisions.SavedTitle}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.Decisions.SavedHint, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"提示没有说明保存已停用：「{hint.Text}」。");
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("已保存决策读不出来时「重试」不可见或不可点。");
+                }
+                _lines.Add($"     已保存决策读不出来：提示「{hint.Text}」");
+            });
+
+            RunAction("差异确认：修好已保存决策后点「重试」退出失败态（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有产出差异确认对话框。");
+                File.Delete(decisionsPath);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (hint.Text.StartsWith(LoadFailureState.Decisions.SavedTitle, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"修好已保存决策后重试，提示仍是失败：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」按钮仍可见：失败态没有随成功读取退出。");
+                }
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("差异确认：尚未检查时不显示「重试」（重试解决不了它，真实控件）", () =>
+            {
+                // 没有检查结果不是失败：下一步在任务页点「开始检查」，同一时刻只给一个下一步。
+                File.Delete(diffPath);
+                dialog = new DecisionsDialog(tasks, task, decisionSaves);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith("尚未检查", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"没有检查结果时提示是「{hint.Text}」，期望以「尚未检查」开头。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「尚未检查」不是失败态，却显示了「重试」：同一屏给了两个下一步。");
+                }
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
     }
 
     /// <summary>

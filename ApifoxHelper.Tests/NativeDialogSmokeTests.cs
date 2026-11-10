@@ -411,6 +411,111 @@ public class NativeDialogSmokeTests
         Assert.True(failure > formLayout, "配置页失败态交互没有排在配置表单布局之后（主链路顺序：配置表单 → 配置页失败态）。");
     }
 
+    // ---------- 三屏读取失败态的真实控件交互（第一百五十三轮，简报 P1-3） ----------
+
+    /// <summary>
+    /// 第一百五十二轮把「读取失败 → 唯一行动按钮「重试」」推广到任务页 / 报告 / 差异确认三屏，
+    /// 但证据只到 Linux 侧判定真值表与源码切片——清单留不留旧行、详情区收不收、按钮点不点得动、
+    /// 点完是否真的重读、恢复后入口能否用，全都可以是坏的而 Linux 全绿、冒烟照样 PASS。
+    /// 这三段钉住它们真的跑：页面/对话框真的显示、读取入口真的调、按钮真的点、磁盘真的坏又真的修好。
+    /// </summary>
+    [Fact]
+    public void TaskLoadFailureInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunTaskLoadFailure(");
+        // 真的显示页面（UserControl 没有 Show，挂在 Form 上）、真的走读取入口、真的点按钮。
+        Assert.Contains("host.Show();", body);
+        Assert.Contains("page.RefreshData();", body);
+        Assert.Contains("Click(page, LoadFailureState.RetryLabel);", body);
+        // 失败是真的：往任务目录写坏 JSON，走 TaskStore.List 的同一个 catch 分支。
+        Assert.Contains("File.WriteAllText(brokenFile,", body);
+        // 断言取共享口径，不是第二份拼字（否则比的是冒烟器自己那份文字）。
+        Assert.Contains("LoadFailureState.Tasks.Title", body);
+        Assert.Contains("LoadFailureState.Tasks.Hint", body);
+        Assert.Contains("LoadFailureState.RetryLabel", body);
+        // 「唯一行动按钮」要真的数一遍可见按钮，不是只判「重试可见」。
+        Assert.Contains("EmptyActionButtons(page)", body);
+        // 清单空了，详情区没有可作用的对象：报告入口必须跟着停用。
+        Assert.Contains("ButtonOf(page, \"查看报告与导出\").Enabled", body);
+        // 段数与断言：段数掉下去说明有人删了某一段（删段比删断言更难发现）。
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 5, $"任务页失败态交互只有 {count} 个 RunAction 段。");
+        // 页面与宿主窗体都要释放：不 Dispose 会漏窗口句柄，跑第二遍就换一只壳。
+        Assert.Contains("page?.Dispose();", body);
+        Assert.Contains("host?.Dispose();", body);
+    }
+
+    /// <summary>段写好了但没在 Main 里调用 = 永远不会跑，报告照样 PASS。</summary>
+    [Fact]
+    public void TaskLoadFailureInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var profile = main.IndexOf("RunProfileLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        var task = main.IndexOf("RunTaskLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(profile >= 0, "Main 里没有调用配置页失败态交互。");
+        Assert.True(task > profile, "任务页失败态交互没有排在配置页失败态之后（主链路顺序：配置页 → 任务页）。");
+    }
+
+    [Fact]
+    public void ReportsLoadFailureInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunReportsLoadFailure(");
+        // 真的显示对话框、真的点按钮。
+        Assert.Contains("dialog.Show();", body);
+        Assert.Contains("Click(dialog, LoadFailureState.RetryLabel);", body);
+        // 失败是真的：把任务目录整个挪走，报告生成读任务时抛，走产品同一个分支（不伪造异常类型）。
+        Assert.Contains("Directory.Move(taskDir, parked);", body);
+        Assert.Contains("Directory.Move(parked, taskDir);", body);
+        // 断言取共享口径。
+        Assert.Contains("LoadFailureState.Reports.Title", body);
+        Assert.Contains("LoadFailureState.RetryLabel", body);
+        // 四个导出入口逐个判（不是只判一个）：预览都没生成出来，导出的只会是同一份失败。
+        Assert.Contains("\"导出 Markdown\", \"导出 HTML\", \"导出 JSON\", \"前端交接说明\"", body);
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 4, $"报告对话框失败态交互只有 {count} 个 RunAction 段。");
+        Assert.Contains("dialog?.Dispose();", body);
+    }
+
+    [Fact]
+    public void ReportsLoadFailureInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var task = main.IndexOf("RunTaskLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        var reports = main.IndexOf("RunReportsLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(task >= 0, "Main 里没有调用任务页失败态交互。");
+        Assert.True(reports > task, "报告对话框失败态交互没有排在任务页之后（主链路顺序：任务页 → 报告）。");
+    }
+
+    [Fact]
+    public void DecisionsLoadFailureInteraction_DrivesRealControls()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunDecisionsLoadFailure(");
+        Assert.Contains("dialog.Show();", body);
+        Assert.Contains("Click(dialog, LoadFailureState.RetryLabel);", body);
+        // 两种失败态都是真的：检查结果与已保存决策各写一份坏 JSON，走产品同一个读取分支。
+        Assert.Contains("File.WriteAllText(diffPath,", body);
+        Assert.Contains("File.WriteAllText(decisionsPath,", body);
+        // 断言取共享口径（两种失败态各有自己的标题与说明）。
+        Assert.Contains("LoadFailureState.Decisions.Title", body);
+        Assert.Contains("LoadFailureState.Decisions.SavedTitle", body);
+        Assert.Contains("LoadFailureState.Decisions.SavedHint", body);
+        // 「尚未检查」不是失败态：不显示「重试」（同一屏只给一个下一步）。
+        Assert.Contains("\"尚未检查\"", body);
+        var count = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(count >= 6, $"差异确认失败态交互只有 {count} 个 RunAction 段。");
+        Assert.Contains("dialog?.Dispose();", body);
+    }
+
+    [Fact]
+    public void DecisionsLoadFailureInteraction_IsRegisteredInMain()
+    {
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        var reports = main.IndexOf("RunReportsLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        var decisions = main.IndexOf("RunDecisionsLoadFailure(services, dataRoot);", StringComparison.Ordinal);
+        Assert.True(reports >= 0, "Main 里没有调用报告对话框失败态交互。");
+        Assert.True(decisions > reports, "差异确认失败态交互没有排在报告之后（主链路顺序：报告 → 差异确认）。");
+    }
+
     // ---------- 字体栈的运行时命中（第一百三十九轮，简报 P0-1 的降级手段） ----------
 
     /// <summary>
@@ -526,7 +631,7 @@ public class NativeDialogSmokeTests
 
     /// <summary>冒烟器里三段真实控件交互用例的方法名（唯一有真实控件触达的三段）。</summary>
     private static readonly string[] InteractionMethods =
-        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction", "RunProfileLoadFailure"];
+        ["RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunCandidatesInteraction", "RunSupplementsInteraction", "RunProfileLoadFailure", "RunTaskLoadFailure", "RunReportsLoadFailure", "RunDecisionsLoadFailure"];
 
     /// <summary>
     /// 交互断言清单：每行是「方法 + 段名 + 该段里一条判失败的等价物」。
@@ -651,6 +756,48 @@ public class NativeDialogSmokeTests
         { "RunProfileLoadFailure", "配置页：恢复后选中行启用编辑与探测（真实控件）", "!ButtonOf(page, \"连接与写入探测\").Enabled" },
         { "RunProfileLoadFailure", "配置页：筛选状态下读取失败仍说失败不说筛到零行（真实控件）", "title.Text != ProfileLoadState.FailureTitle" },
         { "RunProfileLoadFailure", "配置页：筛选状态下读取失败仍说失败不说筛到零行（真实控件）", "visible.Length != 1 || visible[0].Text != ProfileLoadState.RetryLabel" },
+
+        // 任务页读取失败态（第一百五十三轮，简报 P1-3）：正常读取不显示重试 / 失败态换掉清单并给唯一行动按钮 /
+        // 仍失败时留在失败态 / 修好磁盘后重试恢复 / 恢复后详情动作回来 / 筛选状态下失败优先。
+        { "RunTaskLoadFailure", "任务页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "list.Items.Count != 0" },
+        { "RunTaskLoadFailure", "任务页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "title.Text != LoadFailureState.Tasks.Title" },
+        { "RunTaskLoadFailure", "任务页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "hint.Text != LoadFailureState.Tasks.Hint" },
+        { "RunTaskLoadFailure", "任务页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "visible.Length != 1 || visible[0].Text != LoadFailureState.RetryLabel" },
+        { "RunTaskLoadFailure", "任务页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "ButtonOf(page, \"查看报告与导出\").Enabled" },
+        { "RunTaskLoadFailure", "任务页：读取失败时清单区换成失败态并给出唯一行动按钮（真实控件）", "status.Text.StartsWith(LoadFailureState.Tasks.Title + \"：\"" },
+        { "RunTaskLoadFailure", "任务页：失败态下点「重试」仍失败则留在失败态（真实控件）", "Click(page, LoadFailureState.RetryLabel);" },
+        { "RunTaskLoadFailure", "任务页：失败态下点「重试」仍失败则留在失败态（真实控件）", "title.Text != LoadFailureState.Tasks.Title" },
+        { "RunTaskLoadFailure", "任务页：失败态下点「重试」仍失败则留在失败态（真实控件）", "!ButtonOf(page, LoadFailureState.RetryLabel).Visible" },
+        { "RunTaskLoadFailure", "任务页：修好磁盘后点「重试」恢复清单（真实控件）", "list.Items.Count != expected" },
+        { "RunTaskLoadFailure", "任务页：修好磁盘后点「重试」恢复清单（真实控件）", "status.Text.StartsWith(LoadFailureState.Tasks.Title" },
+        { "RunTaskLoadFailure", "任务页：恢复后选中行启用详情动作（真实控件）", "!ButtonOf(page, \"查看报告与导出\").Enabled" },
+        { "RunTaskLoadFailure", "任务页：筛选状态下读取失败仍说失败不说筛到零行（真实控件）", "title.Text != LoadFailureState.Tasks.Title" },
+        { "RunTaskLoadFailure", "任务页：筛选状态下读取失败仍说失败不说筛到零行（真实控件）", "visible.Length != 1 || visible[0].Text != LoadFailureState.RetryLabel" },
+
+        // 报告对话框读取失败态（第一百五十三轮，简报 P1-3）：正常打开预览可见且不显示重试 /
+        // 任务目录读不出来时换成失败态并停用四个导出 / 仍失败时留在失败态 / 修好后重试恢复预览与导出。
+        { "RunReportsLoadFailure", "报告对话框：正常打开时预览可见且不显示「重试」（真实控件）", "if (!preview.Visible)" },
+        { "RunReportsLoadFailure", "报告对话框：正常打开时预览可见且不显示「重试」（真实控件）", "ButtonOf(dialog, LoadFailureState.RetryLabel).Visible" },
+        { "RunReportsLoadFailure", "报告对话框：正常打开时预览可见且不显示「重试」（真实控件）", "if (!ButtonOf(dialog, label).Enabled)" },
+        { "RunReportsLoadFailure", "报告对话框：任务目录读不出来时换成失败态并停用四个导出（真实控件）", "hint.Text.StartsWith(LoadFailureState.Reports.Title + \"：\"" },
+        { "RunReportsLoadFailure", "报告对话框：任务目录读不出来时换成失败态并停用四个导出（真实控件）", "if (preview.Visible)" },
+        { "RunReportsLoadFailure", "报告对话框：任务目录读不出来时换成失败态并停用四个导出（真实控件）", "if (ButtonOf(dialog, label).Enabled)" },
+        { "RunReportsLoadFailure", "报告对话框：仍读不出来时点「重试」留在失败态（真实控件）", "Click(dialog, LoadFailureState.RetryLabel);" },
+        { "RunReportsLoadFailure", "报告对话框：仍读不出来时点「重试」留在失败态（真实控件）", "!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible" },
+        { "RunReportsLoadFailure", "报告对话框：修好任务目录后点「重试」恢复预览与导出（真实控件）", "if (!preview.Visible || preview.Text.Length == 0)" },
+        { "RunReportsLoadFailure", "报告对话框：修好任务目录后点「重试」恢复预览与导出（真实控件）", "if (HintLabel(dialog).Visible)" },
+
+        // 差异确认读取失败态（第一百五十三轮，简报 P1-3）：两种失败态各走「失败 → 重试仍失败 → 修好恢复」，
+        // 外加「尚未检查」不是失败态、不显示「重试」。
+        { "RunDecisionsLoadFailure", "差异确认：检查结果读不出来时换成失败态并给出「重试」（真实控件）", "hint.Text.StartsWith(LoadFailureState.Decisions.Title + \"：\"" },
+        { "RunDecisionsLoadFailure", "差异确认：检查结果读不出来时换成失败态并给出「重试」（真实控件）", "if (filter.Enabled)" },
+        { "RunDecisionsLoadFailure", "差异确认：仍读不出来时点「重试」留在失败态（真实控件）", "Click(dialog, LoadFailureState.RetryLabel);" },
+        { "RunDecisionsLoadFailure", "差异确认：仍读不出来时点「重试」留在失败态（真实控件）", "!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible" },
+        { "RunDecisionsLoadFailure", "差异确认：修好检查结果后点「重试」退出失败态（真实控件）", "hint.Text.StartsWith(LoadFailureState.Decisions.Title" },
+        { "RunDecisionsLoadFailure", "差异确认：已保存决策读不出来时指名「重试」且说明保存停用（真实控件）", "hint.Text.StartsWith(LoadFailureState.Decisions.SavedTitle + \"：\"" },
+        { "RunDecisionsLoadFailure", "差异确认：已保存决策读不出来时指名「重试」且说明保存停用（真实控件）", "hint.Text.Contains(LoadFailureState.Decisions.SavedHint" },
+        { "RunDecisionsLoadFailure", "差异确认：修好已保存决策后点「重试」退出失败态（真实控件）", "hint.Text.StartsWith(LoadFailureState.Decisions.SavedTitle" },
+        { "RunDecisionsLoadFailure", "差异确认：尚未检查时不显示「重试」（重试解决不了它，真实控件）", "ButtonOf(dialog, LoadFailureState.RetryLabel).Visible" },
     };
 
     [Theory]
