@@ -18,7 +18,7 @@
 | [x] | G-D2 设计基线：单一视觉来源，颜色/字号/间距只从令牌取 | 达成（机械抽检在，无就地发明值） | `docs/DESIGN.md`、`Desktop/Native/UiTokens.cs`、`TokenWiringTests.ColorTokens_MatchDesignDoc`、`TokenWiringTests.NativeSources_NoColorLiteralsOutsideUiTokens`、`TokenWiringTests.SpacingTiers_MatchDesignDoc` | 第一百六十二轮三档缩放实测 |
 | [x] | G-D3 状态完备：每屏有状态表，空态/加载/执行中/错误/禁用/部分完成逐态定义 | 达成（读取失败态每屏都有「重试」；长内容区一律经滚动工厂；状态行放不下给入口） | `ApifoxHelper.Tests/LoadFailureRetryCoverageTests.cs` 的 `LoadFailureRetryCoverageTests.EveryFailureScreen_HasOneRetryButtonFromTheSharedLabel`、`ScrollHostTests.DesignDoc_DeclaresLongContentHost`、`StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost` | 第一百六十七轮三屏四段 12 通过 / 0 失败 ×3（本节第二段） |
 | [x] | G-D4 中文排版：对照共享审查清单 A 节机械检查 | 达成（可源码判定的条目全绿）。第一百六十九轮把这一行原先挂到「渲染期属性」的三条里两条拉回可判：**中英文空隙**静态可判（还原字面量 = 剥插值空洞 + 解转义，再判紧贴），**行首行尾禁则**在唯一会折行的交付面（导出 HTML）上落成 `HtmlStyle` 的 `line-break:strict;word-break:normal`，**第一百七十轮起同一份产物交给 headless Chromium 排版量过一次**（禁字起行 0 处、开号收尾 0 处，窄容器 17 档合计 61 行）；**正文行长**同一面落成 `max-width:40em`，真浏览器里解析成 640px 而视口 1280px。**本机不可判别的那半截要说清**：`auto`/`strict`/`loose` 与不写排出来逐档相同，禁则成立不能归因给那条声明，读数与挂账见「真浏览器布局门（HTML 折行）」一节。**第一百七十一轮起这一节的挂账还必须写明「最近一次真跑是哪一轮、哪一天」**，并由 `HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun` 不分路径核（那一行被写坏会一直绿到真需要读它的那天）；同轮答辩口径补第四块「排版归因」，把「禁则为什么成立、功劳不记在一条属性头上」正面写进口径而不是等被追问。仍随 G-D5 真机复核的只剩「界面标签在实际字体度量下到底折不折行」与字距非负。五条硬项各自的落地面见 `docs/DESIGN.md` §6「中文排版」 | `TypographyTests.NoFakeItalic`、`TypographyTests.FontStack_MatchesDesignDocOrder`、`TypographyTests.Copy_ChineseQuotesOnlyUseCornerBrackets`、`TypographyTests.FontFloor_Is12Px`、`TypographyTests.Copy_AvoidsEmptySloganWords`、`TypographyTests.ChineseCopy_LeavesASpaceBetweenChineseAndLatin`、`TypographyTests.DesignSection3_HasExactlyFourFontTiers`、`TypographyTests.DesignDoc6_DeclaresTheTypographyClauseWithFiveItems`、`ReportTypographyTests.HtmlStyle_EnforcesTheChineseLineBreakProhibition`、`ReportTypographyTests.RenderedCopy_LeavesASpaceBetweenChineseAndLatin`、`HtmlWrapTests.DeliveredHtml_KeepsForbiddenPunctuationOffTheLineStart`、`HtmlWrapTests.DeliveredHtml_WrapsInsideTheFortyEmColumnNotTheViewport`、`HtmlWrapTests.TheDetector_ReportsTheBreakItForcedInsideTheArtifactOwnSentences`、`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo`、`DefenseNarrativeTests.Narrative_EveryBlockCitesASectionThatActuallyExists`、`HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun` | 第一百六十九轮 wine 三档 135 通过 / 0 失败 ×3（重发冒烟器后 `.winecheck/demo.sh` 复跑；`PASS ProfileAdvancedDialog（模块与模板）` 在本轮改动之后，**构造通过不等于说明行放得下**——`RunCaptionFit` 量的是同步预览 / 报告与交接 / 代码证据三屏，这一屏的文字宽 / 可用宽随 G-D5；**模拟器，不是真机**） |
-| [ ] | G-D5 真机观感：100% 与 200% DPI 截图各一套并按状态归档，观感由人复核 | **未达成（环境供给缺口）**：真机 0 台，`docs/evidence/real-machine/` 不存在；现有 GUI 证据全部来自 Linux 容器内 wine 10.0 + Xvfb。到期日 2026-11-20，届时仍不可得按「降级答辩脚本」逐屏答辩；机器一到手，第一天照下一节「G-D5 真机复核清单（可勾选）」逐条跑 | `ApifoxHelper.Tests/WordingHonestyTests.cs` 的 `WordingHonestyTests.RealMachineClaims_RequireEvidencePaths`、`WordingHonestyTests.DegradationScript_ExistsAndCoversEveryScreen`、`WordingHonestyTests.Readme_StatesTheRealMachineGap`、`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`、本节下方的「降级答辩脚本」 | 第一百六十七轮 wine 三档 135/0 ×3（`.winecheck/demo.sh` 一条命令复跑；**模拟器，不是真机**） |
+| [ ] | G-D5 真机观感：100% 与 200% DPI 截图各一套并按状态归档，观感由人复核 | **未达成（环境供给缺口）**：真机 0 台，`docs/evidence/real-machine/` 不存在；现有 GUI 证据全部来自 Linux 容器内 wine 10.0 + Xvfb。到期日 2026-11-20，届时仍不可得按「降级答辩脚本」逐屏答辩；机器一到手，第一天照下一节「G-D5 真机复核清单（可勾选）」逐条跑。**第一百七十四轮把第 1 条不依赖 Windows 的那半截量到了**：`dotnet publish` 按 `publish.ps1` 的参数在 Linux 上出自包含单文件（退出码 0、目录内一个文件、字节读数记在该节引言），README 念的用法与产物路径逐字对到脚本字面量——**这一行仍留空框**，缺的是「双击它 → 首程四站」与真机截图，本机一次都没量到 | `ApifoxHelper.Tests/WordingHonestyTests.cs` 的 `WordingHonestyTests.RealMachineClaims_RequireEvidencePaths`、`WordingHonestyTests.DegradationScript_ExistsAndCoversEveryScreen`、`WordingHonestyTests.Readme_StatesTheRealMachineGap`、`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`、`ApifoxHelper.Tests/PublishScriptTests.cs` 的 `PublishScriptTests.PublishUsage_DocumentedSwitchesAreTheDeclaredOnes`、`PublishScriptTests.PublishedPaths_InReadme_AreTheOnesTheScriptComputes`、`PublishScriptTests.LocalPublishReading_IsRecordedAndKeepsTheRealMachineGap`、本节下方的「降级答辩脚本」 | 第一百六十七轮 wine 三档 135/0 ×3（`.winecheck/demo.sh` 一条命令复跑；**模拟器，不是真机**） |
 | [ ] | G-D6 退场：原 Web 页面从用户路径移除 | **未达成**：页面层已冻结、默认入口已翻转为原生（见 G-D1），但 `--web` 回退仍在，退场清单未执行——按决定，最终移除排在 G-D5 真机复核之后 | `Desktop/DesktopApp.cs`、`LaunchOptionsTests.WebFlag_SelectsTransitionShell`（回退入口存在即「未退场」，这条断言钉的是回退行为不是退场完成） | 不经界面（入口路由判定） |
 
 ### 二、SHARED 写入安全不变量（`docs/方案.md` §8 产品红线）
@@ -28,7 +28,7 @@
 | 勾选 | 不变量 | 当前结论 | 证据出处（文件 + 断言名） | GUI 证据（wine 轮次） |
 | --- | --- | --- | --- | --- |
 | [x] | SHARED-1 两阶段独立确认：源码回写与远端同步分别预览、分别确认 | 达成（原生侧两次独立确认，任一动作不隐含另一个；确认框默认按钮一律在「取消」） | `ApifoxHelper.Tests/ApplyPlanConfirmTests.cs` 的 `ApplyPlanConfirmTests.RunApply_AsksBeforeWriting`、`ConfirmBoxConsistencyTests.EveryConfirmBox_DefaultsToCancel` | 第一百六十七轮 `RunWriteBackEndToEnd` 6 通过 / 0 失败 ×3（三档全量复跑内） |
-| [x] | SHARED-2 预览先行：确认绑定计划，选择/目标/CLI 版本变化后原确认失效 | 达成（确认同步只在计划待确认且未过期时可用；第一百七十三轮起 `MockApifoxCliTests.cs` 的 `Shared2_StaleConfirmedHash_IsRefusedBeforeAnyCliCall` 把「确认之后计划被重新生成、拿旧哈希执行」这一支跑到真实进程边界上——`Sync/SyncExecutor.cs` 第 22 行的拒绝发生在任何一条 CLI 命令发出之前，远端逐字节不动，计划不被推进到 `executing`；同文件 `Boundary_TheNativeConfirmPathRunsThisVeryChain` 钉住原生壳那颗按钮调的就是同一个 `ExecuteAsync`，传的正是 `plan.Hash`） | `SyncExecutionTests.CanExecute_OnlyFreshAwaitingConfirmPlan`、`ApplyPlanConfirmTests.ConfirmText_TakesThePlansOwnNumbers`、`ApifoxHelper.Tests/MockApifoxCliTests.cs`（`docs/NOTES.md`「本地 mock CLI 端到端（写入安全红线）」） | 不经界面（门禁真值表 + 本地 mock CLI 端到端） |
+| [x] | SHARED-2 预览先行：确认绑定计划，选择/目标/CLI 版本变化后原确认失效 | 达成（确认同步只在计划待确认且未过期时可用；第一百七十三轮起 `MockApifoxCliTests.cs` 的 `Shared2_StaleConfirmedHash_IsRefusedBeforeAnyCliCall` 把「确认之后计划被重新生成、拿旧哈希执行」这一支跑到真实进程边界上——`Sync/SyncExecutor.cs` 第 22 行的拒绝发生在任何一条 CLI 命令发出之前，远端逐字节不动，计划不被推进到 `executing`；同文件 `Boundary_TheNativeConfirmPathRunsThisVeryChain` 钉住原生壳那颗按钮调的就是同一个 `ExecuteAsync`，传的正是 `plan.Hash`。**第一百七十四轮把这条链的作用范围补到过渡壳 REST 那一头**：`plan/apply` 调的是同一个 `ExecuteAsync`、交给它的哈希来自请求体而不是在路由里现算的第二份、`verify` 不带哈希；JS 对象字面量与 C# 属性之间那层请求体绑定也按产品自己那一份序列化口径核过（键名漂了或 DTO 上加 `JsonPropertyName`，两处源文照旧而线上每次确认都会绑定失败——这一类只有 `Boundary_TheWebRequestBodyKeyBindsToTheFieldTheRouteReads` 看得见）；请求体没带 `planHash`（绑成空串）与带旧哈希两支都在任何一条 CLI 命令发出之前被 `409` 拒掉，带当前那一份走完全程 `verified`） | `SyncExecutionTests.CanExecute_OnlyFreshAwaitingConfirmPlan`、`ApplyPlanConfirmTests.ConfirmText_TakesThePlansOwnNumbers`、`ApifoxHelper.Tests/MockApifoxCliTests.cs` 的 `MockApifoxCliTests.Boundary_TheWebRoutePathRunsTheSameExecutorAndHash`、`MockApifoxCliTests.Boundary_TheWebRequestBodyKeyBindsToTheFieldTheRouteReads`（按请求形状跑真实进程边界那一条是 async 断言，引用门只认返回 void 的形状，故它写在上一格的行为描述里而不是这一格）（`docs/NOTES.md`「本地 mock CLI 端到端（写入安全红线）」） | 不经界面（门禁真值表 + 本地 mock CLI 端到端） |
 | [ ] | SHARED-3 写入边界：只写计划内资源、整段构造嵌套对象、受保护设置不开放相关写入 | **已实现（本地端到端已跑，真实 Apifox 未跑）**：勾选与排除口径在；第一百七十二轮起「计划 2 个 / 远端 3 个 → 写入只命中那 2 个，计划外那个连命令都没发出」与「平台没保住受保护设置 → 判 verifyFailed、不显示成全部核对」两条已在真实进程边界上端到端跑过并常驻本仓。空框保留的理由只剩一个：真实 Apifox 服务端没跑过 | `SyncSelectionTests.SyncableNow_ExcludesPendingAndNonSyncable`、`SyncSelectionTests.PendingCount_OnlyUnconfirmedNeedsDecisionItems`、`ApifoxHelper.Tests/MockApifoxCliTests.cs`（`docs/NOTES.md`「本地 mock CLI 端到端（写入安全红线）」） | 不经界面（勾选真值表 + 本地 mock CLI 端到端） |
 | [ ] | SHARED-4 冲突检测：计划生成时与执行前逐资源重读并核对指纹 | **已实现（本地端到端已跑，真实 Apifox 未跑）**：指纹与最终状态有落盘记录；第一百七十二轮起「确认后把远端改掉 → 执行前重读抓到、判 conflict、一个写入字节都不发出、远端保持别人那一版」有了一次可复跑的端到端记录。本地锁不承诺跨客户端原子性（README 已知限制）这条不变 | `JournalTests.PlanLines_CarryTheFingerprintAndTheFinalStatus`、`ApifoxHelper.Tests/MockApifoxCliTests.cs` | 不经界面（写入形状断言 + 本地 mock CLI 端到端） |
 | [x] | SHARED-5 部分失败如实：首个失败即停、部分完成不显示成全部成功、不谎报回滚 | 达成（结果口径单一落点） | `SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess`、`SyncExecutionTests.ResultText_InterruptedPointsToVerifyFirst`、`ApifoxHelper.Tests/MockApifoxCliTests.cs` | 不经界面（结果文案真值表 + 本地 mock CLI 端到端） |
@@ -56,6 +56,18 @@
 | [ ] | 5. 真机字体度量：`RunFontStackRuntime` 的等价手工核对——在真实渲染下看「计数行 / 源码路径 / 差异文本」三类文字与正文是否**明显不同字体**（等宽栈生效，`Desktop/Native/FontStack.cs`，回退顺序由 `TypographyTests.FontStack_MatchesDesignDocOrder` 钉住） | 三处取字体是否同一份实际渲染名（界面控件、进程默认字体、对话框），以及数字列在内容变化时会不会左右跳 | `docs/evidence/real-machine/fonts/`：一张含计数行与差异文本的放大截图 + 一行「渲染出的字体名」 | 三类文字肉眼可辨为等宽、且数字列在筛选/刷新后不横向漂移即通过。若真机没装 Segoe UI 而落到回退项，把**实际命中的那一项**写进本节（字体栈是有序回退，找到即停），不写成「字体不对」 |
 | [ ] | 6. SHARED-3/4/7/8 端到端（写入安全红线。**本地那一半第一百七十二轮已经常驻本仓**：`ApifoxHelper.Tests/MockApifoxCliTests.cs` 十条在真实进程边界上把这四件事跑过并挡住变异；这一条要量的是剩下的那一半——真实 Apifox 服务端）。先由用户指定**专用测试 Apifox 项目 + 分支 + 可写范围**（谁授权、项目 ID、分支名写在下面第一行空白处），对 1–2 个接口走完「差异检查 → 生成计划 → 确认 → 写入 → 回读核对 → 部分失败模拟」 | 逐条量：只写了计划内资源（SHARED-3，勾选口径 `SyncSelectionTests.SyncableNow_ExcludesPendingAndNonSyncable`）、执行前重读并核对指纹（SHARED-4，`JournalTests.PlanLines_CarryTheFingerprintAndTheFinalStatus`）、创建防重与 ID 回绑（SHARED-7）、未确认的高风险项不进计划且没有任何删除动作（SHARED-8，`CompatEntriesTests.ResultHeadline_FailedKeepsWriteClosedAndNeverClaimsPassed`）；本地那四条的对照基线在 `ApifoxHelper.Tests/MockApifoxCliTests.cs`，真机量到与它不一致的地方逐条写清是服务端行为不同还是产品缺陷 | `docs/evidence/real-machine/apifox-write/`：计划 JSON、任务 `journal.jsonl`、写入前后的远端详情快照各一份 | **部分失败模拟那一支是硬门**：制造一个必然失败的动作后，后续写入必须停住、已完成的如实列出、状态行不得出现「全部成功」（`SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess`）。任一条不成立即整条判失败并写清是哪一条；跑通之后才允许把验收表的 SHARED-3/4/7/8 从 `[ ]` 改成 `[x]`，并同步改本节结论 |
 | [ ] | 7. 冒烟器在真机跑一次：同一份发布产物执行 `ApifoxHelper.Smoke.exe --report=<路径>`（`ApifoxHelper.Smoke/Program.cs`），与 wine 那三档逐段对照 | 报告总通过/失败数、每一段的段名是否都在（段标题带 `[RunXxx]`）、与 wine 是否出现**同一段的判断不同** | `docs/evidence/real-machine/smoke/`：真机报告原文一份 | 退出码 0 且 0 失败即通过；段数与通过数**不要求**等于 wine 的 135（那是模拟器的数，见「Windows 真机 / wine 模拟器验证清单」B 段最后一项），要求的是同一段在两处判定一致。不一致的段名列进本节并逐条查到底层 |
+
+> **第 1 条不依赖 Windows 的那半截，已经量到（第一百七十四轮，简报 P0-2）**
+>
+> 这一条原本整行挂到「真机到手第一天」，但它的前半句——`dotnet publish` 能不能出自包含单文件、`publish.ps1` 的参数
+> 与 `README.md` 说的是不是同一件事——**在本机就能量**。量之前它和后半句混在一起，于是「发布路径」这一整块看起来
+> 都要等机器；量完才知道卡的到底不是发布，是「双击」那一步。读数如下，**一条都不勾**：
+>
+> - **本地发布读数**：第一百七十四轮 · 2026-11-11（Linux 容器，非真机）——按 `publish.ps1` 拼出的参数逐条照抄跑 `dotnet publish`，自包含与框架依赖两档退出码 0：自包含单文件 81570129 字节（≈77.8 MB，输出目录内只有那一个文件），框架依赖单文件 13750326 字节（≈13.1 MB，同样一个文件）；同一工程去掉脚本里 `PublishSingleFile` / `IncludeNativeLibrariesForSelfExtract` / `DebugType=none` / `AllowedReferenceRelatedFileExtensions=none` / `EnableCompressionInSingleFile` 这几条属性后出 4 个文件、主文件 184167377 字节（≈175.6 MB），所以 README 念的「单文件、无附带文件、体积约 78 MB」是这几条属性**合起来**的效果（各自贡献多少没分开量）。复跑命令见 `README.md` 的打包一节，两条产物路径与用法开关由 `PublishScriptTests.PublishUsage_DocumentedSwitchesAreTheDeclaredOnes` 与 `PublishScriptTests.PublishedPaths_InReadme_AreTheOnesTheScriptComputes` 按脚本字面量逐字核对。这一行记的全是产物形状；双击与首程四站在本机没量到，第 1 条整行仍留空框。
+> - **这份单文件在 wine 里起得来（同一轮第一次跑到）**：按 `.winecheck/run_app.sh` 的既有跑法把 `EXE` 指向上面那份单文件产物（不是 `bin/` 里的构建产物），窗口标题「Apifox 助手」出现，原生壳画出左侧导航 + 四个页签 + 空态阶段条 + 版本行，本地服务在回环端口起来，资料目录结构落全。**此前每一轮 wine 证据用的都是 `.winecheck/README.md` 里那条不带 `PublishSingleFile` 的发布命令**——「单文件自解压、WebView2Loader 打进包之后还能不能启动」这一支在 GUI 层从没跑过，本轮第一次跑到，结论是能起。
+> - **仍然没量到的那半截（不勾、不改写成通过）**：① **双击**——本机没有 Windows 图形子系统，「不带任何参数双击 → 原生窗口」只能等真机；② **首程四站**（新建配置 → 新建任务 → 扫描 → 注释缺口）在这份单文件产物上一次没走过，wine 那三档 135 通过 / 0 失败 跑的是冒烟器与多文件产物，两者不能互相顶替；③ 这一跑的中文全是豆腐块（该 wine prefix 缺 CJK 字体），所以「说明行放得下 / 文字宽对可用宽」这类判据在这份产物上量不了；④ 逐窗口截图（`import -window`）拿到的是 285 字节的空白 PNG，只有整屏截图有内容——**按屏归档截图这一步在单文件产物上要重做**。
+> - **这一节凭什么不是又一次自述**：上面三个数字（字节数、退出码、文件个数）都是当前源码 + 当前 SDK 可复跑的产物形状，念之前要重跑一次；`README.md` 里那句「体积约 78 MB」与这里记的字节数由 `PublishScriptTests.LocalPublishReading_IsRecordedAndKeepsTheRealMachineGap` 对一次（容差 1 MB），约数脱离实测读数自己漂走即红。
+> - **真机当天照这两句念**（口径已在上面这几条里定好，真机只是把读数换成机器上量到的，不新增机制）：第 1 条——「发布产物就是 `publish.ps1` 自包含那一条命令的唯一输出文件；本机已验到它的形状（单文件、字节数、目录内无附带文件），真机要补的是『双击它 → 四站逐站可达、每站只给一个下一步』这一句」；第 5 条——「把计数行 / 源码路径 / 差异文本三类文字在真机上实际命中的字体名各抄一行回来，与 `Desktop/Native/FontStack.cs` 的有序回退对照：命中的是哪一项就写哪一项，落到回退项不算『字体不对』」。
 
 **第 6 条的前置信息（真机到位前由用户填，空着就是「还没授权，不许写」）**：授权人 ______；测试项目 ID ______；分支名 ______；可写范围（接口/模型清单）______。
 
@@ -2016,7 +2028,7 @@
 > 可复跑、常驻仓库、有断言名的记录。它顶替不了真机与真实 Apifox，但从此「没跑过」这句话要改成
 > 「本地跑过，真实服务端没跑过」——这两件事差多少，这一节逐条写清。
 >
-> **机械门**：`ApifoxHelper.Tests/MockApifoxCliTests.cs`（12 条：第一百七十二轮 10 条 + 第一百七十三轮 2 条）
+> **机械门**：`ApifoxHelper.Tests/MockApifoxCliTests.cs`（15 条：第一百七十二轮 10 条 + 第一百七十三轮 2 条 + 第一百七十四轮 3 条）
 > + 夹具 `ApifoxHelper.Tests/MockCliRun.cs`
 > + 脚本 `ApifoxHelper.Tests/MockApifoxCli.js`。复跑：`dotnet test ApifoxHelper.Tests --filter FullyQualifiedName~MockApifoxCliTests`。
 >
@@ -2024,6 +2036,19 @@
 > 且拒绝发生在任何一条 CLI 命令发出之前——`Sync/SyncExecutor.cs:22` 这条绑定此前整仓零断言）与
 > `Boundary_TheNativeConfirmPathRunsThisVeryChain`（原生壳那颗按钮调的就是这同一条链——不然上面所有的「端到端」
 > 都可能是在给一条用户不走的路径作证）。两支的变异实测见下面 M7 / M8。
+>
+> **第一百七十四轮补的那三支（把「作用范围」补到 REST 那一头）**：上一轮自己发现原生那一头补了，
+> 而 `Api/ApifoxRoutes.cs` 的 `POST /api/tasks/{id}/plan/apply` 与 `POST /api/tasks/{id}/verify` 是**过渡壳 `--web`
+> 的实际入口**，同样调 `executor.ExecuteAsync(id, hash, job)`，当时没有对应的边界门。页面层已冻结 ≠ 这条链不跑——
+> 答辩现场若用 `--web` 演示，它照样要走通。三支分别是
+> `Boundary_TheWebRoutePathRunsTheSameExecutorAndHash`（路由调的是同一个 `ExecuteAsync`、哈希来自请求体
+> `request.PlanHash` 而不是在路由里现算的第二份、`verify` 不带哈希，外加过渡壳那句发的是 `{ planHash: p.hash }`
+> 即它正在展示的那一份）、`Boundary_TheWebRequestBodyKeyBindsToTheFieldTheRouteReads`（JS 对象字面量与 C# 属性之间
+> 隔着 ASP.NET Core 的请求体绑定，源文字对源文字的门对这一层是盲的：键名漂了、或 DTO 上加一个
+> `JsonPropertyName`，两处源文照旧、线上每一次确认都会绑定失败落成空串——这里用产品自己那一份序列化口径
+> `Api/HelperHost.cs:42` 核过去）、`Shared2_ARequestBodyWithoutTheConfirmedHash_IsRefusedAndWithItThePathCompletes`
+> （按请求形状跑到真实进程边界：请求体没带 `planHash` 时 `409` 拒绝且一条命令都不发，带旧哈希同样拒，
+> 带当前那一份走完全程 `verified`）。三支的变异实测见下面 M9–M12。
 
 - **真实与假的分界（这是这一节唯一要紧的一句话）**：
   - 真实——`Infrastructure/ProcessRunner.cs` 起真子进程；`Apifox/ApifoxCli.cs` 真解析「前导说明行 + 单个完整 JSON 对象」，
@@ -2053,7 +2078,7 @@
      「确认的计划与当前计划不一致，请重新预览。」，**连 `endpoint.get` 都没发出去**、远端逐字节不动、
      计划状态停在 `awaitingConfirm` 没被推进到 `executing`）与
      `Shared3_ProtectedSettingsLost_VerifyFailsAndNeverClaimsSuccess`（平台没保住受保护设置时，回读核对抓得住，判 `verifyFailed`）。
-- **变异验证实测可红 8 处（M1–M8，逐条红在该红的那一条上，全部按原字节还原一致）**：
+- **变异验证实测可红 12 处（M1–M12，逐条红在该红的那一条上，全部按原字节还原一致）**：
   ① `UpdateEndpointAsync` 的目标 ID 改成 `RemoteId + 1` → SHARED-3 那条红（连带 SHARED-5 与受保护设置两支）；
   ② 指纹核对 `if (NativeUtil.Hash(data) != action.BeforeHash)` 前加 `false &&` → **只有** SHARED-4 那条红；
   ③ 创建前同身份复查 `if (existing is not null)` 前加 `false &&` → 只有「同身份已存在」那条红；
@@ -2064,6 +2089,18 @@
   ⑦ `SyncExecutor.cs:22` 的哈希绑定 `if (plan.Hash != planHash)` 前加 `false &&` → **只有** `Shared2_StaleConfirmedHash_…` 红；
   ⑧ 原生壳 `var hash = plan.Hash;` 改成 `var hash = plan.Hash + "";`（运行结果相同、但不再引用计划自己那一串）
      → **只有** `Boundary_TheNativeConfirmPathRunsThisVeryChain` 红。
+  第一百七十四轮补 REST 那一头的四支：
+  M9 `Api/ApifoxRoutes.cs` 的 `var hash = request.PlanHash;` 改成从磁盘上现读一份计划的哈希
+     （加 `TaskStore tasks` 注入，`dotnet build` 0 警告 0 错误——这是一条**能编译的真替代实现**，不是稻草人）
+     → **只有** `Boundary_TheWebRoutePathRunsTheSameExecutorAndHash` 红；
+  M10 同一条路由的 `executor.ExecuteAsync(id, hash, job)` 接错到 `executor.VerifyAsync(id, job)`（同样编译通过）
+     → 同样只红在那一支上；
+  M11 `Web/app.js` 那句请求体的键名 `planHash` 漂成 `hash` → 源文字门与绑定门**两支一起红**；
+  M12 只在 `Sync/PlanModels.cs` 的 `ApplyPlanRequest.PlanHash` 上加一个 `[JsonPropertyName("confirmedPlanHash")]`
+     （路由与页面两处源文一字未改、`dotnet build` 0 警告 0 错误）→ **只有**
+     `Boundary_TheWebRequestBodyKeyBindsToTheFieldTheRouteReads` 红，两支源文字门全绿。
+  **M12 就是新增那一支门存在的全部理由**：它模拟的正是「代码读起来完全正确、线上每一次确认都绑定失败」这一类缺陷，
+  而这一类缺陷 M9/M10/M11 那种「源文字对源文字」的判法结构上看不见。
   **M1–M6 在第一百七十三轮被独立复跑过一次**（红名逐条与上面记录一致：M1 红 3 条、M2–M6 各红 1 条），
   这一条写在这儿是因为「变异实测」这种记录如果只有作者本人信得过，它和没做过只差一步。
 - **本轮第一次真跑抓到的是夹具自己的缺陷（产品代码一行未动）**：夹具落 `remote.json` 用了 `File.WriteAllText`，
@@ -2081,7 +2118,7 @@
   这一对轮次与日期能在本文件里指到一条真实的 `## ` 轮次标题；这条与浏览器探针那一族同一份纪律（第一百七十一轮立的）。
 - **node 缺席时这一族门怎么降级（与浏览器探针同一份纪律：没跑不许算成跑过）**：查找顺序
   `APIFOXHELPER_NODE → PATH(node|nodejs)`（与 `ChromeLayout.NodePath` 同一处落点，换机器设一次两处都生效）。
-  本机没有 node 时，12 条用例退成核「这一节的标题在、上面那句查找顺序原样在、下面那一行真跑登记原样在」，
+  本机没有 node 时，15 条用例退成核「这一节的标题在、上面那句查找顺序原样在、下面那一行真跑登记原样在」，
   缺任一项即红——红在「账没了」，而不是绿在「没跑也算过」。
 - **降级支不是纸上条款（第一百七十三轮真跑过，不必等一台没装 node 的机器）**：把 `PATH` 剥成一个不存在的目录、
   取消 `APIFOXHELPER_NODE`、按绝对路径调 `dotnet test --no-build`，node 就查不到，12 条全绿走的就是降级支
@@ -2089,8 +2126,11 @@
   → **9 条红**（8 条红线/协议支红在 `RequireNodeOrRegisteredGap` 里，加 `RegisteredGap_NamesTheLastLocalRun` 自己）；
   把轮次改成没有过的「第九百九十九轮」再跑 → 红在配对那一句上（「登记的『第九百九十九轮 · 2026-11-11』在 NOTES 里
   没有以……出现的轮次标题」）。两次实验之后 `docs/NOTES.md` 按原字节还原、`git status` 与还原前一致。
-- **上一次本地 mock CLI 端到端真跑**：第一百七十三轮 · 2026-11-11（12 条全绿；node 为本机 `/usr/bin/node`，
-  本轮另按上面那条把「本机没有 node」那一支也真跑了一遍）。
+  **第一百七十四轮按同一条命令复跑过一次**：新增三支之后该族共 15 条，剥掉 `PATH` 与 `APIFOXHELPER_NODE` 之后
+  15 条全绿（走的仍是降级支），实验之后 `docs/NOTES.md` 按原字节还原。
+- **上一次本地 mock CLI 端到端真跑**：第一百七十四轮 · 2026-11-11（15 条全绿：第一百七十二轮 10 条 +
+  第一百七十三轮 2 条 + 本轮 REST 那一头 3 条；node 为本机 `/usr/bin/node`，本轮另按上面那条把「本机没有 node」
+  那一支也复跑了一遍）。
   这一行是降级支的账本：隔很多轮再读「本机没跑」那一句，与「上周刚跑过」在纸面上必须能分辨出来。
 
 ## 可经营清点（第一百七十二轮）
@@ -2150,3 +2190,109 @@
 - **验证状态**：Linux 三工程 `dotnet build` 0 警告 0 错误，`dotnet test` **2451 全部通过**。本轮新增的两支同样**不经 WinForms**——它读的是原生壳的源码形状与真实进程边界上的行为，不是界面观感。**Windows 真机界面证据仍为 0 台**（本机缺 `Microsoft.WindowsDesktop.App` 运行时，GUI 主链路在本机不可验证，这一条如实挂着），G-D5 与三档 DPI 截图仍 `[ ]`，到期日 **2026-11-20**；真机到位当天按「G-D5 真机复核清单」第 1–7 条执行，第 6 条的对照基线就是这 12 条。
 - **本轮未做（如实挂账）**：① 简报 P1-1（降级答辩脚本补两支「真机量到问题」的正面口径）与 P1-2（`.winecheck/demo.sh` 打印「距上次真浏览器量测 N 轮」）仍未动、出处在原；② P2-1（CI 是否有 Chrome）与 P2-2（CDP `Runtime.evaluate` 受 Chrome 版本影响）登记不做；③ 真实 Apifox 写入、真实模型服务、真机 GUI 三项仍未验证，关闭路径见「本地 mock CLI 端到端（写入安全红线）」与「G-D5 真机复核清单」第 6 条；④ 上面那条「证据列只认 `void`」的口径缺口只登记不动。
 - **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖，未改任何产品源码**（两次变异注入都只在实验期间存在，均按备份字节还原并经 `git status` 与 `git diff HEAD -- '*.cs' ':(exclude)ApifoxHelper.Tests'` 核对）；未动视觉令牌、九条写入安全不变量与服务层业务语义；未新增产品功能、对话框或界面代码。
+
+## 共享编译面准入规则（第一百七十四轮登记，简报 P1-2）
+
+> **一句话**：`ApifoxHelper.Tests/ApifoxHelper.Tests.csproj` 的 `<Compile Include>` 只允许**只依赖 BCL** 的文件；
+> 新增一个共享文件的前提是它能在 `net8.0` 上编译——而不是在主工程（`net8.0-windows` + WinForms + ASP.NET Core）上能编译。
+>
+> **为什么登记这一句**：测试工程是 `net8.0`，它不引用主工程，而是把产品源码里那一小批「纯逻辑」文件原样编进来
+> （见该 csproj 顶部注释与 `MockApifoxCliTests.Boundary_TheChainUnderTestIsTheProductsOwnCode`）。一旦有人把
+> 引用了 WinForms / ASP.NET Core 的文件加进 `Compile Include`，Linux 上整个测试工程直接编译失败——
+> 而在 Windows 本机 `dotnet test` 上可能看不出来（框架引用在那边是齐的）。本轮补 REST 那三支门时又走了一遍这条边界：
+> `Api/ApifoxRoutes.cs` 与 `Web/app.js` 都**只被按源码文本读**，一个都没编进测试工程。
+>
+> **这一条不是门**：落成机械门（例如「`Compile Include` 里每个文件不得 `using System.Windows.Forms`」）之前
+> 要先判它会不会误伤——`Desktop/Native/` 有一批文件本来就带 WinForms 引用而不在共享面里，规则得区分
+> 「在共享清单里」与「在 Native 目录里」两件事。本轮按简报口径**只登记条款、不落门**，留给下一轮判断。
+> 现在真正挡住越界的仍是 `dotnet test` 本身：加错一个文件，Linux 上编译不过。
+
+## 交付轮「REST 那一头的边界门补完（含只有绑定门能看见的那一类缺陷）+ G-D5 第 1 条本地那半截量清 + 前置条件文案收到一处」（2026-11-11 第一百七十四轮，简报 P0-1 / P0-2 / P1-1）
+
+- **接续前确认**：开局工作树**干净**，HEAD（d2a7772，第一百七十三轮）；三工程 `dotnet build` 0 警告 0 错误，
+  `dotnet test` **2451 全绿**，基线成立。上一轮的状态与第一百七十二轮不同——那一片成品**已经提交**，
+  `Desktop/Native/` 没有未登记半成品，所以本轮是「在既有实现上接续」，一行未重写上一轮的东西。
+- **本轮定位**：严格按简报「建议本轮只做的 1–3 件事」执行——P0-1（REST 入口的边界门）、P0-2（G-D5 第 1 条
+  本地可验那半截 + `publish.ps1` 与 README 逐字一致的门）、P1-1（`ApifoxRoutes.cs` 前置条件文案统一）。
+  **未新增任何产品功能**；未动视觉令牌、九条写入安全不变量、状态行判定口径、按钮可用性；
+  `Sync/SyncExecutor.cs`、`Apifox/ApifoxCli.cs`、`Reports/ReportRender.cs` 一行未动（简报「明确不做」那一节）。
+- **已交付 ①（P0-1，harden）这条链的作用范围补到 REST 那一头**：`ApifoxHelper.Tests/MockApifoxCliTests.cs` 12 → 15 条。
+  上一轮自己发现并补的是**原生壳那颗按钮**，而 `POST /api/tasks/{id}/plan/apply` 与 `POST /api/tasks/{id}/verify`
+  是过渡壳 `--web` 的实际入口，同样调 `executor.ExecuteAsync(id, hash, job)`，当时**没有对应的边界门**——
+  冻结 ≠ 不跑。三支新门与一支夹具方法：
+  - `Boundary_TheWebRoutePathRunsTheSameExecutorAndHash`：路由体按「从那条路由字面量到下一条 `app.Map` 之前」切片
+    （不是全文 `Contains`——负向断言只在有界区间上有意义），钉「调的是同一个 `ExecuteAsync`」「哈希来自
+    `request.PlanHash`」「这一段里没有 `Read<SyncPlan>` / `plan.Hash` / `HashOf(` 任何现算落点」「`verify` 不带哈希」
+    「这一层不直接碰 CLI 写入（四个 `*EndpointAsync`/`*SchemaAsync` 与 `Process.Start` 计数为 0）」，
+    外加页面侧一句 `{ planHash: p.hash }` 与 verify 那句不带 planHash。
+  - `Boundary_TheWebRequestBodyKeyBindsToTheFieldTheRouteReads`：**这一支是本轮唯一有新增认知的一条**。
+    JS 对象字面量与 C# 属性之间隔着 ASP.NET Core 的请求体绑定，上面那种「源文字对源文字」的判法对这一层**结构上是盲的**。
+    键名从 `Web/app.js` 那一句里正则取出（不在测试里抄第二份），用**产品自己那一份序列化口径**
+    （`Api/HelperHost.cs:42` 起手 `JsonSerializerDefaults.Web` + `JsonDefaults.Apply`，与 `SerializationCaliberTests` 同一取法）
+    绑进 `ApplyPlanRequest`，再核「键名对不上时绑出来是空串而不是凑巧相同的值」。如实写明边界：Web 默认大小写不敏感，
+    所以只差大小写这一支本机判不出来——它挡的是名字漂移，不是拼写风格。
+  - `Shared2_ARequestBodyWithoutTheConfirmedHash_IsRefusedAndWithItThePathCompletes`：按**请求形状**跑到真实进程边界。
+    夹具新增 `MockCliRun.ExecuteWithRequest(ApplyPlanRequest)`——**照搬路由体那一句，不加判定分支、不加假件**
+    （简报口径「只加方法不加实现分支」）。三支结果：请求体没带 `planHash`（绑成空串）→ `409` 拒绝、
+    `WriteCalls()` 为空、`endpoint.get` 计数 0、计划停在 `awaitingConfirm`；带旧哈希 → 同样拒、远端逐字节不动；
+    带当前那一份 → 走完全程 `verified`、两个写入都落地。
+  - **变异实测四处（M9–M12，全部按原字节还原并经 `git status` 核对）**：M9 把 `var hash = request.PlanHash;`
+    改成从磁盘现读一份计划的哈希（加 `TaskStore tasks` 注入，`dotnet build` 0 警告 0 错误——**能编译的真替代实现，
+    不是稻草人**）→ 只红 `Boundary_TheWebRoutePathRunsTheSameExecutorAndHash`；M10 把 `ExecuteAsync` 接错到
+    `VerifyAsync`（同样编译通过）→ 同样只红那一支；M11 页面键名 `planHash` 漂成 `hash` → 源文字门与绑定门两支一起红；
+    **M12 只在 `Sync/PlanModels.cs` 的 `ApplyPlanRequest.PlanHash` 上加一个 `JsonPropertyName`**（路由与页面两处源文
+    一字未改、编译 0 警告 0 错误）→ **只有绑定门红，两支源文字门全绿**。M12 就是新增那一支门存在的全部理由：
+    它模拟的正是「代码读起来完全正确、线上每一次确认都绑定失败」这一类缺陷，而 M9/M10/M11 那种判法结构上看不见它。
+- **已交付 ②（P0-2，clarify + measure）G-D5 第 1 条不依赖 Windows 的那半截量清**：
+  - **量到的**：`dotnet publish` 按 `publish.ps1` 拼出的参数逐条照抄，在 Linux 上**两种档位都成功**（退出码 0）——
+    自包含单文件 81570129 字节（≈77.8 MB，输出目录内只有那一个文件）、框架依赖单文件 13750326 字节（≈13.1 MB，
+    同样一个文件）；去掉脚本那几条属性后同一工程出 4 个文件、主文件 184167377 字节（≈175.6 MB）。
+    **简报原先预设「`net8.0-windows` 在 Linux 上只能编译不能发布」——实测不是**：卡点不在发布，在「双击」。
+    读数记在「G-D5 真机复核清单」第 1 条下方，**空框一个没勾**。
+  - **顺带量到的另一件事（本轮唯一一处「原来大家都看错了」）**：把那份**单文件产物**按 `.winecheck/run_app.sh`
+    的既有跑法交给 wine，窗口标题「Apifox 助手」出现、原生壳画出左导航 + 四个页签 + 空态阶段条 + 版本行、
+    本地服务起来、资料目录结构落全。而 `.winecheck/README.md` 里那条发布命令**不带 `PublishSingleFile`**——
+    也就是说此前每一轮 wine 证据跑的都是多文件产物，「单文件自解压 + WebView2Loader 打进包之后还能不能启动」
+    这一支在 GUI 层**从没跑过**，本轮第一次跑到，结论是能起。同一跑里另两处如实挂着：中文全是豆腐块
+    （该 wine prefix 缺 CJK 字体，所以排版类判据在这份产物上量不了）、逐窗口截图拿到 285 字节空白 PNG
+    只有整屏截图有内容（按屏归档这一步在单文件产物上要重做）。
+  - **新增机械门**：`ApifoxHelper.Tests/PublishScriptTests.cs`（3 条）。`PublishUsage_DocumentedSwitchesAreTheDeclaredOnes`
+    双向核（用法里出现的每个开关都得是 `param()` 真声明过的；声明过的每个参数都得在 README 打包块或脚本自己的
+    `.EXAMPLE` 里被念到——单向查哪一半都会漏）；`PublishedPaths_InReadme_AreTheOnesTheScriptComputes` 把 README 里那两条
+    产物路径**由脚本字面量拼出来**再逐字对，并负向核「README 里同形状的路径一条都不许在这两条之外」；
+    `LocalPublishReading_IsRecordedAndKeepsTheRealMachineGap` 核上面那行读数在不在、有没有按「标签 + 字节数」的形状记、
+    有没有把没量到的那半截写明，并把 README 那句「体积约 78 MB」与记录的字节数对一次（容差 1 MB）。
+    `README.md` 打包一节补了框架依赖档的产物路径与 `-Output` 一行——**门要求文档补齐，不是要求脚本改**（简报：不改 `publish.ps1`）。
+  - **变异实测三处**：改脚本里的 RID 子目录字面量 → 只红路径那条；给 `param()` 加一个未写进文档的参数 →
+    只红开关那条；把 README 的「约 78 MB」改成「约 96 MB」→ 只红读数那条。三处均按备份字节还原，`git status` 与注入前一致。
+- **已交付 ③（P1-1）前置条件文案收到一处**：`Api/ErrorCopy.cs` 加 `NoApifoxProjectMessage` / `InvalidProjectIdMessage`
+  两个常量（命名以 `Message` 收尾，自动落进 `ServiceCopyTests` 已有的「文案常量」扫描面，**没有为它新增扫描**）；
+  `Api/ApifoxRoutes.cs` 三处、`Desktop/Native/ProfileAdvancedDialog.cs` 一处改为引用常量，
+  `ApifoxPicker.ProjectIdInvalid` 保留名字但值指向 `ErrorCopy`。简报原先只点名「三处」，实扫是**两句共五处**
+  （「请先选择 Apifox 项目。」三处 + 「项目 ID 无效。」两处），按「一次收干净、不留第二种形态」的既有口径一起收了。
+  新门 `ApifoxPickerTests.PreconditionCopy_HasOneLandingSiteOnly` 四件事一起钉：两句**逐字未变**（期望值写死在测试里，
+  不引用常量——否则改字面查不出来）、界面侧那个名字的值就是 `ErrorCopy` 那一份、`Api/` + `Desktop/` 扫描面里
+  每句只允许出现在 `Api/ErrorCopy.cs`、调用点引用常量的次数钉死。**值与措辞一个字没改**，本轮只动落点。
+- **本轮又被自家门抓住一次（记成账，不悄悄改掉）**：给 SHARED-2 行的证据出处写说明时，我把「void」加了反引号，
+  `AcceptanceChecklistTests.Checklist_EveryItemHasAnEvidenceSourceAndItResolves` 当场判红——「引用『void』既不是
+  仓库里的文件路径，也不是『类名.断言名』」。查解析规则才看清：那一格**每一对反引号都被当成一条引用**，
+  连解释性文字里的术语也不例外。这是同一张表连续两轮抓到我（第一百七十三轮抓的是「async 断言引不进来」），
+  两次都不是门坏了，是**这张表的引用面比人以为的窄**：它只覆盖「文件名」与「返回 void 的类名.方法名」两种形状。
+  本轮按既有口径收口（解释文字去掉反引号、异步那条写在结论格里），那条口径缺口**仍只登记不动**，理由同上一轮。
+- **测试 2451 → 2458 用例**（+7：REST 那三支、发布那三支、文案落点那一支），既有断言一条未削弱、未删除、未放宽。
+- **验证状态**：Linux 三工程 `dotnet build` 0 警告 0 错误，`dotnet test` **2458 全部通过**；
+  `MockApifoxCliTests` 15 条真跑全绿（node 为本机 `/usr/bin/node`），并按第一百七十三轮那条命令把
+  「本机没有 node」的降级支复跑一遍（剥 `PATH` + 取消 `APIFOXHELPER_NODE` + `--no-build`）→ 15 条全绿。
+  **Windows 真机仍为 0 台**：G-D5 与三档 DPI 截图仍 `[ ]`，到期日 **2026-11-20**；本轮把第 1 条**本地可验的那半截**
+  量到并记账，**不等于第 1 条达成**——「双击它 → 首程四站」与真机截图这一半，wine 与 Linux 发布都顶替不了。
+  SHARED-3/4/7/8 仍 `[ ]`（真实 Apifox 服务端没跑过），关闭路径仍是第 6 条。
+- **本轮未做（如实挂账）**：① 简报 P1-2（共享编译面准入规则）按简报口径**只落成文档条款**（见上一节），未落门；
+  ② 简报 P2 三项（R3 `ErrorCopy` 字节口径已知限制、R5 多显示器混合缩放、`Assets/app-icon*.svg` 图标优化）
+  登记不做，出处在原；③ 简报「不做什么」里那条**本轮没有触发**：M9–M12 四处变异都没暴露产品真缺陷，
+  所以 `ApifoxRoutes.cs` 除 P1-1 的文案落点改动外实现未动，`SyncExecutor.cs` 一行未动；
+  ④ 上面那张验收表「引用面只覆盖 void 与文件名」的口径缺口，连续两轮抓到，仍未动。
+- **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**（`dotnet publish` 用的运行时包与单文件打包工具
+  全部命中本机 NuGet 缓存，未联网取包；wine / Xvfb / xdotool / ImageMagick 都是本机既有），
+  **未新建任何调度器、未动其他项目**；产品源码改动仅限 `Api/ErrorCopy.cs`（两条常量）、
+  `Api/ApifoxRoutes.cs` 与 `Desktop/Native/ProfileAdvancedDialog.cs`、`Desktop/Native/ApifoxPicker.cs`
+  （四处字面量换成引用同一份常量），共 6 处引用、0 处行为改动；变异注入都只在实验期间存在并按备份字节还原。

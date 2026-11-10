@@ -174,6 +174,155 @@ public class MockApifoxCliTests
         }
     }
 
+    /// <summary>
+    /// 同一条链的<b>另一半作用范围</b>（第一百七十四轮，简报 P0-1）：上一支钉的是原生壳那颗按钮，
+    /// 而 <c>--web</c> 过渡壳的实际入口是 <c>Api/ApifoxRoutes.cs</c> 的两条 REST 路由。
+    /// <para>
+    /// <b>为什么这一支不是重复</b>：页面层已冻结不等于这条链不跑——答辩现场若用 <c>--web</c> 演示，
+    /// 「确认同步」仍然要经过 <c>plan/apply</c>。冻结的是画面，不是执行路径。上一轮只补了原生那一头，
+    /// REST 这一头当时是自查发现的缺口、留到本轮。
+    /// </para>
+    /// <para>
+    /// 钉三件事：① <c>plan/apply</c> 调的就是端到端那一个 <c>executor.ExecuteAsync</c>（同一个注入的
+    /// <see cref="SyncExecutor"/>，不是第二条实现）；② 交给它的哈希来自<b>请求体</b>那一个字段
+    /// （<c>request.PlanHash</c>），不是在路由里现算的第二份——现算等于把「确认的那一份」重新定义成
+    /// 「磁盘上此刻那一份」，SHARED-2 那条门禁当场失去对象；③ <c>verify</c> 只读核对不带哈希。
+    /// 再加页面侧一句：过渡壳发的是 <c>{ planHash: p.hash }</c>，即它正在展示的那一份计划的哈希。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Boundary_TheWebRoutePathRunsTheSameExecutorAndHash()
+    {
+        var routes = Repo.Source("Api", "ApifoxRoutes.cs");
+        var apply = RouteBody(routes, "\"/api/tasks/{id}/plan/apply\"");
+        var verify = RouteBody(routes, "\"/api/tasks/{id}/verify\"");
+
+        Assert.Contains("SyncExecutor executor", apply, StringComparison.Ordinal);
+        Assert.Contains("executor.ExecuteAsync(id, hash, job)", apply, StringComparison.Ordinal);
+        Assert.Contains("var hash = request.PlanHash;", apply, StringComparison.Ordinal);
+        Assert.DoesNotContain("Read<SyncPlan>", apply, StringComparison.Ordinal);
+        Assert.DoesNotContain("plan.Hash", apply, StringComparison.Ordinal);
+        Assert.DoesNotContain("HashOf(", apply, StringComparison.Ordinal);
+
+        // 只读核对那一支：不带哈希（它按磁盘上的计划重读远端，不消费任何确认）。
+        Assert.Contains("executor.VerifyAsync(id, job)", verify, StringComparison.Ordinal);
+        Assert.DoesNotContain("PlanHash", verify, StringComparison.Ordinal);
+
+        // 这一层不许自己碰 CLI 写入——写入边界的单一落点在服务层（与原生那头同一判据）。
+        foreach (var bypass in new[] { "UpdateEndpointAsync", "CreateEndpointAsync", "UpdateSchemaAsync", "CreateSchemaAsync", "Process.Start" })
+        {
+            Assert.DoesNotContain(bypass, apply, StringComparison.Ordinal);
+            Assert.DoesNotContain(bypass, verify, StringComparison.Ordinal);
+        }
+
+        // 页面侧：过渡壳送出的是「它正在展示的那一份」的哈希，不是第二个现算的值。
+        var page = Repo.Source("Web", "app.js");
+        var applyCall = SingleJsLine(page, "'/plan/apply'");
+        Assert.Contains("{ planHash: p.hash }", applyCall, StringComparison.Ordinal);
+        var verifyCall = SingleJsLine(page, "'/verify'");
+        Assert.DoesNotContain("planHash", verifyCall, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 请求体到执行器之间那一段<b>不是源文字对源文字</b>（第一百七十四轮，简报 P0-1）。
+    /// <para>
+    /// <c>{ planHash: p.hash }</c> 是 JS 对象字面量，路由读的是 <see cref="ApplyPlanRequest"/> 的属性；
+    /// 两者中间隔着 ASP.NET Core 的请求体 JSON 绑定，而<b>上一支门对这一层是盲的</b>：页面把键名改成
+    /// <c>planHashs</c>、或 DTO 属性改了名，两处源文都还在、那条 Contains 照样绿，而线上每一个确认都会
+    /// 因为绑定不到而落成空串。空串本身不是漏洞（执行器照拒），漏洞是「静默地把每次确认都变成过期确认」。
+    /// </para>
+    /// <para>
+    /// 所以这里用<b>产品自己那一份序列化口径</b>核：<c>Api/HelperHost.cs:42</c> 的
+    /// <c>ConfigureHttpJsonOptions(o =&gt; JsonDefaults.Apply(o.SerializerOptions))</c> 起手于
+    /// <c>JsonSerializerDefaults.Web</c>，与 <see cref="SerializationCaliberTests"/> 同一取法；
+    /// 键名从 <c>Web/app.js</c> 那一句里正则取出来，不在测试里抄第二份。
+    /// 如实说清边界：<c>Web</c> 默认大小写不敏感，所以键名<b>只差大小写</b>这一支本机判不出问题——
+    /// 这一支挡的是名字漂移，不是拼写风格。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Boundary_TheWebRequestBodyKeyBindsToTheFieldTheRouteReads()
+    {
+        var line = SingleJsLine(Repo.Source("Web", "app.js"), "'/plan/apply'");
+        var key = Regex.Match(line, @"\{\s*(?<key>[A-Za-z0-9_]+)\s*:").Groups["key"].Value;
+        Assert.True(key.Length > 0, $"从过渡壳那句 plan/apply 里取不出请求体的键名：{line}。");
+
+        var http = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        JsonDefaults.Apply(http);
+        var bound = JsonSerializer.Deserialize<ApplyPlanRequest>("{\"" + key + "\":\"abc123\"}", http);
+        Assert.True(bound is not null);
+        Assert.Equal("abc123", bound!.PlanHash);
+
+        // 反向那一半：键名对不上时绑出来是空串而不是「凑巧一样的值」——下一支门钉的就是空串必须被拒绝。
+        var mismatched = JsonSerializer.Deserialize<ApplyPlanRequest>("{\"notTheKey\":\"abc123\"}", http);
+        Assert.Equal("", mismatched!.PlanHash);
+    }
+
+    /// <summary>
+    /// 按<b>请求形状</b>跑到真实进程边界上（第一百七十四轮，简报 P0-1）：走的是
+    /// <see cref="MockCliRun.ExecuteWithRequest"/>——它照搬路由体那一句，中间没有测试假件。
+    /// 两支都要成立：<c>planHash</c> 缺失（请求体没带、绑定落成空串）时执行器在任何一条 CLI 命令发出之前
+    /// 拒绝；带对了那一份就一路走到 <c>verified</c>。只测前一支会漏掉「整条 REST 路根本走不通」，
+    /// 只测后一支会漏掉「空哈希被当成有效确认」。
+    /// </summary>
+    [Fact]
+    public async Task Shared2_ARequestBodyWithoutTheConfirmedHash_IsRefusedAndWithItThePathCompletes()
+    {
+        if (!RequireNodeOrRegisteredGap()) return;
+        using var run = new MockCliRun();
+        var target = run.PutEndpoint("GET", "/api/orders", "订单列表");
+        run.AddUpdate(target, Docs("订单列表（本次补充说明）"));
+        var plan = await run.ConfirmPlan();
+        var remoteBefore = run.Endpoint(target).ToJsonString();
+
+        // ① 请求体没带 planHash：ASP.NET 绑定留下 DTO 默认值空串，执行器必须拒掉，且一条命令都不发。
+        var empty = await Assert.ThrowsAsync<UserException>(() => run.ExecuteWithRequest(new ApplyPlanRequest()));
+        Assert.Equal(409, empty.StatusCode);
+        Assert.Equal("确认的计划与当前计划不一致，请重新预览。", empty.Message);
+        Assert.Empty(run.WriteCalls());
+        Assert.Equal(0, run.CallCount("endpoint.get"));
+        Assert.Equal("awaitingConfirm", run.ReadPlan().Status);
+
+        // ② 确认之后计划被换掉（加进第二个接口重新生成）：手上那串哈希就此过期，执行器照样拒。
+        var extra = run.PutEndpoint("POST", "/api/orders", "创建订单");
+        run.AddUpdate(extra, Docs("创建订单（确认之后加进来的）"));
+        var stale = await run.ConfirmPlan();
+        Assert.NotEqual(plan.Hash, stale.Hash);
+        var ex = await Assert.ThrowsAsync<UserException>(() => run.ExecuteWithRequest(new ApplyPlanRequest { PlanHash = plan.Hash }));
+        Assert.Equal(409, ex.StatusCode);
+        Assert.Empty(run.WriteCalls());
+        Assert.Equal(remoteBefore, run.Endpoint(target).ToJsonString());
+        Assert.Equal("创建订单", run.Endpoint(extra)["description"]!.ToString());
+
+        // ③ 带上当前这一份：同一条 REST 形状走完全程，两个动作都写入并回读核对通过。
+        var done = await run.ExecuteWithRequest(new ApplyPlanRequest { PlanHash = stale.Hash });
+        Assert.Equal("verified", done.Status);
+        Assert.Equal(2, run.CallCount("endpoint.update"));
+        Assert.Equal("订单列表（本次补充说明）", run.Endpoint(target)["description"]!.ToString());
+        Assert.Equal("创建订单（确认之后加进来的）", run.Endpoint(extra)["description"]!.ToString());
+    }
+
+    /// <summary>
+    /// 取出一整段路由体：从那条路由的字面量起，到下一条 <c>app.Map</c> 之前。
+    /// 切片而不是全文 Contains——负向断言（「这一段里不许现算哈希」）只有在有界区间上才有意义：
+    /// 全文判会把相邻无关路由判进去，改坏别处反而让这一条变红或变绿。
+    /// </summary>
+    private static string RouteBody(string routes, string routeLiteral)
+    {
+        var start = routes.IndexOf(routeLiteral, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Api/ApifoxRoutes.cs 里找不到路由 {routeLiteral}：过渡壳这条入口被改名或删掉了，那条链不再经过这里。");
+        var next = routes.IndexOf("app.Map", start + routeLiteral.Length, StringComparison.Ordinal);
+        return routes[start..(next < 0 ? routes.Length : next)];
+    }
+
+    /// <summary>页面里那条请求的那一行；出现 0 行或多行都判红——门不能对着一条不存在（或有两份）的调用说话。</summary>
+    private static string SingleJsLine(string page, string needle)
+    {
+        var lines = page.Split('\n').Where(l => l.Contains(needle, StringComparison.Ordinal)).ToList();
+        Assert.True(lines.Count == 1, $"Web/app.js 里含 {needle} 的行应有且只有一行，实际 {lines.Count} 行：{string.Join(" ／ ", lines)}。");
+        return lines[0];
+    }
+
     [Fact]
     public async Task Protocol_TheMockSpeaksTheRealCliShape()
     {

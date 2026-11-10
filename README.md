@@ -36,7 +36,8 @@ dotnet test ApifoxHelper.Tests   # 令牌接线机械检查（DESIGN.md 与 UiTo
 ```powershell
 cd ApifoxHelper
 .\publish.ps1                       # 自包含单文件：dist\win-x64\ApifoxHelper.exe，目标电脑不需要安装 .NET
-.\publish.ps1 -FrameworkDependent   # 体积小的版本：目标电脑需要 .NET 8+ 桌面运行时与 ASP.NET Core 运行时
+.\publish.ps1 -FrameworkDependent   # 体积小的版本：dist\win-x64-framework-dependent\ApifoxHelper.exe，目标电脑需要 .NET 8+ 桌面运行时与 ASP.NET Core 运行时
+.\publish.ps1 -Output D:\release    # 换输出根目录：两条路径里 dist 那一层换成给定目录
 ```
 
 把生成的 `ApifoxHelper.exe` 发给使用者即可，无需安装；可以放在任意目录，或在桌面创建快捷方式。

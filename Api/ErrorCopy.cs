@@ -71,4 +71,30 @@ public static class ErrorCopy
 
         return $"JSON 格式无效（第 {line + 1} 行，第 {position + 1} 个字节处）。";
     }
+
+    /// <summary>
+    /// 前置条件「还没选 Apifox 项目」的唯一落点（第一百七十四轮，简报 P1-1）。
+    /// <para>
+    /// <b>收的是哪个口</b>：这一句此前<b>三处各自写了一遍</b>——<c>/api/apifox/folders</c> 与
+    /// <c>/api/apifox/template-from-endpoint</c> 两条路由各一份，原生「模块与模板」对话框的状态行又一份。
+    /// 三处字面相同，所以今天没有可见缺陷；挡的是「改了其中一处」：用户在同一个产品里会因为走的是页面还是
+    /// 对话框而读到两种说法，而这类漂移不会报错。
+    /// </para>
+    /// <para>
+    /// <b>值逐字未变</b>：本轮只动落点，不动措辞（<c>ApifoxPickerTests</c> 的真值表仍按原句断言，
+    /// 改一个字即红）。常量名以 <c>Message</c> 收尾，与上面三条同族，因此自动落进
+    /// <c>ServiceCopyTests</c> 的「文案常量」扫描面（中文标点、空话禁词同一口径）。
+    /// </para>
+    /// </summary>
+    public const string NoApifoxProjectMessage = "请先选择 Apifox 项目。";
+
+    /// <summary>
+    /// 前置条件「项目 ID 不是纯数字」的唯一落点（第一百七十四轮，简报 P1-1）。
+    /// <para>
+    /// 这一句原本有两处：<c>/api/apifox/branches</c> 路由就地写了一遍，
+    /// <c>Desktop/Native/ApifoxPicker.cs</c> 的 <c>ProjectIdInvalid</c> 又写了一遍——后者自己的注释就写着
+    /// 「与 /api/apifox/branches 路由同文案」，即用注释承认重复、而不是消除它。现在那一处也指到这里。
+    /// </para>
+    /// </summary>
+    public const string InvalidProjectIdMessage = "项目 ID 无效。";
 }

@@ -1,3 +1,5 @@
+using ApifoxHelper.Api;
+
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
@@ -59,8 +61,10 @@ public static class ApifoxPicker
     /// <summary>读取分支时项目 ID 为空的状态行文案（与冻结页面 toast 同一字面）。</summary>
     public const string ProjectIdRequired = "请先填写项目 ID";
 
-    /// <summary>项目 ID 非数字的状态行文案（与 /api/apifox/branches 路由同文案）。</summary>
-    public const string ProjectIdInvalid = "项目 ID 无效。";
+    /// <summary>项目 ID 非数字的状态行文案。<b>值不在这里</b>：单一落点是 <c>Api/ErrorCopy.InvalidProjectIdMessage</c>
+    /// （第一百七十四轮，简报 P1-1）——此前这一句与 /api/apifox/branches 路由各写一遍，注释里写着「同文案」
+    /// 而实现是两份；现在名字留在这里（界面与真值表都认它），字面只有一处。</summary>
+    public const string ProjectIdInvalid = ErrorCopy.InvalidProjectIdMessage;
 
     /// <summary>分支入口的完整校验：先要求已保存，再要求项目 ID 已填且为数字（与冻结页面同一顺序）。</summary>
     public static string? BranchGate(bool saved, string projectIdText) =>

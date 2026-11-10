@@ -1,3 +1,4 @@
+using ApifoxHelper.Api;
 using ApifoxHelper.Desktop.Native;
 using Xunit;
 
@@ -137,5 +138,77 @@ public class ApifoxPickerTests
         Assert.Contains("2", branches);
         Assert.Contains("已归档", branches);
         Assert.Contains("留空", branches);
+    }
+
+    /// <summary>
+    /// 前置条件文案<b>只有一个落点</b>（第一百七十四轮，简报 P1-1）。
+    /// <para>
+    /// <b>收的是哪个口</b>：「请先选择 Apifox 项目。」此前在 <c>Api/ApifoxRoutes.cs</c> 两条路由与
+    /// <c>Desktop/Native/ProfileAdvancedDialog.cs</c> 各写一遍（共三处），「项目 ID 无效。」在路由与
+    /// <c>ApifoxPicker.ProjectIdInvalid</c> 各写一遍（共两处）。字面相同所以今天看不出问题，
+    /// 这条门挡的是「改一处忘其余」——同一句话在产品里出现两种说法不会报错，只会让人以为有两个规则。
+    /// 旧注释「与 /api/apifox/branches 路由同文案」正是这种状态：用注释承认重复，而不是消除它。
+    /// </para>
+    /// <para>
+    /// 核四件事：① 两句<b>逐字未变</b>——期望值写死在这里而不是引用常量，否则字面被改掉也查不出来；
+    /// ② <c>ApifoxPicker.ProjectIdInvalid</c> 的值就是 <see cref="ErrorCopy"/> 那一份（名字留在界面侧，
+    /// 字面只有一处）；③ 扫描面（<c>Api/</c> 与 <c>Desktop/</c> 全部 <c>.cs</c>）里这两句各只允许出现在
+    /// <c>Api/ErrorCopy.cs</c>；④ 三处调用点引用的是常量，计数钉死（少一处引用即红）。
+    /// </para>
+    /// <para>
+    /// <b>本文件自己那份真值表不在扫描面内</b>：<c>BranchGate_ValidationOrderAndTexts</c> 的
+    /// <c>InlineData</c> 必须写着原句才能当判据——把它也改成引用常量就成了同义反复，
+    /// 字面被改动时那条真值表反而不会红。判据指向实物、不指向被测物，与 <c>CodeScanTests</c> 同一族口径。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PreconditionCopy_HasOneLandingSiteOnly()
+    {
+        Assert.Equal("请先选择 Apifox 项目。", ErrorCopy.NoApifoxProjectMessage);
+        Assert.Equal("项目 ID 无效。", ErrorCopy.InvalidProjectIdMessage);
+        Assert.Equal(ErrorCopy.InvalidProjectIdMessage, ApifoxPicker.ProjectIdInvalid);
+
+        var scanned = Directory.GetFiles(Repo.Root, "*.cs", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(Repo.Root, f).Replace('\\', '/'))
+            .Where(r => (r.StartsWith("Api/", StringComparison.Ordinal) || r.StartsWith("Desktop/", StringComparison.Ordinal))
+                        && !r.Contains("/bin/", StringComparison.Ordinal)
+                        && !r.Contains("/obj/", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(scanned.Count > 60, $"扫描面只找到 {scanned.Count} 个文件，取法不对（Api/ 与 Desktop/ 合计应有 60+）。");
+
+        foreach (var (text, routeUses, dialogUses) in new[]
+                 {
+                     (ErrorCopy.NoApifoxProjectMessage, 2, 1),
+                     (ErrorCopy.InvalidProjectIdMessage, 1, 0),
+                 })
+        {
+            var files = scanned
+                .Where(r => File.ReadAllText(Path.Combine(Repo.Root, r)).Contains(text, StringComparison.Ordinal))
+                .ToList();
+            Assert.True(files.Count == 1 && files[0] == "Api/ErrorCopy.cs",
+                $"「{text}」在 Api/ 与 Desktop/ 之下的落点是 {string.Join("、", files)}，只允许 Api/ErrorCopy.cs 一处："
+                + "多出来的每一处，都是下一次改文案时会被忘掉的那一处。");
+
+            // 调用点必须引用常量：计数钉死，新增一处就地写字面量的调用点会被上面那条抓住，
+            // 而删掉一处引用（把某个屏接丢了）在这里红。
+            var constant = text == ErrorCopy.NoApifoxProjectMessage ? nameof(ErrorCopy.NoApifoxProjectMessage) : nameof(ErrorCopy.InvalidProjectIdMessage);
+            var routesSource = Repo.Source("Api", "ApifoxRoutes.cs");
+            var dialogSource = Repo.Source("Desktop", "Native", "ProfileAdvancedDialog.cs");
+            Assert.True(Count(routesSource, "ErrorCopy." + constant) == routeUses,
+                $"Api/ApifoxRoutes.cs 引用 ErrorCopy.{constant} {Count(routesSource, "ErrorCopy." + constant)} 次，应为 {routeUses} 次。");
+            Assert.True(Count(dialogSource, "ErrorCopy." + constant) == dialogUses,
+                $"ProfileAdvancedDialog.cs 引用 ErrorCopy.{constant} {Count(dialogSource, "ErrorCopy." + constant)} 次，应为 {dialogUses} 次。");
+        }
+    }
+
+    private static int Count(string text, string needle)
+    {
+        var count = 0;
+        for (var i = text.IndexOf(needle, StringComparison.Ordinal); i >= 0; i = text.IndexOf(needle, i + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 }

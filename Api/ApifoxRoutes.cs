@@ -29,7 +29,7 @@ public static class ApifoxRoutes
         });
         app.MapGet("/api/apifox/branches", async (string profileId, string projectId, ProfileStore profiles, ApifoxCli cli, HttpContext http) =>
         {
-            if (!projectId.All(char.IsDigit)) throw new UserException("项目 ID 无效。");
+            if (!projectId.All(char.IsDigit)) throw new UserException(ErrorCopy.InvalidProjectIdMessage);
             var result = await cli.ListBranchesAsync(profiles.Get(profileId).Apifox, projectId, http.RequestAborted);
             if (!result.Ok) throw new UserException("读取分支失败：" + result.Describe());
             return Json((result.Data as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(b => new
@@ -44,7 +44,7 @@ public static class ApifoxRoutes
         app.MapGet("/api/apifox/folders", async (string profileId, ProfileStore profiles, ApifoxCli cli, HttpContext http) =>
         {
             var profile = profiles.Get(profileId);
-            if (profile.Apifox.ProjectId is null) throw new UserException("请先选择 Apifox 项目。");
+            if (profile.Apifox.ProjectId is null) throw new UserException(ErrorCopy.NoApifoxProjectMessage);
             var result = await cli.ListFoldersAsync(profile.Apifox, profile.Apifox.ProjectId, profile.Apifox.BranchName, http.RequestAborted);
             if (!result.Ok) throw new UserException("读取目录失败：" + result.Describe());
             return Json(result.Data);
@@ -54,7 +54,7 @@ public static class ApifoxRoutes
         app.MapGet("/api/apifox/template-from-endpoint", async (string profileId, long endpointId, ProfileStore profiles, ApifoxCli cli, HttpContext http) =>
         {
             var profile = profiles.Get(profileId);
-            if (profile.Apifox.ProjectId is null) throw new UserException("请先选择 Apifox 项目。");
+            if (profile.Apifox.ProjectId is null) throw new UserException(ErrorCopy.NoApifoxProjectMessage);
             var result = await cli.GetEndpointAsync(profile.Apifox, profile.Apifox.ProjectId, profile.Apifox.BranchName, endpointId, http.RequestAborted);
             if (!result.Ok || result.Data is not JsonObject data) throw new UserException("读取接口失败：" + result.Describe());
             return Json(EndpointTemplateReader.Read(data));

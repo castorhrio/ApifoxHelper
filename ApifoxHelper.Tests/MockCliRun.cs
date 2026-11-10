@@ -275,6 +275,19 @@ internal sealed class MockCliRun : IDisposable
     /// <summary>执行已确认的计划；断言只看落盘结果与 mock 记下的调用，不看返回值对象。</summary>
     public async Task<SyncPlan> Execute(SyncPlan plan) => await ExecuteWithHash(plan.Hash);
 
+    /// <summary>
+    /// 按<b>过渡壳的 REST 请求形状</b>执行。<c>POST /api/tasks/{id}/plan/apply</c> 的路由体只做一件事
+    /// （<c>Api/ApifoxRoutes.cs</c>）：把请求体里的 <see cref="ApplyPlanRequest.PlanHash"/> 原样交给同一个
+    /// <see cref="SyncExecutor"/>。这里照搬那一句，<b>不加判定分支、不加假件</b>——为的是让
+    /// 「HTTP 请求体里那串哈希」与「执行器比对的那串哈希」之间没有任何测试自造的东西。
+    /// 与 <see cref="ExecuteWithHash"/> 的分工：那一支管原生壳传出去的那一个字符串，这一支管 JSON 绑定之后剩下的形状。
+    /// </summary>
+    public async Task<SyncPlan> ExecuteWithRequest(ApplyPlanRequest request)
+    {
+        await Executor.ExecuteAsync(Task.Id, request.PlanHash, Job("sync"));
+        return ReadPlan();
+    }
+
     /// <summary>「重新核对（只读）」：不写入，只按远端实际状态刷新动作。</summary>
     public async Task<SyncPlan> Verify()
     {

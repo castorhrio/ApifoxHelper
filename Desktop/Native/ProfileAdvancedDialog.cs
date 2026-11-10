@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using ApifoxHelper.Api;
 using ApifoxHelper.Apifox;
 using ApifoxHelper.Infrastructure;
 using ApifoxHelper.Profiles;
@@ -200,7 +201,7 @@ internal sealed class ProfileAdvancedDialog : Form
         }
         if (_profile.Apifox.ProjectId is null)
         {
-            SetStatus("请先选择 Apifox 项目。", UiTokens.BadText);
+            SetStatus(ErrorCopy.NoApifoxProjectMessage, UiTokens.BadText);
             return;
         }
         _extractButton.Enabled = false;
