@@ -21,7 +21,7 @@ namespace ApifoxHelper.Tests;
 /// ⑥ 冒烟工程不参与主工程编译、只对冒烟程序集放行 internal；⑦ 冒烟器不起服务端（不是第二个调度器）。
 /// </para>
 /// <para>
-/// 真实执行证据在 <c>docs/NOTES.md</c> 的「真机/模拟器验证清单」一节（wine 10.0 + Xvfb 下
+/// wine 模拟器执行证据在 <c>docs/NOTES.md</c> 的「Windows 真机 / wine 模拟器验证清单」一节（wine 10.0 + Xvfb 下
 /// 27 通过 / 0 失败，退出码 0；把第一百二十八轮的修法退回后同一命令 7 失败、退出码 1）。
 /// </para>
 /// </summary>
@@ -624,7 +624,7 @@ public class NativeDialogSmokeTests
         var notes = Repo.Source("docs", "NOTES.md");
         Assert.Contains("原生对话框冒烟", notes);
         Assert.Contains("27 通过 / 0 失败", notes);
-        Assert.Contains("真机/模拟器验证清单", notes);
+        Assert.Contains("Windows 真机 / wine 模拟器验证清单", notes);
     }
 
     // ---------- 交互断言清单（第一百三十七轮，控制仓简报 P1-1） ----------
@@ -644,7 +644,7 @@ public class NativeDialogSmokeTests
     /// </para>
     /// <para>
     /// 清单是**源码切片**，不是「跑过」：冒烟器跑在 Windows 桌面运行时上，本环境不可执行。
-    /// 真实执行证据在 <c>docs/NOTES.md</c>（wine 10.0 + Xvfb 下 46 通过 / 0 失败，退出码 0；
+    /// wine 模拟器执行证据在 <c>docs/NOTES.md</c>（wine 10.0 + Xvfb 下 46 通过 / 0 失败，退出码 0；
     /// 把「下一条」的门控改成「有行就可点」后同一命令 45 通过 / 1 失败、退出码 1）。
     /// </para>
     /// </summary>

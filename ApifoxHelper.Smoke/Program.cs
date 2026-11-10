@@ -47,7 +47,7 @@ internal static class Program
     /// <summary>
     /// 报告落点（<c>--report=&lt;路径&gt;</c>，缺省为临时目录下的 <c>ah-smoke-report.txt</c>）。
     /// 存在的理由：wine 的控制台代码页会把中文打成问号，逐行 PASS/FAIL 读不出是哪一处；
-    /// 报告文件按 UTF-8 写，是「真机/模拟器跑过一遍」的可核对证据。
+    /// 报告文件按 UTF-8 写，是「wine 模拟器跑过一遍」的可核对证据（**不是 Windows 真机证据**）。
     /// </summary>
     private static string _reportPath = Path.Combine(Path.GetTempPath(), "ah-smoke-report.txt");
 
