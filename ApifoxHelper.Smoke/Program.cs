@@ -212,58 +212,58 @@ internal static class Program
         Console.WriteLine("== 字段宽度实测（DPI 缩放 125% / 150% / 200%）==");
         MeasureFieldWidthsAtScale(services, profile);
 
-        Console.WriteLine("== 端到端主链路（真实控件交互）==");
+        Section("端到端主链路（真实控件交互）", nameof(RunEndToEnd));
         RunEndToEnd(services, dataRoot);
 
-        Console.WriteLine("== 端到端回写链路（扫描 → 候选 → 计划 → 回写落盘）==");
+        Section("端到端回写链路（扫描 → 候选 → 计划 → 回写落盘）", nameof(RunWriteBackEndToEnd));
         RunWriteBackEndToEnd(services, dataRoot);
 
-        Console.WriteLine("== 注释缺口对话框（真实控件交互）==");
+        Section("注释缺口对话框（真实控件交互）", nameof(RunScanResultsInteraction));
         RunScanResultsInteraction(services, dataRoot);
 
-        Console.WriteLine("== 字体栈运行时命中（真实控件）==");
+        Section("字体栈运行时命中（真实控件）", nameof(RunFontStackRuntime));
         RunFontStackRuntime();
 
-        Console.WriteLine("== 注释候选对话框（真实控件交互）==");
+        Section("注释候选对话框（真实控件交互）", nameof(RunCandidatesInteraction));
         RunCandidatesInteraction(services, dataRoot);
 
-        Console.WriteLine("== 补充说明对话框（真实控件交互）==");
+        Section("补充说明对话框（真实控件交互）", nameof(RunSupplementsInteraction));
         RunSupplementsInteraction(services, dataRoot);
 
-        Console.WriteLine("== 差异确认对话框（真实控件交互）==");
+        Section("差异确认对话框（真实控件交互）", nameof(RunDecisionsInteraction));
         RunDecisionsInteraction(services, dataRoot);
 
-        Console.WriteLine("== 配置表单的真实布局（新建 / 编辑）==");
+        Section("配置表单的真实布局（新建 / 编辑）", nameof(RunProfileFormLayout));
         RunProfileFormLayout(services, profile);
 
-        Console.WriteLine("== 配置页读取失败态（失败 → 重试 → 恢复，真实控件）==");
+        Section("配置页读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunProfileLoadFailure));
         RunProfileLoadFailure(services, dataRoot);
 
-        Console.WriteLine("== 任务页读取失败态（失败 → 重试 → 恢复，真实控件）==");
+        Section("任务页读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunTaskLoadFailure));
         RunTaskLoadFailure(services, dataRoot);
 
-        Console.WriteLine("== 报告对话框读取失败态（失败 → 重试 → 恢复，真实控件）==");
+        Section("报告对话框读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunReportsLoadFailure));
         RunReportsLoadFailure(services, dataRoot);
 
-        Console.WriteLine("== 差异确认读取失败态（两种失败 → 重试 → 恢复，真实控件）==");
+        Section("差异确认读取失败态（两种失败 → 重试 → 恢复，真实控件）", nameof(RunDecisionsLoadFailure));
         RunDecisionsLoadFailure(services, dataRoot);
 
-        Console.WriteLine("== 任务日志读取失败态（失败 → 重试 → 恢复，真实控件）==");
+        Section("任务日志读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunJournalLoadFailure));
         RunJournalLoadFailure(services, dataRoot);
 
-        Console.WriteLine("== 极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）==");
+        Section("极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）", nameof(RunDetailBreak));
         RunDetailBreak(services, dataRoot);
 
-        Console.WriteLine("== 状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）==");
+        Section("状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）", nameof(RunStatusFullText));
         RunStatusFullText(services, dataRoot);
 
-        Console.WriteLine("== 对话框状态行的完整错误入口（三屏各四段：嵌入页面文件的 / 独立文件的 / 真实保存失败的，真实控件）==");
+        Section("对话框状态行的完整错误入口（三屏各四段：嵌入页面文件的 / 独立文件的 / 真实保存失败的，真实控件）", nameof(RunDialogStatusFullText));
         RunDialogStatusFullText(services, dataRoot);
 
-        Console.WriteLine("== 说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）==");
+        Section("说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）", nameof(RunCaptionFit));
         RunCaptionFit(services, dataRoot);
 
-        Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
+        Section("完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）", nameof(RunFullJourney));
         RunFullJourney(services, dataRoot);
 
         Console.WriteLine("== 冒烟清单覆盖（声明 ↔ 真实构造）==");
@@ -5240,6 +5240,23 @@ internal static class Program
         var fail = $"FAIL {name}：{string.Join("；", detail)}";
         Console.WriteLine(fail);
         _lines.Add(fail);
+    }
+
+    /// <summary>
+    /// 段的标题行：中文段名 + 这一段自己的方法名（<c>[RunXxx]</c>）。
+    /// <para>
+    /// <b>为什么要带上方法名</b>：<c>docs/NOTES.md</c> 的「降级答辩脚本」逐屏表按段的方法名引用证据
+    /// （<c>RunCaptionFit</c>、<c>RunProfileLoadFailure</c>…），而报告里原本只有中文段名——两边对不上时，
+    /// 演示脚本只能人手抄一份「哪一屏看哪一段」的清单，抄的那一份会漂（改了段名、加了段，抄单不会红）。
+    /// 现在标题里带 id，脚本直接从逐屏表读引用、在报告里找那一段；id 由调用点的 <c>nameof</c> 给出，
+    /// 段改名即编译不过，不存在第二份名单。
+    /// </para>
+    /// </summary>
+    private static void Section(string title, string id)
+    {
+        var line = $"== {title}[{id}] ==";
+        Console.WriteLine(line);
+        _lines.Add(line);
     }
 
     private static void Run(string name, Func<Control> build)

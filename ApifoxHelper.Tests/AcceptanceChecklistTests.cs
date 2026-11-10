@@ -28,7 +28,8 @@ public class AcceptanceChecklistTests
     /// <summary>本节取出的每一行（一个勾选框一行）。</summary>
     private readonly record struct Row(string Check, string Item, string Verdict, string Evidence, string Gui);
 
-    private static List<Row> Rows()
+    /// <summary>本节正文的行（从标题行到下一个 <c>## </c> 之前）。</summary>
+    private static string[] SectionLines()
     {
         var notes = Repo.Source("docs", "NOTES.md");
         var lines = notes.Split('\n');
@@ -38,19 +39,25 @@ public class AcceptanceChecklistTests
         var firstHeading = Array.FindIndex(lines, l => l.StartsWith("## ", StringComparison.Ordinal));
         Assert.Equal(start, firstHeading);
         var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
-        var body = lines[start..(end < 0 ? lines.Length : end)];
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
 
-        var rows = new List<Row>();
-        foreach (var line in body)
+    /// <summary>本节里所有以 <c>|</c> 开头的行切成单元格的结果，含表头行与分隔行——格式检查要看的是全部行，不只是已被接受的那些。</summary>
+    private static List<List<string>> CellRows()
+    {
+        var cells = new List<List<string>>();
+        foreach (var line in SectionLines())
         {
             if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
-            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
-            if (cells.Count != 5) continue;
-            if (cells[0] != "[x]" && cells[0] != "[ ]") continue;   // 表头行与分隔行跳过
-            rows.Add(new Row(cells[0], cells[1], cells[2], cells[3], cells[4]));
+            cells.Add(line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList());
         }
-        return rows;
+        return cells;
     }
+
+    private static List<Row> Rows() => CellRows()
+        .Where(c => c.Count == 5 && (c[0] == "[x]" || c[0] == "[ ]"))
+        .Select(c => new Row(c[0], c[1], c[2], c[3], c[4]))
+        .ToList();
 
     [Fact]
     public void Checklist_HasEveryGateAndEverySharedInvariant()
@@ -118,5 +125,27 @@ public class AcceptanceChecklistTests
             Assert.True(measured || row.Gui.StartsWith("不经界面", StringComparison.Ordinal),
                 $"「{row.Item}」的 GUI 证据既没写轮次也没写「不经界面」：{row.Gui}。");
         }
+    }
+
+    /// <summary>
+    /// 格式错的行必须判红，不许被解析器静默跳过（第一百六十七轮，简报 P0-2）。
+    /// <para>
+    /// <b>存在的理由</b>：本节的其余断言都从 <see cref="Rows"/> 取数，而它按「五列且首格是勾选框」筛行。
+    /// 既有那 15 行列数写错时，<c>Checklist_HasEveryGateAndEverySharedInvariant</c> 会数到 5 或 8 而变红；
+    /// 漏的是<b>新增行</b>这一支：有人往本表加一条自己的口径（首格是勾选框、少写一列），
+    /// 这行既不被计数、也不被查证据出处与 GUI 证据——<b>整表照样绿，而多出来的那一格没有任何断言看过</b>。
+    /// 这条负向门把「首格是勾选框但列数不是 5」的行本身判红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Checklist_MisshapedRow_IsRedNotSilentlySkipped()
+    {
+        var misshaped = CellRows()
+            .Where(c => (c[0] == "[x]" || c[0] == "[ ]") && c.Count != 5)
+            .ToList();
+        Assert.True(
+            misshaped.Count == 0,
+            $"这些行以勾选框开头却不是 5 列（应为 勾选 / 门槛 / 当前结论 / 证据出处 / GUI 证据），"
+            + $"它们不会进 Rows()，等于从口径表里悄悄消失：{string.Join(" ／ ", misshaped.Select(c => $"{c.Count} 列「{c[1]}」"))}。");
     }
 }

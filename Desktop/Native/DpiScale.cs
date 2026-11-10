@@ -54,9 +54,6 @@ namespace ApifoxHelper.Desktop.Native;
 /// </summary>
 internal static class DpiScale
 {
-    /// <summary>设计基准 DPI：DESIGN.md §3 的字号档与 §4 的间距档都按 96dpi 逻辑像素记录。</summary>
-    private const float DesignDpi = 96f;
-
     /// <summary><c>GetDeviceCaps</c> 的 <c>LOGPIXELSY</c>：屏幕 DC 的纵向 DPI。</summary>
     private const int LogPixelsY = 90;
 
@@ -65,6 +62,10 @@ internal static class DpiScale
     /// <para>
     /// 字体与缩放基准取同一份（<see cref="UiTokens.Body"/>）：窗体字体必须与设计基准一致，
     /// 否则 100% 档就会凭空缩放。故本方法一并把窗体字体设成它，调用点不必再自己保证两处一致。
+    /// </para>
+    /// <para>
+    /// 缩放因子与「要不要真的缩放」都不在本文件算：那是纯算术，取
+    /// <see cref="DpiScaleFactor"/>（与测试工程共享编译，Linux 侧有真值表）。
     /// </para>
     /// </summary>
     public static void Apply(Form form, Size designSize)
@@ -75,21 +76,17 @@ internal static class DpiScale
         form.AutoScaleMode = AutoScaleMode.None;
         form.ClientSize = designSize;
         var factor = ScaleFactor();
-        if (factor > 1f) form.Scale(new SizeF(factor, factor));
+        if (DpiScaleFactor.ShouldScale(factor)) form.Scale(new SizeF(factor, factor));
     }
 
     /// <summary>
-    /// 系统字体缩放比 = 屏幕 DPI / 96。取不到 DPI 时回 1（不缩放）。
+    /// 系统字体缩放比 = 屏幕 DPI / 96（算式在 <see cref="DpiScaleFactor.FromScreenDpi"/>）。
     /// <para>
     /// 不用 <c>Control.DeviceDpi</c>：wine 下它恒报 96，而字体确实按 <c>LogPixels</c> 放大
     /// （第一百六十二轮实测），拿它当缩放比会让因子恒为 1。
     /// </para>
     /// </summary>
-    public static float ScaleFactor()
-    {
-        var dpi = ScreenDpi();
-        return dpi <= 0 ? 1f : dpi / DesignDpi;
-    }
+    public static float ScaleFactor() => DpiScaleFactor.FromScreenDpi(ScreenDpi());
 
     /// <summary>
     /// 屏幕 DC 的纵向 DPI（<c>GetDeviceCaps(LOGPIXELSY)</c>）。取不到时回 0。
