@@ -70,6 +70,9 @@ internal sealed class TasksPage : UserControl, INativePage
     // 读取失败门控：失败态优先于「筛到零行」与「还没有任务」——这一屏连「有没有任务」都还不知道。
     private bool _loadFailed;
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主（第一百六十四轮）：状态行 + 右侧「查看完整错误」入口。失败原因来自
+    // Exception.Message，动辄两三百字符，AutoEllipsis 只解决「有下文」，读全与复制走这颗入口。
+    private readonly StatusLineHost _statusHost;
     // 详情区固定设计宽（FixedPanel = Panel2）：窗口缩放时详情不变、列表吸收剩余宽度，
     // 与「标识列吸收剩余可视宽度」（ListColumns）同一方向；缺省 None 会让详情区随窗口按比例放大、偏离设计宽。
     private readonly SplitContainer _split = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Line, FixedPanel = FixedPanel.Panel2 };
@@ -167,6 +170,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _syncPlans = syncPlans;
         _syncExecutor = syncExecutor;
         _sortMemory = sortMemory;
+        // 状态行宿主先建：工具栏把它当一格控件加进去（标签与入口按钮的显隐由它自己管）。
+        _statusHost = new StatusLineHost(_status);
 
         var newButton = Ui.Primary(NewTaskLabel);
         newButton.Click += (_, _) => ShowNewTaskDialog();
@@ -326,9 +331,8 @@ internal sealed class TasksPage : UserControl, INativePage
         var filterField = Ui.Field(_filter);
         filterField.Margin = new Padding(UiTokens.Md, 0, 0, 0);
         buttons.Controls.Add(filterField);
-        _status.Dock = DockStyle.Fill;
         toolbar.Controls.Add(buttons, 0, 0);
-        toolbar.Controls.Add(_status, 1, 0);
+        toolbar.Controls.Add(_statusHost, 1, 0);
 
         _detail = BuildDetail();
         _detailHint = Ui.Caption("选择左侧任务查看阶段进度。");
@@ -501,11 +505,8 @@ internal sealed class TasksPage : UserControl, INativePage
         base.Dispose(disposing);
     }
 
-    private void SetStatus(string? message, Color? color = null)
-    {
-        _status.Text = message ?? "";
-        _status.ForeColor = color ?? UiTokens.BadText;
-    }
+    private void SetStatus(string? message, Color? color = null) =>
+        _statusHost.SetText(message, color ?? UiTokens.BadText);
 
     private void LoadTasks()
     {

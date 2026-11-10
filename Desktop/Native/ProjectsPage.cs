@@ -44,6 +44,9 @@ internal sealed class ProjectsPage : UserControl, INativePage
     // 这一屏当前是不是读取失败态：三种状态（没有配置 / 筛到零行 / 读取失败）由它区分，行动按钮随之切换。
     private bool _loadFailed;
     private readonly Label _status = Ui.StatusLine();
+    // 状态行宿主（第一百六十四轮）：状态行 + 右侧「查看完整错误」入口。失败原因来自
+    // Exception.Message，动辄两三百字符，AutoEllipsis 只解决「有下文」，读全与复制走这颗入口。
+    private readonly StatusLineHost _statusHost;
     private readonly Button _editButton;
     private readonly Button _probeButton;
     // 选中保留：列表在切页、刷新与保存后都会重建，按配置 Id 恢复选中与键盘焦点（与任务页同一口径）。
@@ -66,6 +69,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
         _jobs = jobs;
         _credentials = credentials;
         _sortMemory = sortMemory;
+        // 状态行宿主先建：工具栏把它当一格控件加进去（标签与入口按钮的显隐由它自己管）。
+        _statusHost = new StatusLineHost(_status);
 
         var newButton = Ui.Primary(NewProfileLabel);
         newButton.Click += (_, _) => ShowDialog(null);
@@ -138,9 +143,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
         var filterField = Ui.Field(_filter);
         filterField.Margin = new Padding(UiTokens.Md, 0, 0, 0);
         buttons.Controls.Add(filterField);
-        _status.Dock = DockStyle.Fill;
         toolbar.Controls.Add(buttons, 0, 0);
-        toolbar.Controls.Add(_status, 1, 0);
+        toolbar.Controls.Add(_statusHost, 1, 0);
 
         // 清单区形状（发丝边 + 叠在前面的空态）取 Ui.ListHost 一份：两页同一份，z 序只在那里定。
         // 此前这里把发丝边面板加在空态面板之后，空态被整块盖住（第一百一十九轮实测）。
@@ -385,11 +389,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
         _ => "未配置",
     };
 
-    private void SetStatus(string? message, Color? color = null)
-    {
-        _status.Text = message ?? "";
-        _status.ForeColor = color ?? UiTokens.BadText;
-    }
+    private void SetStatus(string? message, Color? color = null) =>
+        _statusHost.SetText(message, color ?? UiTokens.BadText);
 
     private void ShowDialog(ProjectProfile? editing)
     {

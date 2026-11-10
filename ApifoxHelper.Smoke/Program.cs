@@ -91,6 +91,7 @@ internal static class Program
         "ReportsDialog",
         "ScanResultsDialog",
         "ScanWarningsDialog",
+        "StatusTextDialog",
         "SupplementsDialog",
         "SyncPreviewDialog",
     ];
@@ -253,6 +254,9 @@ internal static class Program
         Console.WriteLine("== 极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）==");
         RunDetailBreak(services, dataRoot);
 
+        Console.WriteLine("== 状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）==");
+        RunStatusFullText(services, dataRoot);
+
         Console.WriteLine("== 说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）==");
         RunCaptionFit(services, dataRoot);
 
@@ -377,6 +381,12 @@ internal static class Program
         yield return ("ReportsDialog（报告与交接）", () => new ReportsDialog(services.GetRequiredService<ReportExportService>(), task));
         yield return ("JournalDialog（任务日志）", () => new JournalDialog(tasks, task));
         yield return ("NoticeDialog（提示）", () => new NoticeDialog("关于 Apifox 助手", "冒烟构造用的提示正文。", "等宽区示例", "附注示例"));
+        // 状态行完整错误对话框（第一百六十四轮）：正文按产品路径同一份拼装（标题 + 失败原因），
+        // 这一条只拦「构造期就崩」（第一百二十八轮那一类）；放不下 → 入口 → 点开读全的真实交互在 RunStatusFullText。
+        yield return ("StatusTextDialog（读全状态行的失败原因）", () => new StatusTextDialog(
+            LoadFailureState.FailureStatus(
+                LoadFailureState.Tasks.Title,
+                "The process cannot access the file 'task.json' because it is being used by another process.")));
     }
 
     /// <summary>控件工厂：字段网格、滚动宿主、清单宿主——三处都是「构造期就会跑布局」的形状。</summary>
@@ -3678,6 +3688,312 @@ internal static class Program
         {
             page?.Dispose();
             host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 状态行「查看完整错误」入口的真实控件交互（第一百六十二轮挂账、第一百六十四轮接线的补口）。
+    /// <para>
+    /// 存在理由：第一百五十九轮开的 <c>AutoEllipsis</c> 只解决「末尾有下文」，读全与复制这一半
+    /// 此前只有源码切片证据。这一段量的是真实窗口宽度下四件事：短句放得下不给入口（给了就是
+    /// 添一步空动作）、真实失败长句放不下要给、点开看到的正文与状态行逐字相同、关掉回到原处。
+    /// </para>
+    /// <para>
+    /// <b>「放不下」怎么造出来</b>：不手写一句超长文字，走产品的真实失败路径（弄坏任务目录 →
+    /// <c>RefreshData</c>），原因文字与宽度都由磁盘和窗口决定；判定在冒烟侧按口径独立重述一遍
+    /// （<c>可用宽度 &gt; 0 且 首选宽度 &gt; 可用宽度</c>，不调 <c>StatusLineText</c>，
+    /// 否则断言与被测代码同源、恒真）。逐档收窄窗口这一步也是用户真能做的动作——它在测
+    /// 「宽度变了要重判」这条接线，不是在凑一个放不下的数字。
+    /// </para>
+    /// </summary>
+    private static void RunStatusFullText(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort.json"));
+        var brokenDir = Path.Combine(store.TasksDir, "broken-status");
+        var brokenFile = Path.Combine(brokenDir, "task.json");
+
+        Form? host = null;
+        TasksPage? page = null;
+        var toolbarHeightBefore = 0;
+        var baselineWidth = 0;
+        var firstStepOffered = false;
+        try
+        {
+            RunAction("状态行：放得下的短句不给「查看完整错误」入口（真实控件）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "状态行完整错误冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    services.GetRequiredService<ProfileStore>(),
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                page.OnPageShown();
+                page.RefreshData();
+                Application.DoEvents();
+
+                // 真实短句：筛到行的计数句（空状态行「放得下」是废话，量不到这一支）。
+                var filter = FindFirst<TextBox>(page) ?? throw new InvalidOperationException("任务页里找不到筛选框。");
+                filter.Text = "冒烟";
+                Application.DoEvents();
+
+                // 先把窗口拉到屏幕工作区宽（用户真能做的动作；第一百五十九轮实测写死 1600 会被屏宽钳住）：
+                // 「放得下就不给入口」这一支只有在最宽的一档才可能量到。
+                host.Width = Screen.PrimaryScreen?.WorkingArea.Width ?? host.Width;
+                baselineWidth = host.Width;
+                Application.DoEvents();
+
+                var status = StatusLabel(page);
+                if (status.Text.Length == 0)
+                {
+                    throw new InvalidOperationException("筛选后状态行没有文字，这一段量不到短句那一支。");
+                }
+                var entry = ButtonOf(page, StatusLineText.FullTextButton);
+                // 基准行高在换文字之前取：后面几档要判的是「加一颗入口」这单独一件事有没有推动这一行。
+                toolbarHeightBefore = ToolbarOf(status).Height;
+                var (preferred, available, shouldOffer) = StatusEntryRule(status);
+                if (entry.Visible != shouldOffer)
+                {
+                    throw new InvalidOperationException(
+                        $"短句「{status.Text}」（文字 {preferred}px、入口不占位时这一行 {available}px）下入口可见={entry.Visible}，"
+                        + $"按口径该「{(shouldOffer ? "给" : "不给")}」：点开看到的是同一句话时不该给入口，读不到全文时不该没有入口。");
+                }
+                _lines.Add($"     短句「{status.Text}」：文字 {preferred}px、入口不占位时这一行 {available}px、入口可见={entry.Visible}、"
+                    + $"工具栏行高 {toolbarHeightBefore}px（窗口 {baselineWidth}px）"
+                    + (shouldOffer ? "——这一档连最宽窗口都放不下这一句，「放得下不给入口」那一支本轮在这一档没量到（工具栏按钮列不随缩放让位，见 docs/NOTES.md 挂账）" : ""));
+            });
+
+            RunAction("状态行：真实失败长句放不下时给出入口，且同一行宽上按文字内容重判（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                Directory.CreateDirectory(brokenDir);
+                File.WriteAllText(brokenFile, "这不是 JSON");
+                page.RefreshData();
+                Application.DoEvents();
+
+                var status = StatusLabel(page);
+                var entry = ButtonOf(page, StatusLineText.FullTextButton);
+                if (!status.Text.StartsWith(LoadFailureState.Tasks.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行不是真实失败原因：「{status.Text}」。");
+                }
+                // 逐档收窄（用户真能做的动作）：第一档取上一段那个最宽窗口——只有同宽才谈得上
+                // 「加一颗入口」这一单独一件事的行高对照，换一档宽度比的是另一件事（按钮列会不会换行）。
+                var offered = false;
+                var heightHeld = false;
+                var widths = "";
+                var rowWidths = new HashSet<int>();
+                var firstStep = true;
+                foreach (var width in new[] { baselineWidth, 1200, 1100, 1000, 900, 800, 640 })
+                {
+                    host!.Width = width;
+                    Application.DoEvents();
+                    var (preferred, available, shouldOffer) = StatusEntryRule(status);
+                    if (entry.Visible != shouldOffer)
+                    {
+                        throw new InvalidOperationException(
+                            $"窗口 {host.Width}px 下状态行文字 {preferred}px、入口不占位时这一行 {available}px，按口径该「{(shouldOffer ? "给" : "不给")}」入口，实际可见={entry.Visible}。");
+                    }
+                    if (shouldOffer)
+                    {
+                        if (!heightHeld)
+                        {
+                            if (firstStep)
+                            {
+                                AssertToolbarHeightHeld(status, toolbarHeightBefore, host.Width);
+                            }
+                            heightHeld = true;
+                        }
+                        offered = true;
+                    }
+                    else if (offered)
+                    {
+                        throw new InvalidOperationException(
+                            $"窗口收到 {host.Width}px（文字 {preferred}px、入口不占位时这一行 {available}px）后入口又收起：判定随宽度非单调，界面会抖。");
+                    }
+                    widths += $"{host.Width}:{preferred}/{available}{(shouldOffer ? "给" : "不给")} ";
+                    rowWidths.Add(available);
+                    if (firstStep) firstStepOffered = shouldOffer;
+                    firstStep = false;
+                }
+                if (!offered)
+                {
+                    throw new InvalidOperationException(
+                        $"逐档收窄到 640px 都没量到「放不下」（{widths.TrimEnd()}）：这一族宽度上真实失败原因都放得下，这一段量不到入口该出现的那一支。");
+                }
+                if (!entry.Enabled || !entry.CanSelect)
+                {
+                    throw new InvalidOperationException("入口出现了却不可点。");
+                }
+                // 串=窗口实际宽:文字宽/入口不占位时的行宽→给不给。同一行宽下换文字就要换判定，这是本段判的内容；
+                // 「窗口变窄要不要改判」只有当这一行的宽真的随窗口变过时才量得到，没变就如实写没量到。
+                var rowWidthNote = rowWidths.Count == 1
+                    ? "（这一行的宽七档未随窗口变，「窗口变窄要不要改判」这一档没量到，重判只由文字内容触发）"
+                    : "（这一行的宽随窗口变过：" + string.Join("/", rowWidths.Order()) + "）";
+                _lines.Add($"     真实失败原因 {status.Text.Length} 字：{widths.TrimEnd()}{rowWidthNote}，"
+                    + $"工具栏行高 {ToolbarOf(status).Height}px（基准 {toolbarHeightBefore}px，同宽档对照{(heightHeld ? "已判" : "未判")}）");
+            });
+
+            RunAction("状态行：点入口打开的对话框正文与状态行逐字相同，关掉回到原处（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                var status = StatusLabel(page);
+                var expected = status.Text;
+                var openedTitle = "";
+                var openedBody = "";
+                var closeButtonEnabled = false;
+                using var probe = new System.Windows.Forms.Timer { Interval = 30 };
+                var dismissed = false;
+                // ShowDialog 是模态的：Click 会卡在对话框里，核对与关闭只能排在它泵起来的消息循环内做。
+                // 关它走的也是对话框自己那颗「关闭」的 PerformClick，不直接调 Close()（那绕过了产品路径）。
+                probe.Tick += (_, _) =>
+                {
+                    if (dismissed) return;
+                    var dialog = Application.OpenForms.OfType<StatusTextDialog>().FirstOrDefault();
+                    if (dialog is null) return;
+                    openedTitle = dialog.Text;
+                    openedBody = dialog.Message;
+                    var close = ButtonOf(dialog, "关闭");
+                    closeButtonEnabled = close.Enabled;
+                    close.PerformClick();
+                    dismissed = true;
+                };
+                probe.Start();
+                try
+                {
+                    Click(page, StatusLineText.FullTextButton);
+                }
+                finally
+                {
+                    probe.Stop();
+                }
+                Application.DoEvents();
+                if (!dismissed)
+                {
+                    throw new InvalidOperationException("点了入口却没等到完整错误对话框（没打开、或打开的不是这一型）。");
+                }
+                if (openedBody != expected)
+                {
+                    throw new InvalidOperationException(
+                        $"对话框正文与状态行不逐字相同（正文 {openedBody.Length} 字 / 状态行 {expected.Length} 字）：读全这一步给出的是另一句话或半句话。");
+                }
+                if (openedTitle != StatusLineText.FullTextHeading)
+                {
+                    throw new InvalidOperationException($"对话框标题是「{openedTitle}」，取的不是口径文件那一份。");
+                }
+                if (!closeButtonEnabled)
+                {
+                    throw new InvalidOperationException("对话框里那颗「关闭」不可点。");
+                }
+                // 关掉回到原处：状态行那句话与入口都保持原样（这一屏不因为读过一次而换内容）。
+                var (backPreferred, backAvailable, backShouldOffer) = StatusEntryRule(status);
+                var backEntry = ButtonOf(page, StatusLineText.FullTextButton);
+                if (status.Text != expected || backEntry.Visible != backShouldOffer)
+                {
+                    throw new InvalidOperationException(
+                        $"关掉对话框后这一屏变了样：状态行文字是否同一句={status.Text == expected}、入口可见={backEntry.Visible}"
+                        + $"（文字 {backPreferred}px、入口不占位时这一行 {backAvailable}px、按口径该「{(backShouldOffer ? "给" : "不给")}」）。");
+                }
+                _lines.Add($"     点开读全：标题「{openedTitle}」、正文 {openedBody.Length} 字与状态行逐字相同");
+            });
+
+            RunAction("状态行：修好磁盘恢复短句后按同一口径重判（放得下时入口收起，真实控件）", () =>
+            {
+                if (page is null || host is null) throw new InvalidOperationException("上一段没有产出任务页。");
+                Directory.Delete(brokenDir, recursive: true);
+                host.Width = baselineWidth;
+                Click(page, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var status = StatusLabel(page);
+                var entry = ButtonOf(page, StatusLineText.FullTextButton);
+                if (status.Text.StartsWith(LoadFailureState.Tasks.Title, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"修好磁盘后状态行仍说失败：「{status.Text}」。");
+                }
+                var (preferred, available, shouldOffer) = StatusEntryRule(status);
+                if (entry.Visible != shouldOffer)
+                {
+                    throw new InvalidOperationException(
+                        $"恢复后文字 {preferred}px、入口不占位时这一行 {available}px，入口可见={entry.Visible}，按口径该「{(shouldOffer ? "给" : "不给")}」。");
+                }
+                AssertToolbarHeightHeld(status, toolbarHeightBefore, host.Width);
+                _lines.Add($"     恢复后「{status.Text}」：文字 {preferred}px、入口不占位时这一行 {available}px、入口可见={entry.Visible}、"
+                    + $"工具栏行高 {ToolbarOf(status).Height}px"
+                    + (!shouldOffer && firstStepOffered ? "（同一窗口宽下失败态给过、恢复后不给——入口收得回来）" : ""));
+            });
+        }
+        finally
+        {
+            // 坏目录必须清掉：留着它，后面每一段读任务都会失败（冒烟器自己造的坑自己填）。
+            try
+            {
+                if (Directory.Exists(brokenDir)) Directory.Delete(brokenDir, recursive: true);
+            }
+            catch (IOException)
+            {
+                // 删不掉只影响后续段，不影响本段已经记下的失败。
+            }
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 状态行那一句的单行首选宽度，与「入口不占位时这一行有多宽」（宿主客户区宽 − 状态行左右留白）。
+    /// <para>
+    /// 基准不取标签当前宽度：入口一出现就把标签挤窄，拿挤窄后的宽度自比等于让入口替自己投票，
+    /// 短句也会一直被判成放不下（第一百六十四轮 wine 实测到的正是这一支）。这里按几何独立重算，
+    /// 不复用界面层的算法——「该不该给入口」这个判定也在调用点按两个数重述一遍，不调口径文件。
+    /// </para>
+    /// </summary>
+    private static (int Preferred, int Available) StatusTextWidths(Label status)
+    {
+        var host = status.Parent ?? throw new InvalidOperationException("状态行没有挂在宿主里（接线与预期形状不符）。");
+        return (TextRenderer.MeasureText(
+                status.Text, status.Font, new Size(10000, 10000), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix).Width,
+            host.ClientSize.Width - status.Margin.Horizontal);
+    }
+
+    /// <summary>
+    /// 按口径在冒烟侧重述一遍的判定：入口不占位时的行宽为正、且文字首选宽度超过它，才该给入口。
+    /// 这里不调 <c>StatusLineText.ShouldOfferFullText</c>——同一个函数判自己不会红，判定要独立写一遍。
+    /// </summary>
+    private static (int Preferred, int Available, bool ShouldOffer) StatusEntryRule(Label status)
+    {
+        var (preferred, available) = StatusTextWidths(status);
+        return (preferred, available, available > 0 && preferred > available);
+    }
+
+    /// <summary>状态行那一格所在的工具栏（状态行 → 宿主 → 工具栏）——入口出现与收起都不该让它变高。</summary>
+    private static Control ToolbarOf(Control status) =>
+        status.Parent?.Parent ?? throw new InvalidOperationException("状态行没有挂在宿主与工具栏里（接线与预期形状不符）。");
+
+    /// <summary>工具栏行高必须与入口出现之前一致：状态行是固定占位的一行，撑高会推动整屏布局。</summary>
+    private static void AssertToolbarHeightHeld(Control status, int baseline, int windowWidth)
+    {
+        var height = ToolbarOf(status).Height;
+        if (height != baseline)
+        {
+            throw new InvalidOperationException(
+                $"窗口 {windowWidth}px 下工具栏那一行从 {baseline}px 变成 {height}px（状态行宿主 {status.Parent?.Height}px）："
+                + "状态行是固定占位的一行，加一颗入口不该推动布局。");
         }
     }
 
