@@ -1400,7 +1400,7 @@ internal sealed class NewTaskDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 560);
+        DpiScale.Apply(this, new Size(560, 560));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

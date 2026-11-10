@@ -161,7 +161,7 @@ internal sealed class SyncPreviewDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(1020, 740);
+        DpiScale.Apply(this, new Size(1020, 740));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

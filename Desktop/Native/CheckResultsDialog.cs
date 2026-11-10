@@ -88,7 +88,7 @@ internal sealed class CheckResultsDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(1000, 720);
+        DpiScale.Apply(this, new Size(1000, 720));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

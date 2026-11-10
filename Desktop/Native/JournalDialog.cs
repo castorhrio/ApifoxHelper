@@ -73,7 +73,7 @@ internal sealed class JournalDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(960, 620);
+        DpiScale.Apply(this, new Size(960, 620));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

@@ -44,7 +44,7 @@ internal sealed class GenerationDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(620, 470);
+        DpiScale.Apply(this, new Size(620, 470));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

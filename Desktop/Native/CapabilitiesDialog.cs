@@ -60,7 +60,7 @@ internal sealed class CapabilitiesDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(780, 620);
+        DpiScale.Apply(this, new Size(780, 620));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

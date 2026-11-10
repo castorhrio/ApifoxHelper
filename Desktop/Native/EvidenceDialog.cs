@@ -61,7 +61,7 @@ internal sealed class EvidenceDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(960, 640);
+        DpiScale.Apply(this, new Size(960, 640));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

@@ -78,7 +78,7 @@ internal sealed class CandidatesDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(960, 740);
+        DpiScale.Apply(this, new Size(960, 740));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

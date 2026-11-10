@@ -35,7 +35,7 @@ internal sealed class BuildLogDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(860, 560);
+        DpiScale.Apply(this, new Size(860, 560));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

@@ -83,7 +83,7 @@ internal sealed class ScanResultsDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(960, 640);
+        DpiScale.Apply(this, new Size(960, 640));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -593,7 +593,7 @@ internal sealed class ManualDraftDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 400);
+        DpiScale.Apply(this, new Size(560, 400));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -663,7 +663,7 @@ internal sealed class ScanWarningsDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(720, 480);
+        DpiScale.Apply(this, new Size(720, 480));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

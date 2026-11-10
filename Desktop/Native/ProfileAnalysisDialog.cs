@@ -46,7 +46,7 @@ internal sealed class ProfileAnalysisDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(700, 700);
+        DpiScale.Apply(this, new Size(700, 700));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

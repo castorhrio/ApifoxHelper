@@ -3862,7 +3862,8 @@ internal static class Program
                 var verdict = tooWide.Count == 0 ? "全部放得下" : $"{tooWide.Count} 条放不下";
                 _lines.Add(
                     $"     {screenName}：控件报 DPI {dialog.DeviceDpi}、说明行字体 {UiTokens.Caption.Value.Height}px" +
-                    $"（≈{scale}%），对话框可用宽度 {dialogUsable}px，{measured.Count} 条说明行，" +
+                    $"（≈{scale}%），屏幕 DPI {DpiScale.ScreenDpi()}、缩放因子 {DpiScale.ScaleFactor()}、客户区 {dialog.ClientSize.Width}×{dialog.ClientSize.Height}、屏幕 {Screen.PrimaryScreen?.Bounds.Width}×{Screen.PrimaryScreen?.Bounds.Height}、最大窗口 {SystemInformation.MaxWindowTrackSize.Width}×{SystemInformation.MaxWindowTrackSize.Height}，" +
+                    $"对话框可用宽度 {dialogUsable}px，{measured.Count} 条说明行，" +
                     $"文字/可用宽度 = {string.Join("，", measured)}；结论：{verdict}");
 
                 if (measured.Count == 0)

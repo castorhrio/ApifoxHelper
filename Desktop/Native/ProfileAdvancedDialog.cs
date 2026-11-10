@@ -43,7 +43,7 @@ internal sealed class ProfileAdvancedDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(700, 660);
+        DpiScale.Apply(this, new Size(700, 660));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

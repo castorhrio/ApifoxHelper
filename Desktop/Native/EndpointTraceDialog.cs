@@ -57,7 +57,7 @@ internal sealed class EndpointTraceDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(920, 640);
+        DpiScale.Apply(this, new Size(920, 640));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

@@ -21,7 +21,7 @@ internal sealed class NoticeDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 260);
+        DpiScale.Apply(this, new Size(560, 260));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

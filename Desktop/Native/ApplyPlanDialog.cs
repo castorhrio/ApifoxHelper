@@ -102,7 +102,7 @@ internal sealed class ApplyPlanDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(960, 680);
+        DpiScale.Apply(this, new Size(960, 680));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

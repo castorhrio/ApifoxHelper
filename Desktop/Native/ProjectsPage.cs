@@ -476,7 +476,7 @@ internal sealed class ProfileDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(680, 720);
+        DpiScale.Apply(this, new Size(680, 720));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
