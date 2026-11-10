@@ -93,6 +93,7 @@
     <Compile Include="..\Desktop\Native\TaskSummary.cs" Link="Shared\TaskSummary.cs" />
     <Compile Include="..\Desktop\Native\ShellShortcuts.cs" Link="Shared\ShellShortcuts.cs" />
     <Compile Include="..\Desktop\Native\NoticeText.cs" Link="Shared\NoticeText.cs" />
+    <Compile Include="..\Desktop\Native\ConfirmEntries.cs" Link="Shared\ConfirmEntries.cs" />
     <Compile Include="..\Tasks\TaskModels.cs" Link="Shared\TaskModels.cs" />
     <Compile Include="..\Source\SourceModels.cs" Link="Shared\SourceModels.cs" />
     <Compile Include="..\Comments\DraftModels.cs" Link="Shared\DraftModels.cs" />
@@ -110,6 +111,7 @@
     <Compile Include="..\Contracts\DiffEngine.cs" Link="Shared\DiffEngine.cs" />
     <Compile Include="..\Contracts\DocModel.cs" Link="Shared\DocModel.cs" />
     <Compile Include="..\Infrastructure\Core.cs" Link="Shared\Core.cs" />
+    <Compile Include="..\Infrastructure\Redactor.cs" Link="Shared\Redactor.cs" />
   </ItemGroup>
 
 </Project>

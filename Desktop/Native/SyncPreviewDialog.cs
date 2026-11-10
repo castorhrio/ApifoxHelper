@@ -701,13 +701,9 @@ internal sealed class SyncPreviewDialog : Form
         }
         var endpoints = plan.Actions.Count(a => a.Kind.EndsWith("Endpoint", StringComparison.Ordinal));
         var models = plan.Actions.Count - endpoints;
-        var impact = plan.OutOfScopeImpact.Count > 0
-            ? "\n共享模型更新会影响范围外 " + plan.OutOfScopeImpact.Count + " 个接口的文档表现。"
-            : "";
         var choice = MessageBox.Show(this,
-            "将写入 Apifox 项目 " + plan.ProjectId + " / 分支 " + (plan.Branch ?? "main") + "：" + endpoints + " 个接口、" + models + " 个模型。" + impact
-            + "\n同步期间请避免在 Apifox 中修改相同资源；本地锁不能阻止其他用户的修改。\n\n确认同步？",
-            "确认同步",
+            ConfirmEntries.SyncConfirmText(plan.ProjectId, plan.Branch ?? "main", endpoints, models, plan.OutOfScopeImpact.Count),
+            ConfirmEntries.SyncConfirmTitle,
             MessageBoxButtons.OKCancel,
             MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2);

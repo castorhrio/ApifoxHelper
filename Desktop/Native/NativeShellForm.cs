@@ -434,7 +434,7 @@ internal sealed class NativeShellForm : Form
         {
             var kinds = string.Join("、", running.Select(j => j.Kind).Distinct());
             var answer = MessageBox.Show(this,
-                $"以下操作仍在执行：{kinds}。\n\n退出时会请求停止，最多等待 {JobGrace.TotalSeconds:0} 秒让当前步骤结束。未完成的操作下次打开后请重新核对。\n\n确定退出吗？",
+                ConfirmEntries.ExitConfirmText(kinds, (int)JobGrace.TotalSeconds),
                 Title, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
             if (answer != DialogResult.Yes) return;
         }
