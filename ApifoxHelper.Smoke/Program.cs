@@ -253,6 +253,9 @@ internal static class Program
         Console.WriteLine("== 极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）==");
         RunDetailBreak(services, dataRoot);
 
+        Console.WriteLine("== 说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）==");
+        RunCaptionFit(services, dataRoot);
+
         Console.WriteLine("== 完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）==");
         RunFullJourney(services, dataRoot);
 
@@ -3705,6 +3708,98 @@ internal static class Program
         {
             throw new InvalidOperationException(
                 $"{what}：详情区里这些文字被静默裁掉（既没换行也没有省略号）：" + string.Join("、", clipped));
+        }
+    }
+
+    /// <summary>
+    /// 说明行「放得下」（第一百六十轮，简报 P2-3 的冒烟侧）。
+    /// <para>
+    /// 存在理由：Linux 侧的 <c>CaptionBrevityTests</c> 只能判「说明行 ≤ 80 字且 ≤ 2 句」——
+    /// 那是「别写成段落」，不是「放得下」。80 字在 12px 字号下约 960px，比报告与交接对话框（920）
+    /// 与代码证据对话框（960）的可用宽度都宽：写到上限的说明行会被静默裁掉，而长度门是绿的。
+    /// 这里在真实控件上量文字宽度，与那一屏的可用宽度比。
+    /// </para>
+    /// <para>
+    /// 量法：说明行经 <c>Ui.Caption</c> 出厂（<c>AutoSize = true</c>），所以「放不下」的表现是折行
+    /// 或裁掉，不是抛异常——用 <c>TextRenderer.MeasureText</c> 按单行量出文字宽度，与控件实际宽度比。
+    /// 已排好版的控件取它自己的宽度（真实可用宽度）；尚未显示的那一页（同步预览的预览页在计划生成前
+    /// 不可见，WinForms 不排不可见子树）取对话框可用宽度（<c>ClientSize.Width − 2×Lg</c>）作为上界
+    /// ——**如实记录**：那一支量的是「按对话框宽度排版时放不放得下」，不是屏幕上已排好的宽度。
+    /// </para>
+    /// </summary>
+    private static void RunCaptionFit(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var exports = services.GetRequiredService<ReportExportService>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "说明行放得下冒烟" });
+        var slot = new DocSlot
+        {
+            Id = "slot-caption-fit",
+            SymbolId = "M:Probe.Api.Controllers.ProbeController.Get",
+            SymbolKind = "method",
+            Display = "GET /api/probe",
+            Tag = "summary",
+            Status = "missing",
+            File = "Probe.Api/Controllers/ProbeController.cs",
+            Line = 12,
+            Role = "endpoint",
+            Editable = true,
+        };
+
+        var screens = new (string Name, Func<Form> Build)[]
+        {
+            ("同步预览", () => new SyncPreviewDialog(
+                tasks,
+                services.GetRequiredService<SyncPlanService>(),
+                services.GetRequiredService<SyncExecutor>(),
+                services.GetRequiredService<JobRunner>(),
+                task)),
+            ("报告与交接", () => new ReportsDialog(exports, task)),
+            ("代码证据", () => new EvidenceDialog(tasks, task, slot)),
+        };
+
+        foreach (var (screenName, build) in screens)
+        {
+            RunAction($"说明行放得下：{screenName}的说明行在可用宽度内一行放得下（真实控件量文字）", () =>
+            {
+                using var dialog = build();
+                _ = dialog.Handle;
+                dialog.CreateControl();
+                dialog.PerformLayout();
+                Application.DoEvents();
+
+                var fallback = dialog.ClientSize.Width - UiTokens.Lg * 2;
+                var measured = new List<string>();
+                var tooWide = new List<string>();
+                foreach (var label in FindAll<Label>(dialog))
+                {
+                    if (label.Text.Length == 0) continue;
+                    // 只量说明行：经 Ui.Caption 出厂的标签共用同一个 Font 实例。
+                    if (!ReferenceEquals(label.Font, UiTokens.Caption.Value)) continue;
+                    var available = label.Width > 0 ? label.Width : fallback;
+                    var preferred = TextRenderer.MeasureText(
+                        label.Text, label.Font, new Size(10000, 10000), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                    measured.Add($"{preferred.Width}/{available}px");
+                    if (preferred.Width > available + 2)
+                    {
+                        var head = label.Text.Length <= 16 ? label.Text : label.Text[..16] + "…";
+                        tooWide.Add($"「{head}」（文字 {preferred.Width}px、可用 {available}px）");
+                    }
+                }
+
+                if (measured.Count == 0)
+                {
+                    throw new InvalidOperationException($"{screenName}里一条说明行都没量到：量测口径可能已失效。");
+                }
+                if (tooWide.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"{screenName}：这些说明行放不下（会折行或被静默裁掉）：" + string.Join("、", tooWide));
+                }
+                _lines.Add($"     {screenName}：{measured.Count} 条说明行，文字/可用宽度 = {string.Join("，", measured)}");
+            });
         }
     }
 

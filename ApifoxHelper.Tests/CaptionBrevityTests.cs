@@ -20,6 +20,22 @@ namespace ApifoxHelper.Tests;
 /// 并把「说明行不得是段落」落成机械门：长度上限与句数上限各一条，任何一屏再写回长文即红。
 /// 上限取 80 字 / 2 句——现有最长 61 字、最多 2 句，留出余量但不给段落留位置。
 /// </para>
+/// <para>
+/// <b>第一百六十轮（具名 pass：harden）：门只认一种写法，等于只钉住一种写法。</b>
+/// 上面那道门此前只提取 <c>Ui.Caption("…")</c> 这一种形态。而说明行在源码里有三种写法：
+/// ① 就地字面量；② 底部固定区的 <c>BuildBottomHost(inner, "…", height)</c> 调用点
+/// （同步预览的两处说明行就是这样传进去的）；③ <c>Ui.Caption(共享常量)</c>
+/// （代码证据的片段区说明行取 <c>EvidenceEntries.SnippetCaption</c>）。
+/// 后两种写法在门的视野之外——门是绿的，但它没看过那三行。这与前几轮抓到的机械检查盲区同族
+/// （子串匹配被注释行骗过、属性声明形式绕过输入框工厂）：门钉住的是一种写法，不是一条规则。
+/// 本轮把提取口径扩到三种写法，并把「没有说明行能绕过门」落成断言：任何 <c>Ui.Caption(变量)</c>
+/// 要么解析得到共享常量、要么在封闭清单里登记了「文字来自数据」的理由，否则即红。
+/// </para>
+/// <para>
+/// <b>长度门不等于「放得下」</b>：80 字在 12px 字号下约 960px，比报告与交接对话框（920）与
+/// 代码证据对话框（960）的可用宽度都宽——写到上限的说明行会被静默裁掉。长度门管的是「别写成段落」，
+/// 「放得下」由冒烟器在真实控件上量（<c>ApifoxHelper.Smoke</c> 的 <c>RunCaptionFit</c> 段）。
+/// </para>
 /// </summary>
 public class CaptionBrevityTests
 {
@@ -29,18 +45,83 @@ public class CaptionBrevityTests
     /// <summary>说明行句数上限（按句号计）。一句讲这块框是什么，第二句讲什么时候可用。</summary>
     private const int MaxCaptionSentences = 2;
 
-    /// <summary>界面里所有 <c>Ui.Caption("…")</c> 的字面量（文件 + 行号 + 文字）。</summary>
-    private static List<(string File, int Line, string Text)> CaptionLiterals()
+    /// <summary>说明行在源码里的三种写法（第一百六十轮）。</summary>
+    internal enum CaptionForm
     {
-        var found = new List<(string, int, string)>();
+        /// <summary><c>Ui.Caption("…")</c>：就地字面量。</summary>
+        Literal,
+
+        /// <summary><c>BuildBottomHost(inner, "…", height)</c> 调用点：底部固定区的说明行。</summary>
+        BottomHostCallSite,
+
+        /// <summary><c>Ui.Caption(共享常量)</c>：文字在共享口径文件里（如 <c>EvidenceEntries.SnippetCaption</c>）。</summary>
+        SharedConstant,
+    }
+
+    /// <summary>一条说明行：文件、行号、文字与写法。</summary>
+    internal sealed record Caption(string File, int Line, string Text, CaptionForm Form);
+
+    /// <summary>
+    /// 文字来自数据或字段标签的说明行（不是就地写死的说明行），逐条登记理由。
+    /// <para>
+    /// 封闭清单：清单外的 <c>Ui.Caption(变量)</c> 一律判红（说明行不许藏在局部变量里），
+    /// 清单里登记了却找不到对应写法的也判红（清单不许留死条目）。
+    /// </para>
+    /// </summary>
+    private static readonly (string File, string Argument, string Why)[] DynamicCaptions =
+    [
+        ("GenerationDialog.cs", "text", "字段提示：文字由当前字段的标签与提示拼成，随字段变化"),
+        ("ProfileAdvancedDialog.cs", "text", "字段提示：同上"),
+        ("ProfileAnalysisDialog.cs", "text", "字段提示：同上"),
+        ("SupplementsDialog.cs", "editor.Label", "编辑位标题：文字来自编辑位自身"),
+        ("ProjectsPage.cs", "ProfileFormLayout.ProjectListHint(_editing is not null)", "提示文字由共享口径按「新建/编辑」两种状态给出"),
+        ("SyncPreviewDialog.cs", "caption", "底部区说明行：文字来自 BuildBottomHost 调用点，调用点已逐条提取"),
+        ("NoticeDialog.cs", "note", "提示附注：文字由调用方给（NoticeText 的两个共享常量），对话框不就地拼写"),
+    ];
+
+    /// <summary>共享口径里的字符串常量（<c>public const string X = "…";</c>），供共享常量写法解析。</summary>
+    internal static Dictionary<string, string> SharedConstants()
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var source in Repo.NativeSources())
         {
-            var lines = source.Text.Split('\n');
+            var name = Path.GetFileNameWithoutExtension(source.Name);
+            foreach (Match match in Regex.Matches(source.Text, @"public const string (\w+)\s*=\s*""([^""]*)"";"))
+            {
+                map[name + "." + match.Groups[1].Value] = match.Groups[2].Value;
+            }
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// 提取说明行（三种写法）。纯函数：输入是「文件名 + 全文」与常量表，不读磁盘，可单测。
+    /// </summary>
+    internal static List<Caption> ExtractCaptions(
+        IEnumerable<(string Name, string Text)> sources,
+        IReadOnlyDictionary<string, string> constants)
+    {
+        var found = new List<Caption>();
+        foreach (var (name, text) in sources)
+        {
+            var lines = text.Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
-                foreach (Match match in Regex.Matches(lines[i], @"Ui\.Caption\(""([^""]*)""\)"))
+                var line = lines[i];
+                foreach (Match match in Regex.Matches(line, @"Ui\.Caption\(""([^""]*)""\)"))
                 {
-                    found.Add((source.Name, i + 1, match.Groups[1].Value));
+                    found.Add(new Caption(name, i + 1, match.Groups[1].Value, CaptionForm.Literal));
+                }
+                foreach (Match match in Regex.Matches(line, @"BuildBottomHost\([^,]+,\s*""([^""]*)"""))
+                {
+                    found.Add(new Caption(name, i + 1, match.Groups[1].Value, CaptionForm.BottomHostCallSite));
+                }
+                foreach (var (_, argument) in CaptionArguments(line))
+                {
+                    if (constants.TryGetValue(argument, out var value))
+                    {
+                        found.Add(new Caption(name, i + 1, value, CaptionForm.SharedConstant));
+                    }
                 }
             }
         }
@@ -48,21 +129,82 @@ public class CaptionBrevityTests
     }
 
     /// <summary>
+    /// 门看不见的说明行：<c>Ui.Caption(变量)</c> 里既不是共享常量、也不在封闭清单里的那些。
+    /// 空标签（<c>Ui.Caption()</c>，文字稍后由数据填）不算说明行。
+    /// </summary>
+    internal static List<string> UnresolvedCaptionArguments(
+        IEnumerable<(string Name, string Text)> sources,
+        IReadOnlyDictionary<string, string> constants)
+    {
+        var unresolved = new List<string>();
+        foreach (var (name, text) in sources)
+        {
+            var lines = text.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                foreach (var (_, argument) in CaptionArguments(lines[i]))
+                {
+                    if (argument.Length == 0) continue;
+                    if (argument.StartsWith('"')) continue;   // 就地字面量：已由 ExtractCaptions 提取
+                    if (constants.ContainsKey(argument)) continue;
+                    if (DynamicCaptions.Any(entry => entry.File == name && entry.Argument == argument)) continue;
+                    unresolved.Add($"{name}:{i + 1}（{argument}）");
+                }
+            }
+        }
+        return unresolved;
+    }
+
+    /// <summary>
+    /// 一行里所有 <c>Ui.Caption(…)</c> 的第一个实参原文（按括号配对取，能处理嵌套括号；
+    /// 顶层逗号处收手——<c>Ui.Caption("…", muted: false)</c> 的第二个实参不是说明行文字）。
+    /// </summary>
+    private static IEnumerable<(int Column, string Argument)> CaptionArguments(string line)
+    {
+        var index = 0;
+        while (index < line.Length)
+        {
+            var open = line.IndexOf("Ui.Caption(", index, StringComparison.Ordinal);
+            if (open < 0) yield break;
+            var start = open + "Ui.Caption(".Length;
+            var depth = 1;
+            var cursor = start;
+            while (cursor < line.Length)
+            {
+                var ch = line[cursor];
+                if (ch == '(') depth++;
+                else if (ch == ')') depth--;
+                else if (ch == ',' && depth == 1) break;
+                if (depth == 0) break;
+                cursor++;
+            }
+            yield return (open, cursor > start ? line[start..cursor].Trim() : "");
+            index = start;
+        }
+    }
+
+    /// <summary>界面里所有说明行（三种写法，第一百六十轮）。</summary>
+    private static List<Caption> Captions() =>
+        ExtractCaptions(Repo.NativeSources().Select(s => (s.Name, s.Text)), SharedConstants());
+
+    /// <summary>
     /// 说明行不得是段落：长度与句数各一条上限。
     /// <para>
-    /// 变异验证（本轮实测）：把任务详情区任意一段改回原来的长文，这条即红并指名文件与行号。
+    /// 变异验证（第一百五十五轮实测）：把任务详情区任意一段改回原来的长文，这条即红并指名文件与行号。
+    /// 第一百六十轮起口径覆盖三种写法——把 <c>PlanEntries</c> 里的共享常量改长、或把底部区调用点的
+    /// 字面量改长，同样即红（此前这两种写法根本不在门的视野里）。
     /// </para>
     /// </summary>
     [Fact]
     public void CaptionLiterals_AreOneLineNotParagraphs()
     {
-        var captions = CaptionLiterals();
+        var captions = Captions();
         // 地板：提取口径失效时断言会静默空转（比没有断言更糟）。
-        Assert.True(captions.Count >= 30, $"只提取到 {captions.Count} 处 Ui.Caption 字面量，提取口径可能已失效。");
+        Assert.True(captions.Count >= 36, $"只提取到 {captions.Count} 处说明行，提取口径可能已失效。");
 
         var tooLong = captions
             .Where(c => c.Text.Length > MaxCaptionLength)
-            .Select(c => $"{c.File}:{c.Line}（{c.Text.Length} 字）")
+            .Select(c => $"{c.File}:{c.Line}（{c.Text.Length} 字，{FormName(c.Form)}）")
             .ToList();
         Assert.True(
             tooLong.Count == 0,
@@ -71,12 +213,127 @@ public class CaptionBrevityTests
 
         var tooManySentences = captions
             .Where(c => c.Text.Count(ch => ch == '。') > MaxCaptionSentences)
-            .Select(c => $"{c.File}:{c.Line}（{c.Text.Count(ch => ch == '。')} 句）")
+            .Select(c => $"{c.File}:{c.Line}（{c.Text.Count(ch => ch == '。')} 句，{FormName(c.Form)}）")
             .ToList();
         Assert.True(
             tooManySentences.Count == 0,
             $"以下说明行超过 {MaxCaptionSentences} 句：说明行讲「这块是什么 + 什么时候可用」，教程与替代路径不在这里："
             + string.Join("、", tooManySentences));
+    }
+
+    /// <summary>
+    /// 没有说明行能绕过门（第一百六十轮）：<c>Ui.Caption(变量)</c> 要么解析得到共享常量，
+    /// 要么在封闭清单里登记了「文字来自数据」的理由。
+    /// <para>
+    /// 变异验证（本轮实测）：把 <c>Ui.Caption(EvidenceEntries.SnippetCaption)</c> 改成
+    /// <c>Ui.Caption(text)</c>（局部变量），这条即红并指名文件与行号——说明行藏进局部变量后，
+    /// 长度门与句数门都看不见它，而界面照旧显示。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NoCaptionEscapesTheGate()
+    {
+        var sources = Repo.NativeSources().Select(s => (s.Name, s.Text)).ToList();
+        var unresolved = UnresolvedCaptionArguments(sources, SharedConstants());
+        Assert.True(
+            unresolved.Count == 0,
+            "以下说明行绕过了机械门（文字来自局部变量，长度与句数都判不到）："
+            + string.Join("、", unresolved)
+            + "。要么就地写字面量、要么收进共享常量；文字确实来自数据时在 DynamicCaptions 里登记理由。");
+
+        // 反向：封闭清单里登记了却找不到对应写法，说明那条理由已经过期（清单不许留死条目）。
+        var stale = DynamicCaptions
+            .Where(entry => !sources.Any(s => s.Name == entry.File && CaptionArguments(s.Text).Any(a => a.Argument == entry.Argument)))
+            .Select(entry => $"{entry.File}（{entry.Argument}）")
+            .ToList();
+        Assert.True(stale.Count == 0, "DynamicCaptions 里这些登记在源码里找不到对应写法（理由已过期）：" + string.Join("、", stale));
+    }
+
+    /// <summary>
+    /// 提取器本身可单测（第一百六十轮）：三种写法各提取一条，局部变量形式提取不到
+    /// ——后者正是 <see cref="NoCaptionEscapesTheGate"/> 存在的理由。
+    /// </summary>
+    [Fact]
+    public void Extractor_SeesAllThreeWritingForms()
+    {
+        const string source = """
+            var a = Ui.Caption("就地字面量说明行");
+            var b = BuildBottomHost(inner, "底部区说明行", 190);
+            var c = Ui.Caption(Shared.Caption);
+            var d = Ui.Caption(text);
+            var e = Ui.Caption();
+            """;
+        var constants = new Dictionary<string, string>(StringComparer.Ordinal) { ["Shared.Caption"] = "共享常量说明行" };
+        var sources = new[] { ("Fake.cs", source) };
+
+        var captions = ExtractCaptions(sources, constants);
+        Assert.Equal(3, captions.Count);
+        Assert.Contains(captions, c => c is { Text: "就地字面量说明行", Form: CaptionForm.Literal });
+        Assert.Contains(captions, c => c is { Text: "底部区说明行", Form: CaptionForm.BottomHostCallSite });
+        Assert.Contains(captions, c => c is { Text: "共享常量说明行", Form: CaptionForm.SharedConstant });
+
+        // 局部变量形式提取不到（门的盲区），空标签不算说明行（文字来自数据）。
+        var unresolved = UnresolvedCaptionArguments(sources, constants);
+        Assert.Equal(["Fake.cs:4（text）"], unresolved);
+    }
+
+    /// <summary>
+    /// 登记为「文字来自数据」的说明行，其真实来源也要过同一道门（第一百六十轮）。
+    /// <para>
+    /// 封闭清单是门的逃生口：登记一条理由，那一行就不再被长度门看见。逃生口不能变成藏身处——
+    /// 提示对话框的附注文字来自 <c>NoticeText</c> 的两个共享常量（「关于」与「打开目录失败」），
+    /// 这里把这两个常量本身按同一道门判一遍：常量写长成段落，这条即红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DynamicCaptionSources_PassTheSameGate()
+    {
+        var constants = SharedConstants();
+        foreach (var key in new[] { "NoticeText.AboutNote", "NoticeText.FolderErrorNote" })
+        {
+            Assert.True(constants.TryGetValue(key, out var text), $"共享常量 {key} 找不到（DynamicCaptions 里那条理由已过期）。");
+            Assert.True(
+                text!.Length <= MaxCaptionLength,
+                $"{key} 的说明行 {text.Length} 字，超过 {MaxCaptionLength} 字：{text}");
+            Assert.True(
+                text.Count(ch => ch == '。') <= MaxCaptionSentences,
+                $"{key} 的说明行超过 {MaxCaptionSentences} 句：{text}");
+        }
+    }
+
+    /// <summary>
+    /// 三屏说明行逐条过同一道门（第一百六十轮，简报 P2-3）：同步预览、报告与交接、代码证据。
+    /// <para>
+    /// 这三屏是「说明行写法最杂」的三处——同步预览的两处说明行经 <c>BuildBottomHost</c> 传入、
+    /// 代码证据的片段区说明行取共享常量、报告与交接是就地字面量。地板按屏给：提取口径失效时
+    /// 断言会静默空转，比没有断言更糟。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SyncPreviewReportAndEvidenceCaptions_PassTheSameGate()
+    {
+        var captions = Captions();
+        var screens = new (string File, int Floor)[]
+        {
+            ("SyncPreviewDialog.cs", 6),   // 勾选页 1 + 预览页 3 + 底部区调用点 2
+            ("ReportsDialog.cs", 1),
+            ("EvidenceDialog.cs", 1),      // 片段区说明行（共享常量）
+        };
+
+        foreach (var (file, floor) in screens)
+        {
+            var mine = captions.Where(c => c.File == file).ToList();
+            Assert.True(mine.Count >= floor, $"{file} 只提取到 {mine.Count} 条说明行（地板 {floor}），提取口径可能已失效。");
+            foreach (var caption in mine)
+            {
+                Assert.True(
+                    caption.Text.Length <= MaxCaptionLength,
+                    $"{file}:{caption.Line} 的说明行 {caption.Text.Length} 字，超过 {MaxCaptionLength} 字：{caption.Text}");
+                Assert.True(
+                    caption.Text.Count(ch => ch == '。') <= MaxCaptionSentences,
+                    $"{file}:{caption.Line} 的说明行超过 {MaxCaptionSentences} 句：{caption.Text}");
+            }
+        }
     }
 
     /// <summary>
@@ -116,7 +373,7 @@ public class CaptionBrevityTests
     /// <para>
     /// 判据取「末句的收尾两字」：同一收尾在五段里出现 ≥3 次即红。这是弱断言——它不规定每段该用
     /// 什么句式（问句/陈述/条件/结果导向各有各的用处），只钉住「不许五段一个模子」。
-    /// 变异验证（本轮实测）：把五段都改成以「时可用」收尾，这条即红并列出重复的收尾。
+    /// 变异验证（第一百五十六轮实测）：把五段都改成以「时可用」收尾，这条即红并列出重复的收尾。
     /// </para>
     /// </summary>
     [Fact]
@@ -158,5 +415,16 @@ public class CaptionBrevityTests
         Assert.Contains("说明行长度（§6）", design);
         Assert.Contains("第一百五十五轮", design);
         Assert.Contains("distill", design);
+        // 第一百六十轮：三种写法与「长度门不等于放得下」也要在设计基线里留痕。
+        Assert.Contains("第一百六十轮", design);
+        Assert.Contains("RunCaptionFit", design);
     }
+
+    private static string FormName(CaptionForm form) => form switch
+    {
+        CaptionForm.Literal => "字面量",
+        CaptionForm.BottomHostCallSite => "底部区调用点",
+        CaptionForm.SharedConstant => "共享常量",
+        _ => form.ToString(),
+    };
 }
