@@ -28,8 +28,12 @@ public class ReportTypographyTests
     /// 覆盖 Markdown 每一条分支的合成报告：分阶段表格、实际写入（含范围外影响）、接口变化
     /// （不兼容/结构/说明三类条目）、未完成事项、限制清单、验证边界。
     /// 数据全部是解释产品行为的假设值，不指向真实项目。
+    /// <para>
+    /// <c>internal</c> 而不是 <c>private</c>：<see cref="HtmlWrapTests"/> 把同一份渲染结果交给真浏览器排版，
+    /// 两边量的必须是同一份字节——合成报告再造一份就会漂移，那时没人知道排版判的是哪一句。
+    /// </para>
     /// </summary>
-    private static JsonObject Report(string? changeKey = null, string? sourceStatus = null) => new()
+    internal static JsonObject Report(string? changeKey = null, string? sourceStatus = null) => new()
     {
         ["task"] = new JsonObject
         {

@@ -26,6 +26,22 @@ internal static class CopyRules
     /// <summary>工程进度自述（设计验收 D11：界面不向用户自述工程进度）。</summary>
     public static readonly string[] ProgressNarration = ["开发中", "迭代中", "本切片", "后续切片", "尚未接入", "待接入"];
 
+    /// <summary>
+    /// 行首禁字（DESIGN.md §3「行首行尾禁则」里「不得起行」的那一批）：句读与闭号。
+    /// <para>
+    /// 判定口径只有一条：<b>折行造出来的行首</b>才算——一段话的第一个字不是折出来的，
+    /// 把它判成违例会把仪器变成瞎报（<c>ChromeProbe.js</c> 与 <c>HtmlWrapTests</c> 同一口径）。
+    /// </para>
+    /// <para>
+    /// 只列全角：全仓交付面的中文句子按 §3 用全角标点，而半角 <c>()[]{}</c> 出现在标识符、
+    /// 路径与「GET /api/orders」这类记号里，浏览器在那里折行是正常断点，不是禁则违例。
+    /// </para>
+    /// </summary>
+    public const string LineStartForbidden = "。，、；：！？）］》」』”";
+
+    /// <summary>行尾禁字（同一条款里「不得收尾」的那一批）：开号。判定口径与 <see cref="LineStartForbidden"/> 一致。</summary>
+    public const string LineEndForbidden = "［（｛《「『“";
+
     public static bool IsChinese(char c) => c is >= '\u4e00' and <= '\u9fff';
 
     public static bool HasChinese(string text) => text.Any(IsChinese);
