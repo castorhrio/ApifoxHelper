@@ -542,6 +542,28 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 把一段文字交给剪贴板——<b>整个原生界面唯一的剪贴板写入点</b>（列表 Ctrl+C 与提示对话框的
+    /// 「复制路径」都经这里，页面与对话框不各写一套，也不各自 try/catch 一遍）。
+    /// <para>
+    /// 返回是否真的写进去了：剪贴板被其他进程占用时框架抛 <c>ExternalException</c>，这里吞掉并返回
+    /// <c>false</c>——不重试、不弹窗。调用方据此决定要不要说「已复制」：<b>没写进去就不许说写进去了</b>
+    /// （与 <c>ListCopy</c>「剪贴板被占用时不谎称已复制」同一纪律）。
+    /// </para>
+    /// </summary>
+    public static bool CopyToClipboard(string text)
+    {
+        try
+        {
+            Clipboard.SetText(text);
+            return true;
+        }
+        catch (ExternalException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 列表（DESIGN.md §6「列表行」）：自绘选中态——选中行 Bg 底 + 左侧 3px Accent 标记，
     /// 不用系统高亮蓝；未选行 Panel 底；逐子项语义色（Muted/Ok/Warn/Bad）保留（ListRows 判定）。
     /// 表头沿用系统绘制（与既有外观一致）；复选框列由本工厂绘制（自绘模式下系统不再画），
@@ -580,14 +602,9 @@ internal static class Ui
             if (ListCopy.IdentityColumn(row.SubItems.Count, identityColumn) is not int column) return;
             if (ListCopy.CopyText(row.SubItems[column].Text, row.Selected) is not string text) return;
             e.SuppressKeyPress = true;
-            try
-            {
-                Clipboard.SetText(text);
-            }
-            catch (ExternalException)
-            {
-                // 剪贴板被其他进程占用时本次没有复制：不重试、不弹窗，也不谎称已复制（粘贴即见实际内容）。
-            }
+            // 写剪贴板只经 CopyToClipboard 一处（整个原生界面唯一的写入点）；列表不关心成败——
+            // 复制不到时粘贴即见实际内容，不弹窗、不谎称已复制。
+            CopyToClipboard(text);
         };
         if (checkBoxes)
         {

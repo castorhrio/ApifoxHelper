@@ -2417,3 +2417,22 @@
 - **验证**：Linux 上三工程 `dotnet build` 0 警告 0 错误；`dotnet test` **2518 通过 / 0 失败**（2512 + 6 条新门），既有断言一条未削弱、未删除、未放宽。
 - **本轮未做（如实挂账）**：① **≈125% 与 ≈200% 两档在本轮改动之后没有复跑**——只跑了 100% 档；三档全量复跑（`PUBLISH=1 bash .winecheck/demo.sh`）留给下一轮开工第一件事，在那之前**不得引用 120/192 两档的读数作为本轮代码的证据**（`demo.sh` 的源码指纹门会拦住拿旧产物念新结论）；② 简报 P0-1（到期日判定回写）与 P1-1（G-D6 降级场景明确化）本轮**未动**，仍按第一百八十、一百八十一轮的口径登记在案；③ 简报 P2 两项（`.winecheck/README.md` 录制口径逐条对照、`Assets/app-icon*.svg` 16px 可辨性）按简报口径**登记不做**（后者「仅在确实糊成一团时才动刀」，本轮未量到该结论）。
 - **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**，**未新建任何调度器、未动其他项目**；改动只在冒烟器 `ApifoxHelper.Smoke/Program.cs`（接续上一轮草稿）、`ApifoxHelper.Tests/ContractInteractionSmokeTests.cs`（新）、`docs/NOTES.md`、`.winecheck/README.md`。
+
+## 交付轮「提示对话框的路径第一次可复制 + 平台验证边界如实登记（禁用 Wine）」（2026-11-11 第一百八十三轮，简报 OWNER_NATIVE_PLATFORM_20261111_T60）
+
+- **接续前确认**：开局 `git status` 干净，HEAD `de0b38d`（第一百八十二轮）。`Desktop/Native/` 下 100+ 个原生交互切片、`ApifoxHelper.Tests` 2518 条用例全部在位，本轮**一行未删未改**（只按本轮改动更新了 `ListCopyTests` 里两处指向剪贴板写入点的锚点，见下）。
+- **平台验证边界（本轮第一件事，如实登记，不伪造通过）**：
+  1. **Linux 侧真实可验证的是构建与测试**：`dotnet build ApifoxHelper.csproj` **0 警告 0 错误**；`dotnet test ApifoxHelper.Tests` **2532 通过 / 0 失败**（2518 + 本轮新增 14）。这两项是本轮唯一「真跑过」的证据。
+  2. **Windows GUI 在本机不可验证**：主工程是 `net8.0-windows` + WinForms，本机无 `Microsoft.WindowsDesktop.App` 运行时、无 Windows 图形子系统；`EnableWindowsTargeting` 只让 Linux 编译通过，**不提供原生 Linux GUI**。`ApifoxHelper.Smoke` 同理只能编译、不能运行。**Linux 桌面支持缺口如实登记：本产品当前没有 Linux 桌面形态，也不在本维护范围内改架构。**
+  3. **Wine 已按用户约束退役**：本轮**未新建 Wine prefix、未调用 wine/wineboot/winepath/wineserver、未执行 `.winecheck/`、未运行任何 Windows 程序**。此前各轮（第一百六十五至一百八十二轮）的 wine 读数与截图**只作为历史材料保留**，不得当作当前源码的证据、不得替代产品 QA 或真实 Windows 验收；`docs/NOTES.md` 里既有的「wine 量到」字样按「历史读数」读，本轮不改写它们（改写会同时打红 `DemoScriptTests` 与 `WordingHonestyTests` 的既有断言，且抹掉历史记录本身）。
+  4. **Windows 交付保留**：`publish.ps1` 与 `net8.0-windows` 目标未动；Windows GUI 与端到端另在真实 Windows 环境验证，G-D5 与 SHARED-3/4/7/8 在验收表上仍 `[ ]`，到期日 2026-11-20。
+- **本轮唯一的产品侧推进（真实原生交互，不是机械门）**：提示对话框的等宽行（「关于」的资料目录、「打开目录失败」的路径）是 `Label`——不可选中、不可复制，而说明行写着「可以在「文件」菜单里重试，或**手动打开上面的路径**」：说明行指着的下一步在界面上没有落点，用户只能照着屏幕一个字一个字敲。列表那一侧的文字出口在第五十二轮由 Ctrl+C 补上、状态行那一侧由「查看完整错误」补上，**提示对话框这一侧是同一族里剩下的最后一处**。本轮补上：
+  - 新共享口径 `Desktop/Native/NoticeCopy.cs`（不依赖 WinForms、与测试工程单一编译）：三个标签（`复制路径`/`复制成功`/`复制失败`，**同字数 4/4/4**——按钮是 `AutoSize` 的，文字一变宽度就变，右对齐行里「关闭」会跟着跳，与 §6「停止/危险：位置尺寸与常态一致」同一取舍）与 `Target(copyText)`（原样交出、空白与没给返回 `null`，此时**不出现按钮**——一颗点了什么也不会发生的按钮不该出现，与 `StatusLineText`「放得下就不给查看完整错误」同一判据）。
+  - `Ui.CopyToClipboard(text)`：**整个原生界面唯一的剪贴板写入点**（列表 Ctrl+C 与提示对话框共用），返回是否真写进去了；`ExternalException` 收在这一处，调用方据此决定说不说「复制成功」——**没写进去就不许说写进去了**。
+  - `NoticeDialog` 新增可选 `copyText`：给了就在按钮行里多一颗 Ghost「复制路径」，点下去按返回值把按钮文字改成「复制成功」/「复制失败」；两个调用点（`NativeShellForm` 的「关于」与打开目录失败）复制的是**路径本身**而不是带标签的整行。
+  - **为什么是按钮而不是把标签换成可选中文本框**：换控件要改这一屏布局（等宽行从自动折行标签变成固定高度框），而本机量不到；按钮挂在既有按钮行里，布局风险最小，且键盘可达（Tab 到它、空格按下）。
+- **既有断言的两处锚点更新（不是放宽）**：`ListCopyTests.Ui_ListFactory_InstallsCopyOnEveryList` 原先断言工厂切片里有 `Clipboard.SetText(text);` 与 `catch (ExternalException)`——写入点收进 `Ui.CopyToClipboard` 之后这两句不在工厂里了，锚点改为 `CopyToClipboard(text);`，并把「异常处理在位」改成「工厂不自己 try/catch」+ 新增 `Ui_CopyToClipboard_IsTheSingleWritePoint`（写入、`return true`、`catch (ExternalException)`、`return false` 四件都在那一处，且整个 `Ui.cs` 仍只有一行 `Clipboard.`）。**「剪贴板只触达一次」这条不变量没有松，只是从「列表工厂」挪到了「Ui.CopyToClipboard」。**
+- **新增用例 `ApifoxHelper.Tests/NoticeCopyTests.cs`（12 条）**：`Target` 原样返回三组 / 空白四组返回 `null`；三个标签同字数且互不相同；对话框只在有可复制文字的分支里建按钮并加入按钮行、三个标签不就地拼写；成败按 `Ui.CopyToClipboard` 返回值决定、对话框自己不碰 `Clipboard.` 也不自己 `catch`；两个调用点各自 `mono:` 与 `copyText:` 成对（「关于」复制路径本身而非带标签整行）；`Ui.CopyToClipboard` 是唯一写入点；csproj 共享编译清单；DESIGN.md §6/§8 条款。
+- **验证**：Linux 上 `dotnet build` 0 警告 0 错误；`dotnet test` **2532 通过 / 0 失败**。**Windows GUI 不可验证**：按钮的实际观感、Tab 可达、复制后粘贴出来的内容、以及「复制成功/失败」文字切换时按钮行是否真的不跳位，全部随 G-D5 真机复核（本机无 Windows 图形子系统，且 Wine 已按用户约束退役，**本轮没有、也不会用 Wine 去量**）。
+- **本轮未做（如实挂账）**：① 真机三档 DPI 与主链路演示（G-D5）仍不可得——环境供给缺口，且 Wine 退役后连模拟器读数也不再产生；② 简报 P0-1（到期日判定回写）与 P1-1（G-D6 降级场景明确化）本轮未动，仍按第一百八十、一百八十一轮的口径登记在案；③ 第一百八十二轮挂账的「≈125%/≈200% 两档复跑」**按用户约束作废**（不得借测试重建已退役环境），不再作为待办；④ 提示对话框的等宽行仍是 `Label`（不可选中），本轮只补了按钮这一条路，把整屏文字都做成可选中是另一件事。
+- **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**，**未新建任何调度器、未动其他项目**；改动只在 `Desktop/Native/NoticeCopy.cs`（新）、`Desktop/Native/NoticeDialog.cs`、`Desktop/Native/Ui.cs`（剪贴板写入点收口）、`Desktop/Native/NativeShellForm.cs`（两个调用点）、`ApifoxHelper.Tests/NoticeCopyTests.cs`（新）、`ApifoxHelper.Tests/ListCopyTests.cs`（两处锚点）、`ApifoxHelper.Tests/ApifoxHelper.Tests.csproj`、`docs/DESIGN.md`、`docs/NOTES.md`。

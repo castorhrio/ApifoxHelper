@@ -470,7 +470,8 @@ internal sealed class NativeShellForm : Form
             NoticeText.FolderErrorHeading,
             error ?? NoticeText.FolderErrorHeading,
             mono: path,
-            note: NoticeText.FolderErrorNote);
+            note: NoticeText.FolderErrorNote,
+            copyText: path);
         dialog.ShowDialog(this);
     }
 
@@ -485,7 +486,8 @@ internal sealed class NativeShellForm : Form
             NoticeText.AboutHeading,
             NoticeText.AboutBody(TaskStore.ToolVersion, RuntimeInformation.FrameworkDescription),
             mono: NoticeText.AboutDataDirLine(_host.Store.Root),
-            note: NoticeText.AboutNote);
+            note: NoticeText.AboutNote,
+            copyText: _host.Store.Root);
         dialog.ShowDialog(this);
     }
 

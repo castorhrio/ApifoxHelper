@@ -10,10 +10,12 @@ namespace ApifoxHelper.Desktop.Native;
 /// 长内容区经 <see cref="Ui.ScrollHost"/>），不再用系统 MessageBox 的默认观感。
 /// 确认类动作（执行同步、覆盖式写入、退出）仍用原生确认对话框（§6 例外条款），不经过这里。
 /// 文字取 <see cref="NoticeText"/> 一份，本对话框不就地拼写。
+/// 等宽行是路径时，调用方给 <c>copyText</c> 即多一颗「复制路径」按钮（口径在 <see cref="NoticeCopy"/>）：
+/// 标签不可选中，而说明行指着「手动打开上面的路径」，没有这颗按钮那一步只能照着屏幕敲。
 /// </summary>
 internal sealed class NoticeDialog : DpiAwareForm
 {
-    public NoticeDialog(string heading, string body, string? mono = null, string? note = null)
+    public NoticeDialog(string heading, string body, string? mono = null, string? note = null, string? copyText = null)
     {
         Text = heading;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -81,6 +83,16 @@ internal sealed class NoticeDialog : DpiAwareForm
         };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
+        // 复制路径：等宽行是 Label（不可选中、不可复制），而说明行指着「手动打开上面的路径」——
+        // 没有这颗按钮，那一步只能照着屏幕一个字一个字敲。只在调用方给了可复制的文字时出现
+        // （判定在 NoticeCopy.Target：空白与没给都不给按钮，一颗点了什么也不会发生的按钮不该出现）。
+        if (NoticeCopy.Target(copyText) is string target)
+        {
+            var copyButton = Ui.Ghost(NoticeCopy.Label);
+            copyButton.Click += (_, _) =>
+                copyButton.Text = Ui.CopyToClipboard(target) ? NoticeCopy.CopiedLabel : NoticeCopy.FailedLabel;
+            buttonRow.Controls.Add(copyButton);
+        }
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），内容区填满剩余空间。
         Controls.Add(host);

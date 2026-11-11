@@ -105,17 +105,18 @@ public class ListCopyTests
         Assert.Matches(@"(?m)^\s*if \(ListCopy\.CopyText\(row\.SubItems\[column\]\.Text, row\.Selected\) is not string text\) return;", slice);
         // 动作前吞键，且写在剪贴板之前：与 Enter 激活同一纪律。
         Assert.Matches(@"(?m)^\s*e\.SuppressKeyPress = true;", slice);
-        Assert.Matches(@"(?m)^\s*Clipboard\.SetText\(text\);", slice);
+        Assert.Matches(@"(?m)^\s*CopyToClipboard\(text\);", slice);
         var suppress = slice.IndexOf("e.SuppressKeyPress = true;", StringComparison.Ordinal);
-        var set = slice.IndexOf("Clipboard.SetText(text);", StringComparison.Ordinal);
+        var set = slice.IndexOf("CopyToClipboard(text);", StringComparison.Ordinal);
         Assert.True(suppress < set, "应先吞键再写剪贴板。");
         // 列先解出来再取文字：列不在格数之内时不取任何一格，也不写剪贴板。
         Assert.True(
             slice.IndexOf("ListCopy.IdentityColumn", StringComparison.Ordinal)
             < slice.IndexOf("ListCopy.CopyText", StringComparison.Ordinal),
             "应先解析标识列再取文字。");
-        // 剪贴板可能被其他进程占用：不冒到 UI 线程的异常处理里，也不把它显示成已复制。
-        Assert.Matches(@"(?m)^\s*catch \(ExternalException\)", slice);
+        // 剪贴板可能被其他进程占用：异常处理收在 Ui.CopyToClipboard 一处（本工厂不自己 try/catch，
+        // 也不把它显示成已复制）——写入点唯一，由 Ui_CopyToClipboard_IsTheSingleWritePoint 钉住。
+        Assert.DoesNotContain("catch (ExternalException)", slice, StringComparison.Ordinal);
     }
 
     [Fact]
