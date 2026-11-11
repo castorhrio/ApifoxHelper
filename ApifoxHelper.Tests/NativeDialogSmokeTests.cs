@@ -802,6 +802,77 @@ public class NativeDialogSmokeTests
         Assert.True(journey > detail, "极端数据交互没有排在完整旅程之前（它不该影响旅程的干净数据根）。");
     }
 
+    // ---------- 对话框状态行逐屏扫（第一百七十九轮，简报 P0-1） ----------
+
+    /// <summary>
+    /// <c>RunDialogStatusSweep</c> 的屏单必须从 <c>Cases(...)</c> 读，不许另列一份名单（第一百七十九轮，简报 P0-1）。
+    /// <para>
+    /// <b>为什么这条门是 P0</b>：第一百七十六轮把「状态行放不下才给『查看完整错误』入口」这条口径从三处代表屏
+    /// 扩到全部 15 处有状态行的对话框，做法是<b>从 <c>Cases(...)</c> 读屏单</b>——新增对话框自动进这一段，
+    /// 漏掉不会有第二份名单替它兜底。但这件事当时只有 wine 侧的真实控件证据，<b>Linux 侧一条断言都没有</b>：
+    /// 谁把 <c>Cases(...)</c> 换成一份手写数组，冒烟照样跑、报告照样 PASS，而新增的对话框从此不再被扫。
+    /// 这与第一百六十二轮「空门」、第一百六十五轮「构造顺序」同一族——<b>Linux 侧全绿拦不住它</b>。
+    /// </para>
+    /// <para>
+    /// 判三件事：① 屏单来自 <c>Cases(services, profile, task, slot)</c>；② 段里没有硬编码的对话框构造
+    /// （<c>new XxxDialog(</c>）——有的话就是第二份名单；③ 每屏三段（短句不给 → 长句重判 → 回短句收起），
+    /// 段数掉下去说明有人删了某一段（删段比删断言更难发现）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DialogStatusSweep_ReadsItsScreenListFromCases()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunDialogStatusSweep(");
+
+        // ① 屏单来自 Cases(...)：这是「新增对话框自动进这一段」的唯一保证。
+        Assert.Contains("foreach (var (name, build) in Cases(services, profile, task, slot))", body);
+
+        // ② 反面：段里不许自己 new 对话框（那就是第二份名单，会与 Cases 漂开）。
+        Assert.DoesNotMatch(@"new\s+\w*Dialog\s*\(", body);
+
+        // ③ 每屏三段，且三段都真的判失败（不是「跑过、什么也没判」）。
+        var segments = Regex.Matches(body, @"RunAction\(").Count;
+        Assert.True(segments >= 3, $"逐屏扫只有 {segments} 个 RunAction 段（每屏三段：短句不给 → 长句重判 → 回短句收起）。");
+        Assert.Contains("host.FullTextButton.Visible != shouldOffer", body);
+        Assert.Contains("StatusEntryRule(host.Label)", body);
+
+        // ④ 必须真的 Show：不 Show 时 Control.Visible 读的是有效可见性，量到的是「窗体还没显示」。
+        Assert.Contains("dialog.Show();", body);
+
+        // ⑤ 段在 Main 里注册（没注册 = 永远不跑，报告照样 PASS）。
+        var main = MethodBody(SmokeProgram, "private static int Main(");
+        Assert.Contains("RunDialogStatusSweep(services, profile, task, slot);", main);
+    }
+
+    /// <summary>
+    /// <c>docs/NOTES.md</c> 必须写明「<c>RunDialogStatusSweep</c> 在第 177 轮三档复跑中包含」（第一百七十九轮，简报 P0-1）。
+    /// <para>
+    /// <b>为什么这一句要由断言钉住</b>：第一百七十七轮的三档复跑读数是 180 通过 / 0 失败 ×3，
+    /// 而 180 = 135（第一百六十六轮）+ 45（15 屏 × 3 段，第一百七十六轮新增）。这个加法<b>只有算过的人知道</b>——
+    /// 答辩被追问「15 处状态行入口在三档都量过吗」时，文档答不出来，就得现场从两个数字里推。
+    /// 更糟的是下一轮若把这一句改回去（或删掉），没有任何东西会红：<b>同一份报告里两个数字对不上</b>
+    /// 正是这道门要挡的形态。
+    /// </para>
+    /// <para>
+    /// 判据是结构不是措辞：<c>docs/NOTES.md</c> 里必须有一行同时出现「<c>RunDialogStatusSweep</c>」
+    /// 「第一百七十七轮」「三档」「含本段」四件事。**不判**这一跑是不是真机（那是 G-D5 的事，
+    /// 见 <see cref="RealMachineEvidenceTests"/>）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Notes_RecordsThatTheThreeTierRerunIncludesTheDialogStatusSweep()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var line = notes.Split('\n').FirstOrDefault(l =>
+            l.Contains("RunDialogStatusSweep", StringComparison.Ordinal)
+            && l.Contains("第一百七十七轮", StringComparison.Ordinal)
+            && l.Contains("三档", StringComparison.Ordinal)
+            && l.Contains("含本段", StringComparison.Ordinal));
+        Assert.True(line is not null,
+            "docs/NOTES.md 里找不到一句「RunDialogStatusSweep 在第一百七十七轮三档复跑中含本段」："
+            + "答辩被追问「15 处状态行入口在三档都量过吗」时，文档要答得出来，而不是靠人从 180 = 135 + 45 里推。");
+    }
+
     // ---------- 字体栈的运行时命中（第一百三十九轮，简报 P0-1 的降级手段） ----------
 
     /// <summary>
