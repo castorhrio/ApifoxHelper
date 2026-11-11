@@ -37,6 +37,34 @@ public class TypographyTests
         }
     }
 
+    /// <summary>
+    /// 状态行不许只说「正在做」，要说清在做什么（第一百九十一轮，简报 P0-2）。
+    /// <para>
+    /// 与 <see cref="Copy_AvoidsEmptySloganWords"/> 同一条判据（方案 §6.2 #12「说结果不说机制」）的延伸：
+    /// 禁词表管的是「智能」「一键」这类空话，管不到「正在查找…」——它没有禁词，但用户读完不知道
+    /// 在查什么、查的是哪一层。清单是封闭的：只列已经改掉的那几句，新增一句要先说明它为什么空。
+    /// </para>
+    /// </summary>
+    public static TheoryData<string> VagueStatusLines => Data(
+    [
+        "正在查找…",
+        "正在读取接口…",
+        "正在处理…",
+        "请稍候",
+    ]);
+
+    [Theory]
+    [MemberData(nameof(VagueStatusLines))]
+    public void Copy_StatusLines_SayWhatTheyAreWorkingOn(string phrase)
+    {
+        foreach (var source in Repo.NativeSources())
+        {
+            Assert.False(source.Contains(phrase),
+                $"{source.Name}:出现「{phrase}」。状态行要说清在做什么（方案 §6.2 #12），"
+                + "「正在查找…」读不出查的是什么，「正在仓库里查找 .csproj…」读得出。");
+        }
+    }
+
     [Fact]
     public void Copy_ChineseQuotesOnlyUseCornerBrackets()
     {

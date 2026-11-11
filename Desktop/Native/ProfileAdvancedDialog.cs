@@ -205,7 +205,7 @@ internal sealed class ProfileAdvancedDialog : DpiAwareForm
             return;
         }
         _extractButton.Enabled = false;
-        SetStatus("正在读取接口…", UiTokens.Muted);
+        SetStatus("正在按接口 ID 读取接口详情…", UiTokens.Muted);
         try
         {
             var endpointId = long.Parse(endpointIdText, CultureInfo.InvariantCulture);

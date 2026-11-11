@@ -770,7 +770,7 @@ internal sealed class ProfileDialog : DpiAwareForm
     {
         var root = _workspace.Text.Trim();
         _findButton.Enabled = false;
-        SetStatus("正在查找…", UiTokens.Muted);
+        SetStatus("正在仓库里查找 .csproj…", UiTokens.Muted);
         try
         {
             // ProjectFinder 返回匿名对象；经 JSON 变形读取，避免反射或 dynamic。

@@ -138,6 +138,49 @@ internal static class Ui
         ScrollBars scrollBars = ScrollBars.None) =>
         Box(new TextBox { ReadOnly = true, Multiline = multiline, WordWrap = wordWrap, ScrollBars = scrollBars }, mono, caption);
 
+    /// <summary>
+    /// 可框选复制的等宽只读行（第一百九十一轮）：提示对话框的路径行。
+    /// <para>
+    /// <b>为什么不是 <see cref="Mono"/> 那个 Label</b>：Label 不可选中、不可复制，而「打开目录失败」的
+    /// 说明行指着「手动打开上面的路径」——用户想把路径贴进资源管理器或贴给同事时，界面上没有落点。
+    /// 第一百八十三轮先补了一颗「复制路径」按钮（一键交出整行），但「只挑其中一段」这件事按钮做不到；
+    /// 换成只读 <c>TextBox</c> 后框选、Ctrl+A、Ctrl+C 都成立，按钮与框选两条路并存。
+    /// </para>
+    /// <para>
+    /// <b>镀铬与只读预览框同一份</b>（<see cref="Preview"/>：去系统 3D 边框、面板底色、等宽字体），
+    /// 不新造视觉语言；高度按实际字体与可用宽度量出折行后的高度（<see cref="MonoBoxHeight"/>），
+    /// 不猜行数——猜少了长路径会被裁掉半行，猜多了这一屏会多出一块空白。
+    /// </para>
+    /// <para>
+    /// <c>TabStop</c> 打开：Tab 能到它，键盘用户不必用鼠标框选。只读框不接收输入，
+    /// 但选中与复制照常（<c>ShortcutsEnabled</c> 保持默认 true，Ctrl+C 走系统实现）。
+    /// </para>
+    /// </summary>
+    public static TextBox MonoBox(string text, int wrapWidth)
+    {
+        var box = Preview(multiline: true, mono: true, wordWrap: true);
+        box.Text = text;
+        box.Width = Math.Max(wrapWidth, 1);
+        box.Height = MonoBoxHeight(text, wrapWidth);
+        box.TabStop = true;
+        return box;
+    }
+
+    /// <summary>
+    /// 等宽只读行的高度：按等宽字体的实际度量与可用宽度量出折行后的高度，再加一档 <see cref="UiTokens.Xs"/>
+    /// 的余量（多行文本框的最后一行贴着下边框时，框选到行尾的手感很差）。
+    /// 宽度为 0 或负数时按 1px 量（<c>MeasureText</c> 不接受 0 宽），结果至少一行高。
+    /// </summary>
+    public static int MonoBoxHeight(string text, int wrapWidth)
+    {
+        var measured = TextRenderer.MeasureText(
+            text,
+            UiTokens.Mono.Value,
+            new Size(Math.Max(wrapWidth, 1), int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+        return Math.Max(measured.Height, UiTokens.Mono.Value.Height) + UiTokens.Xs;
+    }
+
     private static TextBox Box(TextBox box, bool mono, bool caption)
     {
         box.BorderStyle = BorderStyle.None;

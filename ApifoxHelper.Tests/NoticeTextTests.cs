@@ -88,10 +88,10 @@ public class NoticeTextTests
         Assert.Contains("FormBorderStyle.FixedDialog", source, StringComparison.Ordinal);
         Assert.Contains("BackColor = UiTokens.Panel", source, StringComparison.Ordinal);
         Assert.Contains("Font = UiTokens.Body.Value", source, StringComparison.Ordinal);
-        // 四档文字各经工厂：标题 Section、正文 Body、等宽行 Mono、说明行 Caption。
+        // 四档文字各经工厂：标题 Section、正文 Body、等宽行 MonoBox（只读文本框，可框选复制）、说明行 Caption。
         Assert.Contains("Ui.Section(heading)", source, StringComparison.Ordinal);
         Assert.Contains("Ui.Body(body)", source, StringComparison.Ordinal);
-        Assert.Contains("Ui.Mono(mono)", source, StringComparison.Ordinal);
+        Assert.Contains("Ui.MonoBox(mono, wrapWidth)", source, StringComparison.Ordinal);
         Assert.Contains("Ui.Caption(note)", source, StringComparison.Ordinal);
         // 长内容区经工厂（§6「长内容区」），不就地开 AutoScroll。
         Assert.Contains("Ui.ScrollHost()", source, StringComparison.Ordinal);

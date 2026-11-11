@@ -100,6 +100,56 @@ public class NoticeCopyTests
         Assert.Matches(@"(?m)^\s*copyText: path\);", source);
     }
 
+    // ---------- 等宽行可框选（第一百九十一轮，简报 P0-3）----------
+
+    [Fact]
+    public void NoticeDialog_MonoLineIsASelectableTextBox_NotALabel()
+    {
+        var source = Repo.Source("Desktop", "Native", "NoticeDialog.cs");
+        // 等宽行经 Ui.MonoBox（只读文本框）构造：Label 一个字都选不中，
+        // 而说明行指着「手动打开上面的路径」——用户要能把路径挑一段贴出去。
+        Assert.Matches(@"(?m)^\s*var monoBox = Ui\.MonoBox\(mono, wrapWidth\);", source);
+        Assert.Matches(@"(?m)^\s*grid\.Controls\.Add\(monoBox\);", source);
+        // 退回 Label 即红：Ui.Mono 返回的是 Label（不可选中、不可复制）。
+        Assert.DoesNotContain("Ui.Mono(mono)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Ui_MonoBox_IsReadOnlySelectableChrome()
+    {
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        var from = ui.IndexOf("public static TextBox MonoBox(string text, int wrapWidth)", StringComparison.Ordinal);
+        Assert.True(from >= 0, "源码缺少 Ui.MonoBox。");
+        var to = ui.IndexOf("private static TextBox Box(TextBox box, bool mono, bool caption)", StringComparison.Ordinal);
+        Assert.True(to > from, "Ui.MonoBox 之后应紧跟 Box 镀铬工厂。");
+        var slice = ui[from..to];
+        // 只读：路径行不接受输入，但选中与复制照常（ReadOnly 的 TextBox 仍可框选）。
+        Assert.Contains("Preview(multiline: true, mono: true, wordWrap: true)", slice, StringComparison.Ordinal);
+        // 键盘可达：Tab 能到它，键盘用户不必用鼠标框选。
+        Assert.Contains("box.TabStop = true;", slice, StringComparison.Ordinal);
+        // 高度按实际字体与可用宽度量出，不猜行数（猜少了长路径被裁掉半行）。
+        Assert.Contains("box.Height = MonoBoxHeight(text, wrapWidth);", slice, StringComparison.Ordinal);
+        // 镀铬不就地发明：底色与边框仍由 Box 一处给（BorderStyle.None + Panel 底）。
+        Assert.DoesNotContain("BackColor =", slice, StringComparison.Ordinal);
+        Assert.DoesNotContain("BorderStyle", slice, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Ui_MonoBoxHeight_MeasuresWithTheMonoFontAndTheGivenWidth()
+    {
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        var from = ui.IndexOf("public static int MonoBoxHeight(string text, int wrapWidth)", StringComparison.Ordinal);
+        Assert.True(from >= 0, "源码缺少 Ui.MonoBoxHeight。");
+        var to = ui.IndexOf("private static TextBox Box(TextBox box, bool mono, bool caption)", StringComparison.Ordinal);
+        var slice = ui[from..to];
+        // 量的是等宽字体（不是正文），宽度取可用宽（不是屏幕宽），折行按 WordBreak。
+        Assert.Contains("UiTokens.Mono.Value", slice, StringComparison.Ordinal);
+        Assert.Contains("Math.Max(wrapWidth, 1)", slice, StringComparison.Ordinal);
+        Assert.Contains("TextFormatFlags.WordBreak", slice, StringComparison.Ordinal);
+        // 至少一行高：量出 0 高会让这一行在界面上消失。
+        Assert.Contains("Math.Max(measured.Height, UiTokens.Mono.Value.Height)", slice, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Ui_CopyToClipboard_IsTheSingleWritePoint()
     {
