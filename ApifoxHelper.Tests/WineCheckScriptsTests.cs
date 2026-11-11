@@ -1011,4 +1011,75 @@ public class WineCheckScriptsTests
             + "少一个就意味着有一类结果只有读源码才知道它是什么。");
         Assert.Contains("真机上要有 Git Bash", readme, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// <c>collect-real-machine.sh</c> 的<b>目录集合地板</b>（第二百零九轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：上一轮那条护栏数的是「解析出几条动作」（7 条），它<b>不数目录</b>。
+    /// 于是有一种改法能躲过去：把 README 某一行的「归档目录」格改成不匹配的形状，而表格行数与动作号
+    /// 仍凑得够 7——脚本照跑、照退 1、照念「九个目录还空着」，而那天真正少的是一个落点。
+    /// 这一族的老读法正是「目录里有两张图就以为这条齐了」的反面：核对自己被改坏了，读数仍然像好消息。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 那条护栏判的是<b>写死的地板数 9</b>，不是拿现算出的行数自证（那样改成几都是绿的）；
+    /// ② 重名那一条在<b>代码行</b>里（<c>uniq -d</c>），注释里提一句不算接线——数量地板判不到
+    /// 「同一个目录被点两次、九个名字仍齐」那一种，两条各挡一种；③ 两条都排在第 ② 段<b>之前</b>，
+    /// 清单已经读歪就不许再把歪清单数出来的「九个目录都空」念成结论；④ 每一个地板分支后面三行内
+    /// 真的 <c>exit 2</c>（只点名不停住 = 带坏清单往下跑）；⑤ 这件事在 <c>.winecheck/README.md</c>
+    /// 的登记里有落点：退出码 2 的说明点到这一类，场景表里也有对应的一行——当天读那页的人要知道
+    /// 退出码 2 也可能是「清单的目录集合歪了」，而不只是「表被删过一行」。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那九个目录名（脚本里出现任何一个才是真抄了第二份清单，那一半由
+    /// <c>RealMachineEvidenceTests</c> 拿 <c>ExpectedDirectories</c> 那份地板逐个对）；也不跑脚本
+    /// （跑它是 <c>CollectScript_TreatsThePlaceholderAsEmptyAndNamesEveryDirectory</c> 的活，
+    /// 本轮那两种 README 改法都在临时假树上真跑过）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CollectRealMachineScript_KeepsTheDirectorySetFloorAtNine()
+    {
+        var path = Path.Combine(Directory, "collect-real-machine.sh");
+        var text = File.ReadAllText(path);
+        var lines = text.ReplaceLineEndings("\n").Split('\n')
+            .Select((line, index) => (Line: line, Index: index))
+            .Where(x => !x.Line.TrimStart().StartsWith('#'))
+            .ToList();
+
+        var seg2 = lines.FindIndex(x => Regex.IsMatch(x.Line, "^echo \"-- ② "));
+        Assert.True(seg2 >= 0, "collect-real-machine.sh 里找不到第 ② 段的段头：分段边界判不出来，「地板排在核对之前」也无从判。");
+
+        // ①② 两条地板：比较的是写死的 9（数量）与 uniq -d（重名），且各自是一个 if 分支。
+        var countFloor = lines.FindIndex(x => Regex.IsMatch(x.Line.Trim(), @"^if \[ ""\$[A-Z_]+"" != ""9"" \]; then$"));
+        Assert.True(countFloor >= 0,
+            "collect-real-machine.sh 没有「[ \"$…\" != \"9\" ]」那一条目录数地板：动作数（7 条）只数认出几条动作，"
+            + "把某一行的归档目录格改成不匹配的形状、行数仍凑得够 7 时，核对会带着少一个落点的清单退 1——"
+            + "而那天没人知道少的正是截图要放的那个目录。");
+        var dupFloor = lines.FindIndex(x => x.Line.Contains("| sort | uniq -d", StringComparison.Ordinal));
+        Assert.True(dupFloor >= 0,
+            "collect-real-machine.sh 没有判「同一个归档目录被点到两次」那一条：九个名字仍齐时数量地板是绿的，"
+            + "而产出物已经散进两个名字，当天得自己猜哪个才是落点。");
+
+        // ③ 两条都排在逐目录核对之前。
+        foreach (var (name, at) in new[] { ("目录数地板", countFloor), ("重名地板", dupFloor) })
+        {
+            Assert.True(at < seg2,
+                $"collect-real-machine.sh 把{name}排到了第 ② 段之后：清单已经读歪，却先按歪清单把「九个目录还空着」"
+                + "念成了结论——那一念当天会被当成 G-D5 的读数，而不是「核对失效」。");
+
+            // ④ 点名 + 停住：本行或后两行内有「① 未通过」，且其后三行内有 exit 2。
+            var block = lines.Skip(at).Take(5).Select(x => x.Line).ToList();
+            Assert.True(block.Any(l => l.Contains("① 未通过", StringComparison.Ordinal)),
+                $"collect-real-machine.sh 的{name}分支没有一句「① 未通过」点名：停住了但没说为什么停。");
+            Assert.True(block.Any(l => l.Trim() == "exit 2"),
+                $"collect-real-machine.sh 的{name}分支后面没有 exit 2：只点名不停住，脚本会带着歪清单往下跑。");
+        }
+
+        // ⑤ 登记在位：退出码 2 的说明点到这一类，场景表里也有对应行。
+        var readme = Repo.Source(".winecheck", "README.md");
+        Assert.True(readme.Contains("目录集合凑不满 9 个", StringComparison.Ordinal)
+                    || readme.Contains("解析出 8 个归档目录", StringComparison.Ordinal),
+            ".winecheck/README.md 那节没把「目录集合地板」这一类失败写进入出码 2 的说明或场景表：当天的人看到退出码 2 "
+            + "只会去数表有几行，不会去数那一列有几个目录格。");
+    }
 }

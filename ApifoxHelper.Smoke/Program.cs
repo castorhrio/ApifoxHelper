@@ -2515,6 +2515,11 @@ internal static class Program
     /// 默认尺寸的占位 Panel，① 修掉的根因在这一族里没跟上）。
     /// </para>
     /// <para>
+    /// ① 与 ⑧ 另各记一行 <see cref="DpiContext"/>：控件自报 DPI 与进程 DPI <b>两个数分别进报告</b>
+    /// （第二百零九轮，简报 P0-1）。行高预算按字体行高算，而字体按哪一档放大正是两支演示脚本
+    /// 读数不同的那一处——归因留给下一轮，本轮先把「那一次量到的是哪一个上下文」变成读数自己能回答的事。
+    /// </para>
+    /// <para>
     /// 它证明的是「这一屏排得下、点得到、说得清」，**不是「好看」**——观感与 DPI 缩放仍随 G-D5 真机复核。
     /// </para>
     /// </summary>
@@ -2536,6 +2541,12 @@ internal static class Program
                 var grid = FindGrid(dialog) ?? throw new InvalidOperationException("对话框里找不到两列字段网格。");
                 var heights = grid.GetRowHeights();
                 _lines.Add("     行高：" + string.Join("，", heights.Select((h, i) => RowLabel(grid, i) + "=" + h + "px")));
+                // 第二百零九轮（简报 P0-1）：行高预算来自字体行高，而字体按哪一档放大，两个读数各有各的说法——
+                // demo.ps1 那一跑控件自报的 DPI 跟着档位走（120 / 192）、demo.sh 那一跑恒为 96，
+                // 于是同一份产物在两跑里给出不同行数。把两个数**分别**记进报告（不合成一个、不互相代名），
+                // 下一次两边再差时，读数本身就能回答「那一次量到的是哪一个上下文」。归因与修法是下一轮的事。
+                _lines.Add("     DPI 上下文（新建配置对话框）：" + DpiContext(dialog)
+                    + $"、正文行高 {UiTokens.Body.Value.Height}px、行高预算 {limit}px");
                 var tall = new List<string>();
                 for (var row = 0; row < heights.Length; row++)
                 {
@@ -2544,7 +2555,8 @@ internal static class Program
                 if (tall.Count > 0)
                 {
                     throw new InvalidOperationException(
-                        $"{tall.Count} 行超过 {limit}px（正文行高 {UiTokens.Body.Value.Height} + 行内留白 {ProfileFormLayout.RowPadding}）：{string.Join("，", tall)}");
+                        $"{tall.Count} 行超过 {limit}px（正文行高 {UiTokens.Body.Value.Height} + 行内留白 {ProfileFormLayout.RowPadding}；"
+                        + $"{DpiContext(dialog)}）：{string.Join("，", tall)}");
                 }
             });
 
@@ -2696,10 +2708,10 @@ internal static class Program
                     {
                         if (!IsHintRow(grid, row)) continue;
                         rows.Add($"第{row}行={heights[row]}px");
-                        if (heights[row] > limit) tall.Add($"「{screen}」第 {row} 行 {heights[row]}px（{TallestInRow(grid, row)}）");
+                        if (heights[row] > limit) tall.Add($"「{screen}」第 {row} 行 {heights[row]}px（{TallestInRow(grid, row)}，{DpiContext(form)}）");
                     }
                     if (rows.Count == 0) throw new InvalidOperationException($"「{screen}」对话框里没有一条提示行——工厂调用点被删掉了？");
-                    _lines.Add($"     提示行行高（{screen}，阈值 {limit}px）：{string.Join("，", rows)}");
+                    _lines.Add($"     提示行行高（{screen}，阈值 {limit}px，{DpiContext(form)}）：{string.Join("，", rows)}");
                 }
 
                 if (tall.Count > 0)
@@ -2714,6 +2726,28 @@ internal static class Program
             dialog?.Dispose();
         }
     }
+
+    /// <summary>
+    /// DPI 上下文的两个读数，各挂各的标签（第二百零九轮，简报 P0-1；本方法是这一族的唯一出口）。
+    /// <para>
+    /// <b>为什么要分成两个念</b>：同一份产物、同一个前缀、同一个屏幕，<c>demo.ps1</c> 那一跑里
+    /// <b>控件自报的 DPI 跟着档位走</b>（120 / 192），<c>demo.sh</c> 那一跑里它<b>恒报 96</b>
+    /// （第二百零七轮如实记录，机制未归因）。行高与文字宽都随字体放大，所以「跟档位走」的那一支
+    /// 会先把配置表单量到超出行高预算（125% 档 4 行、200% 档 10 行，提示行另有 2 条）。
+    /// 两边差的这件事有一个可数的候选，就是<b>这两个数是否相等</b>——把它们写进同一行报告，
+    /// 下一次再差时读数本身就能回答「那一次量到的是哪一个上下文」，不用回头猜当时哪支脚本在跑。
+    /// </para>
+    /// <para>
+    /// <b>两个数各自的口径</b>：<c>Control.DeviceDpi</c> 是<b>控件自报</b>的那一个（框架按窗口所在
+    /// 上下文给出的解释，wine 实测它恒报 96，第一百六十二、一百六十三、一百七十五轮各量到一次）；
+    /// <c>DpiScale.ScreenDpi()</c> 是<b>进程取到并按它缩放布局</b>的那一个（屏幕 DC 的
+    /// <c>LOGPIXELSY</c>，即 <c>DpiScale.ScaleFactor()</c> 的分子，第一百六十三轮把缩放动作交给它）。
+    /// 两者不等时谁赢，就是那一跑落在哪个上下文——本方法<b>只念数，不判断、不换算、不取其一</b>，
+    /// 归因与修法是下一轮的事（要先有真机或更深的 wine 环境调查）。
+    /// </para>
+    /// </summary>
+    private static string DpiContext(Control control) =>
+        $"控件自报 DPI {control.DeviceDpi}、进程 DPI {DpiScale.ScreenDpi()}";
 
     /// <summary>按文字找按钮（递归）。</summary>
     private static Button? FindButton(Control root, string text)

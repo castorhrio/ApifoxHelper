@@ -1279,7 +1279,9 @@ public class RealMachineEvidenceTests
     /// 为的就是让「它绿着」不等于「它什么都看不见」）；② 退出码与磁盘实数<b>同源</b>——仓里跑一次，
     /// 期望值由本测试按同一口径自己数一遍文件得出，两边不一致即红；③ 九个归档目录逐个被点名；
     /// ④ 每个「还差东西」都带着 README 为它点到的<b>每一个</b>产出物文件名（<c>&lt;档位&gt;</c> 已按目录名展开）；
-    /// ⑤ 临时假树上把 0（都不空）/ 1（还有空的）/ 2（清单没点到的目录、清单点到的目录不在）三个退出码都跑活。
+    /// ⑤ 临时假树上把 0（都不空）/ 1（还有空的）/ 2（清单没点到的目录、清单点到的目录不在）三个退出码都跑活；
+    /// ⑥⑦ 第二百零九轮在同一棵假树上再跑两种「清单自己歪了」：某一行的归档目录格被删（动作数仍凑得够 7、
+    /// 只剩 8 个目录）与同一个目录被点两次（九个名字仍齐）——这两种都必须是 2，且各点自己的名。
     /// </para>
     /// <para>
     /// <b>它判到哪一层</b>：这一支不启动任何界面、不碰模拟器，所以这一层在 Linux 上量到就是它的<b>全部行为</b>；
@@ -1367,10 +1369,66 @@ public class RealMachineEvidenceTests
             Assert.True(absentExit == 2 && absentOutput.Contains("在磁盘上不存在：125/", StringComparison.Ordinal),
                 $"清单点到的 125/ 不在磁盘上，脚本退出码 {absentExit}：少一档就是少截一套图，"
                 + "而这一句必须把档位点名，否则当天会去翻别的目录。");
+
+            // ⑥ 清单少一格目录（行数与动作号仍凑得够 7）：那条「应为 7 条」的护栏数不到，必须靠目录数地板。
+            Directory.CreateDirectory(Path.Combine(temp, "125"));
+            var readmeCopy = Path.Combine(temp, "README.md");
+            var table = File.ReadAllText(readmeCopy);
+            var thinner = table.Replace("、`docs/evidence/real-machine/125/`", string.Empty, StringComparison.Ordinal);
+            Assert.True(thinner != table, "假树上的清单删不动那一格目录引用：这一场景要先与产出物清单的形状对齐。");
+            File.WriteAllText(readmeCopy, thinner);
+            var (fewerDirs, fewerOutput) = RunCollectScript(temp);
+            Assert.True(fewerDirs == 2 && fewerOutput.Contains("清单解析出 8 个归档目录", StringComparison.Ordinal),
+                $"README 的归档目录那一列少了一格、动作数仍凑得够 7，脚本退出码却是 {fewerDirs}："
+                + "它会带着少一个落点的清单退 1，把「核对被改坏了」念成「活儿还没干完」——那天少截的那一套没人说。");
+
+            // ⑦ 同一个目录被点两次（九个名字仍齐，数量地板拦不住）：只有重名那一条看得见。
+            File.WriteAllText(readmeCopy, table);
+            var rows = table.Split('\n').ToList();
+            var first = rows.FindIndex(l => l.StartsWith("| 1 |", StringComparison.Ordinal));
+            Assert.True(first >= 0, "假树上的清单里没有动作 1 那一行：这一场景要先与产出物清单的形状对齐。");
+            rows.Insert(first + 1, rows[first]);
+            File.WriteAllText(readmeCopy, string.Join('\n', rows));
+            var (twice, twiceOutput) = RunCollectScript(temp);
+            Assert.True(twice == 2 && twiceOutput.Contains("同一个归档目录点到两次", StringComparison.Ordinal)
+                        && twiceOutput.Contains("journey", StringComparison.Ordinal),
+                $"README 里同一个归档目录被点到两次（九个名字仍齐、总数仍 9），脚本退出码却是 {twice}："
+                + "产出物散进两个名字时，当天得自己猜哪个才是落点，而数量地板与动作数都看不见这一种。");
+            File.WriteAllText(readmeCopy, table);
         }
         finally
         {
             if (Directory.Exists(temp)) Directory.Delete(temp, true);
         }
+    }
+
+    /// <summary>
+    /// 那两条目录集合地板（第二百零九轮，简报 P0-2）只写死<b>数量</b>，不写死<b>名字</b>。
+    /// <para>
+    /// <b>为什么单独钉这一条</b>：加地板最容易的写法就是把 <see cref="ExpectedDirectories"/> 那九个名字
+    /// 抄进脚本、再逐个 <c>case</c> 比一遍。那样当天是绿的，而它把「一份出处」这条纪律换成了两份：
+    /// 改产出物清单的人不会想起来改脚本，脚本从此按上一版的名字报警——与第一百六十九轮
+    /// 「run1.sh 的悬空引用」同一课，也与 <c>WineCheckScriptsTests</c> 里「脚本不许抄产出物文件名」同一族。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不跑脚本（跑它是上面那条的活），也不判那九个名字对不对——对齐由
+    /// <see cref="Readme_CoversEveryArchiveDirectoryTheActionListNames"/> 判。这一条不需要 bash，
+    /// 纯文本判定在任何平台上都判得到。<b>只看会真的跑的那些行</b>：注释里举一个目录名做例子不构成
+    /// 第二份判据（那一段不执行），把注释也算进去只会逼人删掉说明文字。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CollectScript_NeedsNoneOfTheNineDirectoryNamesOnItsOwn()
+    {
+        var code = Repo.Source(".winecheck", "collect-real-machine.sh").Split('\n')
+            .Where(line => !line.TrimStart().StartsWith('#'))
+            .ToList();
+        var copied = ExpectedDirectories
+            .Where(d => code.Any(line => line.Contains(d + "/", StringComparison.Ordinal)))
+            .ToList();
+        Assert.True(copied.Count == 0,
+            "collect-real-machine.sh 的代码行里出现了归档目录名字面量：" + string.Join(" ／ ", copied.Select(d => d + "/"))
+            + "。地板只该写死数量 9——名字仍只从 docs/evidence/real-machine/README.md 现读，"
+            + "抄进脚本就等于两份清单，改那份的人不会想起来改这支，当天它按上一版的名字报警。");
     }
 }

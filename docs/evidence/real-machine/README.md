@@ -92,5 +92,13 @@
   本表为它点到的产出物文件名；并拿临时假树把「都不空 → 0」「多一个清单没点到的目录 → 2」两条判据跑活。
   脚本自己的四条失败分支由 `WineCheckScriptsTests.CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList`
   钉住（含「脚本里不许抄第二份文件名清单」）。
+- **第二百零九轮给那条核对补了两条它自己数不到的地板**（本表被改坏而「表有 7 行」仍成立的那两种）：
+  **数量地板**——脚本解析出的归档目录集合必须是 9 项（写死的是**数量**，不是那九个名字），少一格即 `exit 2`
+  并把现算出的集合整个念出来；**重名地板**——同一个目录被点到两次时九个名字仍齐、数量地板看不见，
+  只有这一条拦得住。两种改法都在同一棵临时假树上真跑出退出码 `2`
+  （`CollectScript_TreatsThePlaceholderAsEmptyAndNamesEveryDirectory` 的第 ⑥⑦ 两个场景），
+  形状由 `WineCheckScriptsTests.CollectRealMachineScript_KeepsTheDirectorySetFloorAtNine` 钉；而**脚本的代码行里
+  出现本表那九个目录名任何一个即红**（`CollectScript_NeedsNoneOfTheNineDirectoryNamesOnItsOwn`）——
+  抄进脚本就是两份清单，改本表的人不会想起来改那支，那天它按上一版的名字报警。
 - **不判：真机有没有跑。** 本机没有 Windows 图形子系统，跑没跑只有人知道；门只保证「不许半勾、
   不许把没归档的说成归档了」。有门不等于过了——G-D5 在验收表上仍是 `[ ]`。
