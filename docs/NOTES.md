@@ -4,7 +4,7 @@
 
 ## 本仓验收口径（可勾选）
 
-> **DoD 豁免登记（第一百九十七轮 · 2026-11-11 核对）**：核对来源 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（2026-10-31 版，正文 9 份 + 豁免名单）。核对结果：**ApifoxHelper 既不在正文 9 份，也不在豁免名单**（豁免名单列的是 WeComKit / ZCode / agent-scheduler / agent-control / agent-pointer / PNOS 与各类 caches）。**结论：本仓无 DoD 文件可加载**，验收口径以本节为准——下一轮起「DoD 未勾满」不构成开工依据，本节里留 `[ ]` 的那几行才是。核对日期 **2026-11-11**，核对人：本轮编码会话（只读核对，未改动调度仓任何文件）。**这一行由 `AcceptanceChecklistTests.DodExemption_IsRegisteredWithSourceAndDate` 钉住**：删掉它、或把「来源 / 日期 / 结论」任一项写丢即红——「没有 DoD」这件事本身也要有出处，否则下一轮又会有人去翻一遍、或者干脆自己发明一份。
+> **DoD 豁免登记（第一百九十七轮 · 2026-11-11 核对；第二百零二轮 · 2026-11-11 复核）**：核对来源 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（**INDEX 版本 2026-10-31**，正文 9 份 + 豁免名单）。核对结果：**ApifoxHelper 既不在正文 9 份，也不在豁免名单**（豁免名单列的是 WeComKit / ZCode / agent-scheduler / agent-control / agent-pointer / PNOS 与各类 caches）。**结论：本仓无 DoD 文件可加载**，验收口径以本节为准——下一轮起「DoD 未勾满」不构成开工依据，本节里留 `[ ]` 的那几行才是。核对日期 **2026-11-11**，核对人：本轮编码会话（只读核对，未改动调度仓任何文件）。**这一行由 `AcceptanceChecklistTests.DodExemption_IsRegisteredWithSourceAndDate` 与 `AcceptanceChecklistTests.DodExemption_IndexVersionIsCurrent` 钉住**：删掉它、或把「来源 / 日期 / 结论」任一项写丢即红——「没有 DoD」这件事本身也要有出处，否则下一轮又会有人去翻一遍、或者干脆自己发明一份。**第二百零二轮补的时效门（简报 P0-1）**：登记里的 **INDEX 版本日期**必须等于仓内记录的最新 INDEX 版本（`DodExemption_IndexVersionIsCurrent` 里那个常量，INDEX 更新后要跟着改），且核对日期不得早于版本日期——INDEX 更新后只改一处即红，把「本仓静默过期」变成「必须有人看一眼」。它仍**不判**调度仓里那份 INDEX 现在写了什么（跨主机、只读、本仓不该依赖它）。
 >
 > **为什么要有这一节**：本产品**没有对应的 DoD 文件**——第一百六十五轮核对 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（2026-10-31 版），正文 9 份与豁免名单都没有 ApifoxHelper。DoD 缺席时，验收口径此前散在 `docs/方案.md` §2.2/§8、`README.md`「使用流程」「写入安全」、`docs/DESIGN.md` 与本文件的多处，**没有一份能逐项勾选的表**——任何一轮都可以自行定义「缺口」。本节把这些既有口径机械可读化：**不新增任何产品功能、不新增任何判定**。
 >
@@ -77,12 +77,12 @@
 > ④ **当天照哪一页走**：本节末的「到期日当天执行单」三步（跑三档冒烟记读数 → 读归档清单判可勾 → 按 ② 回写两处），由 `RealMachineEvidenceTests.DueDateRunSheet_HasThreeStepsEachAnchoredToARealArtifact` 判三步各被点到一次、每步至少引一条仓内实物（命令 / 文件 / 断言）、第 3 步的两处回写落点与 ② 逐字一致。
 >
 
-> **第 0 条（机器到手前，本仓可做，第一百九十五轮，简报 P0-2；第一百九十八轮补执行状态）**：下面七条都是「机器到手后」的动作，**机器到手前本仓能做的最后准备此前一条都没写**——若机器在到期日当天到，现场就得一边建目录一边找命令。四项在机器到手前做完，当天只剩「照单跑」。**第一百九十八轮把「哪几项已经做完、哪几项还差什么」逐项写在每项末尾的「状态：」里**——`[x]` 的项必须指到仓里真能跑的东西（命令 / 用例工程 / 文档），`[ ]` 的项必须写清缺在哪一句；这一条由 `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判：
+> **第 0 条（机器到手前，本仓可做，第一百九十五轮，简报 P0-2；第一百九十八轮补执行状态）**：下面七条都是「机器到手后」的动作，**机器到手前本仓能做的最后准备此前一条都没写**——若机器在到期日当天到，现场就得一边建目录一边找命令。四项在机器到手前做完，当天只剩「照单跑」。**第二百零二轮把 ①②③ 收成一条命令 bash `.winecheck/prepare-real-machine.sh`**（① 调 `.winecheck/demo.sh` 跑三档 → ② `dotnet build` + `dotnet test` → ③ 建九个归档目录 → ④ 打印下面这张动作单），任一步不过即非零退出并打出是哪一步；**第一百九十八轮把「哪几项已经做完、哪几项还差什么」逐项写在每项末尾的「状态：」里**——`[x]` 的项必须指到仓里真能跑的东西（命令 / 用例工程 / 文档），`[ ]` 的项必须写清缺在哪一句；这一条由 `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判：
 >
-> - [x] ① 复跑 `.winecheck/demo.sh`（`bash` 执行），确认三档仍是当前源码的 208 通过 / 0 失败 ×3；读数变了就先把本文件里被 `ReadingConsistencyTests` 扫的那几处一起改，别让两处读数各说各的。**状态：已做**——第一百九十八轮 · 2026-11-11 在本机复跑 `.winecheck/demo.sh`（`bash` 执行）：三档 208 通过 / 0 失败 ×3、逐屏对账 0 处对不上、退出码 0，与本节记的读数一致（**模拟器，不是真机**）。
-> - [x] ② 复跑 `dotnet build` 与 `dotnet test`，确认 0 警告 0 错误、用例全绿（红的那条先修，别带着红进真机当天）。**状态：已做**——第一百九十八轮 · 2026-11-11 复跑：`dotnet build` 0 警告 0 错误；`dotnet test ApifoxHelper.Tests/ApifoxHelper.Tests.csproj` 2615 通过 / 0 失败（用例工程 `ApifoxHelper.Tests/ApifoxHelper.Tests.csproj`）。
-> - [ ] ③ 把 `docs/evidence/real-machine/` 的九个归档子目录建好（空目录即可，目录名以 `docs/evidence/real-machine/README.md` 为准，别自己起名——起错名的目录既不会被判据看见，也不会被下一个人找到）。**状态：未做**——缺的是「仓里可核对的落点」：git 不跟踪空目录，建好的九个目录提交不进仓，所以这一项在机器到手前**只能备好命令、不能算做完**。命令已备好并加门：`docs/evidence/real-machine/README.md` 顶部那条 `mkdir -p` 一行建全九个目录，目录名与产出物清单逐字一致（少一个即红，由 `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判）。
-> - [ ] ④ 打印或存好下面这张七条动作单，连同「七条动作的『照抄即可』三列」与「真机当天用到的工具」两节——当天照着念，不现场翻文档。**状态：未做**——缺的是「人的动作」：打印或存盘在本机无法核对，写「已做」就是自述。可核对的那一半已成立：要存的两节都在本文件里（「七条动作的『照抄即可』三列」「真机当天用到的工具」），且被 `RealMachineEvidenceTests` 的门钉住。
+> - [x] ① 复跑 `.winecheck/demo.sh`（`bash` 执行），确认三档仍是当前源码的 208 通过 / 0 失败 ×3；读数变了就先把本文件里被 `ReadingConsistencyTests` 扫的那几处一起改，别让两处读数各说各的。**状态：已做**——第二百零二轮起这一项就是 bash `.winecheck/prepare-real-machine.sh` 的第 ① 步（脚本内部调 `.winecheck/demo.sh`，不另写一份跑法）；第一百九十八轮 · 2026-11-11 在本机复跑：三档 208 通过 / 0 失败 ×3、逐屏对账 0 处对不上、退出码 0，与本节记的读数一致（**模拟器，不是真机**）。
+> - [x] ② 复跑 `dotnet build` 与 `dotnet test`，确认 0 警告 0 错误、用例全绿（红的那条先修，别带着红进真机当天）。**状态：已做**——第二百零二轮起这一项就是 bash `.winecheck/prepare-real-machine.sh` 的第 ② 步；第一百九十八轮 · 2026-11-11 复跑：`dotnet build` 0 警告 0 错误；`dotnet test ApifoxHelper.Tests/ApifoxHelper.Tests.csproj` 2615 通过 / 0 失败（用例工程 `ApifoxHelper.Tests/ApifoxHelper.Tests.csproj`）。
+> - [x] ③ 把 `docs/evidence/real-machine/` 的九个归档子目录建好（空目录即可，目录名以 `docs/evidence/real-machine/README.md` 为准，别自己起名——起错名的目录既不会被判据看见，也不会被下一个人找到）。**状态：已做**——第二百零二轮把这条命令收成 bash `.winecheck/prepare-real-machine.sh` 的第 ③ 步（脚本里那条 `mkdir -p` 是九个目录名的唯一出处），本机跑通、退出码 0，九个目录当场建好。**空目录提交不进仓这一点不变**（git 不跟踪空目录），所以这一项的证据是**脚本本身**而不是目录：脚本在、跑一次就建好，目录名与产出物清单逐字一致（少一个即红，由 `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判）。
+> - [ ] ④ 打印或存好下面这张七条动作单，连同「七条动作的『照抄即可』三列」与「真机当天用到的工具」两节——当天照着念，不现场翻文档。**状态：未做**——缺的是「人的动作」：打印或存盘在本机无法核对，写「已做」就是自述。可核对的那一半已成立：bash `.winecheck/prepare-real-machine.sh` 的最后一步（④）会把这张七条动作单从本文件读出来打印（不另抄一份），要存的两节也都在本文件里（「七条动作的『照抄即可』三列」「真机当天用到的工具」），且被 `RealMachineEvidenceTests` 的门钉住。
 >
 > 机械门：`RealMachineEvidenceTests.BeforeMachineArrives_HasFourCheckableItemsAndNamesTheDemoCommand` 判四项齐、每项都有可勾选框、且至少一项点到 `.winecheck/demo.sh`。**它不判这四项做过没有**（本机没有 Windows 图形子系统，做没做只有人知道），只保证「机器到手前的那一页不是空的」。第一百九十八轮补的第二道门 `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判的是**执行状态本身**：四项各带一句「状态：」、`[x]` 的项必须指到仓里真能跑的东西（命令 / 用例工程 / 文档，编一个不存在的即红）、`[ ]` 的项必须写清「未做」与缺在哪一句——**它同样不判真机跑没跑**，只保证「做完的与没做完的分得开」。
 
@@ -2753,3 +2753,29 @@
 - 真机三档 DPI 与主链路演示（G-D5）、SHARED-3/4/7/8 的真实 Apifox 端到端仍不可得。本轮未连接或写入 Apifox，未调用任何模型服务，未安装依赖，未新建调度器、未动其他项目。
 
 **读数**：`dotnet build` 0 警告 0 错误；`dotnet test` **2590 通过 / 0 失败**；**GUI 证据：wine 模拟器三档 208/0 ×3**（`bash .winecheck/demo.sh`，逐屏对账 0 处对不上）；G-D5 仍是 `[ ]`。
+
+## 第二百零二轮（2026-11-11）：DoD 登记的 INDEX 版本时效门 + 真机准备收成一条脚本 + 「静态门与冒烟段同源」的通用判据
+
+**① DoD 结论复核与版本时效门（简报 P0-1）**
+
+- 重核 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（**INDEX 版本 2026-10-31**，正文 9 份 + 豁免名单）：ApifoxHelper **既不在正文 9 份，也不在豁免名单**，结论仍是「本仓无 DoD 文件可加载」。登记行补上 **INDEX 版本日期**与复核日期（2026-11-11），并写清这一行现在由两道门钉住。
+- **补的是哪个缺口**：第一百九十九轮的 90 天时效软判只判「最近核过」，不判「核的是哪一版 INDEX」——INDEX 若新增本仓条目，只要在 90 天内重核一次、把日期改新，结论照旧写「无 DoD」，门全绿而版本已漂。
+- **门**：新增 `AcceptanceChecklistTests.DodExemption_IndexVersionIsCurrent`——登记行必须写 `INDEX 版本 YYYY-MM-DD`、该日期必须等于测试里 `LatestIndexVersion` 这个「仓内记录的最新 INDEX 版本」常量、且核对日期不得早于版本日期。只改 NOTES 不改常量即红，只改常量不改 NOTES 也即红。它仍**不判**调度仓里那份 INDEX 现在写了什么（跨主机、只读、本仓不该依赖它）。
+
+**② 真机准备收成一条脚本（简报 P0-2）**
+
+- 新增 `.winecheck/prepare-real-machine.sh`：把第 0 条的 ①②③ 收成一条命令——① 调 `.winecheck/demo.sh` 跑三档冒烟 → ② `dotnet build` + `dotnet test` → ③ `mkdir -p` 建好九个归档子目录 → ④ 从 `docs/NOTES.md` 读出七条动作单打印（不另抄一份）。任一步不过即非零退出并打出是哪一步。
+- **落点**：`docs/NOTES.md` 第 0 条 ③ 由 `[ ]` 改 `[x]`（证据是脚本本身，不是目录——空目录提交不进仓这一点不变）；①② 的状态改为指向脚本的对应步骤；④ 仍 `[ ]`（打印/存盘是人的动作），但可核对的那一半已由脚本最后一步承担。`docs/evidence/real-machine/README.md` 那条手抄 `mkdir` 改为指向脚本，**九个目录名只剩一份出处**。
+- **门**：`AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 的 ⑤ 改为从脚本读 `mkdir -p docs/evidence/real-machine/{…}` 并与 README 产出物清单逐字比对；新增 ⑥ 判脚本里 ①②③④ 四个步骤标记各在、且 ① 有 `.winecheck/demo.sh`、② 有 `dotnet build` 与 `dotnet test`、③ 有那条 `mkdir -p`、④ 从 `"$NOTES"` 读动作单。`.winecheck/README.md` 的脚本表同步登记（`WineCheckScriptsTests.Scripts_OnDiskMatchTheReadmeRegistry` 判两侧对齐）。
+
+**③ 「静态门与冒烟段同源」的通用判据（简报 P1-2）**
+
+- 新增 `ApifoxHelper.Tests/GateSourceConsistencyTests.cs`：把第二百零一轮那处矛盾的解法从「一屏一解」抽成通用判据，对已成对的三屏（定向构建输出「复制命令」/ 提示对话框「复制路径」/ 完整错误对话框「查看完整错误」）逐对核四件事——① 两半都在且冒烟段真的被调用；② 静态门与冒烟段**都出现同一个表达式**（`BuildCommandCopy.Line(null)`、`Ui.ContentWidth(grid)`、`StatusLineText.FullTextHeading` 等）；③ 两边都**不许出现那个表达式算出来的字面量**；④ 那个表达式必须是**符号**（带成员访问）而不是字面量——否则「同源」只是「两边抄了同一句话」。
+- **变异验证**：把某一屏的静态门改回字面量（例如把 `BuildCommandCopy.Line(null)` 换成 `"命令：—"`），② 与 ③ 同时红；把冒烟段里那句断言删掉，② 红。
+
+**④ 未做（如实挂账）**
+
+- **wine 三档本轮未复跑**：本轮改动只落在测试工程、文档与 `.winecheck/` 脚本，`Desktop/` 与 `ApifoxHelper.Smoke/` 一行未动，冒烟器源码指纹不变；三档读数仍以第一百九十二轮的 **208 通过 / 0 失败 ×3** 为准（`bash .winecheck/demo.sh`），**模拟器，不是真机**。`prepare-real-machine.sh` 的 ① 步就是那条命令，真机到手前跑一次即可复核。
+- 真机三档 DPI 与主链路演示（G-D5）、SHARED-3/4/7/8 的真实 Apifox 端到端仍不可得。本轮未连接或写入 Apifox，未调用任何模型服务，未安装依赖，未新建调度器、未动其他项目。
+
+**读数**：`dotnet build` 0 警告 0 错误；`dotnet test` **2648 通过 / 0 失败**；G-D5 仍是 `[ ]`。

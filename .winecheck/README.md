@@ -40,6 +40,7 @@ xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke
 | `shot_dialog.sh` | 一条命令走完「启动 → 点空态「新建配置」→ 截图并 OCR 对话框」；参数 `$1` 等待秒数、`$2`/`$3` 点击坐标（坐标随 DPI 与字体变化，换机器后要重新量） |
 | `fill.sh` | 在已打开的「新建配置」对话框里真实键入名称、仓库根目录与 API 项目路径，截图并 OCR |
 | `demo.sh` | **降级答辩的一键复跑演示**：按 wine 三档缩放各跑一次冒烟，并把 `docs/NOTES.md`「降级答辩脚本」逐屏表的每一行与那一档的报告对上一次，逐档产出讲稿（用法见下一节） |
+| `prepare-real-machine.sh` | **真机到手前的第 0 条四项准备，一条命令跑完**：① 复跑三档冒烟（调 `demo.sh`）→ ② 复跑 `dotnet build` 与 `dotnet test` → ③ 建好 `docs/evidence/real-machine/` 的九个归档子目录 → ④ 把 `docs/NOTES.md` 的七条动作单打印出来。任一步不过即非零退出并打出是哪一步（用法见下一节） |
 
 ### 已删脚本（由上表取代，不要复活）
 
@@ -60,6 +61,7 @@ xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke
 bash .winecheck/demo.sh                 # 三档各跑一次；产物在 /tmp/ah-demo
 PUBLISH=1 bash .winecheck/demo.sh       # 冒烟器还没发布时，让脚本自己 dotnet publish
 TIERS=96 bash .winecheck/demo.sh        # 只跑 100% 档（答辩前自查用，一集约 17 秒）
+bash .winecheck/prepare-real-machine.sh # 真机到手前的第 0 条四项准备：①②③ 跑完 + ④ 打印七条动作单
 ```
 
 | 产物 | 内容 |

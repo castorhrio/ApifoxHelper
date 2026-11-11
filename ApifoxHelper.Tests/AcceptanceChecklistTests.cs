@@ -119,6 +119,62 @@ public class AcceptanceChecklistTests
             + "请重核 /opt/agent-scheduler/docs/product-dod/INDEX.md，把这一行的日期与结论改成这次核到的。");
     }
 
+    /// <summary>
+    /// 登记里的 INDEX 版本日期必须等于仓内记录的最新 INDEX 版本（第二百零二轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第一百九十九轮给「DoD 豁免登记」加了 90 天时效软判，判的是
+    /// 「这条结论是最近核过的」——但它<b>不判核的是哪一版 INDEX</b>。INDEX.md 若在两次核对之间
+    /// 新增了 ApifoxHelper 条目（或把它列进豁免名单），本仓只要在 90 天内重核一次、把日期改新，
+    /// 结论照旧写「无 DoD 文件可加载」，门全绿——<b>版本漂了，登记没漂</b>。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 登记行里写着 <c>INDEX 版本 YYYY-MM-DD</c>；② 那个版本日期等于本文件里
+    /// <c>LatestIndexVersion</c> 这个常量——它是<b>仓内记录的最新 INDEX 版本</b>，INDEX 更新后要跟着改；
+    /// ③ 核对日期不早于版本日期（核一个还没发布的版本是自相矛盾）。
+    /// </para>
+    /// <para>
+    /// <b>为什么两处都要动</b>：只改 NOTES 不改常量 → ② 红；只改常量不改 NOTES → ② 红。
+    /// 于是「INDEX 更新了」这件事必须同时落到登记与记录上，<b>静默过期变成必须有人看一眼</b>。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：调度仓里那份 INDEX.md 现在到底写了什么（跨主机、只读、本仓不该依赖它）。
+    /// 本门判的是「本仓记的版本与登记一致」，不是「版本永远最新」——最新与否只有重核的人知道。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DodExemption_IndexVersionIsCurrent()
+    {
+        // 仓内记录的最新 INDEX 版本。INDEX.md 更新后改这里，同时改 docs/NOTES.md 那一行——
+        // 两处必须一起动，只动一处即红（这正是本门存在的理由）。
+        const string LatestIndexVersion = "2026-10-31";
+
+        var line = SectionLines()
+            .FirstOrDefault(l => l.Contains("DoD 豁免登记", StringComparison.Ordinal));
+        Assert.True(line is not null,
+            "docs/NOTES.md「本仓验收口径」一节缺「DoD 豁免登记」一行：版本时效门没有可判的对象。");
+
+        // ① 登记行里写着 INDEX 版本日期。
+        var version = Regex.Match(line!, @"INDEX 版本\s*(?<v>20\d{2}-\d{2}-\d{2})");
+        Assert.True(version.Success,
+            "「DoD 豁免登记」没写「INDEX 版本 YYYY-MM-DD」：只写核对日期，判不出核的是哪一版 INDEX——"
+            + "INDEX 更新后本仓不会有任何红灯。");
+
+        // ② 版本日期 == 仓内记录的最新 INDEX 版本。
+        Assert.Equal(LatestIndexVersion, version.Groups["v"].Value);
+
+        // ③ 核对日期不早于版本日期：核一个还没发布的版本是自相矛盾。
+        var checkedText = Regex.Match(line!, @"20\d{2}-\d{2}-\d{2}").Value;
+        Assert.True(DateTime.TryParseExact(checkedText, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var checkedOn),
+            $"「DoD 豁免登记」里的核对日期「{checkedText}」不是合法的 YYYY-MM-DD。");
+        Assert.True(DateTime.TryParseExact(version.Groups["v"].Value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var versionOn),
+            $"「DoD 豁免登记」里的 INDEX 版本日期「{version.Groups["v"].Value}」不是合法的 YYYY-MM-DD。");
+        Assert.True(checkedOn >= versionOn,
+            $"核对日期 {checkedText} 早于 INDEX 版本日期 {version.Groups["v"].Value}："
+            + "核一个还没发布的版本是自相矛盾，两处必有一处写错了。");
+    }
+
     [Fact]
     public void Checklist_HasEveryGateAndEverySharedInvariant()
     {
@@ -667,14 +723,31 @@ public class AcceptanceChecklistTests
         Assert.True(listed.Count == 9,
             $"docs/evidence/real-machine/README.md 的产出物清单点了 {listed.Count} 个归档目录（应为 9 个）：{string.Join("、", listed)}。");
 
-        var mkdir = readme.Split('\n').FirstOrDefault(l => l.Contains("mkdir -p docs/evidence/real-machine/", StringComparison.Ordinal));
+        // 命令的出处是脚本，不是 README 里手抄的一条 mkdir（第二百零二轮，简报 P0-2）：
+        // 目录名只有一份出处，README 只指过来——两处各写一份，改了一处另一处不会红。
+        var script = Repo.Source(".winecheck", "prepare-real-machine.sh");
+        var mkdir = script.Split('\n').FirstOrDefault(l => l.Contains("mkdir -p docs/evidence/real-machine/", StringComparison.Ordinal));
         Assert.True(mkdir is not null,
-            "docs/evidence/real-machine/README.md 里没有那条「一条命令建好九个目录」的 mkdir："
-            + "第 0 条 ③ 在机器到手前只能备好命令，命令不在，那一项就只剩一句「还没做」。");
+            ".winecheck/prepare-real-machine.sh 里没有那条「一条命令建好九个目录」的 mkdir："
+            + "第 0 条 ③ 的证据就是这个脚本，命令不在，那一项就只剩一句「已做」。");
         var brace = Regex.Match(mkdir!, @"mkdir -p docs/evidence/real-machine/\{([^}]+)\}");
         Assert.True(brace.Success,
-            $"README 里那条 mkdir 不是「mkdir -p docs/evidence/real-machine/{{…}}」的形状：{mkdir!.Trim()}");
+            $"脚本里那条 mkdir 不是「mkdir -p docs/evidence/real-machine/{{…}}」的形状：{mkdir!.Trim()}");
         var made = brace.Groups[1].Value.Split(',').Select(s => s.Trim()).OrderBy(n => n, StringComparer.Ordinal).ToList();
         Assert.Equal(listed, made);
+
+        // ⑥ 脚本把 ①②③ 各收成一条可执行的命令，④ 打印动作单（第二百零二轮，简报 P0-2）。
+        //    只写「已收成脚本」而脚本里没有那三条命令，等于把四项准备换成一句自述。
+        foreach (var marker in new[] { "①", "②", "③", "④" })
+        {
+            Assert.Contains($"-- {marker} ", script, StringComparison.Ordinal);
+        }
+        Assert.Contains(".winecheck/demo.sh", script, StringComparison.Ordinal);   // ① 三档冒烟
+        Assert.Contains("dotnet build", script, StringComparison.Ordinal);         // ② 构建
+        Assert.Contains("dotnet test", script, StringComparison.Ordinal);          // ② 用例
+        Assert.Contains("mkdir -p docs/evidence/real-machine/{", script, StringComparison.Ordinal); // ③ 九个目录
+        // ④ 的动作单从 NOTES 读，不在脚本里抄一份（抄的会漂）。
+        Assert.Contains("\"$NOTES\"", script, StringComparison.Ordinal);
+        Assert.Contains("G-D5 真机复核清单", script, StringComparison.Ordinal);
     }
 }
