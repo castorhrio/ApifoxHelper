@@ -233,6 +233,9 @@ internal static class Program
         Section("差异确认对话框（真实控件交互）", nameof(RunDecisionsInteraction));
         RunDecisionsInteraction(services, dataRoot);
 
+        Section("响应契约对话框（真实控件交互）", nameof(RunContractsInteraction));
+        RunContractsInteraction(services, dataRoot);
+
         Section("配置表单的真实布局（新建 / 编辑）", nameof(RunProfileFormLayout));
         RunProfileFormLayout(services, profile);
 
@@ -2207,6 +2210,288 @@ internal static class Program
             Models = [model],
         };
     }
+
+    /// <summary>
+    /// 响应契约对话框的真实控件交互（第一百八十二轮，简报 P0-2「让降级路径真正可交付」）。
+    /// <para>
+    /// 这一屏在「降级答辩脚本」逐屏表里此前只有「源码 + 编译证据」——审阅动作（确认 / 拒绝 / 重置）与
+    /// 「写任务数据并递增任务版本使旧检查过期」从来没有在真实控件上走过一次，答辩现场只能说
+    /// 「代码与用例在，真实端到端未跑」。本轮把它补成五段真实控件交互：夹具落盘 → 打开即选中第一条且
+    /// 计数行与三个动作的门控对得上 → 点「确认」后契约落盘且任务版本递增 → 阻断契约的「确认」是禁用的
+    /// （不是点了才报错，详情区同时给出未解析点）→ 点「重置」回到待确认。
+    /// </para>
+    /// <para>
+    /// 它证明的是「这一屏的按钮真的接在共享 <c>ContractReviewService</c> 上、点下去磁盘真的变了」，
+    /// <b>不是</b>「好看」——观感与 DPI 缩放仍随 G-D5 真机复核；也不碰真实 Apifox（审阅只写任务目录）。
+    /// </para>
+    /// </summary>
+    private static void RunContractsInteraction(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var reviews = services.GetRequiredService<ContractReviewService>();
+
+        CheckTask? task = null;
+        ContractsDialog? dialog = null;
+        try
+        {
+            // 第一段：准备响应契约（真实落盘）——待确认 / 已阻断 / 已拒绝各一条，够把三个动作的门控都走一遍。
+            RunAction("响应契约：准备契约清单（真实落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe7.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "响应契约配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe7.Api/Probe7.Api.csproj",
+                    AllowedSourcePaths = ["Probe7.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "响应契约任务" });
+                tasks.Write(task.Id, TaskFiles.ResponseContract, ContractsFixture());
+                var reread = tasks.Read<List<ResponseContract>>(task.Id, TaskFiles.ResponseContract)
+                    ?? throw new InvalidOperationException("responseContract.json 写进任务目录后读不回来。");
+                if (reread.Count != 3)
+                {
+                    throw new InvalidOperationException($"夹具读回 {reread.Count} 条契约，期望 3 条（待确认 / 已阻断 / 已拒绝）。");
+                }
+                _lines.Add("     夹具：1 条待确认、1 条已阻断（带未解析点）、1 条已拒绝");
+            });
+
+            // 第二段：打开对话框（Show 触发 OnLoad 读盘），核对清单行数、打开时的选中落点、计数行与三个动作的门控。
+            RunAction("响应契约：打开即选中第一条且计数行与动作门控对得上（真实控件）", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new ContractsDialog(tasks, task, reviews);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = ContractList(dialog);
+                if (!list.Visible) throw new InvalidOperationException("契约清单不可见（对话框停在提示态）。");
+                if (list.Items.Count != 3)
+                {
+                    throw new InvalidOperationException($"清单有 {list.Items.Count} 行，夹具是 3 条契约（待确认 / 已阻断 / 已拒绝）。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"打开后选中 {list.SelectedIndices.Count} 行（首行序号 {list.SelectedIndices.Cast<int>().FirstOrDefault()}），期望恰好第一行。");
+                }
+                var expectedCounts = "契约 3 · 待确认 1 · 已确认 0 · 已拒绝 1 · 已阻断 1 · 已失效 0";
+                var counts = ContractCountsLabel(dialog);
+                if (counts.Text != expectedCounts)
+                {
+                    throw new InvalidOperationException($"计数行是「{counts.Text}」，期望「{expectedCounts}」。");
+                }
+                // 第一条是待确认：确认与拒绝可点；重置只对已确认 / 已拒绝 / 已失效有效，此刻必须禁用。
+                if (!ButtonOf(dialog, "确认").Enabled)
+                {
+                    throw new InvalidOperationException("第一条是待确认契约，「确认」却是禁用的。");
+                }
+                if (!ButtonOf(dialog, "拒绝").Enabled)
+                {
+                    throw new InvalidOperationException("第一条是待确认契约，「拒绝」却是禁用的。");
+                }
+                if (ButtonOf(dialog, "重置").Enabled)
+                {
+                    throw new InvalidOperationException("第一条还是待确认，「重置」却是可点的（重置只对已确认 / 已拒绝 / 已失效有效）。");
+                }
+            });
+
+            // 第三段：点「确认」（真实控件）→ 契约落盘为 confirmed、任务版本递增、状态行与计数行如实。
+            RunAction("响应契约：确认后契约落盘且任务版本递增（真实控件）", () =>
+            {
+                if (task is null || dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var before = tasks.Get(task.Id).Revision;
+                var status = StatusLabel(dialog);
+                status.Text = "";
+                Click(dialog, "确认");
+                PumpUntilCondition(() => status.Text.StartsWith("已确认。", StringComparison.Ordinal), "契约确认完成");
+
+                var stored = tasks.Read<List<ResponseContract>>(task.Id, TaskFiles.ResponseContract)
+                    ?? throw new InvalidOperationException("确认后 responseContract.json 读不回来。");
+                var confirmed = stored.FirstOrDefault(c => c.EndpointKey == "GET /api/probe/orders");
+                if (confirmed is null || confirmed.ReviewState != "confirmed")
+                {
+                    throw new InvalidOperationException(
+                        $"磁盘上那条契约的审阅状态是「{confirmed?.ReviewState ?? "（没有这一条）"}」，期望 confirmed。");
+                }
+                if (confirmed.ReviewedAt is null)
+                {
+                    throw new InvalidOperationException("确认后 ReviewedAt 没有落盘——审阅时间没记下来。");
+                }
+                var after = tasks.Get(task.Id).Revision;
+                if (after != before + 1)
+                {
+                    throw new InvalidOperationException($"任务版本从 {before} 变成 {after}，期望 +1（旧检查与旧计划要过期）。");
+                }
+                if (!status.Text.Contains("剩余待确认 0 个", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，没有如实报出剩余待确认数。");
+                }
+                if (!status.Text.Contains("重新检查", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，没有说明确认后需重新检查才生效。");
+                }
+                var counts = ContractCountsLabel(dialog);
+                if (!counts.Text.Contains("待确认 0", StringComparison.Ordinal) || !counts.Text.Contains("已确认 1", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"确认后计数行是「{counts.Text}」，期望待确认 0 / 已确认 1。");
+                }
+                _lines.Add($"     状态行：{status.Text}（任务版本 {before} → {after}）");
+            });
+
+            // 第四段：阻断契约不能确认——「确认」是禁用的，详情区同时给出未解析点（不是点了才报错）。
+            RunAction("响应契约：阻断契约的「确认」是禁用的且详情区给出未解析点（真实控件）", () =>
+            {
+                if (task is null || dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var list = ContractList(dialog);
+                SelectContractRow(list, "GET /api/probe/blocked");
+                Application.DoEvents();
+
+                if (ButtonOf(dialog, "确认").Enabled)
+                {
+                    throw new InvalidOperationException("阻断契约的「确认」是可点的——未解析点应当阻断确认。");
+                }
+                if (!ButtonOf(dialog, "拒绝").Enabled)
+                {
+                    throw new InvalidOperationException("阻断契约的「拒绝」却是禁用的（拒绝对阻断契约仍然有效）。");
+                }
+                var detail = DetailBox(dialog);
+                if (!detail.Text.Contains("未解析点（阻断确认）", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"详情区没有说明为什么不能确认。详情区原文：{detail.Text}");
+                }
+                var stored = tasks.Read<List<ResponseContract>>(task.Id, TaskFiles.ResponseContract)
+                    ?? throw new InvalidOperationException("responseContract.json 读不回来。");
+                if (stored.First(c => c.EndpointKey == "GET /api/probe/blocked").ReviewState != "blocked")
+                {
+                    throw new InvalidOperationException("只是选中了阻断契约，磁盘上的状态却变了。");
+                }
+            });
+
+            // 第五段：点「重置」（真实控件）→ 已确认的那条回到待确认、版本再递增一次。
+            RunAction("响应契约：重置回待确认（真实控件）", () =>
+            {
+                if (task is null || dialog is null) throw new InvalidOperationException("上一段没有产出对话框。");
+                var list = ContractList(dialog);
+                SelectContractRow(list, "GET /api/probe/orders");
+                Application.DoEvents();
+                if (!ButtonOf(dialog, "重置").Enabled)
+                {
+                    throw new InvalidOperationException("已确认的契约「重置」却不可点。");
+                }
+                var before = tasks.Get(task.Id).Revision;
+                var status = StatusLabel(dialog);
+                status.Text = "";
+                Click(dialog, "重置");
+                PumpUntilCondition(() => status.Text.StartsWith("待确认。", StringComparison.Ordinal), "契约重置完成");
+
+                var stored = tasks.Read<List<ResponseContract>>(task.Id, TaskFiles.ResponseContract)
+                    ?? throw new InvalidOperationException("重置后 responseContract.json 读不回来。");
+                if (stored.First(c => c.EndpointKey == "GET /api/probe/orders").ReviewState != "pending")
+                {
+                    throw new InvalidOperationException("重置后磁盘上的审阅状态没有回到 pending。");
+                }
+                var after = tasks.Get(task.Id).Revision;
+                if (after != before + 1)
+                {
+                    throw new InvalidOperationException($"重置后任务版本从 {before} 变成 {after}，期望 +1。");
+                }
+                if (!status.Text.Contains("剩余待确认 1 个", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望剩余待确认 1 个。");
+                }
+                _lines.Add($"     状态行：{status.Text}（任务版本 {before} → {after}）");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 响应契约夹具：待确认（可确认）、已阻断（带未解析点，确认必须被挡住）、已拒绝（可重置）各一条。
+    /// 三条都带分支与证据，详情区才有东西可显示——空壳夹具会让「详情区给出未解析点」那一段变成空断言。
+    /// </summary>
+    private static List<ResponseContract> ContractsFixture() =>
+    [
+        new ResponseContract
+        {
+            EndpointKey = "GET /api/probe/orders",
+            WrapperType = "ApiResponse<T>",
+            DataMember = "Data",
+            DataJsonName = "data",
+            DataType = "ProbeResponse",
+            DataTypeId = "#/definitions/ProbeResponse",
+            ReviewState = "pending",
+            Branches =
+            [
+                new ResponseBranch
+                {
+                    BranchKey = "200",
+                    HttpStatus = 200,
+                    Condition = "",
+                    DataKind = "type",
+                    DataType = "ProbeResponse",
+                    File = "Controllers/ProbeController.cs",
+                    Line = 12,
+                },
+            ],
+            EvidenceIds = ["ev-orders"],
+            SourceFingerprint = "fixture-orders",
+        },
+        new ResponseContract
+        {
+            EndpointKey = "GET /api/probe/blocked",
+            WrapperType = "ApiResponse<T>",
+            DataMember = "Data",
+            DataJsonName = "data",
+            DataType = null,
+            ReviewState = "blocked",
+            UnresolvedPoints = ["ProbeController.Get 的返回表达式无法静态确定 data 类型"],
+            Branches =
+            [
+                new ResponseBranch
+                {
+                    BranchKey = "200",
+                    HttpStatus = 200,
+                    Condition = "",
+                    DataKind = "unknown",
+                    Note = "返回表达式未解析",
+                    File = "Controllers/ProbeController.cs",
+                    Line = 20,
+                },
+            ],
+            EvidenceIds = ["ev-blocked"],
+            SourceFingerprint = "fixture-blocked",
+        },
+        new ResponseContract
+        {
+            EndpointKey = "GET /api/probe/rejected",
+            WrapperType = "ApiResponse<T>",
+            DataMember = "Data",
+            DataJsonName = "data",
+            DataType = "ProbeResponse",
+            ReviewState = "rejected",
+            Branches =
+            [
+                new ResponseBranch
+                {
+                    BranchKey = "200",
+                    HttpStatus = 200,
+                    Condition = "",
+                    DataKind = "type",
+                    DataType = "ProbeResponse",
+                    File = "Controllers/ProbeController.cs",
+                    Line = 28,
+                },
+            ],
+            EvidenceIds = ["ev-rejected"],
+            SourceFingerprint = "fixture-rejected",
+        },
+    ];
 
     /// <summary>
     /// 配置表单的真实布局（第一百四十八轮）：新建配置对话框在真机截图里是「名称、仓库根目录之后
@@ -4999,6 +5284,32 @@ internal static class Program
     /// <summary>补充说明对话框的接口清单（对话框里唯一的 <c>ListView</c>）。</summary>
     private static ListView SupplementList(Control root) =>
         FindFirst<ListView>(root) ?? throw new InvalidOperationException("对话框里找不到接口清单。");
+
+    /// <summary>响应契约对话框的契约清单（对话框里唯一的 <c>ListView</c>）。</summary>
+    private static ListView ContractList(Control root) =>
+        FindFirst<ListView>(root) ?? throw new InvalidOperationException("对话框里找不到契约清单。");
+
+    /// <summary>响应契约对话框的计数行（「契约 N · 待确认 M · …」）。</summary>
+    private static Label ContractCountsLabel(Control root) =>
+        FindAll<Label>(root).FirstOrDefault(l => l.Text.StartsWith("契约 ", StringComparison.Ordinal))
+        ?? throw new InvalidOperationException("对话框里找不到契约计数行。界面文案：" + LabelTexts(root));
+
+    /// <summary>
+    /// 按接口键选中契约清单里的一行（真实控件：选中事件随即问到详情区与三个审阅动作）。
+    /// 清单是 <c>MultiSelect = false</c>（<c>Ui.List</c> 出厂口径），选中一行即换掉上一行。
+    /// </summary>
+    private static void SelectContractRow(ListView list, string endpointKey)
+    {
+        foreach (ListViewItem item in list.Items)
+        {
+            if (item.Tag is ResponseContract contract && contract.EndpointKey == endpointKey)
+            {
+                item.Selected = true;
+                return;
+            }
+        }
+        throw new InvalidOperationException($"契约清单里没有「{endpointKey}」这一行。");
+    }
 
     /// <summary>差异确认对话框的条目清单（对话框里唯一的 <c>ListView</c>）。</summary>
     private static ListView DecisionList(Control root) =>
