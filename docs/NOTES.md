@@ -39,6 +39,24 @@
 | [ ] | SHARED-8 不删除、不自动发布：不自动删除远端资源，高风险未逐项确认不进计划 | **部分达成**：不进计划的门禁在并验证过；第一百七十二轮起「部分失败模拟」那一支有了端到端记录——第二个动作失败后第三个动作连命令都没发出、已完成的如实列出、失败不重发、状态行查不到「全部核对」。但「不删除」仍是能力缺失式保证（原生根本没有删除入口），且整条链对真实 Apifox 未跑过，故留空框 | `SyncSelectionTests.Selectable_OnlySyncableStatusesAndOnline`、`CompatEntriesTests.ResultHeadline_FailedKeepsWriteClosedAndNeverClaimsPassed`、`ApifoxHelper.Tests/MockApifoxCliTests.cs` | 不经界面（本地 mock CLI 端到端 + 门禁用例） |
 | [x] | SHARED-9 本地安全：只监听回环并校验 Host/Origin/会话令牌；凭据加密不入日志与导出；共享报告脱敏 | 达成（脱敏为单一编译口径；密钥按配置 ID 存 DPAPI，导出天然不含凭据——Linux 侧以真实异常路径验证拒绝） | `ErrorCopyTests.Redactor_IsSharedCompiledIntoTheTestProject`、`ProfileStoreTests.Save_RejectsEmptyName_WithFieldId`（保存校验与不落半份状态） | 不经界面 |
 
+## 过渡壳冻结登记（可机械核对）
+
+> **这一节是什么**：`docs/方案.md` §2.4 与 `README.md` 都承诺「页面层（`Web/` 的 index.html / app.js / app.css）已冻结、只修阻断性缺陷」，但仓内此前**没有任何一条断言**判这三个文件没被功能性改动——承诺只活在两句散文里：谁往 `Web/app.js` 里加一段交互打磨，构建与全部用例照旧全绿，冻结静默失效。本节把冻结落成可机械核对的登记：三个文件的 SHA-256 基线 + 一份「变更登记」。
+>
+> **怎么改（白名单口径）**：改 `Web/` 下任一文件必须同时做两件事——① 更新下面「冻结基线」里该文件的哈希与轮次；② 在「变更登记」里加一行 `- \`Web/app.js\` · 第 N 轮 · 理由：…`，轮次与基线那一行一致、理由不少于八个字。只改文件不改基线即红（`TransitionShellFreezeTests.ShellFiles_MatchTheRegisteredHashes`）；改了基线却没有同轮次的理由登记也红（`TransitionShellFreezeTests.EveryRegisteredHash_HasAChangeEntryWithAReason`）；`Web/` 里出现基线之外的新文件同样红（`TransitionShellFreezeTests.WebDirectory_HoldsOnlyTheFrozenFiles`）。哈希能证明「文件没变」，理由才能证明「变了是为什么」——门**不判**改动是否真的阻断性，那是人的判断，机械门判不了也不假装判得了。
+>
+> **冻结基线（第一百九十九轮 · 2026-11-11 登记，哈希即当时内容）**：
+> - `Web/app.js` sha256 `74cfd03e08e86f7b0feb26246b113a754fb4a8ebdb712815ee984964216339b2` · 第一百九十九轮
+> - `Web/app.css` sha256 `42d200cce3bf707b6ac8a89b627b01380932fb15e8758263ab4083ad9141d44c` · 第一百九十九轮
+> - `Web/index.html` sha256 `e96c68a7192b14bdad86cf98593f877ef9d9e5ffdb86d0d0c87d09fb0679faed` · 第一百九十九轮
+>
+> **变更登记**（每行一条，格式 `- <文件> · 第 N 轮 · 理由：<不少于八个字>`）：
+> - `Web/app.js` · 第一百九十九轮 · 理由：冻结基线首次登记，哈希即当时内容，本轮未改动该文件
+> - `Web/app.css` · 第一百九十九轮 · 理由：冻结基线首次登记，哈希即当时内容，本轮未改动该文件
+> - `Web/index.html` · 第一百九十九轮 · 理由：冻结基线首次登记，哈希即当时内容，本轮未改动该文件
+>
+> **与 G-D6 的关系**：退场那天是删文件，本节与三个文件一起删；在那之前，本节是「页面层已冻结」这句话唯一的机械证据。
+
 ## G-D5 真机复核清单（可勾选）
 
 > **这一节是什么**：上面那张验收表里 G-D5 留 `[ ]`，SHARED-3/4/7/8 也留 `[ ]`——那五条缺的只有同一个原因：**没有 Windows 真机、没有专用测试 Apifox 项目**。机器一到手，缺的不是判定而是「第一天要跑哪些动作、每个动作量哪几个数、东西放到哪里」。这一节把这些动作逐条写成可勾选项，真机到位当天照单执行，不需要现场设计。

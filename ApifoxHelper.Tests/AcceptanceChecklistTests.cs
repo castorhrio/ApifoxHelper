@@ -73,9 +73,16 @@ public class AcceptanceChecklistTests
     /// 只写「没有 DoD」而不写从哪核的、哪天核的，下一个人无法判断这条结论是否过期。
     /// </para>
     /// <para>
+    /// <b>时效软判（第一百九十九轮，简报 P0-1）</b>：上面三项只判「登记齐不齐」，不判「登记还新不新」——
+    /// 一条 2025 年的核对结论与一条昨天的结论在门眼里一模一样。若 INDEX.md 之后新增了 ApifoxHelper 条目
+    /// （或把它列进豁免名单），本仓不会有任何红灯，直到有人碰巧重读那一行。所以补一条：核对日期距今
+    /// <b>不得超过 90 天</b>，且不得写在未来。过期即红，红的时候要做的事只有一件——重核 INDEX.md，
+    /// 把这一行的日期与结论改成这次核到的，门跟着新日期走。这是<b>软判</b>：它不证明结论正确，
+    /// 只保证「这条结论是最近核过的」，把「静默过期」变成「到期必须有人看一眼」。
+    /// </para>
+    /// <para>
     /// <b>不判什么</b>：调度仓里那份 INDEX.md 现在到底写了什么（跨主机、只读、且本仓不该依赖它）。
-    /// 本门判的是「本仓把核对结果登记下来了」，不是「核对结果永远正确」——INDEX.md 变了要重核，
-    /// 重核就改这一行的日期与结论，门会跟着新日期走。
+    /// 本门判的是「本仓把核对结果登记下来了、且是最近核的」，不是「核对结果永远正确」。
     /// </para>
     /// </summary>
     [Fact]
@@ -94,6 +101,22 @@ public class AcceptanceChecklistTests
         Assert.Matches(@"20\d{2}-\d{2}-\d{2}", line!);
         // ③ 结论：不是「大概没有」，是「无 DoD 文件可加载」。
         Assert.Contains("无 DoD 文件可加载", line!, StringComparison.Ordinal);
+
+        // ④ 时效：核对日期距今不得超过 90 天，也不得写在未来（第一百九十九轮，简报 P0-1）。
+        //    取这一行里第一处 YYYY-MM-DD——登记行的写法是「第一百九十七轮 · 2026-11-11 核对」，
+        //    日期在前、结论在后，第一处就是核对日期。
+        var dateText = Regex.Match(line!, @"20\d{2}-\d{2}-\d{2}").Value;
+        Assert.True(DateTime.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var checkedOn),
+            $"「DoD 豁免登记」里的核对日期「{dateText}」不是合法的 YYYY-MM-DD。");
+        var age = (DateTime.UtcNow.Date - checkedOn.Date).Days;
+        Assert.True(age >= 0,
+            $"「DoD 豁免登记」的核对日期是 {dateText}，比今天（{DateTime.UtcNow:yyyy-MM-dd}）还晚 {(-age)} 天："
+            + "核对日期只能写已经发生的那一天，写未来等于这条结论永远不过期。");
+        Assert.True(age <= 90,
+            $"「DoD 豁免登记」的核对日期是 {dateText}，距今 {age} 天（上限 90 天）："
+            + "INDEX.md 可能已经变了（新增 ApifoxHelper 条目、或把它列进豁免名单），而本仓不会有任何红灯。"
+            + "请重核 /opt/agent-scheduler/docs/product-dod/INDEX.md，把这一行的日期与结论改成这次核到的。");
     }
 
     [Fact]
