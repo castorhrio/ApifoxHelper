@@ -950,4 +950,106 @@ public class RealMachineEvidenceTests
             Assert.Contains(station, section, StringComparison.Ordinal);
         }
     }
+
+    // ---------- 第一百九十三轮（简报 P0-1）：真机当天用到的工具逐个点名 ----------
+
+    /// <summary>「真机当天用到的工具」那一节的标题前缀（三级标题，落在 G-D5 动作单那一节之内）。</summary>
+    private const string ToolRosterHeading = "### 真机当天用到的工具";
+
+    /// <summary>这一节那一节的正文行（标题行到下一个二级/三级标题之前）。</summary>
+    private static string[] ToolRosterLines()
+    {
+        var lines = ActionListLines();
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(ToolRosterHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的 G-D5 动作单里缺「{ToolRosterHeading}」这一节：上面两张「照抄即可」表只写了"
+            + "「数写在哪个控件上」，而控件名不是工具名——真机当天仍要现场决定「客户区宽拿什么量、截图存成什么格式、"
+            + "DPI 从哪个界面读」，现场决定 = 现场发明。");
+        var end = Array.FindIndex(lines, start + 1,
+            l => l.StartsWith("## ", StringComparison.Ordinal) || l.StartsWith("### ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    /// <summary>
+    /// 真机当天用到的工具：每个预置槽位都被点到、截图工具与冒烟器被点名、让读的报告行关键词真的在冒烟器源码里、
+    /// 且这一节里出现的 .exe 只许是仓内产物（第一百九十三轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第一百八十七轮把「量什么数 / 数写在哪个控件上 / 归档文件名」补到了照抄粒度，
+    /// 但「<b>用什么读</b>」这一列一直是空的——<c>主窗口边框</c>、<c>说明行</c>、<c>系统显示设置</c> 是槽位名，
+    /// 不是工具名。真机当天站在那台机器前，仍要现场决定「客户区宽拿什么量、截图存成什么格式、DPI 从哪个界面读」。
+    /// 现场决定 = 现场发明，而现场发明出来的读数没人能复核。
+    /// </para>
+    /// <para>
+    /// <b>判四件事</b>：① <see cref="PresetControlSlots"/> 里的<b>每一个</b>槽位名都在这一节里被点到
+    /// （漏一个，那个数当天就没人知道拿什么读）；② 截图工具与 <c>Win+Shift+S</c> 被点名；
+    /// ③ 这一节让读的报告行关键词（<c>缩放因子</c>、<c>客户区</c>、<c>文字/可用宽度</c>）<b>逐字出现在
+    /// <c>ApifoxHelper.Smoke/Program.cs</c> 里</b>——指着一行冒烟器根本不打的字，等于没指；
+    /// ④ 这一节里出现的 <c>.exe</c> 只许是仓内产物（<c>ApifoxHelper.Smoke.exe</c> / <c>ApifoxHelper.exe</c>），
+    /// 真机上没有的工具不许写进来。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机有没有跑</b>（本机没有 Windows 图形子系统），也不判这些工具在真机上
+    /// 打不打得开——它只保证「当天照着念的工具名，都是真机上真有的那一个」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ToolRoster_NamesAToolForEveryPresetSlotAndOnlyRealReportLines()
+    {
+        var section = string.Join('\n', ToolRosterLines());
+
+        // ① 每个预置槽位都被点到：槽位名是「数写在哪里」，工具是「拿什么读」，两列缺一列都到不了照抄粒度。
+        var slots = PresetControlSlots.Values.SelectMany(v => v).Distinct(StringComparer.Ordinal).ToList();
+        var missing = slots.Where(s => !section.Contains(s, StringComparison.Ordinal)).ToList();
+        Assert.True(missing.Count == 0,
+            "「真机当天用到的工具」这一节漏了这些预置槽位：" + string.Join(" ／ ", missing)
+            + "。漏一个槽位，那个数当天就没人知道拿什么读。");
+
+        // ② 截图工具：7 条动作全都要截图，工具名与快捷键都得点名（只写「截图」等于没写）。
+        Assert.Contains("截图工具", section, StringComparison.Ordinal);
+        Assert.Contains("Win+Shift+S", section, StringComparison.Ordinal);
+
+        // ③ 让读的报告行关键词必须真的在冒烟器源码里：文档指着一行冒烟器不打的字，当天照着搜就是空手。
+        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        foreach (var keyword in new[] { "缩放因子", "客户区", "文字/可用宽度" })
+        {
+            Assert.True(section.Contains(keyword, StringComparison.Ordinal),
+                $"「真机当天用到的工具」这一节没点名报告行里的「{keyword}」：三个数（因子 / 客户区宽 / 说明行可用宽）"
+                + "当天要照着这一行抄，不点名就不知道搜什么。");
+            Assert.True(smoke.Contains(keyword, StringComparison.Ordinal),
+                $"这一节让读报告里的「{keyword}」，而 ApifoxHelper.Smoke/Program.cs 里根本没有这几个字："
+                + "文档指着一行冒烟器不打的字，当天照着搜就是空手。");
+        }
+
+        // ④ 只许点仓内产物：真机上没有的工具写进来，当天照着找就是找不到。
+        var exes = Regex.Matches(section, @"[A-Za-z0-9_.]+\.exe")
+            .Select(m => m.Value).Distinct(StringComparer.Ordinal).ToList();
+        Assert.True(exes.Count > 0,
+            "「真机当天用到的工具」这一节一个 .exe 都没点：三个数（因子 / 客户区宽 / 说明行可用宽）"
+            + "要读的那份报告是仓内冒烟器打的，工具名必须点名。");
+        foreach (var exe in exes)
+        {
+            Assert.True(exe is "ApifoxHelper.Smoke.exe" or "ApifoxHelper.exe",
+                $"这一节点了仓外工具「{exe}」：真机上没有的工具不许写进动作单——当天照着找就是找不到。");
+        }
+
+        // ⑤ 表格结构：至少 4 行、4 列、每格不空（空着的那一格正是当天要现场编的东西）。
+        var rows = 0;
+        foreach (var line in ToolRosterLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (cells[0] == "用途") continue;
+            if (cells.All(c => c.All(ch => ch is '-' or ' '))) continue;
+            Assert.True(cells.Count == 4,
+                $"「真机当天用到的工具」有一行不是 4 列（实际 {cells.Count} 列，应为 用途 / 工具 / 照抄怎么用 / 读到的数落进哪）：{cells[0]}。");
+            foreach (var cell in cells)
+            {
+                Assert.True(cell.Length >= 2, $"「真机当天用到的工具」有一格空着（{cells[0]}）：空着的那一格正是当天要现场编的东西。");
+            }
+
+            rows++;
+        }
+
+        Assert.True(rows >= 4, $"「真机当天用到的工具」只有 {rows} 行（地板 4）：截图 / 缩放档 / 三个数 / 归档各要一行。");
+    }
 }
