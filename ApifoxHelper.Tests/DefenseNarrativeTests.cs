@@ -194,43 +194,11 @@ public class DefenseNarrativeTests
     [Fact]
     public void Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun()
     {
-        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
         var blocksWithSmokeSegment = 0;
 
         foreach (var row in Blocks())
         {
-            var runnable = new List<string>();
-            var smokeSegments = new List<string>();
-
-            foreach (Match match in Regex.Matches(row.Citations, "`([^`]+)`"))
-            {
-                var token = match.Groups[1].Value;
-
-                // 文档与源码路径不是「能跑的证据」：它们证明「东西在」，不证明「跑得起来」。
-                if (token.EndsWith(".md", StringComparison.Ordinal) || token.EndsWith(".cs", StringComparison.Ordinal)) continue;
-
-                if (IsSmokeSegment(token))
-                {
-                    Assert.True(smoke.Contains($"private static void {token}(", StringComparison.Ordinal),
-                        $"「{row.Name}」引的冒烟段「{token}」在 ApifoxHelper.Smoke/Program.cs 里没有声明："
-                        + "答辩现场照着念的段名必须真的存在，否则 demo.sh 逐屏对账时找不到它。");
-                    Assert.True(smoke.Contains($"nameof({token})", StringComparison.Ordinal),
-                        $"「{row.Name}」引的冒烟段「{token}」没有接进运行清单（找不到 nameof({token})）："
-                        + "只声明不调用的段在报告里不会出现，等于没有这一段。");
-                    runnable.Add(token);
-                    smokeSegments.Add(token);
-                    continue;
-                }
-
-                var parts = token.Split('.');
-                if (parts.Length != 2) continue; // 其余形状由 Narrative_EveryBlockCitesASectionThatActuallyExists 判红。
-
-                var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
-                Assert.True(File.Exists(testFile), $"「{row.Name}」引用的测试类不存在：{parts[0]}。");
-                Assert.True(Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]"),
-                    $"「{row.Name}」引用的断言不存在：{token}。");
-                runnable.Add(token);
-            }
+            var (runnable, smokeSegments) = RunnableEvidence(row.Name, row.Citations);
 
             Assert.True(runnable.Count > 0,
                 $"「{row.Name}」一块可跑证据都没有（冒烟段名 RunXxx 或断言名 类名.断言名）："
@@ -242,5 +210,155 @@ public class DefenseNarrativeTests
         Assert.True(blocksWithSmokeSegment >= SmokeSegmentFloor,
             $"五块里只有 {blocksWithSmokeSegment} 块点到了冒烟段名（地板 {SmokeSegmentFloor}）："
             + "答辩现场能当场复跑的是冒烟段（bash .winecheck/demo.sh），只指断言的块在「现场复跑」这一问上答不出东西。");
+    }
+    /// <summary>
+    /// 一块出处里「能跑的证据」——<b>两条门共用这一份清单</b>（第一百九十四轮抽出）。
+    /// <para>
+    /// 返回 <c>(可跑证据, 其中的冒烟段)</c>：冒烟段名（<c>RunXxx</c>）必须真有声明、真有 <c>nameof</c> 调用点；
+    /// 断言名（<c>类名.断言名</c>）必须真在测试工程里。文档与源码路径不算「能跑的证据」——
+    /// 它们证明「东西在」，不证明「跑得起来」。
+    /// </para>
+    /// <para>
+    /// <b>为什么抽出来</b>：<see cref="Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun"/> 与
+    /// <see cref="ScriptTemplate_EveryBlockHasAPronounceableSentence"/> 判的是同一件事的两份材料
+    /// （口径表与讲稿模板）。各写一份解析，改一处漏一处时两份材料就会各绿各的——
+    /// 而答辩现场念的是讲稿模板、被追问时翻的是口径表，两份对不上正是最难当场发现的那种错。
+    /// </para>
+    /// </summary>
+    private static (List<string> Runnable, List<string> SmokeSegments) RunnableEvidence(string blockName, string citations)
+    {
+        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        var runnable = new List<string>();
+        var smokeSegments = new List<string>();
+
+        foreach (Match match in Regex.Matches(citations, "`([^`]+)`"))
+        {
+            var token = match.Groups[1].Value;
+
+            // 文档与源码路径不是「能跑的证据」：它们证明「东西在」，不证明「跑得起来」。
+            if (token.EndsWith(".md", StringComparison.Ordinal) || token.EndsWith(".cs", StringComparison.Ordinal)) continue;
+
+            if (IsSmokeSegment(token))
+            {
+                Assert.True(smoke.Contains($"private static void {token}(", StringComparison.Ordinal),
+                    $"「{blockName}」引的冒烟段「{token}」在 ApifoxHelper.Smoke/Program.cs 里没有声明："
+                    + "答辩现场照着念的段名必须真的存在，否则 demo.sh 逐屏对账时找不到它。");
+                Assert.True(smoke.Contains($"nameof({token})", StringComparison.Ordinal),
+                    $"「{blockName}」引的冒烟段「{token}」没有接进运行清单（找不到 nameof({token})）："
+                    + "只声明不调用的段在报告里不会出现，等于没有这一段。");
+                runnable.Add(token);
+                smokeSegments.Add(token);
+                continue;
+            }
+
+            var parts = token.Split('.');
+            if (parts.Length != 2) continue; // 其余形状由 Narrative_EveryBlockCitesASectionThatActuallyExists 判红。
+
+            var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
+            Assert.True(File.Exists(testFile), $"「{blockName}」引用的测试类不存在：{parts[0]}。");
+            Assert.True(Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]"),
+                $"「{blockName}」引用的断言不存在：{token}。");
+            runnable.Add(token);
+        }
+
+        return (runnable, smokeSegments);
+    }
+
+    /// <summary>讲稿模板那一小节的标题前缀（第一百九十四轮，简报 P0-1）。</summary>
+    private const string TemplateHeading = "### 五块讲稿模板";
+
+    /// <summary>
+    /// 指向 wine 冒烟段的句子必须带的限定词：模拟器读数不许说成真机结果
+    /// （与 <c>WordingHonestyTests.RealMachineClaims_RequireEvidencePaths</c> 同一口径）。
+    /// </summary>
+    private const string WineQualifier = "在 Linux 容器内 wine 模拟器上";
+
+    /// <summary>
+    /// 把模拟器读数说成真机结果的四种措辞（封闭清单）。句子可以提「真机未验」——那是实话；
+    /// 不许说的是「真机量到」这一类。
+    /// </summary>
+    private static readonly string[] RealMachineClaims = ["真机量到", "真机实测", "真机验证", "真机跑过"];
+
+    private readonly record struct TemplateRow(string Name, string Sentence, string Evidence, string FollowUp);
+
+    /// <summary>讲稿模板表的行（块 / 照抄念的句子 / 指向的证据 / 被追问时接什么）。</summary>
+    private static List<TemplateRow> TemplateRows()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var start = notes.IndexOf(TemplateHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 缺少「{TemplateHeading}」一小节：五块口径是「要点」，答辩人要念的是句子。");
+        var rest = notes[(start + TemplateHeading.Length)..];
+        var end = rest.IndexOf("\n## ", StringComparison.Ordinal);
+        var section = end < 0 ? rest : rest[..end];
+
+        var rows = section.Split('\n')
+            .Where(l => l.TrimStart().StartsWith("|", StringComparison.Ordinal))
+            .Select(l => l.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList())
+            .Where(c => c.Count == 4)
+            .Where(c => c[0] != "块" && !c[0].All(ch => ch is '-' or ' ' or ':'))
+            .Select(c => new TemplateRow(c[0], c[1], c[2], c[3]))
+            .ToList();
+        Assert.True(rows.Count == ExpectedBlocks.Length,
+            $"讲稿模板有 {rows.Count} 块，简报要的是 {ExpectedBlocks.Length} 块（{string.Join("、", ExpectedBlocks)}）。");
+        return rows;
+    }
+
+    /// <summary>
+    /// 五块讲稿模板：每块一句能当场念完的话，且它指向的证据在当前源码里真能跑到（第一百九十四轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun"/> 判住了
+    /// 「口径表每块都指向能跑的证据」，但口径表写的是<b>要点</b>（「导入按源文件重写一遍，人工写好的说明会被覆盖」），
+    /// 不是<b>能念出口的句子</b>。答辩人照着要点现场组织语言，最容易把「wine 模拟器量到」说成「跑过了」——
+    /// 而这句话一旦说出口，前面十几轮攒下的诚实口径就白攒了。这一条把「照抄即可念」落成材料并加门。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 五块齐且顺序与口径表一致（块名只在 <see cref="ExpectedBlocks"/> 一处表达）；
+    /// ② 每句非空、≤<see cref="Ceiling"/> 字、不含 <see cref="CopyRules.BannedWords"/>、不含反引号
+    /// （带反引号的句子念不出来，那是给读的人看的）；③ 「指向的证据」列至少一条可跑证据，且解析走
+    /// <see cref="RunnableEvidence"/> 这<b>同一份清单</b>（冒烟段须真有声明与 <c>nameof</c> 调用点、
+    /// 断言须真在测试工程里）；④ 指向 wine 冒烟段的句子必须带 <see cref="WineQualifier"/>；
+    /// ⑤ 句子不许出现 <see cref="RealMachineClaims"/> 里的四种措辞；⑥ 「被追问时接什么」不许空着。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机跑没跑</b>（真机 0 台，G-D5 仍是 <c>[ ]</c>），也不判措辞好不好听——
+    /// 措辞会漂，钉措辞的门最后只会被改措辞绕过。它只保证「照抄念出来的每一句，指向的东西都在仓里跑得起来，
+    /// 且没有一句把模拟器读数说成真机结果」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ScriptTemplate_EveryBlockHasAPronounceableSentence()
+    {
+        var rows = TemplateRows();
+        Assert.Equal(ExpectedBlocks, rows.Select(r => r.Name));
+
+        foreach (var row in rows)
+        {
+            Assert.True(row.Sentence.Length > 0, $"「{row.Name}」的讲稿模板是空的：空的一句在答辩现场念不出任何东西。");
+            Assert.True(row.Sentence.Length <= Ceiling,
+                $"「{row.Name}」的讲稿句子 {row.Sentence.Length} 字，超过 {Ceiling} 字上限：超过就不是一句能当场念完的话。");
+            Assert.DoesNotContain("`", row.Sentence, StringComparison.Ordinal);
+            foreach (var word in CopyRules.BannedWords)
+            {
+                Assert.DoesNotContain(word, row.Sentence, StringComparison.Ordinal);
+            }
+
+            var (runnable, smokeSegments) = RunnableEvidence(row.Name, row.Evidence);
+            Assert.True(runnable.Count > 0,
+                $"「{row.Name}」的讲稿模板没有指向任何可跑证据（冒烟段名 RunXxx 或断言名 类名.断言名）："
+                + "念完指不出东西，等于又一次自述。");
+
+            if (smokeSegments.Count > 0)
+            {
+                Assert.Contains(WineQualifier, row.Sentence, StringComparison.Ordinal);
+            }
+
+            foreach (var claim in RealMachineClaims)
+            {
+                Assert.DoesNotContain(claim, row.Sentence, StringComparison.Ordinal);
+            }
+
+            Assert.True(row.FollowUp.Length > 0, $"「{row.Name}」没有写「被追问时接什么」：现场被追问时只能临时组织语言。");
+        }
     }
 }

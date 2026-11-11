@@ -21,6 +21,14 @@ namespace ApifoxHelper.Tests;
 /// <b>模拟器不是真机</b>：这一支量的是「写进去的是不是屏幕上那一行」，量不到的是按钮在真实字体与
 /// 真实剪贴板下的观感与手感——那三项仍随 G-D5 真机复核。
 /// </para>
+/// <para>
+/// <b>Enter 键的挂账位置（第一百九十四轮，简报 P1-1）</b>：第一百九十二轮把「只读行不吃 Enter、
+/// Enter 冒泡给窗体的 <c>AcceptButton</c>」写成显式契约并在 wine 三档真量过按钮宽度与位置，
+/// 但<b>真的按一下 Enter 键没有模拟</b>——本环境没有 Windows 图形子系统，模拟不了真实按键。
+/// 能静态钉住的那一半已由 <see cref="NoticeDialog_SetsTheEnterTargetInExactlyOnePlace"/> 判住
+/// （<c>AcceptButton</c> 恰好一处赋值、赋的是「关闭」、复制按钮不吃 Enter）；
+/// <b>仍随 G-D5 真机复核的是</b>「真机上按一下 Enter 是不是真的关掉这一屏」与「Tab 到只读行再按 Enter 的落点」。
+/// </para>
 /// </summary>
 public class NoticeCopyTests
 {
@@ -232,6 +240,45 @@ public class NoticeCopyTests
         // 用 Assert.Single 而不是 Assert.Equal(1, …Count)：后者是拿集合大小当断言（xUnit2013），
         // 判据写成「恰好一个」更贴近这句话本身——多一个写入点照样红。
         Assert.Single(Regex.Matches(ui, @"(?m)^[ \t]*Clipboard\."));
+    }
+
+    // ---------- Enter 的落点只由一处决定（第一百九十四轮，简报 P1-1）----------
+
+    /// <summary>
+    /// 提示对话框里 Enter 的落点只由一处决定：<c>AcceptButton</c> 只设一次，且设的是「关闭」（第一百九十四轮，简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第一百九十二轮把「只读行不吃 Enter、Enter 冒泡给窗体的 <c>AcceptButton</c>」
+    /// 写成显式契约（<c>box.AcceptsReturn = false</c>），并在 wine 三档真量过按钮宽度与位置——
+    /// 但<b>真的按一下 Enter 键没有模拟</b>（本环境没有 Windows 图形子系统，模拟不了真实按键）。
+    /// 能静态钉住的那一半是「落点唯一」：<c>AcceptButton</c> 若被第二处赋值（比如顺手让「复制路径」也吃 Enter），
+    /// 界面上不会有任何异样，只是 Enter 从此落到另一颗按钮上——而这一屏的 Enter 契约是「关掉它」。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① <c>NoticeDialog.cs</c> 里 <c>AcceptButton</c> 的赋值<b>恰好一处</b>；
+    /// ② 那一处赋的是 <c>closeButton</c>（Enter 的落点是「关闭」，不是「复制路径」）；
+    /// ③ <c>CancelButton</c> 同样只设一处且也是 <c>closeButton</c>（Esc 与 Enter 落同一颗，用户不必分辨）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真的按一下 Enter 会怎样</b>——那要 WinForms 真跑，Linux 侧判不了；
+    /// 运行时那一半在冒烟段「等宽行的 Enter 契约——只读框不吃 Enter，落点是「关闭」」（wine 三档各跑一次），
+    /// 而「真机上的按键手感」仍随 G-D5 挂账（见本文件类注释）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NoticeDialog_SetsTheEnterTargetInExactlyOnePlace()
+    {
+        var source = Repo.Source("Desktop", "Native", "NoticeDialog.cs");
+
+        // ① 恰好一处赋值：多一处就是「Enter 落到哪颗按钮」有了第二个决定者。
+        Assert.Single(Regex.Matches(source, @"(?m)^[ \t]*AcceptButton\s*="));
+        // ② 那一处赋的是「关闭」：Enter 的落点在这一屏是关掉它，不是复制。
+        Assert.Matches(@"(?m)^\s*AcceptButton = closeButton;", source);
+        // ③ Esc 与 Enter 落同一颗：用户不必分辨「哪个键关、哪个键复制」。
+        Assert.Single(Regex.Matches(source, @"(?m)^[ \t]*CancelButton\s*="));
+        Assert.Matches(@"(?m)^\s*CancelButton = closeButton;", source);
+        // 复制按钮不吃 Enter：它只接 Click（多接一个 AcceptButton 或 KeyDown 就是第二个落点）。
+        Assert.DoesNotContain("copyButton.AcceptsReturn", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("copyButton.KeyDown", source, StringComparison.Ordinal);
     }
 
     [Fact]

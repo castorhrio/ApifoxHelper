@@ -188,4 +188,142 @@ public class ReadingConsistencyTests
         var numbers = Regex.Matches(text, @"\d+").Select(x => int.Parse(x.Value)).ToList();
         return numbers.Count == 0 ? null : numbers.Sum();
     }
+    // ---------- 逐屏对账表的段数（第一百九十四轮，简报 P1-2）----------
+
+    /// <summary>逐屏对账表所在的一节（<c>docs/NOTES.md</c>「降级答辩脚本」）。</summary>
+    private const string ScreenTableHeading = "## 降级答辩脚本";
+
+    /// <summary>逐屏表的行：序号 + 证据出处一列（列数与 <c>DemoScriptTests.Rows()</c> 同一判据）。</summary>
+    private static List<(string Num, string Evidence)> ScreenRows()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var start = notes.IndexOf(ScreenTableHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"docs/NOTES.md 缺少「{ScreenTableHeading}」一节。");
+        var rest = notes[(start + ScreenTableHeading.Length)..];
+        var end = rest.IndexOf("\n## ", StringComparison.Ordinal);
+        var section = end < 0 ? rest : rest[..end];
+
+        var rows = new List<(string, string)>();
+        foreach (var line in section.Split('\n'))
+        {
+            if (!Regex.IsMatch(line, @"^\| \d")) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            Assert.True(cells.Count == 5,
+                $"逐屏表有一行不是 5 列（{cells.Count} 列）：{line[..Math.Min(40, line.Length)]}…");
+            rows.Add((cells[0], cells[3]));
+        }
+
+        Assert.True(rows.Count >= 12, $"逐屏表只有 {rows.Count} 行（地板 12）。");
+        return rows;
+    }
+
+    /// <summary>
+    /// 冒烟器里每个 <c>RunXxx</c> 段方法体内有几段（= 几处 <c>RunAction(</c> 调用）。
+    /// <para>
+    /// 方法体按「下一个顶格 <c>private static</c> 声明」切边界，不做花括号配对——
+    /// 段体里全是 lambda 与插值字符串，配对一旦被字符串里的花括号骗到，数出来的段数就是错的。
+    /// </para>
+    /// </summary>
+    private static Dictionary<string, int> SegmentCounts()
+    {
+        var program = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        var starts = Regex.Matches(program, @"(?m)^    private static void (Run[A-Za-z0-9]+)\(");
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < starts.Count; i++)
+        {
+            var name = starts[i].Groups[1].Value;
+            var from = starts[i].Index;
+            var to = i + 1 < starts.Count ? starts[i + 1].Index : program.Length;
+            counts[name] = Regex.Matches(program[from..to], @"\bRunAction\(").Count;
+        }
+
+        Assert.True(counts.Count >= 12, $"冒烟器里只解析出 {counts.Count} 个段方法（地板 12）。");
+        return counts;
+    }
+
+    /// <summary>括号里的解释先剥掉：<c>（失败 → 重试 → 恢复）</c> 里的箭头与数字不是段数。</summary>
+    private static string StripParentheticals(string text)
+    {
+        var flat = new System.Text.StringBuilder();
+        var depth = 0;
+        foreach (var ch in text)
+        {
+            if (ch is '（' or '(') { depth++; continue; }
+            if (ch is '）' or ')') { if (depth > 0) depth--; continue; }
+            if (depth == 0) flat.Append(ch);
+        }
+        return flat.ToString();
+    }
+
+    /// <summary>中文数字（一…二十）。逐屏表里的段数最大是八，留到二十是给以后加段留余量。</summary>
+    private static int? ChineseNumber(string text) => text switch
+    {
+        "一" => 1, "二" => 2, "三" => 3, "四" => 4, "五" => 5,
+        "六" => 6, "七" => 7, "八" => 8, "九" => 9, "十" => 10,
+        _ => text.StartsWith('十') && text.Length == 2 && "一二三四五六七八九".Contains(text[1])
+            ? 10 + "一二三四五六七八九".IndexOf(text[1]) + 1
+            : null,
+    };
+
+    /// <summary>
+    /// 逐屏对账表里写的段数必须与冒烟器里那一段真有几段对得上（第一百九十四轮，简报 P1-2）。
+    /// <para>
+    /// <b>要解决的问题</b>：<see cref="ReadingBreakdown_AddsUpToTheNumberItExplains"/> 判的是「三档读数后面的
+    /// 加法算式加得起来」，第一百九十三轮正是靠它抓到逐屏表第 17 行少了一段。但那条门只看
+    /// <c>N 通过 / 0 失败 ×3</c> 这种读数——<b>逐屏表每一行自己写的段数它一概不看</b>：
+    /// 「<c>RunNoticeCopyClick</c> 六段」这种话，写的时候是真的，后来那一段补了两段就没人回头改，
+    /// 而答辩现场念的正是这个数。念错一个数，前面十几轮攒的「读数可核对」就白攒了。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 逐屏表每一行的证据出处里，凡「一个段名 + 一个中文段数」同处一句的，
+    /// 那个段数必须等于冒烟器里该段方法体内的 <c>RunAction(</c> 调用数；② 「A 屏 × B 段 = C 段」
+    /// 这类乘积必须乘得起来。括号里的解释先剥掉（「（失败 → 重试 → 恢复）」不是段数），
+    /// 「第 8 段」这种序号不算段数（那是「第几段」，不是「共几段」）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判这些段在真机上跑过</b>（真机 0 台，G-D5 仍是 <c>[ ]</c>），
+    /// 也不判「这一屏该有几段」——那是设计判断，不是机械可判的事。它只保证「表里写的数与冒烟器里的段数
+    /// 是同一个数」：改一段而不改表，即红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ScreenTable_EveryStatedSegmentCountMatchesTheSmokeProgram()
+    {
+        var counts = SegmentCounts();
+        var wrong = new List<string>();
+
+        foreach (var (num, evidence) in ScreenRows())
+        {
+            var flat = StripParentheticals(evidence);
+
+            foreach (var clause in flat.Split(['、', '，', '；', '。', '+', '\n']))
+            {
+                var segments = Regex.Matches(clause, @"Run[A-Za-z0-9]+")
+                    .Select(m => m.Value).Distinct().ToList();
+                var stated = Regex.Matches(clause, @"(?<![第这那每同逐])([一二三四五六七八九十]+)段")
+                    .Select(m => ChineseNumber(m.Groups[1].Value)).Where(n => n is not null).Select(n => n!.Value).ToList();
+                // 一句里只有一个段名、一个段数时才判：两个段名共用一句时，那个数属于谁读不出来。
+                if (segments.Count != 1 || stated.Count != 1) continue;
+
+                var actual = counts.TryGetValue(segments[0], out var n) ? n : -1;
+                if (actual != stated[0])
+                {
+                    wrong.Add($"第 {num} 行：`{segments[0]}` 写的是 {stated[0]} 段，冒烟器里是 {actual} 段");
+                }
+            }
+
+            foreach (Match m in Regex.Matches(flat, @"(\d+) 屏 × (\d+) 段 = (\d+) 段"))
+            {
+                var (screens, perScreen, total) = (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[3].Value));
+                if (screens * perScreen != total)
+                {
+                    wrong.Add($"第 {num} 行：{screens} 屏 × {perScreen} 段 = {total} 段，乘不起来");
+                }
+            }
+        }
+
+        Assert.True(wrong.Count == 0,
+            "逐屏对账表里这些段数与冒烟器对不上：" + string.Join(" ／ ", wrong)
+            + "。答辩现场念的就是这个数——改一段就回来改表，别让表比代码旧。");
+    }
 }

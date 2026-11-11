@@ -141,7 +141,16 @@ public class RuleExtractionScopeTests
         var heading = "## " + ScopeSection;
         Assert.Contains(heading, notes, StringComparison.Ordinal);
 
-        var row = notes.Split('\n')
+        // 只在「初审答辩口径」那一节里找：第一百九十四轮在「降级答辩脚本」一节补了五块讲稿模板，
+        // 那里也有一行叫「AI 必要性」（同一块的口播版）。不切节的话这里会数到两行，
+        // 而它要判的是**口径表**那一行引的是不是这一节。
+        var start = notes.IndexOf("## 初审答辩口径", StringComparison.Ordinal);
+        Assert.True(start >= 0, "docs/NOTES.md 缺少「## 初审答辩口径」一节。");
+        var rest = notes[start..];
+        var end = rest.IndexOf("\n## ", StringComparison.Ordinal);
+        var section = end < 0 ? rest : rest[..end];
+
+        var row = section.Split('\n')
             .Select(l => l.Trim())
             .Where(l => l.StartsWith("| " + AiNecessityBlock + " |", StringComparison.Ordinal))
             .ToList();
