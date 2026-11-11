@@ -307,6 +307,31 @@ public class AcceptanceChecklistTests
     private static bool RealMachineEvidenceArchived() =>
         Directory.Exists(RealMachineEvidenceDir) && Directory.GetFiles(RealMachineEvidenceDir, "*.png", SearchOption.AllDirectories).Length > 0;
 
+    /// <summary>
+    /// 动作单那一节里某个 <c>### </c> 子段的正文（标题行到下一个二级 / 三级标题之前）。
+    /// <para>
+    /// 第二百一十三轮（简报 P0-1，还 R4 那笔债）把 G-D5「当前结论」格里叠上去的两段判定细则——
+    /// 「行高预算判定」与「到期日判定」——搬进这一节的两个 <c>### </c> 子段，格里只留一句指向。
+    /// <b>搬的是位置，不是内容</b>：<see cref="Gd4_RealMachineOverBudget_IsPreRegistered"/> 与
+    /// <see cref="Gd5_ExpiryVerdict_IsRecordedWithTheDegradationRunPath"/> 现在都从这里取数，
+    /// 每一条子判据原样保留，所以「删掉搬过来的任何一句」与「删掉留在格里的任何一句」同样是红的。
+    /// 按标题取而不按 <c>IndexOf("行高预算判定（")</c> 取，是因为那段话在自己的正文里也被引用过一次
+    /// （「由 … 判这段在位」那一句），子串取法会把它自己截进来。
+    /// </para>
+    /// </summary>
+    private static string RealMachineSubsection(string headingPrefix)
+    {
+        var lines = RealMachineSectionLines();
+        var start = Array.FindIndex(lines,
+            l => l.TrimEnd().StartsWith("### " + headingPrefix, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的「{RealMachineHeading}」一节缺「### {headingPrefix}…」这个子段：那两段判定细则"
+            + "第二百一十三轮从 G-D5「当前结论」格里搬到这里，搬走的东西不在，格里那句指向就是悬空指针。");
+        var end = Array.FindIndex(lines, start + 1,
+            l => l.StartsWith("## ", StringComparison.Ordinal) || l.StartsWith("### ", StringComparison.Ordinal));
+        return string.Join('\n', lines[start..(end < 0 ? lines.Length : end)]);
+    }
+
     /// <summary>本节全部行（标题行到下一个 <c>## </c> 之前）。本节必须排在验收口径之后——口径表在前，动作单才有「哪几条缺口由它关闭」的落点。</summary>
     private static string[] RealMachineSectionLines()
     {
@@ -766,6 +791,30 @@ public class AcceptanceChecklistTests
     private static readonly Regex StaleCountdown = new(@"距今\s*\d+\s*天", RegexOptions.Compiled);
 
     /// <summary>
+    /// 从任意一段文字里现读「到期日 + <c>YYYY-MM-DD</c>」的第一处。全仓只此一把取法：
+    /// 比对到期日的每一方（时效门、细则段、当天执行单那页）都从这里取，谁也不抄第二份。
+    /// </summary>
+    internal static string FirstDueDateIn(string text) => DueDatePattern.Match(text).Groups[1].Value;
+
+    /// <summary>
+    /// 验收表 G-D5 那一格里记着的到期日（<see cref="DueDatePattern"/> 现读的第一处，形如 <c>2026-11-20</c>）。
+    /// <para>
+    /// <b>为什么单独收成这一个出口</b>：到期日这个数在仓里被三处读——本文件的时效门、
+    /// <see cref="Gd5_ExpiryVerdict_IsRecordedWithTheDegradationRunPath"/>（细则段里那个日期要与之同一个）、
+    /// 以及动作单那一节「到期日当天执行单」那页（
+    /// <c>RealMachineEvidenceTests.DueDateRunSheet_WritebackDestinations_NameTheFileAndTheRow</c>）。
+    /// 各写一份字面量时，改期那天必然只改到其中一两处，而剩下那几处会<b>安静地继续绿</b>——
+    /// 最坏的一种漂移：日期已经换了，执行单那页还写着旧的，当天照它走会晚一周。
+    /// 现在那三处读的是同一个出口：这一格没写日期 → 返回空串 → 每一个用它的人都得先红。
+    /// </para>
+    /// </summary>
+    internal static string Gd5DueDateText()
+    {
+        var row = Rows().Single(r => r.Item.StartsWith("G-D5", StringComparison.Ordinal));
+        return FirstDueDateIn(row.Verdict);
+    }
+
+    /// <summary>
     /// G-D5 到期日必须是未来日期，或明确记为「已过期并降级」；且「距今 N 天」这类动态读数不许写死在文档里
     /// （第二百零四轮，简报 P0-3）。
     /// <para>
@@ -790,11 +839,12 @@ public class AcceptanceChecklistTests
         var row = Rows().Single(r => r.Item.StartsWith("G-D5", StringComparison.Ordinal));
 
         // ① 到期日必须是固定日期：相对读数（「距今 N 天」）第二天就错，不能当到期日。
-        var match = DueDatePattern.Match(row.Verdict);
-        Assert.True(match.Success,
+        //    取数走 Gd5DueDateText() 这一个出口——细则段与「到期日当天执行单」那页读的都是它，
+        //    这里再 Match 一遍就等于给「改期只改一处」留出空间。
+        var dueText = Gd5DueDateText();
+        Assert.True(dueText.Length > 0,
             "G-D5 行里没有「到期日 YYYY-MM-DD」这样的固定日期：到期日写成相对读数（「距今 N 天」）第二天就错，"
             + "而它读起来像事实。");
-        var dueText = match.Groups[1].Value;
         var due = DateOnly.ParseExact(dueText, "yyyy-MM-dd");
 
         // ② 两份文件里所有「到期日 + 日期」只许是同一个日期：两处各写一个日期就是两套说法。
@@ -864,12 +914,11 @@ public class AcceptanceChecklistTests
         var verdict = row.Verdict;
 
         // ① 段在位 + 段里的日期与本行既记的到期日同一个。
-        var start = verdict.IndexOf("到期日判定（", StringComparison.Ordinal);
-        Assert.True(start >= 0,
-            "G-D5 行没有「到期日判定（YYYY-MM-DD）」这一段：那段收口仍是散文，到期日当天要现场发明一句话。");
-        var section = verdict[start..];
+        //    第二百一十三轮（简报 P0-1，还 R4 那笔债）：这一段从「当前结论」格里搬到动作单那节的同名子段，
+        //    本门跟着搬——每一条子判据都原样留着，换的只是取数的位置。
+        var section = RealMachineSubsection("到期日判定");
         var sectionDate = DueDatePattern.Match(section).Groups[1].Value;
-        var rowDate = DueDatePattern.Match(verdict).Groups[1].Value;
+        var rowDate = Gd5DueDateText();
         Assert.True(sectionDate.Length > 0 && sectionDate == rowDate,
             $"到期日判定那一段写的日期（{(sectionDate.Length > 0 ? sectionDate : "没写日期")}）与本行既记的到期日"
             + $"（{rowDate}）不是同一个：两处各写一个日期，那天不知道按哪一个收口。");
@@ -878,14 +927,17 @@ public class AcceptanceChecklistTests
         Assert.Contains("collect-real-machine.sh", section, StringComparison.Ordinal);
         Assert.Contains("0 / 9", section, StringComparison.Ordinal);
 
-        // ③ 改写后的措辞逐字在行内；且当天那一格还得留着兄弟门读的两个词。
+        // ③ 改写后的措辞逐字在段内；且当天那一格还得留着兄弟门读的两个词。
         Assert.Contains("未达成（已到期 · 环境供给缺口 · 降级答辩已执行）", section, StringComparison.Ordinal);
-        // 两个词必须是被「留着…」那一句点名的（本轮变异实测：只写两个 Assert.Contains 抓不住——把
-        // 「留着 **「已过期」** 与 **「降级」**」里的「已过期」删掉，同一句后半段的解释还会再提它一次，
-        // 两条 Contains 照样绿。判顺序与距离才判的是「这句话在不在」，而不是「这两个字出现过没有」。
-        Assert.True(Regex.IsMatch(section, @"留着.{0,12}已过期.{0,16}降级"),
+        // 两个词必须在**同一个「留着…」子句里按序出现，且中间不跨任何标点**（第二百一十二轮 + 本轮，R5 那一族）：
+        //   · 只写两条 Assert.Contains 抓不住——把「留着 **「已过期」** 与 **「降级」**」里的「已过期」删掉，
+        //     同一句后半段的解释还会再提它一次，两条 Contains 照样绿（第二百一十二轮磁盘上实测过）；
+        //   · 上一轮的 `留着.{0,12}已过期.{0,16}降级` 仍留了一个洞：`.` 能跨「，」「；」，所以
+        //     「留着 X，别忘已过期……（另一句）……降级 Y」这种拼出来的形状也算过，而那已经不是
+        //     「这句话在不在」，只是「这两个字离得不太远」。本轮把窗口里的标点全部排除掉。
+        Assert.True(Regex.IsMatch(section, @"留着[^。；，、！？""\n]{0,20}已过期[^。；，、！？""\n]{0,20}降级"),
             "那段没有把「当天必须同时留着『已过期』与『降级』」这句话写出来（要求：两个词在同一个「留着…」子句里、"
-            + "按这个顺序）：兄弟门 Gd5DueDate_IsNotStaleOrFuture 在到期日之后读的就是这两个字，"
+            + "按这个顺序、中间不跨标点）：兄弟门 Gd5DueDate_IsNotStaleOrFuture 在到期日之后读的就是这两个字，"
             + "这句话悬空，那天红的会是格子，而预登记看起来是齐的。");
 
         Assert.True(verdict.StartsWith("**未达成（环境供给缺口）**", StringComparison.Ordinal),
@@ -958,15 +1010,14 @@ public class AcceptanceChecklistTests
     [Fact]
     public void Gd4_RealMachineOverBudget_IsPreRegistered()
     {
-        var verdict = Rows().Single(r => r.Item.StartsWith("G-D5", StringComparison.Ordinal)).Verdict;
-
-        // ① 段在位，并切到下一段之前。
-        var start = verdict.IndexOf("行高预算判定（", StringComparison.Ordinal);
-        Assert.True(start >= 0,
-            "G-D5 行没有「行高预算判定（…）」那一段：真机 125% / 200% 超预算时「算不算过」仍是一句描述，"
-            + "那天要么把超预算念成观感问题先勾上，要么把整条 G-D5 念成全不过，两种都不诚实。");
-        var next = verdict.IndexOf("到期日判定（", start, StringComparison.Ordinal);
-        var section = verdict[start..(next > start ? next : verdict.Length)];
+        // ① 段在位。第二百一十三轮（简报 P0-1）：这一段连同「到期日判定」那段从「当前结论」格里搬进
+        //    动作单那节的同名子段——格里塞两段判定细则，读表的人一眼看不到「现在缺什么」；
+        //    本门跟着搬，取数换成按标题取子段（不再靠「下一段的标题」当右边界），下面每一条子判据原样留着。
+        var section = RealMachineSubsection("行高预算判定");
+        Assert.True(section.Contains("行高预算判定（", StringComparison.Ordinal),
+            "「行高预算判定」那个子段里没有段自身的引导句「行高预算判定（…」：只剩一个标题、正文被换掉，"
+            + "真机 125% / 200% 超预算时「算不算过」就又回到一句描述，那天要么把超预算念成观感问题先勾上，"
+            + "要么把整条 G-D5 念成全不过，两种都不诚实。");
 
         // ② 三句后果，一句都不能少。每条都念得出「缺的是哪一句、少了它那天会怎么读」。
         foreach (var (needle, consequence) in new (string, string)[]
@@ -1056,5 +1107,83 @@ public class AcceptanceChecklistTests
         Assert.True(gd4.Contains("仍随 G-D5 真机复核的只剩", StringComparison.Ordinal),
             "G-D4 那一格被改了，段里指的补写位置（「仍随 G-D5 真机复核的只剩…」那一句之后）已不存在："
             + "回写落点悬空，等于那天现场发明一句。");
+    }
+
+    /// <summary>
+    /// G-D5「当前结论」那一格必须瘦回<b>三要素</b>（结论 / 缺什么 / 由哪条挂账接续）且带上指向，
+    /// 而搬走的细则子段必须还是那么长——<b>瘦的是位置，不是内容</b>（第二百一十三轮，简报 P0-1，还 R4 那笔债）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：那一格从第一百六十六轮的「一句话结论 + 缺口」长到本轮开工前的 <b>2472 字</b>：
+    /// 「到期日判定」「行高预算判定」两段判定细则（≈1840 字）叠在一份长读数沿革后面。简报连续两轮把 P1-2
+    /// 排在「若有余量」，第二百一十二轮的记录自己写下「下一轮若还要往那一格加东西，应先做 P1-2」。
+    /// 那一格是<b>验收表</b>上的一格，读表的人要的是「现在到哪一步、还差什么、谁接着办」；
+    /// 把当天才用的判定细则放在这里，等于让每一个读表的人先读两屏细则才看到「真机 0 台」这四个字。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 上限 <see cref="VerdictCellCharCap"/> 字（超了即红，红了要点出实际字数）；
+    /// ② 三要素齐——结论「未达成」、缺什么「真机 0 台」＋「wine」（模拟器不是真机，措辞纪律同
+    /// <c>WordingHonestyTests</c>）、由哪条接续「G-D5 真机复核清单（可勾选）」，四个关键词一个都不能被瘦掉；
+    /// ③ 指向在位——格里写着「已移出本格」，且它指的那两个细则子段都真在、正文各不少于 800 字
+    /// （<b>只留一个标题把正文删了，这一条当场红</b>：那是删除，不是移动）；
+    /// ④ 细则不许回流——只属于细则的四个形状（「其一，」「措辞为「」「MaxRowHeight」「narration-」）
+    /// 出现在格里即红，否则下一轮往格里再塞一段，这一格又会回到两千字。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判细则内容对不对（那是 <see cref="Gd4_RealMachineOverBudget_IsPreRegistered"/>
+    /// 与 <see cref="Gd5_ExpiryVerdict_IsRecordedWithTheDegradationRunPath"/> 从新位置读回去的事），
+    /// 不判 G-D5 算不算过（<see cref="Checklist_RealMachineGate_IsStillUnmetAndSaysSo"/>），
+    /// 也不判那一格好不好读——长度是可判的，「好读」不是。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Gd5_VerdictCell_IsSlimmedToThreeElementsAndPointsAtTheDetailSubsections()
+    {
+        const int VerdictCellCharCap = 800;
+        const int MinSubsectionChars = 800;
+
+        var verdict = Rows().Single(r => r.Item.StartsWith("G-D5", StringComparison.Ordinal)).Verdict;
+
+        // ① 上限。这一格长回去的唯一路径是「又往里加一段判定细则」，而细则该去的地方就在下一节。
+        Assert.True(verdict.Length <= VerdictCellCharCap,
+            $"G-D5「当前结论」格 {verdict.Length} 字，超过上限 {VerdictCellCharCap} 字：那一格是读表的人看的"
+            + "「现在到哪一步」，判定细则写在下一节的「行高预算判定（细则…）」与「到期日判定（细则…）」两个子段里，"
+            + "往格里加东西之前先把它们读完（第二百一十二轮起这一格已经因为叠了两段细则长到 2472 字，"
+            + "R4 那笔债登记在案，别再借一次）。");
+
+        // ② 三要素：结论 / 缺什么 / 由哪条接续，加上「模拟器不是真机」那句措辞纪律。
+        foreach (var (needle, element) in new (string, string)[]
+                 {
+                     ("未达成", "结论——瘦完不许把结论一起瘦掉"),
+                     ("真机 0 台", "缺什么的第一项：机器一台都没有"),
+                     ("wine", "现有 GUI 证据出自模拟器，不写清就会被读成量过了"),
+                     ("G-D5 真机复核清单（可勾选）", "由哪条挂账接续"),
+                 })
+        {
+            Assert.True(verdict.Contains(needle, StringComparison.Ordinal),
+                $"瘦身后的那一格里没有「{needle}」：{element}。这一格瘦的是位置，三要素少一项就回到"
+                + "「任何一轮都可以自行定义缺口」——那正是第一百六十六轮立这张表要挡的事。");
+        }
+
+        // ③ 指向在位，且被指过去的两个子段还是那么长（移动不是删除）。
+        Assert.Contains("已移出本格", verdict, StringComparison.Ordinal);
+        foreach (var heading in new[] { "行高预算判定", "到期日判定" })
+        {
+            var body = RealMachineSubsection(heading);
+            var prose = body.Length - $"### {heading}".Length;
+            Assert.True(prose >= MinSubsectionChars,
+                $"「{heading}」那个子段只剩 {prose} 字（地板 {MinSubsectionChars} 字）：格里的指向还在、"
+                + "细则正文却没了，这一轮做的就不是瘦身而是删除——判定细则一条都不许丢。");
+            Assert.True(verdict.Contains(heading, StringComparison.Ordinal),
+                $"格里那句指向没点到「{heading}」：搬过去了却不指过去，读表的人找不到那段细则。");
+        }
+
+        // ④ 细则的形状不许回流到格里。
+        foreach (var shape in new[] { "其一，", "措辞为「", "MaxRowHeight", "narration-" })
+        {
+            Assert.False(verdict.Contains(shape, StringComparison.Ordinal),
+                $"G-D5 那一格里又出现了只属于判定细则的形状「{shape}」：细则的落点是下一节那两个子段，"
+                + "往验收表的一格里再塞一段，这一格就会重新长成读表的人读不下去的样子（上限 "
+                + $"{VerdictCellCharCap} 字就是这么来的）。");
+        }
     }
 }

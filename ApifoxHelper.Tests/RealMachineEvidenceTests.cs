@@ -609,6 +609,120 @@ public class RealMachineEvidenceTests
         Assert.Contains("不判", sheet, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 两处回写落点：<b>哪个文件</b> ＋ <b>那个文件的哪一行</b>。成对写全才算落点，
+    /// 只写文件名（改哪一行？）或只写行名（哪个文件？）当天都要现场猜。
+    /// <para>
+    /// 文件带反引号是这一族在文档里的既有写法（<see cref="CitesRealArtifact"/> 就按反引号跨度取实物），
+    /// 这里照同一写法取，不给同一件事起第二种形状。
+    /// </para>
+    /// </summary>
+    private static readonly (string File, string Row)[] WritebackDestinations =
+    [
+        ("`docs/NOTES.md`", "G-D5 行「当前结论」格"),
+        ("`README.md`", "「已知限制」第 1 条"),
+    ];
+
+    /// <summary>把一段文字按句子切开（句号 / 分号 / 换行 / 圈号都是边界）——落点必须在<b>同一句</b>里写全。</summary>
+    private static List<string> Clauses(string text) =>
+        Regex.Split(text, @"[。；\n①②③④⑤]").Select(c => c.Trim()).Where(c => c.Length > 0).ToList();
+
+    /// <summary>
+    /// 落点成对写全没有（<paramref name="where"/> 说清是哪一处文档）。
+    /// <para>
+    /// <b>判的是「一段 = 一个落点」</b>：两处落点在文档里由「，与」相连，切开之后每一段必须带着
+    /// <b>它自己那一个文件 + 它自己那一行</b>，且不许出现另一处落点的任何一个半边。
+    /// 为什么不是「两个字符串都出现过」：② 那一行本来就同时点了两个文件与两个行名，Presence 型判据
+    /// 在<b>把两个文件互换</b>时照样绿，而互换后那句读起来完全通顺——
+    /// 「<c>`README.md`</c> 顶部验收表的 G-D5 行『当前结论』格」。那天照它改，改的是没有 G-D5 行的那份文件，
+    /// 验收表一格未动，两处说法却已经分叉。
+    /// <b>也不是「离锚点最近的文件」</b>（本门第一版那么写，在<b>正确</b>的那句话上直接红了）：
+    /// 「…G-D5 行「当前结论」格，与 <c>`README.md`</c>…」里物理上离那个锚点更近的恰恰是 README。
+    /// 距离量的是字序，配对量的是「这一段在说哪一处」——所以按连接词切段，一段一个落点。
+    /// </para>
+    /// </summary>
+    private static void AssertWritebackDestinationsWrittenOut(string where, string text)
+    {
+        var segments = Clauses(text)
+            .SelectMany(c => Regex.Split(c, @"[，、,]\s*与\s*"))
+            .Select(s => s.Trim())
+            .Where(s => s.Length > 0)
+            .ToList();
+
+        foreach (var (file, row) in WritebackDestinations)
+        {
+            var others = WritebackDestinations.Where(o => o.File != file).ToList();
+            var hit = segments.FirstOrDefault(s => s.Contains(file, StringComparison.Ordinal)
+                                                  && s.Contains(row, StringComparison.Ordinal)
+                                                  && others.All(o => !s.Contains(o.File, StringComparison.Ordinal)
+                                                                     && !s.Contains(o.Row, StringComparison.Ordinal)));
+            Assert.True(hit is not null,
+                $"{where}没有把回写落点「{file} ＋ {row}」单独成段写全（现读到 {segments.Count} 段，"
+                + $"最长一段 {segments.OrderByDescending(s => s.Length).FirstOrDefault()?.Length} 字）："
+                + "要么文件与行名分在两段、要么两处落点混进同一段（混写时既切不出「一个文件 + 一行」的形状，"
+                + "两处文件互换也抓不到）。当天照混写的那句改，两处只会改到一处。");
+        }
+    }
+
+    /// <summary>
+    /// 「到期日当天执行单」那页的<b>最后一段机械门</b>：三步编号齐、两处回写落点各自把「哪个文件 + 哪一行」
+    /// 在同一句里写全（三行动作 ② 与第 3 步两处都要），且这一页的到期日与时效门读的是<b>同一个出口</b>
+    /// （第二百一十三轮，简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：那页有三步、每步三行，兄弟门
+    /// <see cref="DueDateRunSheet_HasThreeStepsEachAnchoredToARealArtifact"/> 判的是「编号齐 / 三行齐 /
+    /// 引到实物 / 两个行名两处措辞一致」——<b>但它判的两个行名不带文件</b>。回写这件事的完整说法是
+    /// 「改 <c>docs/NOTES.md</c> 的 G-D5 行那一格，与 <c>README.md</c> 的已知限制第 1 条」：
+    /// 少了文件，那一行在两份文档里都可能出现（本仓确实两份都有「已知限制」）；少了行名，
+    /// 只写「改 README.md」会改到首屏那句场景描述上去。而且这两个落点<b>必须逐字一致</b>——
+    /// ② 与第 3 步漂开，读的人按哪一处都行，就是两套说法。
+    /// </para>
+    /// <para>
+    /// <b>到期日为什么收成同一个出口</b>：这一页的标题写着到期日，<see cref="DueDate_HasADecisionAction"/>
+    /// 与 <see cref="DueDateRunSheet_HasThreeStepsEachAnchoredToARealArtifact"/> 判的都是
+    /// <c>Contains("2026-11-20")</c> 那份<b>字面量</b>。改期那天若只改了验收表那一格，
+    /// 这几条门会红（字面量找不到）——但红的是「这一页没写 2026-11-20」，念不出真正的问题
+    /// 「这一页的日期与那一格不是同一个」。本门直接比两个<b>现读取值</b>，红的时候念得出两个日期各是多少。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判当天选哪一支、不判真机跑没跑、不判 G-D5 算不算过（勾选框只由真机证据关闭，
+    /// 同 <see cref="DueDate_HasADecisionAction"/>）。它只保证「当天那三行落点写全了、日期不会各说一套」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DueDateRunSheet_WritebackDestinations_NameTheFileAndTheRow()
+    {
+        // ① 三步编号齐（多一步是没人判的动作，少一步是断链）。
+        var steps = RunSheetSteps();
+        Assert.Equal([1, 2, 3], steps.Select(s => s.Number));
+
+        // ② 两处落点各自写全「文件 + 那一行」：定落点的 ② 那一行，与照它写的第 3 步，两处都要。
+        var blockquote = string.Join('\n', ActionListLines()
+            .Where(l => l.TrimStart().StartsWith(">", StringComparison.Ordinal)));
+        AssertWritebackDestinationsWrittenOut("三行动作 ②", blockquote);
+        AssertWritebackDestinationsWrittenOut("执行单第 3 步", steps.Single(s => s.Number == 3).Text);
+
+        // ③ 这一页的到期日与时效门读的是同一个值——不是只判「两处都出现过某个日期」。
+        var recorded = AcceptanceChecklistTests.Gd5DueDateText();
+        Assert.True(recorded.Length > 0,
+            "验收表 G-D5 那一格里读不到到期日（YYYY-MM-DD）：没有权威值，这一页对齐谁都没有意义。");
+        var onSheet = AcceptanceChecklistTests.FirstDueDateIn(string.Join('\n', RunSheetLines()));
+        Assert.True(onSheet.Length > 0,
+            "「到期日当天执行单」那一页没有写到期日：这一页是那天唯一不用回头翻别处的一页，"
+            + "日期不在页首，走的人会按记忆里的日子收口。");
+        Assert.True(onSheet == recorded,
+            $"执行单那页写的到期日是 {onSheet}，验收表 G-D5 那一格记的是 {recorded}：两个日期就是两套说法，"
+            + "那天按哪一份收口都对，于是哪一份都没人负责。改期要同时改这两处（本仓唯一取法是 "
+            + $"{nameof(AcceptanceChecklistTests)}.{nameof(AcceptanceChecklistTests.Gd5DueDateText)}）。");
+
+        // ④ 这一页自己点名本门，并写清它不判什么（有门不等于过了，同族纪律）。
+        var sheet = string.Join('\n', RunSheetLines());
+        var self = $"{nameof(RealMachineEvidenceTests)}.{nameof(DueDateRunSheet_WritebackDestinations_NameTheFileAndTheRow)}";
+        Assert.True(sheet.Contains(self, StringComparison.Ordinal),
+            $"这一页没点名判它的那条门（{self}）：读这一页的人不知道两处落点的配对是被机械核过的，"
+            + "也不知道要改判据该去哪一条断言。");
+    }
+
     // ---------- 第一百八十七轮（简报 P0-1）：真机动作单「照抄即可」化 ----------
 
     /// <summary>「照抄即可」三列那一节的标题前缀（三级标题，落在 G-D5 动作单那一节之内）。</summary>
