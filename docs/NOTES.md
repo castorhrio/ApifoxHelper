@@ -59,14 +59,14 @@
 > ④ **当天照哪一页走**：本节末的「到期日当天执行单」三步（跑三档冒烟记读数 → 读归档清单判可勾 → 按 ② 回写两处），由 `RealMachineEvidenceTests.DueDateRunSheet_HasThreeStepsEachAnchoredToARealArtifact` 判三步各被点到一次、每步至少引一条仓内实物（命令 / 文件 / 断言）、第 3 步的两处回写落点与 ② 逐字一致。
 >
 
-> **第 0 条（机器到手前，本仓可做，第一百九十五轮，简报 P0-2）**：下面七条都是「机器到手后」的动作，**机器到手前本仓能做的最后准备此前一条都没写**——若机器在到期日当天到，现场就得一边建目录一边找命令。四项在机器到手前做完，当天只剩「照单跑」：
+> **第 0 条（机器到手前，本仓可做，第一百九十五轮，简报 P0-2；第一百九十八轮补执行状态）**：下面七条都是「机器到手后」的动作，**机器到手前本仓能做的最后准备此前一条都没写**——若机器在到期日当天到，现场就得一边建目录一边找命令。四项在机器到手前做完，当天只剩「照单跑」。**第一百九十八轮把「哪几项已经做完、哪几项还差什么」逐项写在每项末尾的「状态：」里**——`[x]` 的项必须指到仓里真能跑的东西（命令 / 用例工程 / 文档），`[ ]` 的项必须写清缺在哪一句；这一条由 `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判：
 >
-> - [ ] ① 复跑 `.winecheck/demo.sh`（`bash` 执行），确认三档仍是当前源码的 208 通过 / 0 失败 ×3；读数变了就先把本文件里被 `ReadingConsistencyTests` 扫的那几处一起改，别让两处读数各说各的。
-> - [ ] ② 复跑 `dotnet build` 与 `dotnet test`，确认 0 警告 0 错误、用例全绿（红的那条先修，别带着红进真机当天）。
-> - [ ] ③ 把 `docs/evidence/real-machine/` 的九个归档子目录建好（空目录即可，目录名以 `docs/evidence/real-machine/README.md` 为准，别自己起名——起错名的目录既不会被判据看见，也不会被下一个人找到）。
-> - [ ] ④ 打印或存好下面这张七条动作单，连同「七条动作的『照抄即可』三列」与「真机当天用到的工具」两节——当天照着念，不现场翻文档。
+> - [x] ① 复跑 `.winecheck/demo.sh`（`bash` 执行），确认三档仍是当前源码的 208 通过 / 0 失败 ×3；读数变了就先把本文件里被 `ReadingConsistencyTests` 扫的那几处一起改，别让两处读数各说各的。**状态：已做**——第一百九十八轮 · 2026-11-11 在本机复跑 `.winecheck/demo.sh`（`bash` 执行）：三档 208 通过 / 0 失败 ×3、逐屏对账 0 处对不上、退出码 0，与本节记的读数一致（**模拟器，不是真机**）。
+> - [x] ② 复跑 `dotnet build` 与 `dotnet test`，确认 0 警告 0 错误、用例全绿（红的那条先修，别带着红进真机当天）。**状态：已做**——第一百九十八轮 · 2026-11-11 复跑：`dotnet build` 0 警告 0 错误；`dotnet test ApifoxHelper.Tests/ApifoxHelper.Tests.csproj` 2615 通过 / 0 失败（用例工程 `ApifoxHelper.Tests/ApifoxHelper.Tests.csproj`）。
+> - [ ] ③ 把 `docs/evidence/real-machine/` 的九个归档子目录建好（空目录即可，目录名以 `docs/evidence/real-machine/README.md` 为准，别自己起名——起错名的目录既不会被判据看见，也不会被下一个人找到）。**状态：未做**——缺的是「仓里可核对的落点」：git 不跟踪空目录，建好的九个目录提交不进仓，所以这一项在机器到手前**只能备好命令、不能算做完**。命令已备好并加门：`docs/evidence/real-machine/README.md` 顶部那条 `mkdir -p` 一行建全九个目录，目录名与产出物清单逐字一致（少一个即红，由 `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判）。
+> - [ ] ④ 打印或存好下面这张七条动作单，连同「七条动作的『照抄即可』三列」与「真机当天用到的工具」两节——当天照着念，不现场翻文档。**状态：未做**——缺的是「人的动作」：打印或存盘在本机无法核对，写「已做」就是自述。可核对的那一半已成立：要存的两节都在本文件里（「七条动作的『照抄即可』三列」「真机当天用到的工具」），且被 `RealMachineEvidenceTests` 的门钉住。
 >
-> 机械门：`RealMachineEvidenceTests.BeforeMachineArrives_HasFourCheckableItemsAndNamesTheDemoCommand` 判四项齐、每项都有可勾选框、且至少一项点到 `.winecheck/demo.sh`。**它不判这四项做过没有**（本机没有 Windows 图形子系统，做没做只有人知道），只保证「机器到手前的那一页不是空的」。
+> 机械门：`RealMachineEvidenceTests.BeforeMachineArrives_HasFourCheckableItemsAndNamesTheDemoCommand` 判四项齐、每项都有可勾选框、且至少一项点到 `.winecheck/demo.sh`。**它不判这四项做过没有**（本机没有 Windows 图形子系统，做没做只有人知道），只保证「机器到手前的那一页不是空的」。第一百九十八轮补的第二道门 `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判的是**执行状态本身**：四项各带一句「状态：」、`[x]` 的项必须指到仓里真能跑的东西（命令 / 用例工程 / 文档，编一个不存在的即红）、`[ ]` 的项必须写清「未做」与缺在哪一句——**它同样不判真机跑没跑**，只保证「做完的与没做完的分得开」。
 
 | 勾选 | 动作 | 量什么 | 归档到哪里 | 判定标准 |
 | --- | --- | --- | --- | --- |
@@ -1971,7 +1971,7 @@
 >
 > **第四块为什么在这里**：第一百七十轮的读数是「四种取值排版相同」。答辩现场若被追问「那你样式里那条 `line-break:strict` 到底起了什么作用」，没有这一块就得现场编。它给的是**正面表述**——禁则为什么成立、功劳记在谁头上——不是缺陷说明，也不是「这条属性没用」（那是 CSS 规范层面的另一件事，读数见「真浏览器布局门（HTML 折行）」一节末「不可判别的那半截」）。
 >
-> **口径**：字数只按「口径」这一列的字符数算（不含表头与本句说明）；禁词按 `CopyRules.BannedWords` 一份；引用收三种形状——``README.md``「小节名」/ ``docs/NOTES.md``「小节名」（该小节必须真的以标题形式存在于那份文件里）、`类名.断言名`（必须在测试工程里存在）、冒烟段名 `RunXxx`（必须在 `ApifoxHelper.Smoke/Program.cs` 里既有声明、又有 `nameof(RunXxx)` 的调用点）。字数超、禁词出现、引用不 resolve，各判各的红。机械门：`ApifoxHelper.Tests/DefenseNarrativeTests.cs`。
+> **口径**：字数只按「口径」这一列的字符数算（不含表头与本句说明）；禁词按 `CopyRules.BannedWords` 一份；引用收三种形状——``README.md``「小节名」/ ``docs/NOTES.md``「小节名」（该小节必须真的以标题形式存在于那份文件里）、`类名.断言名`（必须在测试工程里存在）、冒烟段名 `RunXxx`（必须在 `ApifoxHelper.Smoke/Program.cs` 里既有声明、又有 `nameof(RunXxx)` 的调用点）。字数超、禁词出现、引用不 resolve，各判各的红。**五块连起来念一遍的总字数上限 400 字**（第一百九十八轮加门：`DefenseNarrativeTests.Narrative_FiveBlocksReadInOneBreath` 判两件事——① 五块「口径」列字符数之和 ≤400（现场念稿的合理上限，当前 344 字）；② 同一段可跑证据（冒烟段名 / 断言名）不许被两块同时引用，重复引用说明两块在说同一件事，念出来是同一句）。机械门：`ApifoxHelper.Tests/DefenseNarrativeTests.cs`。
 >
 > **第一百八十九轮补的那一条门（简报 P0-1）**：此前只判「引的小节存在」与「引的断言存在」，**没判「指向的证据能跑」**——冒烟段名这种形状在旧门里根本不被接受（`RunXxx` 没有点号，会被判成「既不是文档出处也不是断言名」），于是答辩现场真正要复跑的那一段，五块里一块都指不到。现在 `DefenseNarrativeTests.Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun` 判四件事：① 每块至少一条**可跑证据**（冒烟段名或断言名）；② 冒烟段名必须真的接进运行清单（有声明 + 有 `nameof(...)` 调用点，只声明不调用的段在报告里不会出现，`demo.sh` 逐屏对账时找不到它）；③ 断言名必须在测试工程里真有这一条；④ 至少三块点到冒烟段名（地板 3：答辩现场能当场复跑的是冒烟段；「AI 必要性」那一块讲的是模型那一支，本仓从未调用过模型服务，没有段可指，硬指一个只会逼出假话）。**它不判真机跑没跑**——G-D5 仍是 `[ ]`。
 >

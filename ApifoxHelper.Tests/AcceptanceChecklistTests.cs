@@ -502,4 +502,156 @@ public class AcceptanceChecklistTests
         Assert.Contains($"{nameof(AcceptanceChecklistTests)}.{nameof(ExitChecklist_EveryItemPointsToRealSymbols)}",
             gate.Evidence, StringComparison.Ordinal);
     }
+
+    // ---------- 第 0 条「机器到手前的四项准备」的执行状态（第一百九十八轮，简报 P0-1） ----------
+
+    /// <summary>「第 0 条」那一段的标记（落在 G-D5 动作单那一节之内，排在七条动作之前）。</summary>
+    private const string BeforeArrivalMarker = "第 0 条（机器到手前，本仓可做";
+
+    /// <summary>第 0 条的一项：勾选 / 编号 / 正文（含末尾那句「状态：」）。</summary>
+    private readonly record struct BeforeArrivalItem(string Check, string Marker, string Text);
+
+    /// <summary>
+    /// 第 0 条的四项（<c>&gt; - [x] ① …</c> 形状的列表行），从标记行往下取到动作单表格表头之前。
+    /// <para>
+    /// 与 <c>RealMachineEvidenceTests.BeforeArrivalLines</c> 判的是同一段材料，但取的是<b>不同的东西</b>：
+    /// 那一条判「四项齐、每项有勾选框」，这一条判「每项末尾那句执行状态」。两处各写一份解析是有意的——
+    /// 那一条在 <c>RealMachineEvidenceTests</c> 里是私有的，跨类复用要把它改成 internal 并让两个文件互相依赖；
+    /// 而这两条门判的判据不同（形状 vs 状态），改一处不该牵动另一处。
+    /// </para>
+    /// </summary>
+    private static List<BeforeArrivalItem> BeforeArrivalItems()
+    {
+        var lines = RealMachineSectionLines();
+        var start = Array.FindIndex(lines, l => l.Contains(BeforeArrivalMarker, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的 G-D5 动作单里缺「{BeforeArrivalMarker}…）」这一段：机器到手前本仓能做的最后准备一条都没写。");
+
+        var items = new List<BeforeArrivalItem>();
+        for (var i = start + 1; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (line.TrimStart().StartsWith("|", StringComparison.Ordinal)) break; // 动作单表格开始
+            if (!Regex.IsMatch(line, @"^>\s*-\s")) continue;
+            var m = Regex.Match(line, @"^>\s*-\s*\[(?<box>[ x])\]\s*(?<marker>[①②③④])\s*(?<text>.+)$");
+            Assert.True(m.Success,
+                $"「第 0 条」有一项不是「> - [ ] ① …」的形状：{line.Trim()}。写成普通段落的那一项当天没人会去勾它。");
+            items.Add(new BeforeArrivalItem(
+                m.Groups["box"].Value == "x" ? "[x]" : "[ ]",
+                m.Groups["marker"].Value,
+                m.Groups["text"].Value.Trim()));
+        }
+
+        return items;
+    }
+
+    /// <summary>反引号里「像仓内路径」的引用：带斜杠或以已知后缀结尾。命令名（<c>dotnet build</c>）不算。</summary>
+    private static bool LooksLikeRepoPath(string token) =>
+        token.Contains('/', StringComparison.Ordinal)
+        || SourceExtensions.Any(e => token.EndsWith(e, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// 第 0 条四项各自带一句执行状态，且「做完的」与「没做完的」分得开（第一百九十八轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第一百九十五轮把「机器到手前的四项准备」写成了四项可勾选，但<b>四项全是空框</b>——
+    /// 于是「机器到手前能做的都做完了吗」这个问题在仓里没有答案：读者看到四个空框，分不清是「还没做」
+    /// 还是「做了但没人勾」。到期日 9 天内，这个分不清正是最贵的：机器一到手，人得先花半天判断哪几项其实已经就绪。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 四项齐且编号 ① ② ③ ④ 各一次；② 每项末尾都有一句「状态：」，且那句话至少 12 字
+    /// （一句「已做」不算状态，得说清做了什么、什么时候做的）；③ 勾成 <c>[x]</c> 的项，状态里必须点到
+    /// <b>仓里真能跑的东西</b>——命令（<c>bash .winecheck/demo.sh</c>）、用例工程（<c>…csproj</c>）、
+    /// 文档（<c>…md</c>）或断言名，且这些引用<b>必须 resolve</b>（编一个不存在的路径即红）；
+    /// ④ 留 <c>[ ]</c> 的项，状态里必须同时写「未做」与「缺」（缺什么、为什么这一项在机器到手前做不完）；
+    /// ⑤ ③ 那一项备好的命令与 <c>docs/evidence/real-machine/README.md</c> 产出物清单的九个目录名<b>逐字一致</b>
+    /// （少一个、多一个都即红——两套名字等于两套判据）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判这四项真的做过</b>（本机没有 Windows 图形子系统，做没做只有人知道），
+    /// 也<b>不判真机跑没跑</b>（G-D5 仍是 <c>[ ]</c>）。它只保证「做完的与没做完的分得开，且做完的那几项指得出东西」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void BeforeMachineArrives_EveryItemCarriesItsExecutionStatus()
+    {
+        var items = BeforeArrivalItems();
+
+        // ① 四项齐、编号各一次。
+        Assert.Equal(["①", "②", "③", "④"], items.Select(i => i.Marker));
+
+        foreach (var item in items)
+        {
+            // ② 每项末尾一句「状态：」，且不是一句口号。
+            var at = item.Text.IndexOf("状态：", StringComparison.Ordinal);
+            Assert.True(at >= 0,
+                $"「第 0 条」{item.Marker} 没写「状态：」：四个空框分不清「还没做」与「做了没人勾」，"
+                + "机器到手前最贵的正是这个分不清。");
+            var status = item.Text[(at + "状态：".Length)..].Trim();
+            Assert.True(status.Length >= 12,
+                $"「第 0 条」{item.Marker} 的状态只写了 {status.Length} 字：「已做」两个字不算状态，得说清做了什么、什么时候做的。");
+
+            if (item.Check == "[x]")
+            {
+                // ③ 做完的项必须指到仓里真能跑的东西，且引用要 resolve。
+                var citations = Regex.Matches(status, @"`([^`]+)`").Select(m => m.Groups[1].Value).ToList();
+                Assert.True(citations.Count > 0,
+                    $"「第 0 条」{item.Marker} 勾成 [x] 却没点到任何仓内实物：做完的项要指得出东西（命令 / 用例工程 / 文档 / 断言名）。");
+
+                var resolved = 0;
+                foreach (var citation in citations)
+                {
+                    // 命令带参数时取最后一个词：`bash .winecheck/demo.sh` 的实物是那个脚本，不是 `bash`。
+                    var token = citation.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? citation;
+                    if (LooksLikeRepoPath(token))
+                    {
+                        var full = Path.Combine(Repo.Root, token.Replace('\\', '/'));
+                        Assert.True(File.Exists(full) || Directory.Exists(full),
+                            $"「第 0 条」{item.Marker} 的状态里点到的路径不存在：{token}。做完的项指一个不存在的路径，等于又一次自述。");
+                        resolved++;
+                        continue;
+                    }
+
+                    if (Regex.IsMatch(token, @"^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$"))
+                    {
+                        var parts = token.Split('.');
+                        var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
+                        Assert.True(File.Exists(testFile), $"「第 0 条」{item.Marker} 引用的测试类不存在：{parts[0]}。");
+                        Assert.True(Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]"),
+                            $"「第 0 条」{item.Marker} 引用的断言不存在：{token}。");
+                        resolved++;
+                    }
+                }
+
+                Assert.True(resolved > 0,
+                    $"「第 0 条」{item.Marker} 勾成 [x]，但状态里没有一条引用落到仓内实物：{status}");
+            }
+            else
+            {
+                // ④ 没做完的项必须写清「未做」与缺在哪一句。
+                Assert.Contains("未做", status, StringComparison.Ordinal);
+                Assert.Contains("缺", status, StringComparison.Ordinal);
+            }
+        }
+
+        // ⑤ ③ 备好的那条命令与 README 的九个目录名逐字一致。
+        var readme = Repo.Source("docs", "evidence", "real-machine", "README.md");
+        var listed = readme.Split('\n')
+            .Where(l => l.TrimStart().StartsWith("|", StringComparison.Ordinal))
+            .SelectMany(l => Regex.Matches(l, @"docs/evidence/real-machine/([^/`\s]+)/").Select(m => m.Groups[1].Value))
+            .Distinct()
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+        Assert.True(listed.Count == 9,
+            $"docs/evidence/real-machine/README.md 的产出物清单点了 {listed.Count} 个归档目录（应为 9 个）：{string.Join("、", listed)}。");
+
+        var mkdir = readme.Split('\n').FirstOrDefault(l => l.Contains("mkdir -p docs/evidence/real-machine/", StringComparison.Ordinal));
+        Assert.True(mkdir is not null,
+            "docs/evidence/real-machine/README.md 里没有那条「一条命令建好九个目录」的 mkdir："
+            + "第 0 条 ③ 在机器到手前只能备好命令，命令不在，那一项就只剩一句「还没做」。");
+        var brace = Regex.Match(mkdir!, @"mkdir -p docs/evidence/real-machine/\{([^}]+)\}");
+        Assert.True(brace.Success,
+            $"README 里那条 mkdir 不是「mkdir -p docs/evidence/real-machine/{{…}}」的形状：{mkdir!.Trim()}");
+        var made = brace.Groups[1].Value.Split(',').Select(s => s.Trim()).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        Assert.Equal(listed, made);
+    }
 }

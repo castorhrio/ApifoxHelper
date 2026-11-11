@@ -16,6 +16,14 @@
 >    **只跑一半就勾，机械门会红**（`ApifoxHelper.Tests/RealMachineEvidenceTests.cs` 的
 >    `CheckedAction_RequiresItsArchiveDirectoryToHoldFiles`：勾了哪一条，那一条的归档目录里就必须真有文件）。
 
+> **机器到手前的一条命令（第一百九十八轮）**：九个归档子目录一条命令建好，目录名与下面产出物清单逐字一致——
+> `mkdir -p docs/evidence/real-machine/{journey,100,125,200,mixed-dpi,scale-change,fonts,apifox-write,smoke}`。
+> **建好的空目录提交不进仓**（git 不跟踪空目录），所以这一步在机器到手前只能「备好命令」，不能算做完——
+> `docs/NOTES.md` 第 0 条 ③ 因此仍留 `[ ]` 并写明缺的就是这个落点。命令与清单是否一致由
+> `ApifoxHelper.Tests/AcceptanceChecklistTests.cs` 的
+> `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判：清单里少一个目录名、
+> 或命令里多一个清单没有的目录名，都即红——两套名字等于两套判据。
+
 ## 产出物清单（与 `docs/NOTES.md` G-D5 动作单逐行对应）
 
 | 动作 | 归档目录 | 产出物（文件名模式） | 每个文件里必须有的数字 | 什么算过 | 量测项（动作单该行「量什么」必须逐项点到） |
