@@ -67,12 +67,71 @@ public class NoticeCopySmokeTests
         Assert.Contains("closeButton.Left != closeLeftBefore", body);
 
         // ④ 段数不许掉下去（每一段都是一个独立的判定，少一段就是少量到一件事）。
+        // 地板 8 段 = 第一百八十五轮的 6 段 + 第一百九十二轮的「等宽行量宽 == 实际可用宽」1 段
+        // + 同轮的「等宽行 Enter 契约」1 段。
         var segments = Regex.Matches(body, @"RunAction\(").Count;
-        Assert.True(segments >= 6, $"「复制路径」这一段只有 {segments} 个 RunAction 段（地板 6 段）。");
+        Assert.True(segments >= 8, $"「复制路径」这一段只有 {segments} 个 RunAction 段（地板 8 段）。");
 
         // ⑤ 段在 Main 里注册：没注册 = 永远不跑，报告照样 PASS。
         var main = MethodBody(SmokeProgram, "private static int Main(");
         Assert.Contains("RunNoticeCopyClick(dataRoot)", main);
+    }
+
+    /// <summary>
+    /// 等宽行的「量宽度」与「实际可用宽度」在运行时相等（第一百九十二轮，简报 P0-2）。
+    /// <para>
+    /// <b>为什么这一条必须落在冒烟里</b>：静态门（<see cref="NoticeCopyTests.NoticeDialog_MeasuresTheMonoLineWithTheGridsActualAvailableWidth"/>）
+    /// 只能判「算式收在一处」，判不了<b>布局完成后那个等式成不成立</b>——构造那一刻内容网格还没有客户区，
+    /// 宽度是布局给的，只有真跑一次 WinForms 才知道量宽与控件实际拿到的宽度是不是同一个数。
+    /// 这一段删掉，报告照样 PASS，而「长路径会不会被裁掉半行」就再没人量过。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheMonoLineIsMeasuredWithTheWidthItActuallyGets()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunNoticeCopyClick(");
+
+        // ① 段在，且判的是「实际宽 == 可用宽」这个等式（不是只判非零）。
+        Assert.Contains("等宽行的量宽就是它实际拿到的宽度", body);
+        Assert.Contains("var available = Ui.ContentWidth(grid);", body);
+        Assert.Contains("box.ClientSize.Width != available", body);
+        // ② 高度必须按同一个宽度重量（只改宽不重量 = 长路径被裁掉半行）。
+        Assert.Contains("Ui.MonoBoxHeight(box.Text, available)", body);
+        Assert.Contains("box.Height != expected", body);
+        // ③ 越界也要判：宽度相等但被网格裁掉，用户看到的仍是半行。
+        Assert.Contains("box.Right > right", body);
+    }
+
+    /// <summary>
+    /// 等宽行的 Enter 契约在运行时成立（第一百九十二轮，简报 P1-3）。
+    /// <para>
+    /// <b>为什么这一条必须落在冒烟里</b>：静态门（<see cref="NoticeCopyTests.Ui_MonoBox_IsReadOnlySelectableChrome"/>）
+    /// 只能判「源码里写了 <c>AcceptsReturn = false</c>」，判不了<b>这个框真的不吃 Enter</b>、
+    /// 也判不了<b>窗体的 <c>AcceptButton</c> 真的是那颗「关闭」</b>——后者是 Enter 的落点，
+    /// 落点错了（比如被改成「复制路径」），用户按 Enter 会去复制而不是关屏。
+    /// 这一段删掉，报告照样 PASS，而「Enter 到底落到哪」就再没人量过。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：真的按一下 Enter 键没有模拟（本环境没有 Windows 图形子系统，键盘注入在 wine 里
+    /// 不可靠），「按 Enter 真的关掉这一屏」仍随 G-D5 真机复核——冒烟报告里逐档写明这一句，不冒充量到。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheMonoLineDoesNotEatEnter_AndTheAcceptButtonIsTheCloseButton()
+    {
+        var body = MethodBody(SmokeProgram, "private static void RunNoticeCopyClick(");
+
+        // ① 段在，且判的是「不吃 Enter」这个方向（不是只判控件存在）。
+        Assert.Contains("等宽行的 Enter 契约", body);
+        Assert.Contains("if (box.AcceptsReturn)", body);
+        // ② 只读与多行一起判：只读行没有换行可做，多行才折得了长路径。
+        Assert.Contains("if (!box.ReadOnly)", body);
+        Assert.Contains("if (!box.Multiline)", body);
+        // ③ Enter 的落点必须是那颗「关闭」——落点错了，Enter 会去干别的。
+        Assert.Contains("dialog.AcceptButton is not Button accept", body);
+        Assert.Contains("!ReferenceEquals(accept, closeButton)", body);
+        // ④ 没模拟按键这件事要如实写在报告里，不许让读者以为「按 Enter 量过了」。
+        Assert.Contains("真的按 Enter 未模拟", body);
     }
 
     [Fact]

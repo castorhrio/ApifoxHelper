@@ -29,9 +29,6 @@ internal sealed class NoticeDialog : DpiAwareForm
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
-        // 正文按对话框宽度折行：MaximumSize 的宽度取可视宽度，高度交给 AutoSize（长内容由宿主滚动）。
-        var wrapWidth = ClientSize.Width - 2 * UiTokens.Lg;
-
         var grid = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -43,6 +40,13 @@ internal sealed class NoticeDialog : DpiAwareForm
         };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
+        // 折行宽与量宽取同一处：内容网格的实际可用宽度（客户区宽 - 左右内边距，算式在 Ui.ContentWidth）。
+        // 第一百九十二轮之前这里是「窗体客户区宽减两档 Lg」——与 grid.Padding 是两笔独立的账，
+        // 数值碰巧相等，改一处就错位（正文按窗体宽折、等宽行按网格宽量，长路径会被裁掉半行）。
+        // 构造这一刻 grid 还没有客户区（宽 0），先按窗体客户区宽种一次，布局完成后再按实际可用宽度重算。
+        grid.Width = ClientSize.Width;
+        var wrapWidth = Ui.ContentWidth(grid);
+
         var title = Ui.Section(heading);
         title.Margin = new Padding(0, 0, 0, UiTokens.Md);
         grid.Controls.Add(title);
@@ -52,21 +56,45 @@ internal sealed class NoticeDialog : DpiAwareForm
         bodyLabel.Margin = new Padding(0, 0, 0, UiTokens.Md);
         grid.Controls.Add(bodyLabel);
 
+        TextBox? monoBox = null;
         if (mono is not null)
         {
             // 可框选复制的只读文本框（不是 Label）：路径要能被选中、Ctrl+A、Ctrl+C，
             // 而「只挑其中一段」这件事按钮做不到。高度按实际字体与可用宽度量出（Ui.MonoBoxHeight）。
-            var monoBox = Ui.MonoBox(mono, wrapWidth);
+            monoBox = Ui.MonoBox(mono, wrapWidth);
             monoBox.Margin = new Padding(0, 0, 0, UiTokens.Md);
             grid.Controls.Add(monoBox);
         }
 
+        Label? noteLabel = null;
         if (note is not null)
         {
-            var noteLabel = Ui.Caption(note);
+            noteLabel = Ui.Caption(note);
             noteLabel.MaximumSize = new Size(wrapWidth, 0);
             grid.Controls.Add(noteLabel);
         }
+
+        // 布局完成后按 grid 的实际可用宽度重算一次：量宽与控件实际拿到的宽度必须是同一个数
+        // （门在 NoticeCopyTests.NoticeDialog_MeasuresTheMonoLineWithTheGridsActualAvailableWidth，
+        // 运行时那一半在冒烟段「等宽行的量宽就是它实际拿到的宽度」）。
+        // 宽度没变就不动——在 Layout 里改尺寸会再触发一次 Layout，不设这道闸会自己绕圈。
+        var applied = wrapWidth;
+        void ApplyWrapWidth()
+        {
+            var width = Ui.ContentWidth(grid);
+            if (width == applied) return;
+            applied = width;
+            bodyLabel.MaximumSize = new Size(width, 0);
+            if (monoBox is not null)
+            {
+                // 宽度变了高度必须跟着重量：只改宽不重量，长路径会被裁掉半行。
+                monoBox.Width = width;
+                monoBox.Height = Ui.MonoBoxHeight(monoBox.Text, width);
+            }
+            if (noteLabel is not null) noteLabel.MaximumSize = new Size(width, 0);
+        }
+
+        grid.Layout += (_, _) => ApplyWrapWidth();
 
         // 停靠方向由工厂一处决定（Dock = Fill），这里不再补设。
         var host = Ui.ScrollHost();

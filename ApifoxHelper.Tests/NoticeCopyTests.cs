@@ -108,7 +108,7 @@ public class NoticeCopyTests
         var source = Repo.Source("Desktop", "Native", "NoticeDialog.cs");
         // 等宽行经 Ui.MonoBox（只读文本框）构造：Label 一个字都选不中，
         // 而说明行指着「手动打开上面的路径」——用户要能把路径挑一段贴出去。
-        Assert.Matches(@"(?m)^\s*var monoBox = Ui\.MonoBox\(mono, wrapWidth\);", source);
+        Assert.Matches(@"(?m)^\s*monoBox = Ui\.MonoBox\(mono, wrapWidth\);", source);
         Assert.Matches(@"(?m)^\s*grid\.Controls\.Add\(monoBox\);", source);
         // 退回 Label 即红：Ui.Mono 返回的是 Label（不可选中、不可复制）。
         Assert.DoesNotContain("Ui.Mono(mono)", source, StringComparison.Ordinal);
@@ -127,11 +127,75 @@ public class NoticeCopyTests
         Assert.Contains("Preview(multiline: true, mono: true, wordWrap: true)", slice, StringComparison.Ordinal);
         // 键盘可达：Tab 能到它，键盘用户不必用鼠标框选。
         Assert.Contains("box.TabStop = true;", slice, StringComparison.Ordinal);
+        // Enter 的落点写成显式契约（第一百九十二轮）：只读行不吃 Enter，Enter 冒泡给窗体的
+        // AcceptButton（提示对话框里是「关闭」）。不写时默认也是 false，但那是隐式的——
+        // 后来人顺手改成 true，界面上不会有任何异样，只是 Enter 从此什么都不做。
+        Assert.Contains("box.AcceptsReturn = false;", slice, StringComparison.Ordinal);
         // 高度按实际字体与可用宽度量出，不猜行数（猜少了长路径被裁掉半行）。
         Assert.Contains("box.Height = MonoBoxHeight(text, wrapWidth);", slice, StringComparison.Ordinal);
         // 镀铬不就地发明：底色与边框仍由 Box 一处给（BorderStyle.None + Panel 底）。
         Assert.DoesNotContain("BackColor =", slice, StringComparison.Ordinal);
         Assert.DoesNotContain("BorderStyle", slice, StringComparison.Ordinal);
+    }
+
+    // ---------- 量宽与可用宽收成一处（第一百九十二轮，简报 P0-2）----------
+
+    /// <summary>
+    /// 等宽行的「量宽度」与「实际可用宽度」必须是同一笔账（第一百九十二轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第一百九十一轮把等宽行从 <c>Label</c> 换成只读文本框后，高度是按
+    /// 「窗体客户区宽减两档 Lg」量出来的，而内容网格自己的 <c>Padding</c> 是另一笔账——
+    /// 两笔账数值碰巧相等，所以当时看不出来；改内边距、改停靠方式、或宿主出现纵向滚动条时，
+    /// 量宽与实际可用宽就分叉：量宽偏大则长路径被裁掉半行，偏小则这一屏多出一块空白。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 折行宽从内容网格的实际可用宽度算（<c>Ui.ContentWidth</c> 一处算式），
+    /// 不再按窗体客户区宽自己减一遍；② 布局完成后按同一算式重算一次（构造那一刻网格还没有客户区）；
+    /// ③ 重算时等宽行的宽度与高度一起重量（只改宽不重量 = 长路径被裁掉半行）。
+    /// <b>不判</b>运行时那个等式本身——那要 WinForms 真跑，Linux 侧判不了，
+    /// 运行时那一半在冒烟段「等宽行的量宽就是它实际拿到的宽度」（wine 三档各跑一次）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NoticeDialog_MeasuresTheMonoLineWithTheGridsActualAvailableWidth()
+    {
+        var source = Repo.Source("Desktop", "Native", "NoticeDialog.cs");
+
+        // ① 一处算式：折行宽取网格的实际可用宽度。
+        Assert.Matches(@"(?m)^\s*var wrapWidth = Ui\.ContentWidth\(grid\);", source);
+        // 退回「窗体客户区宽减两档 Lg」即红：那正是与 grid.Padding 分家的那一笔账。
+        Assert.DoesNotContain("ClientSize.Width - 2 * UiTokens.Lg", source, StringComparison.Ordinal);
+
+        // ② 布局完成后按同一算式重算（构造那一刻 grid 还没有客户区，宽是 0）。
+        Assert.Matches(@"(?m)^\s*grid\.Layout \+= \(_, _\) => ApplyWrapWidth\(\);", source);
+        Assert.Contains("var width = Ui.ContentWidth(grid);", source, StringComparison.Ordinal);
+
+        // ③ 宽度变了高度跟着重量：只改宽不重量，长路径会被裁掉半行。
+        Assert.Contains("monoBox.Width = width;", source, StringComparison.Ordinal);
+        Assert.Contains("monoBox.Height = Ui.MonoBoxHeight(monoBox.Text, width);", source, StringComparison.Ordinal);
+        // 正文与说明行的折行宽也走同一个数（三处各算一遍就是三笔账）。
+        Assert.Contains("bodyLabel.MaximumSize = new Size(width, 0);", source, StringComparison.Ordinal);
+        Assert.Contains("noteLabel.MaximumSize = new Size(width, 0);", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>Ui.ContentWidth</c> 是「可用宽度」的唯一算式（第一百九十二轮）。
+    /// 判它算的是「客户区宽 - 左右内边距」且至少 1px（<c>MeasureText</c> 不接受 0 宽，
+    /// 量出 0 宽会让这一行在界面上消失）。
+    /// </summary>
+    [Fact]
+    public void Ui_ContentWidth_IsTheSingleFormulaForAvailableWidth()
+    {
+        var ui = Repo.Source("Desktop", "Native", "Ui.cs");
+        var from = ui.IndexOf("public static int ContentWidth(Control container)", StringComparison.Ordinal);
+        Assert.True(from >= 0, "源码缺少 Ui.ContentWidth。");
+        var to = ui.IndexOf("public static TextBox MonoBox(", StringComparison.Ordinal);
+        Assert.True(to > from, "Ui.ContentWidth 之后应紧跟 MonoBox。");
+        var slice = ui[from..to];
+        Assert.Contains("container.ClientSize.Width - container.Padding.Horizontal", slice, StringComparison.Ordinal);
+        Assert.Contains("Math.Max(", slice, StringComparison.Ordinal);
+        // 不就地发明：宽度只从容器自己的客户区与内边距来，不读屏幕、不读窗体。
+        Assert.DoesNotContain("Screen.", slice, StringComparison.Ordinal);
     }
 
     [Fact]

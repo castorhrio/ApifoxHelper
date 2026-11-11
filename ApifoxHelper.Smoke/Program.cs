@@ -4706,6 +4706,84 @@ internal static class Program
             if (!copyButton.CanSelect) throw new InvalidOperationException("「复制路径」按钮不可选中（Tab 到不了它）。");
         });
 
+        // 等宽行的「量宽度」与「实际可用宽度」必须是同一个数（第一百九十二轮，简报 P0-2）：
+        // 高度是按某个宽度量出来的，那个宽度必须就是控件实际拿到的宽度——量宽偏大，长路径被裁掉半行；
+        // 偏小，这一屏多出一块空白。静态门只能判「算式收在一处」，这个等式要 WinForms 真跑才成立。
+        RunAction("提示对话框：等宽行的量宽就是它实际拿到的宽度（真实控件）", () =>
+        {
+            var box = FindAll<TextBox>(dialog)
+                .FirstOrDefault(t => string.Equals(t.Text, NoticeText.AboutDataDirLine(path), StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("对话框里找不到等宽行（只读文本框）。");
+            if (box.Parent is not TableLayoutPanel grid)
+            {
+                throw new InvalidOperationException("等宽行不在内容网格里：可用宽度无从算起。");
+            }
+            var available = Ui.ContentWidth(grid);
+            if (box.ClientSize.Width != available)
+            {
+                throw new InvalidOperationException(
+                    $"等宽行实际宽 {box.ClientSize.Width}px，内容网格的可用宽 {available}px："
+                    + "量宽与可用宽是两笔账，长路径会被裁掉半行或多出一块空白。");
+            }
+            var expected = Ui.MonoBoxHeight(box.Text, available);
+            if (box.Height != expected)
+            {
+                throw new InvalidOperationException(
+                    $"等宽行高 {box.Height}px，按可用宽 {available}px 量出来应是 {expected}px："
+                    + "宽度变了高度没跟着重量。");
+            }
+            var right = grid.ClientSize.Width - grid.Padding.Right;
+            if (box.Right > right)
+            {
+                throw new InvalidOperationException(
+                    $"等宽行右边界 {box.Right}px 越出内容网格的可用右边界 {right}px：这一行被裁了。");
+            }
+            _lines.Add($"     等宽行量宽 {available}px == 实际宽 {box.ClientSize.Width}px，"
+                + $"高 {box.Height}px（按同一宽度量出），右边界 {box.Right}px ≤ {right}px。");
+        });
+
+        // 等宽行的 Enter 契约（第一百九十二轮，简报 P1-3）：只读行不吃 Enter，Enter 冒泡给窗体的
+        // AcceptButton（提示对话框里是「关闭」）。静态门只能判「源码里写了 AcceptsReturn = false」，
+        // 判不了「这个框真的不吃 Enter」「窗体的 AcceptButton 真的是那颗关闭」——那要 WinForms 真跑。
+        // 这一段量的是控件契约本身；**真的按一下 Enter 键**没有模拟（本环境没有 Windows 图形子系统，
+        // 键盘注入在 wine 里不可靠），「按 Enter 真的关掉这一屏」仍随 G-D5 真机复核，不在这里冒充量到。
+        RunAction("提示对话框：等宽行的 Enter 契约——只读框不吃 Enter，落点是「关闭」（真实控件）", () =>
+        {
+            var box = FindAll<TextBox>(dialog)
+                .FirstOrDefault(t => string.Equals(t.Text, NoticeText.AboutDataDirLine(path), StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("对话框里找不到等宽行（只读文本框）。");
+            if (!box.ReadOnly)
+            {
+                throw new InvalidOperationException("等宽行不是只读的：路径行不该接受输入。");
+            }
+            if (!box.Multiline)
+            {
+                throw new InvalidOperationException("等宽行不是多行的：长路径折不了行，会被裁掉半行。");
+            }
+            if (box.AcceptsReturn)
+            {
+                throw new InvalidOperationException(
+                    "等宽行吃 Enter（AcceptsReturn = true）：只读行没有换行可做，Enter 从此什么都不发生，"
+                    + "键盘用户被卡在这一屏里（Enter 本该冒泡给「关闭」）。");
+            }
+            if (!box.TabStop)
+            {
+                throw new InvalidOperationException("等宽行 Tab 到不了：键盘用户没法框选路径。");
+            }
+            if (dialog.AcceptButton is not Button accept)
+            {
+                throw new InvalidOperationException("提示对话框没有 AcceptButton：Enter 没有落点。");
+            }
+            if (!ReferenceEquals(accept, closeButton))
+            {
+                throw new InvalidOperationException(
+                    $"提示对话框的 AcceptButton 是「{accept.Text}」，不是「关闭」：Enter 会落到别的动作上。");
+            }
+            _lines.Add($"     等宽行：ReadOnly={box.ReadOnly}、Multiline={box.Multiline}、"
+                + $"AcceptsReturn={box.AcceptsReturn}、TabStop={box.TabStop}；"
+                + $"Enter 的落点 AcceptButton =「{accept.Text}」（真的按 Enter 未模拟，随 G-D5 真机复核）。");
+        });
+
         RunAction("提示对话框：真点「复制路径」，按钮文字切到「复制成功」（真实控件）", () =>
         {
             copyButton.PerformClick();

@@ -139,6 +139,23 @@ internal static class Ui
         Box(new TextBox { ReadOnly = true, Multiline = multiline, WordWrap = wordWrap, ScrollBars = scrollBars }, mono, caption);
 
     /// <summary>
+    /// 内容区可用宽度（第一百九十二轮）：容器客户区宽减去左右内边距，至少 1px。
+    /// <para>
+    /// <b>为什么要有这一处</b>：提示对话框里「正文折行宽」「等宽行量宽」「说明行折行宽」原本各按
+    /// 窗体客户区宽减两档 <see cref="UiTokens.Lg"/> 算一遍，而内容网格自己的 <c>Padding</c> 又是另一笔账——
+    /// 两笔账数值碰巧相等时看不出来，改一处（换内边距、换停靠方式、换宿主）就错位：
+    /// 量宽比实际可用宽大，长路径会被裁掉半行；量宽比它小，这一屏会多出一块空白。
+    /// 现在三处都取这一个算式，量宽与控件实际拿到的宽度是同一个数。
+    /// </para>
+    /// <para>
+    /// 容器还没布局时客户区宽是 0，这里按 1px 兜底（<c>MeasureText</c> 不接受 0 宽）；
+    /// 调用方在布局完成后按同一算式重算一次即可（见 <c>NoticeDialog</c> 的 <c>ApplyWrapWidth</c>）。
+    /// </para>
+    /// </summary>
+    public static int ContentWidth(Control container) =>
+        Math.Max(container.ClientSize.Width - container.Padding.Horizontal, 1);
+
+    /// <summary>
     /// 可框选复制的等宽只读行（第一百九十一轮）：提示对话框的路径行。
     /// <para>
     /// <b>为什么不是 <see cref="Mono"/> 那个 Label</b>：Label 不可选中、不可复制，而「打开目录失败」的
@@ -155,6 +172,16 @@ internal static class Ui
     /// <c>TabStop</c> 打开：Tab 能到它，键盘用户不必用鼠标框选。只读框不接收输入，
     /// 但选中与复制照常（<c>ShortcutsEnabled</c> 保持默认 true，Ctrl+C 走系统实现）。
     /// </para>
+    /// <para>
+    /// <b>Enter 的落点写成显式契约</b>（第一百九十二轮）：<c>AcceptsReturn = false</c>。
+    /// 这一行是<b>只读</b>的，Enter 在它上面没有「换行」可做；<c>AcceptsReturn</c> 不写时默认就是 false，
+    /// 于是 Enter 冒泡给窗体的 <c>AcceptButton</c>（提示对话框里是「关闭」）——用户按 Enter 关掉这一屏。
+    /// 但「默认是 false」是隐式的：后来人顺手改成 <c>true</c>（比如想让它看起来像可编辑框），
+    /// 界面上不会有任何异样，只是 Enter 从此什么都不做，键盘用户被卡在这一屏里。
+    /// 显式写出来，改它就得先删掉这一行——门在
+    /// <c>NoticeCopyTests.Ui_MonoBox_IsReadOnlySelectableChrome</c>，运行时那一半在冒烟段
+    /// 「等宽行的 Enter 契约」（wine 三档各跑一次）。
+    /// </para>
     /// </summary>
     public static TextBox MonoBox(string text, int wrapWidth)
     {
@@ -163,6 +190,9 @@ internal static class Ui
         box.Width = Math.Max(wrapWidth, 1);
         box.Height = MonoBoxHeight(text, wrapWidth);
         box.TabStop = true;
+        // 只读行不吃 Enter：Enter 冒泡给窗体的 AcceptButton（提示对话框里是「关闭」）。
+        // 显式写出来而不是靠默认值——见上面那段注释。
+        box.AcceptsReturn = false;
         return box;
     }
 
