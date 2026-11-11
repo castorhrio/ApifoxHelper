@@ -4,7 +4,9 @@
 
 ## 本仓验收口径（可勾选）
 
-> **DoD 豁免登记（第一百九十七轮 · 2026-11-11 核对；第二百零二轮 · 2026-11-11 复核）**：核对来源 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（**INDEX 版本 2026-10-31**，正文 9 份 + 豁免名单）。核对结果：**ApifoxHelper 既不在正文 9 份，也不在豁免名单**（豁免名单列的是 WeComKit / ZCode / agent-scheduler / agent-control / agent-pointer / PNOS 与各类 caches）。**结论：本仓无 DoD 文件可加载**，验收口径以本节为准——下一轮起「DoD 未勾满」不构成开工依据，本节里留 `[ ]` 的那几行才是。核对日期 **2026-11-11**，核对人：本轮编码会话（只读核对，未改动调度仓任何文件）。**这一行由 `AcceptanceChecklistTests.DodExemption_IsRegisteredWithSourceAndDate` 与 `AcceptanceChecklistTests.DodExemption_IndexVersionIsCurrent` 钉住**：删掉它、或把「来源 / 日期 / 结论」任一项写丢即红——「没有 DoD」这件事本身也要有出处，否则下一轮又会有人去翻一遍、或者干脆自己发明一份。**第二百零二轮补的时效门（简报 P0-1）**：登记里的 **INDEX 版本日期**必须等于仓内记录的最新 INDEX 版本（`DodExemption_IndexVersionIsCurrent` 里那个常量，INDEX 更新后要跟着改），且核对日期不得早于版本日期——INDEX 更新后只改一处即红，把「本仓静默过期」变成「必须有人看一眼」。它仍**不判**调度仓里那份 INDEX 现在写了什么（跨主机、只读、本仓不该依赖它）。
+> **DoD 豁免登记（第一百九十七轮 · 2026-11-11 核对；第二百零二轮 · 2026-11-11 复核）**：核对来源 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（**INDEX 版本 2026-10-31**，正文 9 份 + 豁免名单）。核对结果：**ApifoxHelper 既不在正文 9 份，也不在豁免名单**（豁免名单列的是 WeComKit / ZCode / agent-scheduler / agent-control / agent-pointer / PNOS 与各类 caches）。**结论：本仓无 DoD 文件可加载**，验收口径以本节为准——下一轮起「DoD 未勾满」不构成开工依据，本节里留 `[ ]` 的那几行才是。核对日期 **2026-11-11**，核对人：本轮编码会话（只读核对，未改动调度仓任何文件）。
+>
+> **这一行怎么被钉住（说明）**：由 `AcceptanceChecklistTests.DodExemption_IsRegisteredWithSourceAndDate` 与 `AcceptanceChecklistTests.DodExemption_IndexVersionIsCurrent` 钉住——删掉它、或把「来源 / 日期 / 结论」任一项写丢即红；「没有 DoD」这件事本身也要有出处，否则下一轮又会有人去翻一遍、或者干脆自己发明一份。**时效门（第二百零二轮，简报 P0-1）**：登记里的 **INDEX 版本日期**必须等于仓内记录的最新 INDEX 版本（`DodExemption_IndexVersionIsCurrent` 里那个常量，INDEX 更新后要跟着改），且核对日期不得早于版本日期——INDEX 更新后只改一处即红，把「本仓静默过期」变成「必须有人看一眼」。它仍**不判**调度仓里那份 INDEX 现在写了什么（跨主机、只读、本仓不该依赖它）。
 >
 > **为什么要有这一节**：本产品**没有对应的 DoD 文件**——第一百六十五轮核对 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（2026-10-31 版），正文 9 份与豁免名单都没有 ApifoxHelper。DoD 缺席时，验收口径此前散在 `docs/方案.md` §2.2/§8、`README.md`「使用流程」「写入安全」、`docs/DESIGN.md` 与本文件的多处，**没有一份能逐项勾选的表**——任何一轮都可以自行定义「缺口」。本节把这些既有口径机械可读化：**不新增任何产品功能、不新增任何判定**。
 >
@@ -2779,3 +2781,33 @@
 - 真机三档 DPI 与主链路演示（G-D5）、SHARED-3/4/7/8 的真实 Apifox 端到端仍不可得。本轮未连接或写入 Apifox，未调用任何模型服务，未安装依赖，未新建调度器、未动其他项目。
 
 **读数**：`dotnet build` 0 警告 0 错误；`dotnet test` **2648 通过 / 0 失败**；G-D5 仍是 `[ ]`。
+
+## 第二百零三轮（2026-11-11）：覆盖率门（漏一屏即红）+ 真机准备脚本的失败路径机械门 + 首屏登记拆分
+
+**① 「静态门 + 冒烟段」的覆盖率门（简报 P0-1）**
+
+- **补的是哪个缺口**：第二百零二轮新增的 `GateSourceConsistencyTests` 把「同源」抽成了通用判据，但 `Pairs` 数组只有三屏，类注释写着「新增一屏要在这里加一行」——**没有任何一条门判「是不是漏了」**。下一屏出现时，「漏登记」与「这一屏本来就不该登记」在门眼里一模一样，仍然只有 wine 跑一次才看得见两边矛盾。
+- **门**：新增 `GateSourceConsistencyTests.EverySmokeSectionWithAStaticGate_IsListedInPairs`——扫冒烟器 `Main` 里注册过的段（`Section("…", nameof(RunXxx))`），再扫 `ApifoxHelper.Tests/*SmokeTests.cs` 里是否引用它（`nameof(Xxx)` 或整串字面量 `"Xxx"`，带名字边界）；凡这对特征成立、却既不在 `Pairs` 里也没登记豁免的，即红并打出缺的屏名。
+- **豁免登记**：确实不适合判同源的，在 `Exemptions` 里登记一行（段名 + 理由，理由短于 20 字即红）。本轮登记两条：`NativeDialogSmokeTests.cs` 引用的 13 段（该文件判的是段序 / 段数 / 接线，不是同源表达式）、`RunContractsInteraction`（这一屏的同源判据落在 `ReadFullTextAndCheck` 段，即 `Pairs` 第三行）。豁免本身也是活的：登记的段必须还在冒烟器里、不得与 `Pairs` 重复、不得重复登记。
+- **同族补一条**：`EveryDeclaredSection_IsRegisteredInMain`——冒烟器里每个 `private static void RunXxx(` 都必须在 `Main` 里注册过，注册表里也不许出现没有方法体的名字。段写在文件里但没注册，报告里永远不会出现这一段，演示脚本的逐屏对账也就少了一屏，而所有静态门照旧全绿。
+- **变异验证**：把 `Pairs` 里「定向构建输出『复制命令』」那一行删掉 → 新门红，报「RunBuildCommandCopyClick（被 BuildCommandCopySmokeTests.cs 引用）」；还原后全绿。
+
+**② 真机准备脚本的失败路径机械门（简报 P0-2）**
+
+- **补的是哪个缺口**：`prepare-real-machine.sh` 第 ①②③ 步失败时确实各打一句「① / ② / ③ 未通过」，但**没有一条门判这三句真的在**——把失败信息删掉，`WineCheckScriptsTests` 此前一条都不会红。真机到手当天靠这一支脚本，它的失败信息必须可核对。
+- **门**：新增 `WineCheckScriptsTests.PrepareRealMachineScript_EveryStepNamesItsOwnFailure`——按 `echo "-- ① …"` 这类段头把脚本切成三步（④ 只作第 ③ 步的收尾边界，不判它），逐步核三件事：① 至少有一句 `echo "① 未通过…"`；② 这一步的**失败分支数**（含 `||` 的行数）与**点名数**相等；③ 每一句点名都在失败路径上（本行带 `||`，或紧邻的上一行是 `|| {` 开的分支）。
+- **为什么判「分支数 == 点名数」而不只判「有一句」**：第 ② 步有构建与用例两条命令，只判「至少一句」的话，删掉其中一句点名照样绿——实测确认过这一点，所以把判据收紧到逐分支。
+- **变异验证**：把第 ② 步构建那一句 `echo "② 未通过：构建有错误。"` 删掉（改成 `|| exit 1`）→ 门红，报「第 ② 步有 2 个失败分支，却只有 1 句『② 未通过』」；还原后全绿。
+
+**③ `docs/NOTES.md` 首屏「DoD 豁免登记」拆成两段（简报 P1-1）**
+
+- 原来一行里塞了七层信息（核对来源 / INDEX 版本 / 核对结果 / 结论 / 核对日期 / 核对人 / 两道门怎么钉 / 时效门 / 不判什么），第一遍读不完。现在拆成两段：**登记**只放四要素（核对来源 / INDEX 版本 / 核对日期 / 结论），**说明**放两道门怎么钉、时效门、以及「不判调度仓里那份 INDEX 现在写了什么」。
+- **只动排版，不动事实，不动关键词**：`AcceptanceChecklistTests.DodExemption_IsRegisteredWithSourceAndDate` 与 `DodExemption_IndexVersionIsCurrent` 仍绿（它们取的是本节里第一处含「DoD 豁免登记」的行，登记段仍在最前）。
+
+**④ 未做（如实挂账）**
+
+- 简报 P1-2（INDEX 时效门的变异验证记录）、P2-1（脚本 `[1/3]` 进度前缀）、P2-2（`Infrastructure/JsonErrorCopy.cs` 是否在仓）本轮未动。其中 **P2-2 已顺手只读确认**：`Infrastructure/JsonErrorCopy.cs` 在仓里，`Api/ErrorHandling.cs` 与 `Api/ErrorCopy.cs` 的引用不是坏引用，该项可关闭。
+- 本轮改动只落在测试工程与 `docs/NOTES.md`，`Desktop/`、`ApifoxHelper.Smoke/`、`Web/` 一行未动，冒烟器源码指纹不变。
+- 真机三档 DPI 与主链路演示（G-D5）、SHARED-3/4/7/8 的真实 Apifox 端到端仍不可得。本轮未连接或写入 Apifox，未调用任何模型服务，未安装依赖，未新建调度器、未动其他项目。
+
+**读数**：`dotnet build` 0 警告 0 错误；`dotnet test` **2651 通过 / 0 失败**（较上一轮 2648 增 3 条：覆盖率门、声明即注册、脚本失败路径门）；G-D5 仍是 `[ ]`。

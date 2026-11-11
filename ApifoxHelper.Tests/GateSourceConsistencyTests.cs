@@ -16,7 +16,11 @@ namespace ApifoxHelper.Tests;
 /// ① 两半都在（静态门方法在测试文件里、冒烟段在冒烟器里且真的被 <c>Main</c> 调用）；
 /// ② 静态门与冒烟段<b>都出现同一个表达式</b>（例如都取 <c>BuildCommandCopy.Line(null)</c>）；
 /// ③ 两边都<b>不许出现那个表达式算出来的字面量</b>（各写一套字面量正是上一轮那处矛盾的成因）；
-/// ④ 那个表达式必须是<b>符号</b>（带成员访问）而不是字面量——否则「同源」只是「两边抄了同一句话」。
+/// ④ 那个表达式必须是<b>符号</b>（带成员访问）而不是字面量——否则「同源」只是「两边抄了同一句话」；
+/// ⑤ <b>没有漏屏</b>（第二百零三轮，简报 P0-1）：凡「冒烟器里有这一段 + 测试工程里有 <c>*SmokeTests.cs</c>
+/// 引用它」这对特征成立的，就必须在 <see cref="Pairs"/> 里出现，或在 <see cref="Exemptions"/> 里登记一行说明。
+/// 前四条判的是「已登记的那几对同不同源」，这一条判的是「该登记的有没有漏」——没有它，下一屏出现时
+/// 仍然只有 wine 跑一次才看得见。
 /// </para>
 /// <para>
 /// <b>它不跑 wine</b>（跑法是 <c>.winecheck/demo.sh</c>）：它只保证「两边口径同源、且没被掏空」，
@@ -178,6 +182,159 @@ public class GateSourceConsistencyTests
                 Assert.DoesNotContain('"', expression);
             }
         }
+    }
+
+    // ── 第二百零三轮（简报 P0-1）：覆盖率门——「漏一屏」也要红 ──────────────
+
+    /// <summary>
+    /// 冒烟器里<b>声明</b>的段方法（<c>private static void RunXxx(</c>）。
+    /// </summary>
+    private static List<string> DeclaredSections() =>
+        Regex.Matches(SmokeProgram, @"private static void (Run[A-Za-z0-9_]*)\(")
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>
+    /// 冒烟器 <c>Main</c> 里<b>注册</b>过的段（<c>Section("…", nameof(RunXxx))</c>）。
+    /// <para>
+    /// 注册表是「段」的权威定义：只有注册过的段才会出现在报告的分段表里，演示脚本也按它逐屏对账。
+    /// </para>
+    /// </summary>
+    private static List<string> RegisteredSections() =>
+        Regex.Matches(SmokeProgram, @"Section\(""[^""]*"",\s*nameof\((Run[A-Za-z0-9_]*)\)\)")
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>
+    /// 冒烟器里的构造辅助，不是段：<c>Run(name, build)</c> 造一个控件、<c>RunAction(name, action)</c> 跑一段动作。
+    /// 它们没有 <c>Section</c> 注册，也不该出现在报告的分段表里——列在这里是为了让下面那条
+    /// 「声明了就要注册」的门不把它们当成漏注册的段。
+    /// </summary>
+    private static readonly string[] SmokeHelpers = ["Run", "RunAction"];
+
+    /// <summary>
+    /// 「有冒烟段、也有 <c>*SmokeTests.cs</c> 引用它，但<b>不是</b>同源成对屏」的豁免登记。
+    /// <para>
+    /// 写法同 <c>AcceptanceChecklistTests</c> 的「DoD 豁免登记」：<b>登记 + 理由</b>两件事都要有。
+    /// 只登记不写理由，下一个人推不出这一屏为什么不在 <see cref="Pairs"/> 里，就会以为漏了。
+    /// </para>
+    /// </summary>
+    private sealed record Exemption(string[] Sections, string Reason);
+
+    /// <summary>
+    /// 已登记的豁免。新增一屏「有冒烟段 + 有 <c>*SmokeTests.cs</c> 引用、但没有同源表达式可判」时在这里加一行。
+    /// </summary>
+    private static readonly Exemption[] Exemptions =
+    [
+        new(
+            [
+                "RunEndToEnd", "RunWriteBackEndToEnd", "RunScanResultsInteraction", "RunFontStackRuntime",
+                "RunCandidatesInteraction", "RunSupplementsInteraction", "RunProfileLoadFailure",
+                "RunTaskLoadFailure", "RunReportsLoadFailure", "RunDecisionsLoadFailure",
+                "RunJournalLoadFailure", "RunDetailBreak", "RunDialogStatusSweep",
+            ],
+            "NativeDialogSmokeTests.cs 判的是「段序 / 段数 / 段在 Main 里被调用」，不是「静态门与冒烟段断言同一表达式」——"
+            + "它引用的这 13 段没有可判的同源表达式，硬凑一对只会把「同源」稀释成「两边都提到这个名字」。"),
+        new(
+            ["RunContractsInteraction"],
+            "响应契约那一屏的同源判据落在 ReadFullTextAndCheck 段（Pairs 第三行：状态行完整错误入口），"
+            + "RunContractsInteraction 判的是五段交互与落盘，不是同源表达式。"),
+    ];
+
+    /// <summary>
+    /// <b>覆盖率门</b>：凡「冒烟器里有这一段 + 测试工程里有 <c>*SmokeTests.cs</c> 引用它」这对特征成立的，
+    /// 就必须在 <see cref="Pairs"/> 里出现，或在 <see cref="Exemptions"/> 里登记一行。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="Pairs"/> 的类注释从第二百零二轮起就写着「新增一屏要在这里加一行」，
+    /// 但<b>没有任何一条门判「是不是漏了」</b>——下一屏出现时，漏登记的表现与「这一屏本来就不该登记」
+    /// 一模一样，仍然只有 wine 跑一次才看得见两边矛盾。这条门把「记得加」变成「不加就红」。
+    /// </para>
+    /// <para>
+    /// <b>判据不发明新口径</b>：特征就是已有三屏各自的样子——冒烟器里有段、测试工程里有
+    /// <c>*SmokeTests.cs</c> 提到它（<c>nameof(Xxx)</c> 或字面量 <c>"Xxx"</c>）。它<b>不要求</b>每一屏都进
+    /// <see cref="Pairs"/>：确实不适合的，在 <see cref="Exemptions"/> 里登记一行说明即可。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EverySmokeSectionWithAStaticGate_IsListedInPairs()
+    {
+        var smokeTests = Directory
+            .GetFiles(Path.Combine(Repo.Root, "ApifoxHelper.Tests"), "*SmokeTests.cs")
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .Select(f => (Name: Path.GetFileName(f), Text: File.ReadAllText(f)))
+            .ToList();
+        Assert.NotEmpty(smokeTests);
+
+        var paired = Pairs.Select(p => p.SmokeSection).ToHashSet(StringComparer.Ordinal);
+        var exempt = Exemptions.SelectMany(e => e.Sections).ToHashSet(StringComparer.Ordinal);
+
+        var missing = new List<string>();
+        foreach (var section in RegisteredSections())
+        {
+            // 名字边界：`nameof(Xxx)` 或整串字面量 `"Xxx"`——子串取法会把 RunXxx 与 RunXxxY 混成一个。
+            var pattern = @"nameof\(" + Regex.Escape(section) + @"\)|""" + Regex.Escape(section) + @"""";
+            var referencing = smokeTests
+                .Where(t => Regex.IsMatch(t.Text, pattern))
+                .Select(t => t.Name)
+                .ToList();
+            if (referencing.Count == 0) continue; // 没有静态门那一半，不在本门判的范围
+            if (paired.Contains(section) || exempt.Contains(section)) continue;
+            missing.Add($"{section}（被 {string.Join(" / ", referencing)} 引用）");
+        }
+
+        Assert.True(missing.Count == 0,
+            "下面这些冒烟段已经有 *SmokeTests.cs 引用它（= 静态门那一半已经在），却既不在 Pairs 里、也没登记豁免："
+            + string.Join("；", missing)
+            + "。在 Pairs 里加一行判同源，或在 Exemptions 里登记一行说明这一屏为什么不适合——"
+            + "不登记就是这一屏没人判同源，与第二百零一轮之前一样：只有 wine 跑一次才看得见两边矛盾。");
+
+        // 豁免登记本身也要是活的：每一段都真的还在冒烟器里、且没有与 Pairs 重复登记。
+        var registered = RegisteredSections().ToHashSet(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var exemption in Exemptions)
+        {
+            Assert.True(exemption.Reason.Length >= 20,
+                "Exemptions 里有一条没写理由（或理由短到看不出为什么）：只登记不写理由，下一个人会以为这一屏漏了。");
+            Assert.NotEmpty(exemption.Sections);
+            foreach (var section in exemption.Sections)
+            {
+                Assert.True(registered.Contains(section),
+                    $"Exemptions 登记了 {section}，冒烟器里没有这一段——豁免指向一个不存在的段，等于没有豁免。");
+                Assert.False(paired.Contains(section),
+                    $"{section} 既在 Pairs 里又在 Exemptions 里：同一屏两种登记，改了一处另一处不会红。");
+                Assert.True(seen.Add(section), $"{section} 在 Exemptions 里登记了两次。");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 声明了就要注册：冒烟器里每一个 <c>private static void RunXxx(</c> 都必须在 <c>Main</c> 里
+    /// 以 <c>Section("…", nameof(RunXxx))</c> 注册过，反过来注册表里也不许出现没有方法体的名字。
+    /// <para>
+    /// 只判「方法存在」不够：段写在文件里但没注册，报告里永远不会出现这一段，演示脚本的逐屏对账
+    /// 也就少了一屏——而所有静态门照旧全绿。这是「漏屏」的另一种形态，与上面那条覆盖率门同一族。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryDeclaredSection_IsRegisteredInMain()
+    {
+        var declared = DeclaredSections()
+            .Where(n => !SmokeHelpers.Contains(n, StringComparer.Ordinal))
+            .ToList();
+        var registered = RegisteredSections();
+
+        var unregistered = declared.Except(registered, StringComparer.Ordinal).ToList();
+        Assert.True(unregistered.Count == 0,
+            $"冒烟器里声明了 {string.Join(" / ", unregistered)}，但 Main 里没有 Section(…, nameof(…)) 注册："
+            + "这一段永远不会跑，报告里也不会出现——要么注册，要么删掉。");
+
+        var dangling = registered.Except(declared, StringComparer.Ordinal).ToList();
+        Assert.True(dangling.Count == 0,
+            $"Main 里注册了 {string.Join(" / ", dangling)}，冒烟器里没有这个方法：注册表指向不存在的段。");
     }
 
     /// <summary>方法体（按大括号配平取，与本仓其它门同一套取法）。</summary>

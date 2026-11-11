@@ -193,6 +193,80 @@ public class WineCheckScriptsTests
     private static MatchCollection ScriptReferences(string text) =>
         Regex.Matches(text, @"(?<![A-Za-z0-9_.-])[A-Za-z0-9_]+\.sh(?![A-Za-z0-9_])");
 
+    // ── 第二百零三轮（简报 P0-2）：真机准备脚本的失败路径也要有门 ──────────
+
+    /// <summary>
+    /// <c>prepare-real-machine.sh</c> 的 ①②③ 三步，<b>每一个失败分支都要自己点名</b>。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：脚本第 ①②③ 步失败时确实各打一句「① / ② / ③ 未通过」，
+    /// 但<b>没有任何一条门判这几句真的在</b>——把失败信息删掉、或挪到成功路径上，
+    /// 本文件此前一条都不会红。真机到手当天靠这一支脚本，它的失败信息必须可核对：
+    /// 三步里哪一步没过、为什么没过，是操作者当天唯一能读到的线索。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：按 <c>echo "-- ① …"</c> 这类段头把脚本切成三步，逐步核三件事——
+    /// ① 这一步至少有一句 <c>echo "① 未通过…"</c>；
+    /// ② 这一步的<b>失败分支数</b>（含 <c>||</c> 的行数）与<b>点名数</b>相等——第 ② 步有两条命令
+    /// （构建 / 用例），删掉其中一句点名，分支数就比点名数多，即红；
+    /// ③ 每一句点名都在<b>失败路径</b>上（本行带 <c>||</c>，或紧邻的上一行是 <c>|| {</c> 开的分支）——
+    /// 只判「这句话在文件里」不够：挪到成功路径上，文件里照样有这句话，而失败时反而不打。
+    /// </para>
+    /// <para>
+    /// 与本文件已有的「脚本与 README 表对齐」是同一族：机械判脚本源码里写明的可见约定，不发明新机制。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PrepareRealMachineScript_EveryStepNamesItsOwnFailure()
+    {
+        var path = Path.Combine(Directory, "prepare-real-machine.sh");
+        Assert.True(File.Exists(path), ".winecheck/prepare-real-machine.sh 缺失（真机到手前的第 0 条没有可跑的一支）。");
+        var lines = File.ReadAllText(path).ReplaceLineEndings("\n").Split('\n');
+
+        var markers = new[] { "①", "②", "③" };
+        // 段头：`echo "-- ① 复跑三档冒烟…--"`。切块只按段头，不按空行——空行会随排版漂。
+        // ④ 也取段头：它只是第 ③ 步的**收尾边界**（不判它），否则第 ③ 步的块会一路吃到 ④ 的 `|| exit 1`。
+        var boundaries = new[] { "①", "②", "③", "④" };
+        var starts = boundaries
+            .Select(m => Array.FindIndex(lines, l => Regex.IsMatch(l, "^echo \"-- " + m + " ")))
+            .ToList();
+        for (var i = 0; i < boundaries.Length; i++)
+        {
+            Assert.True(starts[i] >= 0,
+                $"prepare-real-machine.sh 里找不到第 {boundaries[i]} 步的段头（`echo \"-- {boundaries[i]} …--`）："
+                + "三步的边界判不出来，失败信息也就无从核对。");
+        }
+
+        for (var i = 0; i < markers.Length; i++)
+        {
+            var marker = markers[i];
+            var block = lines[starts[i]..starts[i + 1]];
+
+            var messages = block
+                .Select((line, index) => (Line: line, Index: index))
+                .Where(x => Regex.IsMatch(x.Line, "echo\\s+\"" + marker + " 未通过"))
+                .ToList();
+            Assert.True(messages.Count > 0,
+                $"prepare-real-machine.sh 第 {marker} 步里找不到「{marker} 未通过」这一句："
+                + "这一步失败时脚本会静默往下走，操作者看不出卡在哪一步——真机到手当天最需要的正是这一句。");
+
+            // 失败分支数 == 点名数：第 ② 步有构建与用例两条命令，删掉其中一句点名即红。
+            var branches = block.Count(l => l.Contains("||", StringComparison.Ordinal));
+            Assert.True(branches == messages.Count,
+                $"prepare-real-machine.sh 第 {marker} 步有 {branches} 个失败分支（含 `||` 的行），"
+                + $"却只有 {messages.Count} 句「{marker} 未通过」：有分支失败时不点名，"
+                + "操作者只看到脚本停住、看不到停在哪一步、为什么停。");
+
+            foreach (var (line, index) in messages)
+            {
+                var onFailurePath = line.Contains("||", StringComparison.Ordinal)
+                    || (index > 0 && block[index - 1].Contains("||", StringComparison.Ordinal));
+                Assert.True(onFailurePath,
+                    $"「{marker} 未通过」那一句不在失败路径上（本行与上一行都没有 `||`）："
+                    + "它会在成功时也打出来，失败时反而可能不打——失败信息必须挂在失败分支上。");
+            }
+        }
+    }
+
     /// <summary>
     /// 环境变量的登记与实读两个方向都核：<c>${VAR:-默认}</c> 是这些脚本唯一的取参入口。
     /// 第一百六十九轮两处都漂了——<c>DSHOT</c> 一直在 <c>shot_dialog.sh</c> 里用而表里没有，
