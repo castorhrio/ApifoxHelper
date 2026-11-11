@@ -815,8 +815,8 @@ public class NativeDialogSmokeTests
     /// </para>
     /// <para>
     /// 判三件事：① 屏单来自 <c>Cases(services, profile, task, slot)</c>；② 段里没有硬编码的对话框构造
-    /// （<c>new XxxDialog(</c>）——有的话就是第二份名单；③ 每屏三段（短句不给 → 长句重判 → 回短句收起），
-    /// 段数掉下去说明有人删了某一段（删段比删断言更难发现）。
+    /// （<c>new XxxDialog(</c>）——有的话就是第二份名单；③ 每屏四段（短句不给 → 长句重判 → **点开读全** → 回短句收起，
+    /// 「点开读全」一段是第一百八十四轮补上的），段数掉下去说明有人删了某一段（删段比删断言更难发现）。
     /// </para>
     /// </summary>
     [Fact]
@@ -830,11 +830,18 @@ public class NativeDialogSmokeTests
         // ② 反面：段里不许自己 new 对话框（那就是第二份名单，会与 Cases 漂开）。
         Assert.DoesNotMatch(@"new\s+\w*Dialog\s*\(", body);
 
-        // ③ 每屏三段，且三段都真的判失败（不是「跑过、什么也没判」）。
+        // ③ 每屏四段，且每段都真的判失败（不是「跑过、什么也没判」）。
         var segments = Regex.Matches(body, @"RunAction\(").Count;
-        Assert.True(segments >= 3, $"逐屏扫只有 {segments} 个 RunAction 段（每屏三段：短句不给 → 长句重判 → 回短句收起）。");
+        Assert.True(segments >= 4, $"逐屏扫只有 {segments} 个 RunAction 段（每屏四段：短句不给 → 长句重判 → 点开读全 → 回短句收起）。");
         Assert.Contains("host.FullTextButton.Visible != shouldOffer", body);
         Assert.Contains("StatusEntryRule(host.Label)", body);
+
+        // ③' 第四段「点开读全」不许被顺手删掉（第一百八十四轮新增）。
+        // 删段的形态与删断言一样难发现：这一段被删后，逐屏扫照样跑、报告照样 PASS，
+        // 而「用户点开入口读到的到底是不是那一句」在 12 处屏上就再没人量过了
+        // ——那正是 README「已知限制」里记的那个缺口（此前只由接线门判住）。
+        Assert.Contains("点入口读全，正文与状态行逐字相同", body);
+        Assert.Contains("ReadFullTextAndCheck(dialog, host.Label)", body);
 
         // ④ 必须真的 Show：不 Show 时 Control.Visible 读的是有效可见性，量到的是「窗体还没显示」。
         Assert.Contains("dialog.Show();", body);

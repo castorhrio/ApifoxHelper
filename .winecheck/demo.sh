@@ -103,10 +103,23 @@ for TIER in $TIERS; do
   CONSOLE="$OUT/console-$TIER.log"
   echo "== 档位 LogPixels=$TIER（≈$((100 * TIER / 96))%）=="
   rm -f "$REPORT"
-  "$WINE_BIN" reg add 'HKCU\Control Panel\Desktop' /v LogPixels /t REG_DWORD /d "$TIER" /f >/dev/null 2>&1 || {
-    echo "  改不了 LogPixels（注册表写入失败），这一档没量成。"; TOTAL_MISSING=$((TOTAL_MISSING + 1)); continue; }
-  xvfb-run -a "$WINE_BIN" "$SMOKE_EXE" "--report=$REPORT" >"$CONSOLE" 2>&1
+  # 改 LogPixels 与跑冒烟必须落在**同一个活显示**里（第一百八十四轮实测修）。
+  # 原因：注册表写入与 GUI 进程共用同一个常驻 wineserver。脚本头部的 DISPLAY 默认是 :99，
+  # 而那块屏上没有 Xvfb——在死显示里先写注册表，会把 wineserver 的显示状态带坏，
+  # 之后同一前缀下的每一扇窗口都构造不出来（报告整片「Error creating window handle」）。
+  # 那不是产品回归，是环境差异：把它读成回归会带偏一整场答辩（同 README 记的前缀误用那一族）。
+  # 写法保持可核对：这一段里仍然逐字出现 `LogPixels /t REG_DWORD /d "$TIER"` 与 `"--report=$REPORT"`。
+  export WINE_BIN SMOKE_EXE
+  TIER="$TIER" REPORT="$REPORT" xvfb-run -a bash -c '
+    set -u
+    export WINEPREFIX DISPLAY
+    "$WINE_BIN" reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d "$TIER" -f >/dev/null 2>&1 || exit 3
+    exec "$WINE_BIN" "$SMOKE_EXE" "--report=$REPORT"
+  ' >"$CONSOLE" 2>&1
   RUN_RC=$?
+  if [ "$RUN_RC" = "3" ]; then
+    echo "  改不了 LogPixels（注册表写入失败），这一档没量成。"; TOTAL_MISSING=$((TOTAL_MISSING + 1)); continue
+  fi
   if [ ! -f "$REPORT" ]; then
     echo "  报告没落盘：$REPORT（冒烟器退出码 $RUN_RC，见 $CONSOLE）"
     TOTAL_MISSING=$((TOTAL_MISSING + 1))
@@ -156,7 +169,13 @@ for TIER in $TIERS; do
 done
 
 # 把缩放改回 100%，别把下一个用同一前缀的人留在 200% 档。
-"$WINE_BIN" reg add 'HKCU\Control Panel\Desktop' /v LogPixels /t REG_DWORD /d 96 /f >/dev/null 2>&1 || true
+# 这一步同样要在活显示里写：否则它会把常驻 wineserver 的显示状态带坏，
+# 下一个用同一前缀的人会撞上「每扇窗口都构造不出来」（与上面同一族原因）。
+xvfb-run -a bash -c '
+  set -u
+  export WINEPREFIX DISPLAY
+  "$WINE_BIN" reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d 96 -f >/dev/null 2>&1 || true
+' || true
 
 cat <<'CALIBER'
 

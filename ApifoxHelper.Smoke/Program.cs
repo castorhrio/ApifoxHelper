@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using System.Windows.Forms;
 using ApifoxHelper.Apifox;
@@ -263,8 +264,11 @@ internal static class Program
         Section("对话框状态行的完整错误入口（三屏各四段：嵌入页面文件的 / 独立文件的 / 真实保存失败的，真实控件）", nameof(RunDialogStatusFullText));
         RunDialogStatusFullText(services, dataRoot);
 
-        Section("对话框状态行逐屏（15 处对话框各三段：短句不给 → 长句按口径重判 → 回短句收起，真实控件）", nameof(RunDialogStatusSweep));
+        Section("对话框状态行逐屏（15 处对话框各四段：短句不给 → 长句按口径重判 → 点开读全 → 回短句收起，真实控件）", nameof(RunDialogStatusSweep));
         RunDialogStatusSweep(services, profile, task, slot);
+
+        Section("提示对话框的「复制路径」（按钮在 → 真点 → 剪贴板逐字核对 → 不跳位 → 真点关闭，真实控件）", nameof(RunNoticeCopyClick));
+        RunNoticeCopyClick(dataRoot);
 
         Section("说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）", nameof(RunCaptionFit));
         RunCaptionFit(services, dataRoot);
@@ -4526,6 +4530,7 @@ internal static class Program
 
         var swept = 0;
         var offered = 0;
+        var readFull = 0;
         var noStatus = new List<string>();
         var seen = new HashSet<Type>();
         foreach (var (name, build) in Cases(services, profile, task, slot))
@@ -4591,6 +4596,25 @@ internal static class Program
                     + (shouldOffer ? "" : "——这一档这一屏放得下，「放不下给」这一支在本档这一屏没量到（不伪造一个放不下的数字）"));
             });
 
+            // 「点开读全」这一支：入口给出来之后，真的点它、真的在模态窗里核对正文与状态行逐字相同，
+            // 再真的点那颗「关闭」（走产品路径，不直接 Close()）。
+            // 这一支此前只在三处代表屏量过（第一百六十六轮），其余 12 处只由接线门判住——
+            // 而「点开读全」按屏各不相同（同一句长失败，在 506px 的两屏放不下、在 922px 的几屏放得下），
+            // 不逐屏点开就不知道哪一屏的用户真的读得到全文（README「已知限制」与 NOTES 都按实写了这个缺口）。
+            RunAction($"对话框状态行逐屏：{screen}——点入口读全，正文与状态行逐字相同（真实控件）", () =>
+            {
+                if (!host.FullTextButton.Visible)
+                {
+                    // 放得下就没有入口：这一支在本档本屏没量到，如实写明，不伪造一个「点开了」。
+                    var (_, rowWidth) = StatusTextWidths(host.Label);
+                    _lines.Add($"     {screen}：这一档这一屏放得下（失败原因 {longText.Length} 字 / 这一行 {rowWidth}px），"
+                        + "没有入口可点——「点开读全」这一支在本档本屏没量到（不伪造）");
+                    return;
+                }
+                ReadFullTextAndCheck(dialog, host.Label);
+                readFull++;
+            });
+
             RunAction($"对话框状态行逐屏：{screen}——回到短句后入口收得回来", () =>
             {
                 host.SetText(shortText, UiTokens.Text);
@@ -4606,7 +4630,151 @@ internal static class Program
         }
 
         _lines.Add($"     逐屏扫过 {swept} 屏有状态行的对话框；「放不下给」这一档量到 {offered} 屏；"
+            + $"「点开读全」这一档量到 {readFull} 屏（放得下就没有入口可点，如实记没量到，不伪造）；"
             + $"没有状态行的屏（如实记，不算失败）：{(noStatus.Count == 0 ? "无" : string.Join("、", noStatus))}");
+    }
+
+    /// <summary>
+    /// 提示对话框的「复制路径」按钮：第一遍真的走一遍（第一百八十五轮）。
+    /// <para>
+    /// 这一颗按钮是第一百八十三轮加的，当时只判了口径（三个标签同字数、给了才出现）与接线
+    /// （按钮经 <c>Ui.CopyToClipboard</c> 写剪贴板），**按钮本身从来没有被点过**：冒烟构造清单里
+    /// 那一屏根本没给 <c>copyText</c>，按钮压根没被构造出来；而「复制后粘贴出来的到底是不是屏幕上
+    /// 那一行」当场没有 Windows 图形子系统量不了，当时连 Wine 也按约束退役了，这一支只能挂在
+    /// G-D5 真机复核上（那一支的口径写在 <c>ApifoxHelper.Tests/NoticeCopyTests.cs</c> 的类注释里）。
+    /// </para>
+    /// <para>
+    /// 现在 Linux 侧的模拟器又可用（wine 10.0 + Xvfb；本轮先单独探过：剪贴板写进去读得回来，
+    /// 读回来的与写进去的逐字相同），这一支就可以在 Linux 上真的走一遍：真点那颗按钮、
+    /// 真把剪贴板读回来逐字比对、真核对按钮宽度与旁边「关闭」的位置没有因为文字变化而跳位、
+    /// 真点那颗「关闭」。**量到的是模拟器，不是真机**——按钮的实际观感、Tab 可达、用户在自己
+    /// 机器上粘贴时的手感仍随 G-D5 真机复核。
+    /// </para>
+    /// <para>
+    /// 这一段刻意不给「按钮点了之后剪贴板里是空的也算过」留口子：读回来必须与屏幕上那一行
+    /// <b>逐字相同</b>（不多不少、不裁剪、不改写），否则就是「复制成功」这三个字说了假话。
+    /// </para>
+    /// </summary>
+    private static void RunNoticeCopyClick(string dataRoot)
+    {
+        // 复制出去的就是屏幕上那一行：路径取真实存在的资料目录（冒烟自己建的那一个），不是拼出来的字符串。
+        var path = dataRoot;
+        var body = NoticeText.AboutBody(TaskStore.ToolVersion, RuntimeInformation.FrameworkDescription);
+
+        // ① 没有可复制的东西时不该出现按钮：一颗点了什么也不会发生的按钮不该出现
+        // （与 StatusLineText「放得下就不给查看完整错误」同一判据）。
+        RunAction("提示对话框：没给可复制的路径时不出现「复制路径」按钮（真实控件）", () =>
+        {
+            using var plain = new NoticeDialog(
+                NoticeText.AboutHeading,
+                body,
+                mono: NoticeText.AboutDataDirLine(path),
+                note: NoticeText.AboutNote);
+            plain.Show();
+            Application.DoEvents();
+            var stray = FindAll<Button>(plain).Where(b => b.Text == NoticeCopy.Label).ToList();
+            if (stray.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"没给可复制的路径却出现了 {stray.Count} 颗「复制路径」按钮（点它什么也不会发生）。");
+            }
+        });
+
+        // 下面六段共用同一屏：点了按钮之后要接着看按钮文字、看剪贴板、看位置有没有跳位，
+        // 最后再点「关闭」——中间不换屏，换屏就量不到「同一颗按钮被点过之后」的那几个数。
+        using var dialog = new NoticeDialog(
+            NoticeText.AboutHeading,
+            body,
+            mono: NoticeText.AboutDataDirLine(path),
+            note: NoticeText.AboutNote,
+            copyText: path);
+        dialog.Show();
+        Application.DoEvents();
+
+        var copyButton = ButtonOf(dialog, NoticeCopy.Label);
+        var closeButton = ButtonOf(dialog, "关闭");
+        // 宽度与位置先记下来：点了之后文字从「复制路径」变成「复制成功」，四个字换四个字，
+        // 按钮宽度本就该不变（§6「停止/危险：位置尺寸与常态一致，防按钮跳位」），变了就是回归。
+        var widthBefore = copyButton.Width;
+        var closeLeftBefore = closeButton.Left;
+        var rowHeightBefore = copyButton.Parent?.Height ?? 0;
+
+        RunAction("提示对话框：给了可复制的路径时「复制路径」按钮在且可点（真实控件）", () =>
+        {
+            if (!copyButton.Visible) throw new InvalidOperationException("「复制路径」按钮不可见。");
+            if (!copyButton.Enabled) throw new InvalidOperationException("「复制路径」按钮是禁用的。");
+            if (!copyButton.CanSelect) throw new InvalidOperationException("「复制路径」按钮不可选中（Tab 到不了它）。");
+        });
+
+        RunAction("提示对话框：真点「复制路径」，按钮文字切到「复制成功」（真实控件）", () =>
+        {
+            copyButton.PerformClick();
+            Application.DoEvents();
+            if (copyButton.Text == NoticeCopy.FailedLabel)
+            {
+                throw new InvalidOperationException(
+                    "点了「复制路径」之后按钮说的是「复制失败」：剪贴板写不进去（这一屏如实说了没复制成，"
+                    + "但本段量的是成功路径——写不进去不算量到）。");
+            }
+            if (copyButton.Text != NoticeCopy.CopiedLabel)
+            {
+                throw new InvalidOperationException(
+                    $"点了「复制路径」之后按钮上是「{copyButton.Text}」，不是「{NoticeCopy.CopiedLabel}」。");
+            }
+        });
+
+        RunAction("提示对话框：剪贴板里读回来的是那一条路径，逐字相同（真实控件）", () =>
+        {
+            string pasted;
+            try
+            {
+                pasted = Clipboard.GetText();
+            }
+            catch (ExternalException ex)
+            {
+                throw new InvalidOperationException("读不回剪贴板（被其他进程占用）：" + ex.Message);
+            }
+            if (pasted != path)
+            {
+                throw new InvalidOperationException(
+                    $"剪贴板里是「{pasted}」（{pasted.Length} 字），要复制的是「{path}」（{path.Length} 字）"
+                    + "——粘出去的不是屏幕上那一行。");
+            }
+        });
+
+        RunAction("提示对话框：复制成功后按钮宽度与旁边「关闭」的位置都没动（真实控件）", () =>
+        {
+            if (copyButton.Width != widthBefore)
+            {
+                throw new InvalidOperationException(
+                    $"按钮宽度从 {widthBefore}px 变成 {copyButton.Width}px：三个标签同字数，宽度本该不变（防按钮跳位）。");
+            }
+            if (closeButton.Left != closeLeftBefore)
+            {
+                throw new InvalidOperationException(
+                    $"「关闭」按钮从左边 {closeLeftBefore}px 挪到 {closeButton.Left}px：复制按钮宽度一变就把它推走了。");
+            }
+            if ((copyButton.Parent?.Height ?? 0) != rowHeightBefore)
+            {
+                throw new InvalidOperationException(
+                    $"按钮行从 {rowHeightBefore}px 变成 {copyButton.Parent?.Height}px：文字切换不该推动这一行。");
+            }
+        });
+
+        RunAction("提示对话框：真点「关闭」把这一屏关掉（真实控件）", () =>
+        {
+            closeButton.PerformClick();
+            Application.DoEvents();
+            // 模态之外的窗体 Close() 之后会被销毁：判「关掉了」用「销毁了或不可见了」，
+            // 只判其中一个会在另一种框架行为下把通过了的一屏判成失败。
+            if (!dialog.IsDisposed && dialog.Visible)
+            {
+                throw new InvalidOperationException("点了「关闭」这一屏还开着（窗体既没销毁也没隐藏）。");
+            }
+        });
+
+        _lines.Add($"     提示对话框的「复制路径」：点了之后按钮文字切到「{NoticeCopy.CopiedLabel}」，"
+            + $"剪贴板里读回来的与屏幕上那一行逐字相同（{path.Length} 字），按钮宽度 {widthBefore}px 未变。");
     }
 
 
@@ -4637,10 +4805,15 @@ internal static class Program
     /// <summary>
     /// 真的点一下「查看完整错误」，在模态窗泵起来的消息循环里核对正文与状态行逐字相同，再点它那颗「关闭」。
     /// 关它不直接调 <c>Close()</c>——那绕过了产品路径。
+    /// <para>
+    /// <paramref name="statusOverride"/>：逐屏扫里每屏的状态行标签由宿主给出，不一定是「对话框里第一个
+    /// 非 AutoSize 且左对齐的标签」——那一条在部分对话框里会取到别的标签（那就成了拿别人的句子比）。
+    /// 传进来就只比这一屏自己的状态行。
+    /// </para>
     /// </summary>
-    private static void ReadFullTextAndCheck(Form dialog)
+    private static void ReadFullTextAndCheck(Form dialog, Label? statusOverride = null)
     {
-        var status = StatusLabel(dialog);
+        var status = statusOverride ?? StatusLabel(dialog);
         var expected = status.Text;
         var openedTitle = "";
         var openedBody = "";

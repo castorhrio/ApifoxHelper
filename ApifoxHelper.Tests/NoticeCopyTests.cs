@@ -12,7 +12,15 @@ namespace ApifoxHelper.Tests;
 /// 提示对话框这一侧是同一族里剩下的最后一处。
 /// 口径单一落点在 <see cref="NoticeCopy"/>（不依赖 WinForms，与测试工程共享编译），
 /// 剪贴板写入收在 <c>Ui.CopyToClipboard</c> 一处（整个原生界面唯一的写入点）。
-/// 按钮的实际观感、Tab 可达与复制后粘贴出来的内容随 G-D5 真机复核（Linux 无 WinForms GUI 运行时）。
+/// 按钮的实际观感、Tab 可达与用户在自己机器上粘贴时的手感随 G-D5 真机复核（Linux 无 WinForms GUI 运行时）。
+/// <para>
+/// <b>「粘贴出来的是什么」这一支已在 Linux 侧量过</b>（第一百八十五轮，wine 10.0 + Xvfb 模拟器）：
+/// 真点那颗按钮 → 按钮文字切到「复制成功」→ 把剪贴板读回来与屏幕上那一行<b>逐字比对</b>（52 字逐字相同）
+/// → 按钮宽度与旁边「关闭」的位置没有因为文字变化而跳位 → 真点那颗「关闭」把这一屏关掉；
+/// 那一段的机械门在 <see cref="NoticeCopySmokeTests"/>（钉住它删不掉）。
+/// <b>模拟器不是真机</b>：这一支量的是「写进去的是不是屏幕上那一行」，量不到的是按钮在真实字体与
+/// 真实剪贴板下的观感与手感——那三项仍随 G-D5 真机复核。
+/// </para>
 /// </summary>
 public class NoticeCopyTests
 {
@@ -107,7 +115,9 @@ public class NoticeCopyTests
         Assert.Matches(@"(?m)^\s*catch \(ExternalException\)", slice);
         Assert.Matches(@"(?m)^\s*return false;", slice);
         // 整个原生界面只有这一行写剪贴板（列表工厂与提示对话框都经这里）。
-        Assert.Equal(1, Regex.Matches(ui, @"(?m)^[ \t]*Clipboard\.").Count);
+        // 用 Assert.Single 而不是 Assert.Equal(1, …Count)：后者是拿集合大小当断言（xUnit2013），
+        // 判据写成「恰好一个」更贴近这句话本身——多一个写入点照样红。
+        Assert.Single(Regex.Matches(ui, @"(?m)^[ \t]*Clipboard\."));
     }
 
     [Fact]
