@@ -173,7 +173,14 @@ public sealed class ModelKeyRequest
 
 public sealed class MaterialRequest
 {
-    public List<string> SlotIds { get; set; } = new();
+    private List<string> _slotIds = new();
+
+    /// <summary>与 <see cref="GenerateRequest.SlotIds"/> 同一条边界规则：请求体显式的 null 归一为空清单（= 全部缺口），不留一条 500。</summary>
+    public List<string> SlotIds
+    {
+        get => _slotIds;
+        set => _slotIds = value ?? new();
+    }
 }
 
 public sealed class PickFolderRequest

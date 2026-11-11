@@ -180,7 +180,8 @@ public class DpiContextConsistencyTests
     /// （同一形状见 <see cref="Signature"/> 与 <c>ToolRoster_…</c> 的关键词清单）。
     /// </para>
     /// </summary>
-    private static readonly string[] ReportLineLabels = ["DPI 上下文（新建配置对话框）", "提示行行高（"];
+    /// <summary>那两行报告行的原文标签（<c>RealMachineEvidenceTests</c> 的 30 分钟执行单也指这两行，不各抄一份）。</summary>
+    internal static readonly string[] ReportLineLabels = ["DPI 上下文（新建配置对话框）", "提示行行高（"];
 
     /// <summary>「真机当天先看这两行」那一段所在的最小单元：列表项 4 本体，取到下一个顶格 <c>**</c> 块之前。</summary>
     private static string DivergenceSection()

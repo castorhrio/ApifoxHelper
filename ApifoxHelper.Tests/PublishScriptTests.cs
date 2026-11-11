@@ -41,7 +41,8 @@ public class PublishScriptTests
         .ToList();
 
     /// <summary>脚本里那两条产物路径的字面量来源：默认输出目录名、两种档位的 RID 子目录名、可执行文件名。</summary>
-    private static (string Output, string SelfContainedDir, string FrameworkDependentDir, string Exe) ScriptLiterals()
+    /// <summary>给 <see cref="RealMachineEvidenceTests"/> 用：产物路径只由这一处从脚本字面量算出，别处不再拼第二份。</summary>
+    internal static (string Output, string SelfContainedDir, string FrameworkDependentDir, string Exe) ScriptLiterals()
     {
         var output = Regex.Match(Script, @"\$Output\s*=\s*\(Join-Path\s+\$PSScriptRoot\s*'(?<v>[^']+)'\)").Groups["v"].Value;
         var dirs = Regex.Match(Script, @"\$target\s*=\s*Join-Path\s+\$Output\s+\$\(if\s*\(\$selfContained\)\s*\{\s*'(?<a>[^']+)'\s*\}\s*else\s*\{\s*'(?<b>[^']+)'").Groups;

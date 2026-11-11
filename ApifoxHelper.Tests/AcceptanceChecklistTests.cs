@@ -921,4 +921,140 @@ public class AcceptanceChecklistTests
             $"行内点了 {cited.Count} 份讲稿路径，而 demo.sh 的缺省档位只有 {expected.Count} 档（{string.Join("、", expected)}）："
             + "多出来的那几份要么是自己发明的档位，要么是上一场留在别处的产物，那天没有人替它们背书。");
     }
+
+    /// <summary>
+    /// 真机 125% / 200% 档「行高超出预算算不算过」——必须是一段<b>写在 G-D5 行内</b>的预登记，
+    /// 而不是第二百一十一轮那种「README 里说不能读成过」（第二百一十二轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百一十一轮在现有环境里量到了分岔变量（换档时重不重启 wine 前缀），
+    /// 也量到了后果（重启那一跑的 125% 档 4 行 60px 超 50px 预算；慢一档那一跑同一批行 31/37px 不超），
+    /// 三处活文档都写清了「<c>reading.txt</c> 那份三档全绿<b>不能</b>读成行高预算在 125%/200% 也过」——
+    /// 但<b>那是描述，不是判定</b>。真机到手大概先撞的就是这两档，而那天没有判定路径就等于 G-D5 当场卡住：
+    /// 现场要么把超预算念成「观感问题，先勾上」，要么把整条 G-D5 念成「全都不过」，两种都不诚实。
+    /// 这一段提前把三句话定死。
+    /// </para>
+    /// <para>
+    /// <b>简报原文在本仓对不上的那一处（顺手钉住，与第二百一十一轮那句「已到期」同族）</b>：简报给的措辞是
+    /// 「见归档 <c>dpi-125/</c>、<c>dpi-200/</c>」，而<b>这两个目录不存在</b>——九个归档目录的名字只有一份出处
+    /// （<c>docs/evidence/real-machine/README.md</c> 的产出物清单），那两档在那里叫 <c>125/</c> 与 <c>200/</c>。
+    /// 照原文写下去，当天照这段话去建 <c>dpi-125/</c>，<c>collect-real-machine.sh</c> 会因「磁盘上多出一个清单
+    /// 没点到的目录」直接退 <c>2</c>：核对坏掉，而读起来像「证据有了」。所以本门判④把<b>档位数字</b>与
+    /// <b>目录名</b>钉成同一个，且必须是产出物清单第 2 行声明的那几个（现读 <see cref="RealMachineEvidenceTests.ArtifactRows"/>
+    /// 与 <see cref="RealMachineEvidenceTests.DirectoriesIn"/>，不在本文件抄第二份清单）。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 那一段在位，且只取到下一段（<c>到期日判定（</c>）之前——写在进行中的段落里不算；
+    /// ② 三句后果齐全（动作单第 2 条判不过／G-D4 那一格的 <c>[x]</c> 不动但补真机读数／这一段不构成任何达成、
+    /// 也不改预算）；③ 要比的那个数取<b>报告同一行</b>报出的那一个，算式只许指 <c>ProfileFormLayout.MaxRowHeight</c>
+    /// 一处，且那一处真在文件里；④ 段里点名的档位与归档目录一一对上、都在磁盘上、都在产出物清单第 2 行里；
+    /// ⑤ 那两档的 px 数被标明是<b>模拟器那一跑</b>的读数（不许被当成真机的预算）；⑥ G-D4 那一格有反向锚点
+    /// 指回这一段——单向引用等于只有被指着的一方知道有这件事。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判真机到底超没超（那天由报告那两行说），<b>不判预算该是多少</b>（本轮一行未改，
+    /// 改它等于替真机做决定），也不判 G-D4 或 G-D5 算不算过（<see cref="Checklist_RealMachineGate_IsStillUnmetAndSaysSo"/>）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Gd4_RealMachineOverBudget_IsPreRegistered()
+    {
+        var verdict = Rows().Single(r => r.Item.StartsWith("G-D5", StringComparison.Ordinal)).Verdict;
+
+        // ① 段在位，并切到下一段之前。
+        var start = verdict.IndexOf("行高预算判定（", StringComparison.Ordinal);
+        Assert.True(start >= 0,
+            "G-D5 行没有「行高预算判定（…）」那一段：真机 125% / 200% 超预算时「算不算过」仍是一句描述，"
+            + "那天要么把超预算念成观感问题先勾上，要么把整条 G-D5 念成全不过，两种都不诚实。");
+        var next = verdict.IndexOf("到期日判定（", start, StringComparison.Ordinal);
+        var section = verdict[start..(next > start ? next : verdict.Length)];
+
+        // ② 三句后果，一句都不能少。每条都念得出「缺的是哪一句、少了它那天会怎么读」。
+        foreach (var (needle, consequence) in new (string, string)[]
+                 {
+                     ("其一，动作单第 2 条判不过", "超预算没有后果，那一屏的截图就会被当成「量过了」，而动作单第 2 条的判定标准本就是「三档都无裁切」"),
+                     ("其二，G-D4 那一格的 `[x]` 不动", "要么没人知道往哪一格补话，要么有人把那一格改回空框——那才是把「可源码判定」与「渲染观感」两件事混成一套"),
+                     ("其三，这段预登记不构成任何一项达成的说法", "一段提前写好的判定被读成一条已完成的工作"),
+                 })
+        {
+            Assert.True(section.Contains(needle, StringComparison.Ordinal),
+                $"段里没有那一句「{needle}」：少了它，{consequence}。");
+        }
+
+        // 「不改预算」必须写在段里：缺它，下一轮的默认动作就是把预算改到能过。
+        Assert.True(section.Contains("不改预算", StringComparison.Ordinal),
+            "段里没有「不改预算」这四个字：少了这一句，超预算当天的最短路径是把预算改到能过，而不是把数记下来。");
+
+        // ③ 判据取同一行报出的数，算式只指一处，且那一处真在文件里（指空即红）。
+        //    这里判的是**带反引号的整跨度**：裸子串 Contains("MaxRowHeight") 会被 `MaxRowHeightX` 蒙过——
+        //    符号改了名而文档没跟上，正是这一段最该红的那一种。
+        // 判的是**整句话**而不是「同一行报出」这四个字：那四个字在本段出现了两次（「其二」那句引的
+        // 归档措辞里还有一次），只判子串时把上面那句换成「要比的那个数看那一行」照样绿——
+        // 与第二百一十一轮记下的「Presence 型断言在同一个字符串里被另一处满足」同一个坑，本轮自己又踩了一次。
+        Assert.True(section.Contains("要比的那个数就取同一行报出来的那一个", StringComparison.Ordinal),
+            "段里没有「要比的那个数就取同一行报出来的那一个」这句整话：不写清预算取报告同一行的那个数，"
+            + "读的人会拿第二百一十一轮记在 .winecheck/README.md 里的 50px / 65px 当真机的预算，而预算按档位现算。");
+        Assert.True(section.Contains("`MaxRowHeight`", StringComparison.Ordinal),
+            $"段里没有带反引号的那一个跨度 `MaxRowHeight`（现读到的反引号跨度："
+            + string.Join("、", Regex.Matches(section, "`([^`]+)`").Cast<Match>().Select(m => m.Groups[1].Value).Take(8))
+            + "）：算式指给一个不存在的符号名，那天比的是一个没人算过的数。");
+        var layout = Repo.Source("Desktop", "Native", "ProfileFormLayout.cs");
+        Assert.True(layout.Contains("public static int MaxRowHeight(", StringComparison.Ordinal),
+            "段里把行高预算指给 ProfileFormLayout.MaxRowHeight，而那个文件里没有这一处算式：算式搬了家，"
+            + "这段预登记指的是一行不存在的判据，那天按它比的是空气。");
+        Assert.True(Regex.Matches(section, "`MaxRowHeight`").Count == 1,
+            "段里点了两次以上 `MaxRowHeight`：这一族要的是「算式只有一处」，正文里复述第二遍就是抄的第二份。");
+
+        // ③之二：那句要**照抄进 G-D4 格**的措辞，自己就得带着「预算取同一行」这个口径与那两个目录名。
+        //        它会被整句搬走，所以判它完整，不判它出现——只判段里别处提到，搬走的那一句可以是个空壳。
+        var quoted = Regex.Match(section, @"措辞为「(?<q>[^」]+)」").Groups["q"].Value;
+        Assert.True(quoted.Length > 0,
+            "段里没有「措辞为「…」」那一句：那天要写进 G-D4 格的话没有定好的原句，回写又变成现场编。");
+        Assert.True(quoted.Contains("同一行报出的行高预算", StringComparison.Ordinal),
+            $"要照抄进 G-D4 格的那一句里没有「同一行报出的行高预算」（现读到：{quoted}）："
+            + "搬过去的句子不带口径，读 G-D4 的人手里就只剩一个数，而那个数是按档位现算的。");
+
+        // ④ 档位 ⇄ 归档目录：同一个数字，且是产出物清单第 2 行声明的那几个。
+        var tiers = Regex.Matches(section, @"(?<t>\d{3})\s*%\s*档").Cast<Match>()
+            .Select(m => m.Groups["t"].Value).Distinct(StringComparer.Ordinal).OrderBy(t => t, StringComparer.Ordinal).ToList();
+        var dirs = Regex.Matches(section, @"`(?<d>\d{2,3})/`").Cast<Match>()
+            .Select(m => m.Groups["d"].Value).Distinct(StringComparer.Ordinal).OrderBy(d => d, StringComparer.Ordinal).ToList();
+        Assert.True(tiers.Count == 2 && dirs.Count == 2 && tiers.SequenceEqual(dirs, StringComparer.Ordinal),
+            $"段里那两个档位（现读到：{(tiers.Count == 0 ? "没写档位" : string.Join("、", tiers))}）与那两个归档目录名"
+            + $"（现读到：{(dirs.Count == 0 ? "没写目录" : string.Join("、", dirs))}）不是同一批数字："
+            + "简报原文的 dpi-125/ 与 dpi-200/ 在本仓不存在——照它建目录，collect-real-machine.sh 会因为"
+            + "「磁盘上多出一个清单没点到的目录」退 2，读起来却像证据到位了。");
+        var row2 = RealMachineEvidenceTests.ArtifactRows().Single(r => r.Action == 2);
+        var declared = RealMachineEvidenceTests.DirectoriesIn(row2.DirCell);
+        var strays = dirs.Where(d => !declared.Contains(d, StringComparer.Ordinal)).ToList();
+        Assert.True(strays.Count == 0,
+            "段里那两个目录不在产出物清单第 2 行声明的集合里：" + string.Join("、", strays)
+            + "（清单现读到：" + string.Join("、", declared) + "）。目录名有第二份出处，就是那天报警时念错的那一个。");
+        foreach (var dir in dirs)
+        {
+            Assert.True(Directory.Exists(Path.Combine(RealMachineEvidenceDir, dir)),
+                $"段里指向 docs/evidence/real-machine/{dir}/，磁盘上没有这个目录：当天第一件事又变成建目录。");
+            Assert.True(quoted.Contains($"`{dir}/`", StringComparison.Ordinal),
+                $"那两个目录里的 {dir}/ 没有出现在要照抄的那一句里（现读到：{quoted}）："
+                + "回写时被人手补一个出处，等于那天没归档也能写成归档了。");
+        }
+
+        // ⑤ 那两个 px 数被标明出自模拟器那一跑（不标明，读的人会把 wine 的数当成真机的预算）。
+        Assert.True(Regex.IsMatch(section, @"模拟器[^。]{0,20}\d{2}px[^。]{0,20}\d{2}px"),
+            "段里那两个 px 数没有跟在「模拟器」后面：那是第二百一十一轮在 wine 里量到的两个读数，"
+            + "不写出处就会被读成「真机的预算是 50px / 65px」，而预算本来按档位现算。");
+        foreach (var forbidden in new[] { "真机实测", "真机已验证", "真机证据已归档" })
+        {
+            Assert.False(section.Contains(forbidden, StringComparison.Ordinal),
+                $"段里出现了「{forbidden}」：这一段是预登记，真机还没跑过，这种措辞会把一条待办读成一条已完成。");
+        }
+
+        // ⑥ G-D4 那一格指回这一段（双向：单向引用等于只有被指着的一方知道有这件事）。
+        var gd4 = Rows().Single(r => r.Item.StartsWith("G-D4", StringComparison.Ordinal)).Verdict;
+        Assert.True(gd4.Contains("行高预算判定", StringComparison.Ordinal),
+            "G-D4 那一格没有指回「行高预算判定」那一段：那天读 G-D4 的人不知道自己就是回写落点，"
+            + "而这段预登记写的第二句会永远落空。");
+        Assert.True(gd4.Contains("仍随 G-D5 真机复核的只剩", StringComparison.Ordinal),
+            "G-D4 那一格被改了，段里指的补写位置（「仍随 G-D5 真机复核的只剩…」那一句之后）已不存在："
+            + "回写落点悬空，等于那天现场发明一句。");
+    }
 }

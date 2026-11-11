@@ -81,9 +81,21 @@ public sealed class ManualCandidateRequest
 
 public sealed class GenerateRequest
 {
+    private List<string> _slotIds = new();
+
     /// <summary>rule / model</summary>
     public string Mode { get; set; } = "rule";
-    public List<string> SlotIds { get; set; } = new();
+
+    /// <summary>
+    /// 要生成草稿的注释位置，空清单 = 全部缺口（<c>DraftService.SelectSlots</c>）。
+    /// 写成 null 容忍的 setter：请求体显式带 <c>"slotIds": null</c> 时 System.Text.Json 会用 null
+    /// 覆盖属性初始值，下游 <c>slotIds.Count</c> 就抛未处理异常（500），而不是按「未提供」走。
+    /// </summary>
+    public List<string> SlotIds
+    {
+        get => _slotIds;
+        set => _slotIds = value ?? new();
+    }
 
     /// <summary>模型模式必须显式确认发送材料范围。</summary>
     public bool ConfirmSend { get; set; }

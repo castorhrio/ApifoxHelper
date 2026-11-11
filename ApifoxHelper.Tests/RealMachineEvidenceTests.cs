@@ -60,7 +60,7 @@ public class RealMachineEvidenceTests
     }
 
     /// <summary>README 产出物清单的一行：动作 / 归档目录 / 产出物 / 必须有的数字 / 什么算过 / 量测项。</summary>
-    private readonly record struct ArtifactRow(int Action, string DirCell, string Files, string Numbers, string Pass, string Keys);
+    internal readonly record struct ArtifactRow(int Action, string DirCell, string Files, string Numbers, string Pass, string Keys);
 
     /// <summary>动作单那一节的正文行（标题行到下一个 <c>## </c> 之前）。</summary>
     private static string[] ActionListLines()
@@ -95,7 +95,8 @@ public class RealMachineEvidenceTests
         return File.ReadAllText(ReadmePath);
     }
 
-    private static List<ArtifactRow> ArtifactRows()
+    /// <summary>产出物清单的行（内部两处门共用：本文件的对齐门与 <c>AcceptanceChecklistTests</c> 那条预登记门）。</summary>
+    internal static List<ArtifactRow> ArtifactRows()
     {
         var rows = new List<ArtifactRow>();
         foreach (var line in ReadmeText().Split('\n'))
@@ -131,7 +132,7 @@ public class RealMachineEvidenceTests
     /// 文档里到底写没写这三档，由 <see cref="DpiPlaceholder_ExpandsToAllThreeTiersAndBothCellsNameThem"/> 单独判。
     /// </para>
     /// </summary>
-    private static List<string> DirectoriesIn(string cell)
+    internal static List<string> DirectoriesIn(string cell)
     {
         var names = new List<string>();
         foreach (Match m in Regex.Matches(cell, @"docs/evidence/real-machine/([^/`\s]+)/"))
@@ -453,14 +454,24 @@ public class RealMachineEvidenceTests
     }
 
     /// <summary>
-    /// 执行单的三步：按行首 <c>1. </c> / <c>2. </c> / <c>3. </c> 切块，每块含该步的标题行与下面三行。
+    /// 执行单的三步：按行首 <c>1. </c> / <c>2. </c> / <c>3. </c> 切块，每块含该步的标题行与下面几行。
     /// </summary>
-    private static List<(int Number, string Text)> RunSheetSteps()
+    private static List<(int Number, string Text)> RunSheetSteps() => NumberedSteps(RunSheetLines());
+
+    /// <summary>
+    /// 「按行首编号切块」这一把刀（第二百一十二轮起两处共用：<see cref="RunSheetSteps"/> 与
+    /// <see cref="ThirtyMinuteDrill_EveryStepNamesACommandAndAnOutputFile"/>）。
+    /// <para>
+    /// 抽出来不是为了省十二行，是因为两页执行单必须<b>数出同一种「步」</b>：各写一把切刀时，
+    /// 「<c>10.</c> 也算一步」「缩进过的编号不算」这类分歧只会在一页上红，另一页静静少判一步。
+    /// </para>
+    /// </summary>
+    private static List<(int Number, string Text)> NumberedSteps(string[] lines)
     {
         var steps = new List<(int, string)>();
         var buffer = new System.Text.StringBuilder();
         var number = 0;
-        foreach (var line in RunSheetLines())
+        foreach (var line in lines)
         {
             var m = Regex.Match(line, @"^(\d+)\.\s");
             if (m.Success)
@@ -1491,5 +1502,192 @@ public class RealMachineEvidenceTests
             "collect-real-machine.sh 的代码行里出现了归档目录名字面量：" + string.Join(" ／ ", copied.Select(d => d + "/"))
             + "。地板只该写死数量 9——名字仍只从 docs/evidence/real-machine/README.md 现读，"
             + "抄进脚本就等于两份清单，改那份的人不会想起来改这支，当天它按上一版的名字报警。");
+    }
+
+    // ---------- 第二百一十二轮（简报 P0-1）：真机到手 30 分钟执行单 ----------
+
+    /// <summary>「真机到手 30 分钟执行单」那一页的标题前缀（三级标题，落在 G-D5 动作单那一节之内）。</summary>
+    private const string DrillHeading = "### 真机到手 30 分钟执行单";
+
+    /// <summary>归档目录的写法（<c>docs/evidence/real-machine/125/</c> 那一形）。</summary>
+    private static readonly Regex ArchiveDirPattern = new(@"docs/evidence/real-machine/([^/`\s]+)/", RegexOptions.Compiled);
+
+    /// <summary>某一步引的产出物清单行号（<c>产出物清单第 2 行</c>）。</summary>
+    private static readonly Regex RowCitationPattern = new(@"产出物清单第\s*(?<n>\d+)\s*行", RegexOptions.Compiled);
+
+    /// <summary>执行单那一页的正文行（标题行到下一个二级/三级标题之前）。</summary>
+    private static string[] DrillLines()
+    {
+        var lines = ActionListLines();
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(DrillHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的 G-D5 动作单里缺「{DrillHeading}」这一页：动作单按事排、「照抄即可」两张表按数排，"
+            + "机器真到手那天仍排不出一条时间线——借来的机器只给半小时，现场排线花的正是那半小时的头一段。");
+        var end = Array.FindIndex(lines, start + 1,
+            l => l.StartsWith("## ", StringComparison.Ordinal) || l.StartsWith("### ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    /// <summary>
+    /// 「真机当天用到的工具」那张表点名的工具（每行第二格，取到第一个全角括号为止）。
+    /// <para>现读而不是在本门里列一份工具清单：执行单要说「只许用名册里那些工具」，
+    /// 名册本身改了（换截图工具、换读缩放的入口），执行单不许自己留在旧名字上。</para>
+    /// </summary>
+    private static List<string> RosterTools() =>
+        ToolRosterLines()
+            .Where(l => l.TrimStart().StartsWith("|", StringComparison.Ordinal))
+            .Select(l => l.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList())
+            .Where(c => c.Count >= 2 && c[0] != "用途" && !c[0].All(ch => ch == '-' || char.IsWhiteSpace(ch)))
+            .Select(c => c[1].Split('（')[0].Trim())
+            .Where(t => t.Length > 0)
+            .ToList();
+
+    /// <summary>
+    /// 「命令：」那一行当天敲不敲得通：要么引到仓里真有的路径，要么是 <c>publish.ps1</c> 自己算出的那条产物路径
+    /// （现读 <see cref="PublishScriptTests.ScriptLiterals"/>，不在这里拼第二份），要么是工具名册里点过名的那一个工具。
+    /// </summary>
+    private static bool CommandIsRunnable(string line, out string cited)
+    {
+        var published = $@"{PublishScriptTests.ScriptLiterals().Output}\{PublishScriptTests.ScriptLiterals().SelfContainedDir}\{PublishScriptTests.ScriptLiterals().Exe}";
+        foreach (Match span in Regex.Matches(line, "`([^`]+)`"))
+        {
+            foreach (var raw in span.Groups[1].Value.Split([' ', '|', '"', '\''], StringSplitOptions.RemoveEmptyEntries))
+            {
+                var token = raw.Trim();
+                if (token.Length == 0) continue;
+                if (token.Contains(published, StringComparison.Ordinal))
+                {
+                    cited = token + "（publish.ps1 现算的产物路径）";
+                    return true;
+                }
+
+                var full = Path.Combine(Repo.Root, token.Replace('\\', '/').TrimEnd('/'));
+                if (File.Exists(full) || Directory.Exists(full))
+                {
+                    cited = token;
+                    return true;
+                }
+            }
+        }
+
+        var tool = RosterTools().FirstOrDefault(t => line.Contains(t, StringComparison.Ordinal));
+        if (tool is not null)
+        {
+            cited = tool + "（工具名册里点过名）";
+            return true;
+        }
+
+        cited = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// 「真机到手 30 分钟执行单」七步：每步都得有一句<b>敲得通的命令</b>与一个<b>落点</b>，落点指向的归档
+    /// 目录必须与它自己引的那一行产出物清单配得上（第二百一十二轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：动作单七条 + 两张「照抄即可」表 + 那份产出物清单，全都<b>按事</b>与<b>按数</b>排，
+    /// 没有一份按<b>时间</b>排。借来的机器给半小时，现场排线 = 前一段白丢。这一页把当天收成为
+    /// 「进了归档目录的截图与报告 + 一个说得出口的缺什么」排成七步。
+    /// </para>
+    /// <para>
+    /// <b>本轮抓到的第一处「照简报原文写下去会坏」就在落点上</b>：简报给的四个目录名
+    /// （<c>prepare/</c>、<c>first-run/</c>、<c>dpi-100/</c>、<c>dpi-200/</c>）<b>仓里一个都不存在</b>——
+    /// 九个归档目录的名字只有一份出处（那份 README 的产出物清单），磁盘上多出一个清单没点到的目录，
+    /// <c>collect-real-machine.sh</c> 当场退 <c>2</c>（那条门就是 <see cref="CollectScript_TreatsThePlaceholderAsEmptyAndNamesEveryDirectory"/> 的 ⑤）。
+    /// 所以本门判④：落点点到的每一个目录，既要<b>在磁盘上</b>，也要<b>确实是它所引那一行声明的那一个</b>。
+    /// 把 <c>125</c> 写成 <c>dpi-125</c>、把第 3 步的截图说成进 <c>fonts/</c>、行号写成第 8 行——都红在这里。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 七步编号 1–7 各一次；② 每步都有「命令：」与「落点：」两行（缺一行那一步当天没产物）；
+    /// ③ 每步的「命令：」敲得通（<see cref="CommandIsRunnable"/>：仓内实物 / <c>publish.ps1</c> 现算的产物路径 /
+    /// 名册里的工具，三者至少其一）；④ 落点的归档目录与行号互相配得上，且目录在磁盘上；
+    /// ⑤ 页首写清<b>排不进的是第 3、4、5、6 条</b>，并写明「30 分钟走完」不等于这一节七条走完、更不等于 G-D5 达成；
+    /// ⑥ 第 5 步让读的那两行报告标签，是<b>冒烟器源码真打的字</b>（与 <c>DpiContextConsistencyTests</c> 同一份标签清单）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机有没有跑</b>（本机没有 Windows 图形子系统），<b>不判抄回来的那两个数</b>
+    /// 怎么算、<b>不判任何一条动作可勾</b>。它只保证「半小时这条线走得通、落点不悬空」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ThirtyMinuteDrill_EveryStepNamesACommandAndAnOutputFile()
+    {
+        var steps = NumberedSteps(DrillLines());
+
+        // ① 七步各一次。
+        Assert.Equal(Enumerable.Range(1, 7), steps.Select(s => s.Number).OrderBy(n => n));
+
+        var declared = ArtifactRows().ToDictionary(r => r.Action, r => DirectoriesIn(r.DirCell));
+
+        foreach (var (number, text) in steps)
+        {
+            var commandLine = text.Split('\n').FirstOrDefault(l => l.Contains("命令：", StringComparison.Ordinal));
+            var landingLine = text.Split('\n').FirstOrDefault(l => l.Contains("落点：", StringComparison.Ordinal));
+            Assert.True(commandLine is not null,
+                $"执行单第 {number} 步没有「命令：」那一行：没有命令的那一步，当天就是一件说不出做了没做的动作。");
+            Assert.True(landingLine is not null,
+                $"执行单第 {number} 步没有「落点：」那一行：半小时的收成是「东西进了哪个目录」，"
+                + "不写落点的步骤跑完仍然是零份证据（collect-real-machine.sh 数不到它，下一轮也找不到它）。");
+
+            // ③ 命令敲得通。
+            Assert.True(CommandIsRunnable(commandLine!, out var cited),
+                $"执行单第 {number} 步的「命令：」当天敲不通——既没引到仓里真有的路径，也不是 publish.ps1 现算的"
+                + "产物路径，还不在「真机当天用到的工具」名册里：" + commandLine!.Trim()
+                + "。「跑一下脚本」「照着设置改」这种写法没人替它敲得通。");
+
+            // ④ 落点的目录 ⇄ 它引的那一行产出物清单，两边配得上。
+            var dirs = ArchiveDirPattern.Matches(landingLine!).Cast<Match>().Select(m => m.Groups[1].Value).ToList();
+            if (dirs.Count == 0) continue; // 第 1、6、7 步的落点是产物文件与本文件那一格，不指归档目录
+
+            var rows = RowCitationPattern.Matches(landingLine!).Cast<Match>()
+                .Select(m => int.Parse(m.Groups["n"].Value)).Distinct().ToList();
+            Assert.True(rows.Count == 1,
+                $"执行单第 {number} 步点了归档目录（{string.Join("、", dirs)}），却没有且只有一个「产出物清单第 N 行」：行号就是这一步与那份清单唯一的接线柱，"
+                + "散着写目录名等于在本页抄第二份清单。");
+            var row = rows[0];
+            Assert.True(declared.TryGetValue(row, out var allowed),
+                $"执行单第 {number} 步引的「产出物清单第 {row} 行」不存在（清单只有 {string.Join("、", declared.Keys.OrderBy(k => k))} 行）："
+                + "行号写错，那天按这一行找产出物会找到另一条动作的落点。");
+            foreach (var dir in dirs)
+            {
+                Assert.True(allowed!.Contains(dir, StringComparer.Ordinal),
+                    $"执行单第 {number} 步把东西放进 docs/evidence/real-machine/{dir}/，而产出物清单第 {row} 行声明的是 "
+                    + string.Join("、", allowed) + "：两边各写一套目录名，collect-real-machine.sh 会按清单那套报警（磁盘上多出"
+                    + $"的 {dir}/ 判退出码 2），而照着本页放文件的人永远等不到它说「都齐了」。");
+                Assert.True(Directory.Exists(Path.Combine(EvidenceRoot, dir)),
+                    $"执行单第 {number} 步指向 docs/evidence/real-machine/{dir}/，磁盘上却没有这个目录：当天第一件事又变成建目录。");
+            }
+        }
+
+        // ⑤ 页首：排不进的必须是第 3、4、5、6 条，且不许被读成「G-D5 走完了」。
+        var intro = string.Join('\n', DrillLines().TakeWhile(l => !Regex.IsMatch(l, @"^\d+\.\s")));
+        var excluded = Regex.Matches(intro, @"不含第\s*(?<n>\d)\s*条").Cast<Match>()
+            .Select(m => int.Parse(m.Groups["n"].Value)).Distinct().OrderBy(n => n).ToList();
+        Assert.True(excluded.Count == 4 && excluded.SequenceEqual(new[] { 3, 4, 5, 6 }),
+            $"这一页没有逐条写明「排不进来的是动作单第 3、4、5、6 条」（现读到：{(excluded.Count == 0 ? "一条都没写" : string.Join("、", excluded))}）："
+            + "半小时只收得下首程四站、三档截图、冒烟报告与那条核对；副屏、运行中改档、字体名核对、真实写入各缺一件硬前置。"
+            + "不点名，「30 分钟走完」就会被读成「G-D5 走完」。");
+        Assert.True(intro.Contains("更不等于 G-D5 达成", StringComparison.Ordinal),
+            "页首没有「更不等于 G-D5 达成」那半句：半小时收完前四条动作里的两条，读的人会把这一页当成关闭 G-D5 的路径。");
+
+        // ⑥ 让读的那两行报告标签，冒烟器真打得出来（指一行不打的字 = 当天空手）。
+        var drill = string.Join('\n', DrillLines());
+        var smoke = Repo.SmokeProgram;
+        foreach (var label in DpiContextConsistencyTests.ReportLineLabels)
+        {
+            Assert.True(drill.Contains(label, StringComparison.Ordinal),
+                $"执行单没有点到报告里「{label}」那一行：那一行才是当天分辨「真机像哪一个上下文」的唯一读数，"
+                + "漏了它，第 4 步那两档的截图就只剩目测。");
+            Assert.True(smoke.Contains(label, StringComparison.Ordinal),
+                $"执行单让读「{label}」，而冒烟器源码里没有这几个字：指一行冒烟器根本不打的字，等于没指。");
+        }
+
+        // ⑦ 这一页自己点名本门，并写清它不判什么——有门不等于过了。
+        var sheet = string.Join('\n', DrillLines());
+        var self = $"{nameof(RealMachineEvidenceTests)}.{nameof(ThirtyMinuteDrill_EveryStepNamesACommandAndAnOutputFile)}";
+        Assert.True(sheet.Contains(self, StringComparison.Ordinal),
+            $"这一页没点名判它的那条门（{self}）：读了这一页的人不知道这七步的引用是被机械核过的、也没法找到那一门改判据。");
+        Assert.True(sheet.Contains("不判真机有没有跑", StringComparison.Ordinal),
+            "这一页没写「不判真机有没有跑」：七步走得通不等于七步走完了，这一句是这一页与「G-D5 已达成」之间唯一的隔断。");
     }
 }
