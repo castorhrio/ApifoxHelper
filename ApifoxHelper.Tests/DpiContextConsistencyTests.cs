@@ -6,15 +6,17 @@ namespace ApifoxHelper.Tests;
 /// <summary>
 /// 「控件自报 DPI」与「进程 DPI」必须是两个分开念的数（第二百零九轮，简报 P0-1）。
 /// <para>
-/// <b>补的是哪个缺口</b>：<c>demo.ps1</c> 与 <c>demo.sh</c> 在 125% / 200% 两档给出不同读数，机制未归因
-/// （第二百零七轮如实记录）。两边差的那件事有一个可数的候选：控件自报的 DPI 跟不跟档位走。
+/// <b>补的是哪个缺口</b>：<c>demo.ps1</c> 与 <c>demo.sh</c> 在 125% / 200% 两档给出不同读数（第二百零七轮
+/// 写下时后面跟的是「机制未归因」）。两边差的那件事有一个可数的候选：控件自报的 DPI 跟不跟档位走。
 /// 若真机落进「控件自报跟着走」那一支，配置表单在 125% 档会量到 4 行、200% 档 10 行超出行高预算。
-/// 本轮不归因、不改预算，只把「那一次量到的是哪一个上下文」变成读数自己能回答的事：
+/// 第二百零九轮不归因、不改预算，只把「那一次量到的是哪一个上下文」变成读数自己能回答的事：
 /// <c>RunProfileFormLayout</c> 那两段预算判定各记下两个数，取法收在唯一出口 <c>DpiContext</c>。
+/// 第二百一十一轮按简报 P0-2 量到了分岔的变量（换档时是否重启 wine 前缀），那两个数与这条门本身都没改——
+/// 改的是「那一句挂账还成不成立」，见 <see cref="Readme_RecordsTheDivergenceAndPointsAtTheNewReportLine"/>。
 /// </para>
 /// <para>
-/// <b>它不判什么</b>：不判两档真机上到底差在哪（那需要真机或更深的 wine 环境调查），
-/// 也不判两个数谁对谁错。它只保证下一次两边再差时，报告里已经有可对照的两行。
+/// <b>它不判什么</b>：不判真机上到底差在哪（那要真机），也不判两个数谁对谁错。
+/// 它只保证下一次两边再差时，报告里已经有可对照的两行。
 /// </para>
 /// </summary>
 public class DpiContextConsistencyTests
@@ -128,18 +130,43 @@ public class DpiContextConsistencyTests
         Assert.Contains("两个数分别进报告", doc, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 那一段必须给到<b>实测结论</b>，而不是「机制未归因」那句挂账（这条门立时判的是后者，判据随第二百一十一轮换掉）。
+    /// <para>
+    /// <b>为什么换</b>：本轮按简报 P0-2 在同一个容器里做了隔离实验（预置 <c>LogPixels</c> → 重启前缀 →
+    /// 单档各跑一支脚本），两支读数<b>相同</b>。这一段若仍只要求「机制未归因」那四个字，它就把一段已经量到
+    /// 变量的记录钉回「等下一轮」——而等的东西这一轮交付了。
+    /// </para>
+    /// <para>
+    /// <b>判三件事</b>：① 实测结论那句在位（不是「大概相同」「看起来相同」）；② 结论下面那张表按
+    /// 两支脚本 × 三个档位给齐六个格子——只写一句结论而格子缺人，读的人无从判断它是怎么来的；
+    /// ③ 那一段仍然指出两个数出自报告里哪一行、取法收在哪个唯一出口。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那两个数该是多少（那是实验本身），也不判<b>没</b>重启前缀那一种为什么慢一档
+    /// ——那一句仍未归因，那一段末尾自己写着；这里不拿「已归因」去覆盖它（同一段里留两种说法正是本仓的禁项）。
+    /// </para>
+    /// </summary>
     [Fact]
     public void Readme_RecordsTheDivergenceAndPointsAtTheNewReportLine()
     {
-        var readme = Repo.Source(".winecheck", "README.md");
-        var section = readme[readme.IndexOf("**125% / 200% 两档的读数不同", StringComparison.Ordinal)..];
-        var end = section.IndexOf("\n\n", StringComparison.Ordinal);
-        section = section[..(end < 0 ? section.Length : end)];
+        var section = DivergenceSection();
 
-        Assert.Contains("机制未归因", section, StringComparison.Ordinal);
+        Assert.Contains("两支读数相同", section, StringComparison.Ordinal);
         Assert.Contains("DPI 上下文", section, StringComparison.Ordinal);
         Assert.True(section.Contains("DpiContext", StringComparison.Ordinal),
             ".winecheck/README.md 那段分歧记录没指出新的报告行叫什么：读到「两边读数不同」的人应该立刻知道下一次去哪一行对照。");
+
+        foreach (var script in new[] { "demo.sh", "demo.ps1" })
+        {
+            foreach (var tier in new[] { "96", "120", "192" })
+            {
+                var cell = @"\| `" + Regex.Escape(script) + @"` \| " + tier + @" \|";
+                Assert.True(Regex.IsMatch(section, cell),
+                    $"那段说两支读数相同，可表里没有「{script} · 档位 {tier}」那一行：结论少了它自己的那一格，"
+                    + "读的人分不清这句话覆盖的是三档还是只有 100% 那一档。");
+            }
+        }
     }
 
     // ---------- 第二百一十轮（简报 P0-1）：把悬案铺成「真机先看哪两行、不符时记进哪一条」 ----------

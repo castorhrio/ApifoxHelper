@@ -830,4 +830,95 @@ public class AcceptanceChecklistTests
                 + "。这类读数第二天就错，而它读起来像事实——改成固定到期日（到期日 YYYY-MM-DD），时效由本门判。");
         }
     }
+
+    /// <summary>
+    /// G-D5 那一行的「到期日判定」段必须写着**改写成哪一句**与**引用哪三份产物**，且那三份是
+    /// <c>demo.sh</c> 真会写出的那三份（第二百一十一轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：到期日那天要写的东西此前只有散文——「届时仍不可得按降级答辩逐屏答辩」
+    /// （第一百八十轮）与下一节开头那三行（谁决定、回写哪里、哪条断言核）。这三行把<b>动作</b>定死了，
+    /// 没定死<b>结论那一格改成什么话、话后要附哪几份产物</b>。真机多轮不可得，最坏的不是没有机器，
+    /// 是到期日当天现场发明一句「基本达成」——所以把那句话与那三份路径提前写进行内，并由本门判它们对得上实物。
+    /// </para>
+    /// <para>
+    /// <b>判四件事</b>：① 段在位，且段里那个日期与本行既记的到期日是<b>同一个</b>（两个日期就是两套说法，
+    /// 与 <see cref="Gd5DueDate_IsNotStaleOrFuture"/> ② 同一口径）；② 触发条件写在行内（那条可跑的
+    /// <c>collect-real-machine.sh</c> 与它的 0 / 9 读数），不是「到时候看情况」；③ 改写后的结论措辞逐字在行内，
+    /// 且这一格<b>当天</b>还要留着「已过期」与「降级」两个词——兄弟门 <see cref="Gd5DueDate_IsNotStaleOrFuture"/> ③
+    /// 读的就是这两个字，预登记若绕开它，到期日第二天红的会是那一格而不是这段话（那天眼红=现场返工）；
+    /// ④ 三份讲稿路径<b>逐个等于</b> <c>demo.sh</c> 自己算出的那三份：目录取自脚本 <c>OUT</c> 的缺省值、
+    /// 档位取自 <c>TIERS</c> 的缺省值、文件名取自脚本里那一句 <c>NARRATION=</c>——脚本改了自己产物叫什么，
+    /// 本门红，因为行内那三份已经指着不相干的路径了（同一个「不许抄第二份」的纪律见
+    /// <c>WineCheckScriptsTests.CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList</c>）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判当天选「按降级路径执行」还是「延后至某日」（那是下一节 ① 由人决定），
+    /// 不判 G-D5 算不算过（勾选框只由真机证据关闭，见 <see cref="Checklist_RealMachineGate_IsStillUnmetAndSaysSo"/>），
+    /// 也不判那三份讲稿里念的数字对不对（那是 <c>ReadingConsistencyTests</c> 与冒烟段自己的事）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Gd5_ExpiryVerdict_IsRecordedWithTheDegradationRunPath()
+    {
+        var row = Rows().Single(r => r.Item.StartsWith("G-D5", StringComparison.Ordinal));
+        var verdict = row.Verdict;
+
+        // ① 段在位 + 段里的日期与本行既记的到期日同一个。
+        var start = verdict.IndexOf("到期日判定（", StringComparison.Ordinal);
+        Assert.True(start >= 0,
+            "G-D5 行没有「到期日判定（YYYY-MM-DD）」这一段：那段收口仍是散文，到期日当天要现场发明一句话。");
+        var section = verdict[start..];
+        var sectionDate = DueDatePattern.Match(section).Groups[1].Value;
+        var rowDate = DueDatePattern.Match(verdict).Groups[1].Value;
+        Assert.True(sectionDate.Length > 0 && sectionDate == rowDate,
+            $"到期日判定那一段写的日期（{(sectionDate.Length > 0 ? sectionDate : "没写日期")}）与本行既记的到期日"
+            + $"（{rowDate}）不是同一个：两处各写一个日期，那天不知道按哪一个收口。");
+
+        // ② 触发条件是那条可跑的核对，不是「到时候看情况」。
+        Assert.Contains("collect-real-machine.sh", section, StringComparison.Ordinal);
+        Assert.Contains("0 / 9", section, StringComparison.Ordinal);
+
+        // ③ 改写后的措辞逐字在行内；且当天那一格还得留着兄弟门读的两个词。
+        Assert.Contains("未达成（已到期 · 环境供给缺口 · 降级答辩已执行）", section, StringComparison.Ordinal);
+        // 两个词必须是被「留着…」那一句点名的（本轮变异实测：只写两个 Assert.Contains 抓不住——把
+        // 「留着 **「已过期」** 与 **「降级」**」里的「已过期」删掉，同一句后半段的解释还会再提它一次，
+        // 两条 Contains 照样绿。判顺序与距离才判的是「这句话在不在」，而不是「这两个字出现过没有」。
+        Assert.True(Regex.IsMatch(section, @"留着.{0,12}已过期.{0,16}降级"),
+            "那段没有把「当天必须同时留着『已过期』与『降级』」这句话写出来（要求：两个词在同一个「留着…」子句里、"
+            + "按这个顺序）：兄弟门 Gd5DueDate_IsNotStaleOrFuture 在到期日之后读的就是这两个字，"
+            + "这句话悬空，那天红的会是格子，而预登记看起来是齐的。");
+
+        Assert.True(verdict.StartsWith("**未达成（环境供给缺口）**", StringComparison.Ordinal),
+            "G-D5 那一格的「当前」结论不再是「未达成（环境供给缺口）」：到期日还没到就把预登记的那句当现况写，"
+            + "读的人会以为那天已经过完了。");
+
+        // ④ 三份讲稿路径 = demo.sh 自己算出的那三份（OUT / TIERS / 文件名三处全部现读）。
+        var script = Repo.Source(".winecheck", "demo.sh");
+        var outDir = Regex.Match(script, @"(?m)^OUT=\$\{OUT:-(?<v>[^}]*)\}$").Groups["v"].Value;
+        var tiers = Regex.Match(script, @"(?m)^TIERS=\$\{TIERS:-(?<v>[^}]*)\}$").Groups["v"].Value
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var naming = Regex.Match(script, @"NARRATION=""\$OUT/(?<head>[^""$]*)\$TIER(?<tail>\.[a-z]+)""");
+        Assert.True(outDir.Length > 0 && tiers.Length > 0 && naming.Success,
+            $"从 .winecheck/demo.sh 现读产物路径失败（OUT={outDir}、TIERS={tiers.Length} 档、"
+            + $"文件名模板{(naming.Success ? "读到" : "读不到")}）：脚本的取法变了要先改本门，"
+            + "否则这里比对的是三个凭空的字符串。");
+
+        var expected = tiers.Select(t => $"{outDir}/{naming.Groups["head"].Value}{t}{naming.Groups["tail"].Value}")
+            .ToList();
+        var cited = Regex.Matches(section, @"`(?<p>/[^`]*narration-[^`]*)`").Cast<Match>()
+            .Select(m => m.Groups["p"].Value).ToList();
+        Assert.True(cited.Count > 0,
+            "那段说「引用降级答辩那一次的三档产物」，行内却没有一个反引号包住的 narration 路径：只说引用不给路径。");
+        foreach (var path in expected)
+        {
+            Assert.True(cited.Contains(path, StringComparer.Ordinal),
+                $"demo.sh 当前会写出 {path}（OUT 与 TIERS 与文件名三处都从脚本现读），行内那三份里却没有它："
+                + "到期日那天照着行内去取产物，会取到一份脚本根本没写出的东西。行内现读到的："
+                + string.Join("、", cited) + "。");
+        }
+
+        Assert.True(cited.Count == expected.Count,
+            $"行内点了 {cited.Count} 份讲稿路径，而 demo.sh 的缺省档位只有 {expected.Count} 档（{string.Join("、", expected)}）："
+            + "多出来的那几份要么是自己发明的档位，要么是上一场留在别处的产物，那天没有人替它们背书。");
+    }
 }
