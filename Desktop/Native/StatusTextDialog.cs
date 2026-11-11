@@ -16,6 +16,12 @@ namespace ApifoxHelper.Desktop.Native;
 /// 用可滚动的只读框而不是自动折行的标签：错误原因里带文件全路径与英文句子，
 /// 折行会把路径断在任意位置，而用户要抄的往往正是那段路径。
 /// </para>
+/// <para>
+/// <b>两条交出文字的路（第一百九十七轮）</b>：框本身可框选（只挑其中一段），旁边一颗「复制全文」
+/// 一次点击交出整段（口径在 <see cref="StatusLineText.CopyFullTextButton"/>，结果标签取
+/// <see cref="NoticeCopy"/> 那一份）。此前只有框选那条路，说明行也只说「可以选中复制」——
+/// 用户读完还得自己找怎么复制。
+/// </para>
 /// </summary>
 internal sealed class StatusTextDialog : DpiAwareForm
 {
@@ -73,7 +79,15 @@ internal sealed class StatusTextDialog : DpiAwareForm
             BackColor = UiTokens.Panel,
             Padding = new Padding(0, UiTokens.Sm, UiTokens.Lg, UiTokens.Md),
         };
+        // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
+        // 复制全文（第一百九十七轮）：框已经能选中复制，但「整段交给剪贴板」要三步（点进框 → Ctrl+A → Ctrl+C），
+        // 而错误原因正是用户要整段贴进工单的东西。结果标签与提示对话框同一份（NoticeCopy），不另写一套；
+        // 三个标签同字数（4/4/4），复制成功/失败时旁边那颗「关闭」不挪位。
+        var copyButton = Ui.Ghost(StatusLineText.CopyFullTextButton);
+        copyButton.Click += (_, _) =>
+            copyButton.Text = Ui.CopyToClipboard(_text.Text) ? NoticeCopy.CopiedLabel : NoticeCopy.FailedLabel;
+        buttonRow.Controls.Add(copyButton);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），只读框填满剩余空间，标题行最上。
         Controls.Add(boxHost);

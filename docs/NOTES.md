@@ -4,6 +4,8 @@
 
 ## 本仓验收口径（可勾选）
 
+> **DoD 豁免登记（第一百九十七轮 · 2026-11-11 核对）**：核对来源 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（2026-10-31 版，正文 9 份 + 豁免名单）。核对结果：**ApifoxHelper 既不在正文 9 份，也不在豁免名单**（豁免名单列的是 WeComKit / ZCode / agent-scheduler / agent-control / agent-pointer / PNOS 与各类 caches）。**结论：本仓无 DoD 文件可加载**，验收口径以本节为准——下一轮起「DoD 未勾满」不构成开工依据，本节里留 `[ ]` 的那几行才是。核对日期 **2026-11-11**，核对人：本轮编码会话（只读核对，未改动调度仓任何文件）。**这一行由 `AcceptanceChecklistTests.DodExemption_IsRegisteredWithSourceAndDate` 钉住**：删掉它、或把「来源 / 日期 / 结论」任一项写丢即红——「没有 DoD」这件事本身也要有出处，否则下一轮又会有人去翻一遍、或者干脆自己发明一份。
+>
 > **为什么要有这一节**：本产品**没有对应的 DoD 文件**——第一百六十五轮核对 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（2026-10-31 版），正文 9 份与豁免名单都没有 ApifoxHelper。DoD 缺席时，验收口径此前散在 `docs/方案.md` §2.2/§8、`README.md`「使用流程」「写入安全」、`docs/DESIGN.md` 与本文件的多处，**没有一份能逐项勾选的表**——任何一轮都可以自行定义「缺口」。本节把这些既有口径机械可读化：**不新增任何产品功能、不新增任何判定**。
 >
 > **勾选口径**：`[x]` = 达成，且必须有本仓可核对的断言把它钉住；`[ ]` = 未达成，「当前结论」一列写清缺在哪、由哪一条挂账接续。

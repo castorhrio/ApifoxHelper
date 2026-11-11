@@ -22,6 +22,13 @@ namespace ApifoxHelper.Desktop.Native;
 /// 「关闭」会跟着左右跳——复制成功/失败是终态，不该让旁边的按钮挪位。三个标签取同一字数，
 /// 宽度因此不变（与 §6「停止/危险：位置尺寸与常态一致，防按钮跳位」同一取舍）。
 /// </para>
+/// <para>
+/// <b>结果标签是这一族的通用词，不按屏各写一套</b>：<see cref="CopiedLabel"/> 与
+/// <see cref="FailedLabel"/> 说的是「复制这件事成没成」，与复制的是什么无关——完整错误对话框的
+/// 「复制全文」（<see cref="StatusLineText.CopyFullTextButton"/>）取的就是这两句，不另写一份
+/// （另写一份必然漂：一处改成「已复制」另一处还是「复制成功」，同一族按钮两种说法）。
+/// 只有按钮本身的文字按屏不同（「复制路径」/「复制全文」），因为那说的是<b>交出什么</b>。
+/// </para>
 /// </summary>
 public static class NoticeCopy
 {

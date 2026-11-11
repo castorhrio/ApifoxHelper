@@ -63,6 +63,14 @@ internal sealed class NativeSource(string path, string text)
 {
     public string Name { get; } = Path.GetFileName(path);
     public string Text { get; } = text;
+
+    /// <summary>
+    /// 剥掉注释后的代码（第一百九十七轮）。「界面不就地拼写某句文案」这类断言判的是<b>代码</b>：
+    /// 注释里点名一颗按钮、引用一句文案，是读者顺着注释找到实物的路，不是第二份字面量。
+    /// 去注释口径只有一份（<see cref="CodeScan"/>），这里只做转发——本仓已经因为「各写一份去注释」
+    /// 犯过四次（见 <c>CodeScan</c> 类注释），不再开第五处。
+    /// </summary>
+    public string Code { get; } = CodeScan.Text(text);
     public bool IsUiTokens => Name == "UiTokens.cs";
     public bool IsUi => Name == "Ui.cs";
 

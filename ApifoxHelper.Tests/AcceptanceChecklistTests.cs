@@ -59,6 +59,43 @@ public class AcceptanceChecklistTests
         .Select(c => new Row(c[0], c[1], c[2], c[3], c[4]))
         .ToList();
 
+    /// <summary>
+    /// 「本仓没有 DoD 文件」这件事本身要有出处（第一百九十七轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：本节此前只在「为什么要有这一节」那段里顺带提了一句「第一百六十五轮核对过
+    /// INDEX.md，正文 9 份与豁免名单都没有 ApifoxHelper」——那是<b>叙述</b>，不是<b>登记</b>：
+    /// 没有核对日期、没有写清「既不在正文也不在豁免名单」这个具体结论、也没有一条断言钉住它。
+    /// 于是每一轮都可能有人重新去翻一遍调度仓（跨主机、只读、耗时），或者更糟——自己发明一份 DoD。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：本节里有一行以「DoD 豁免登记」开头，且同时写着 ① 核对来源（INDEX.md 的路径）、
+    /// ② 核对日期（<c>YYYY-MM-DD</c>）、③ 结论（「无 DoD 文件可加载」）。三项缺一即红——
+    /// 只写「没有 DoD」而不写从哪核的、哪天核的，下一个人无法判断这条结论是否过期。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：调度仓里那份 INDEX.md 现在到底写了什么（跨主机、只读、且本仓不该依赖它）。
+    /// 本门判的是「本仓把核对结果登记下来了」，不是「核对结果永远正确」——INDEX.md 变了要重核，
+    /// 重核就改这一行的日期与结论，门会跟着新日期走。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DodExemption_IsRegisteredWithSourceAndDate()
+    {
+        var line = SectionLines()
+            .FirstOrDefault(l => l.Contains("DoD 豁免登记", StringComparison.Ordinal));
+
+        Assert.True(line is not null,
+            "docs/NOTES.md「本仓验收口径」一节缺「DoD 豁免登记」一行：本仓没有 DoD 文件这件事必须有出处，"
+            + "否则下一轮要么重新去翻调度仓，要么自己发明一份 DoD。");
+
+        // ① 核对来源：从哪一份文件核的。
+        Assert.Contains("product-dod/INDEX.md", line!, StringComparison.Ordinal);
+        // ② 核对日期：这条结论是哪天核的（过期了要重核）。
+        Assert.Matches(@"20\d{2}-\d{2}-\d{2}", line!);
+        // ③ 结论：不是「大概没有」，是「无 DoD 文件可加载」。
+        Assert.Contains("无 DoD 文件可加载", line!, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Checklist_HasEveryGateAndEverySharedInvariant()
     {
