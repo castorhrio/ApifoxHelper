@@ -1243,6 +1243,21 @@ public class RealMachineEvidenceTests
         return null;
     }
 
+    /// <summary>这个文件现在到底读不读得动。<see cref="File.SetUnixFileMode"/> 在 root / CAP_DAC_OVERRIDE 下挡不住读，
+    /// 那一支就不能假装跑过——这里当场试一次，读得动就说明这台机器判不到。</summary>
+    private static bool TryCanRead(string path)
+    {
+        try
+        {
+            using var _ = File.OpenRead(path);
+            return true;
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>真的执行一次核对脚本；<paramref name="evidence"/> 为空时用仓里那个归档根。</summary>
     private static (int Exit, string Output) RunCollectScript(string? evidence)
     {
@@ -1282,6 +1297,9 @@ public class RealMachineEvidenceTests
     /// ⑤ 临时假树上把 0（都不空）/ 1（还有空的）/ 2（清单没点到的目录、清单点到的目录不在）三个退出码都跑活；
     /// ⑥⑦ 第二百零九轮在同一棵假树上再跑两种「清单自己歪了」：某一行的归档目录格被删（动作数仍凑得够 7、
     /// 只剩 8 个目录）与同一个目录被点两次（九个名字仍齐）——这两种都必须是 2，且各点自己的名。
+    /// ⑧⑨⑩ 第二百一十轮（简报 P1-1）把剩下三条 <c>exit 2</c> 分支也在同一棵假树上跑活：少一行动作（认出 6 条）、
+    /// 产出物表被改成散文（一行都没解析出来）、清单文件读不动（awk 本身失败）。从此那张表里每一行退出码 2 的读数
+    /// 都有这一段做出处，<c>MutationVerificationTests</c> 判的就是「表与脚本分支一一对得上、而这一对又都有出处」。
     /// </para>
     /// <para>
     /// <b>它判到哪一层</b>：这一支不启动任何界面、不碰模拟器，所以这一层在 Linux 上量到就是它的<b>全部行为</b>；
@@ -1394,6 +1412,49 @@ public class RealMachineEvidenceTests
                         && twiceOutput.Contains("journey", StringComparison.Ordinal),
                 $"README 里同一个归档目录被点到两次（九个名字仍齐、总数仍 9），脚本退出码却是 {twice}："
                 + "产出物散进两个名字时，当天得自己猜哪个才是落点，而数量地板与动作数都看不见这一种。");
+
+            // ⑧⑨⑩（第二百一十轮，简报 P1-1）：另外三条 exit 2 分支此前只在 .winecheck/README.md 那张表里
+            // 由人写一句「跑过了」。表现在多一列逐字对着脚本里的字面量，而下面这三段把那一行变成当场跑出来的读数。
+            File.WriteAllText(readmeCopy, table);
+            var fewerActions = table.Split('\n').Where(l => !l.StartsWith("| 4 |", StringComparison.Ordinal)).ToList();
+            Assert.True(fewerActions.Count < table.Split('\n').Length,
+                "假树上的清单删不动动作 4 那一行：这一场景要先与产出物清单的形状对齐。");
+            File.WriteAllText(readmeCopy, string.Join('\n', fewerActions));
+            var (sixActions, sixOutput) = RunCollectScript(temp);
+            Assert.True(sixActions == 2 && sixOutput.Contains("清单解析出 6 条动作（应为 7 条）", StringComparison.Ordinal),
+                $"清单少了一行动作（认出 6 条），脚本退出码却是 {sixActions}：那一条动作的产出物当天没人点名要放什么，"
+                + "而核对会带着「表被改过」这件事继续往下数目录。");
+
+            File.WriteAllText(readmeCopy, string.Join('\n', table.Split('\n')
+                .Where(l => !Regex.IsMatch(l, @"^\| \d+ \|")).ToList()));
+            var (prose, proseOutput) = RunCollectScript(temp);
+            Assert.True(prose == 2 && proseOutput.Contains("清单里一行都没解析出来", StringComparison.Ordinal),
+                $"清单里的产出物表被改成散文（一行都没解析出来），脚本退出码却是 {prose}："
+                + "没有表就无从核对，那种情况必须停在「核对本身跑不动」，而不是退 1 让人以为「活儿还没干完」。");
+
+            File.WriteAllText(readmeCopy, table);
+            // ⑩ 清单读不动那一条只在 Linux 上造得出来：SetUnixFileMode 在非 Unix 平台会抛，
+            // 而 Git Bash 那台 Windows 机器上根本没有这个模式可言——那种机器上这一支判不到，
+            // 判不到就说判不到（与 PowerShell 解析器不在时同一做法），不许把「没跑到」写成「跑过了」。
+            if (OperatingSystem.IsLinux())
+            {
+                File.SetUnixFileMode(readmeCopy, UnixFileMode.None);
+                try
+                {
+                    if (!TryCanRead(readmeCopy))
+                    {
+                        var (unreadable, unreadableOutput) = RunCollectScript(temp);
+                        Assert.True(unreadable == 2 && unreadableOutput.Contains("awk 本身就失败", StringComparison.Ordinal),
+                            $"清单文件读不动时脚本退出码却是 {unreadable}：那一句「awk 本身就失败了」是本条唯一念得出来的话，"
+                            + "停不住就会拿一份空清单去数目录，把「核对失效」念成「活儿没干完」。");
+                    }
+                }
+                finally
+                {
+                    File.SetUnixFileMode(readmeCopy, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
+            }
+
             File.WriteAllText(readmeCopy, table);
         }
         finally
