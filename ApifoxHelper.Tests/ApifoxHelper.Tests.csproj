@@ -123,6 +123,7 @@
     <Compile Include="..\Contracts\DocModel.cs" Link="Shared\DocModel.cs" />
     <Compile Include="..\Infrastructure\Core.cs" Link="Shared\Core.cs" />
     <Compile Include="..\Infrastructure\Redactor.cs" Link="Shared\Redactor.cs" />
+    <Compile Include="..\Infrastructure\JsonErrorCopy.cs" Link="Shared\JsonErrorCopy.cs" />
     <!-- 写入安全红线（SHARED-3/4/7/8）的端到端链路：CLI 子进程边界与同步执行器一起编进来，
          断言走的是真实 ProcessRunner + 真实输出解析 + 真实执行器，脚本换成仓库外的本地 mock CLI。
          这一批文件同样不引用 WinForms。 -->

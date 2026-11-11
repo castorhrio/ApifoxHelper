@@ -4,7 +4,8 @@ namespace ApifoxHelper.Api;
 
 /// <summary>
 /// 错误响应文案的单一口径（第一百四十三轮；第一百五十四轮把 400 两条分支收成同一口径；
-/// 第一百五十七轮把 JSON 分支的列号口径改成「字节」）。
+/// 第一百五十七轮把 JSON 分支的列号口径改成「字节」；第一百九十六轮把 JSON 那一句的本体
+/// 搬到 <see cref="JsonErrorCopy"/>，让 CLI 输出解析那条同形状的路径共用同一份口径）。
 /// <para>
 /// 存在理由：<see cref="ErrorHandling"/> 的四个 catch 分支此前各自就地拼字符串，其中 500 分支把
 /// <c>ex.Message</c> 原样回给前端——未知异常的消息里可能带内部路径、类型名甚至凭据片段，
@@ -40,37 +41,23 @@ public static class ErrorCopy
 
     /// <summary>
     /// JSON 格式无效但没有位置信息时的固定文案（<see cref="InvalidJson"/> 的兜底）。
+    /// <para>
+    /// <b>第一百九十六轮起口径本体搬到 <see cref="JsonErrorCopy"/></b>（简报 P0-2）：<c>Apifox/ApifoxCli.cs</c>
+    /// 的 <c>Parse</c> 里有一个同形状的 <c>catch (JsonException ex)</c>，它此前拼的是
+    /// <c>"JSON 不完整：" + ex.Message</c>——同一件事两条路径两种说法，且后者会把用户原文片段带进错误行。
+    /// 让 CLI 层引用 <c>Api/ErrorCopy</c> 会造成分层倒置（<c>Api/</c> 已经引用 <c>Apifox/</c>），
+    /// 因此口径本体落在只依赖 BCL 的 <see cref="JsonErrorCopy"/>，本文件保留同名常量与方法作为
+    /// HTTP 层的入口——<b>文案逐字未变</b>，既有断言仍按原句判。
+    /// </para>
     /// </summary>
-    public const string InvalidJsonMessage = "JSON 格式无效，请检查请求内容后重试。";
+    public const string InvalidJsonMessage = JsonErrorCopy.InvalidJsonMessage;
 
     /// <summary>
     /// JSON 格式无效（<c>JsonException</c>）：只回**结构信息**——第几行、第几个字节，不回消息体。
-    /// <para>
-    /// 行号与位置是用户能照着改的那一句（「第 3 行第 12 个字节处」直接指到出错的那个字符），
-    /// 而 <c>JsonException.Message</c> 会带用户原文片段，不能回显。
-    /// <c>LineNumber</c> / <c>BytePositionInLine</c> 是 0 基的，这里换算成 1 基（用户数行从 1 开始）。
-    /// 两者缺一（异常不是解析器抛的、没有位置）时回固定文案，不猜位置。
-    /// </para>
-    /// <para>
-    /// <b>为什么说「字节」而不说「列」（第一百五十七轮）</b>：<c>BytePositionInLine</c> 的名字与
-    /// .NET 8 的实测行为一致——它是**行内 UTF-8 字节位**，不是字符位。实测（<c>JsonDocument.Parse</c>）：
-    /// <c>{"名":"值",,}</c> 报 <c>BytePositionInLine = 15</c>，而同一个出错位置按字符数是第 11 个字符
-    /// （「名」「值」各占 3 字节）。此前文案写「第 15 列」，含中文的请求体上这个数字对不上用户数出来的列，
-    /// 而这一句恰恰是错误路径上用户唯一能照着改的那一句——口径错就是误导。
-    /// 本方法拿不到请求体（<c>JsonException</c> 只带位置、不带原文），无法把字节位换算成字符位，
-    /// 因此如实按字节计：纯 ASCII 的请求体上字节位与字符位相等（数字仍然精确），
-    /// 含中文时用户按「字节」理解不会数错方向。换算成字符位需要请求体原文，属另一件事，不在本方法里猜。
-    /// </para>
+    /// 口径本体与「为什么说字节不说列」的完整理由在 <see cref="JsonErrorCopy.InvalidJson"/>；
+    /// 本方法只是 HTTP 层的转发入口，不另写一份实现（两份实现就是两个会各自漂的口径）。
     /// </summary>
-    public static string InvalidJson(JsonException ex)
-    {
-        if (ex.LineNumber is not { } line || ex.BytePositionInLine is not { } position)
-        {
-            return InvalidJsonMessage;
-        }
-
-        return $"JSON 格式无效（第 {line + 1} 行，第 {position + 1} 个字节处）。";
-    }
+    public static string InvalidJson(JsonException ex) => JsonErrorCopy.InvalidJson(ex);
 
     /// <summary>
     /// 前置条件「还没选 Apifox 项目」的唯一落点（第一百七十四轮，简报 P1-1）。

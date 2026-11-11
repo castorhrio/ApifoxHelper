@@ -27,7 +27,9 @@ public static class ErrorHandling
             }
             catch (JsonException ex)
             {
-                // 只回结构信息（第几行第几列）：消息体会带用户原文片段（第一百五十四轮）。
+                // 只回结构信息（第几行第几个字节）：消息体会带用户原文片段（第一百五十四轮；
+                // 第一百五十七轮把「列」改成「字节」——BytePositionInLine 是行内 UTF-8 字节位，
+                // 第一百九十六轮把这条注释与文案对齐，口径本体在 Infrastructure/JsonErrorCopy）。
                 logger.LogWarning(ex, "请求 JSON 无法解析 {Path}", context.Request.Path);
                 await WriteError(context, StatusCodes.Status400BadRequest, ErrorCopy.InvalidJson(ex));
             }

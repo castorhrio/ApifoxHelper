@@ -137,7 +137,13 @@ public sealed partial class ApifoxCli
         }
         catch (JsonException ex)
         {
-            return new CliResult { ExitCode = process.ExitCode, Elapsed = process.Elapsed, ParseError = "JSON 不完整：" + ex.Message };
+            // 只回结构信息（第几行第几个字节），不回 ex.Message（第一百九十六轮，简报 P0-2）。
+            // 此前这里拼的是 "JSON 不完整：" + ex.Message——同一形状的两条路径（HTTP 请求体解析失败
+            // 与 CLI 输出解析失败）两种说法，而 ex.Message 会带用户原文片段，CLI 的输出还可能来自远端；
+            // 这条 ParseError 经 CliResult.Describe() 拼成「输出无法可靠解析：…」后原样进状态行与错误行。
+            // 口径本体在 Infrastructure/JsonErrorCopy（只依赖 BCL）：让本层引用 Api/ErrorCopy 会造成
+            // 分层倒置（Api/ 已经引用 Apifox/），故两边都指向那一份，而不是各写一句。
+            return new CliResult { ExitCode = process.ExitCode, Elapsed = process.Elapsed, ParseError = JsonErrorCopy.InvalidJson(ex) };
         }
 
         if (root is not JsonObject obj || obj["success"] is not JsonValue successValue || !successValue.TryGetValue<bool>(out var success))
