@@ -123,6 +123,11 @@ public class DefenseNarrativeTests
             foreach (Match match in matches)
             {
                 var token = match.Groups[1].Value;
+
+                // 冒烟段名（RunXxx）是第三种引用形状：它由 Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun
+                // 判「真的接进了冒烟器的运行清单」，这里只跳过，不重复判（两处各判一半，改一处漏一处即红）。
+                if (IsSmokeSegment(token)) continue;
+
                 if (!match.Groups[2].Success)
                 {
                     var parts = token.Split('.');
@@ -148,5 +153,94 @@ public class DefenseNarrativeTests
 
             Assert.True(docCitations > 0, $"「{row.Name}」没有引到 README 或 NOTES 的实体段落：只有断言名的出处讲不出产品故事。");
         }
+    }
+
+    /// <summary>冒烟段名：<c>RunXxx</c>（<c>ApifoxHelper.Smoke/Program.cs</c> 里的段方法）。</summary>
+    private static bool IsSmokeSegment(string token) => Regex.IsMatch(token, @"^Run[A-Za-z0-9]+$");
+
+    /// <summary>
+    /// 五块里至少这么多块必须点到<b>冒烟段名</b>（第一百八十九轮，简报 P0-1）。
+    /// <para>
+    /// 为什么是地板而不是「每块都要」：答辩现场能当场复跑的是冒烟段（<c>bash .winecheck/demo.sh</c> 逐屏对账），
+    /// 但「AI 必要性」那一块讲的是模型那一支，本仓从未调用过模型服务，没有段可指——硬要它指一个段，
+    /// 只会逼出一句假话。地板 3 的意思是：五块里至少三块在被追问「能不能当场跑一遍」时答得出东西。
+    /// </para>
+    /// </summary>
+    private const int SmokeSegmentFloor = 3;
+
+    /// <summary>
+    /// 每一块都必须点到一个<b>当前源码里真能跑到的</b>证据：冒烟段名或断言名（第一百八十九轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="Narrative_EveryBlockCitesASectionThatActuallyExists"/> 判的是
+    /// 「引的小节真的存在」与「引的断言真的存在」，但它<b>判不出「指向的证据能跑」</b>——冒烟段名这种形状
+    /// 在它那里根本不被接受（<c>RunXxx</c> 没有点号，会被当成「既不是文档出处也不是断言名」判红），
+    /// 于是「每块都指向真实存在的东西」这句话只兑现了一半：文档小节在、断言在，而答辩现场真正要复跑的那一段
+    /// 没有任何一块指得到。降级答辩的全部说服力来自「每块都指向真实存在的东西」，这一条把「能跑」补上。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 每块的出处里至少有一条<b>可跑证据</b>——冒烟段名（<c>RunXxx</c>）或断言名
+    /// （<c>类名.断言名</c>）；② 冒烟段名必须<b>真的接进了运行清单</b>：<c>ApifoxHelper.Smoke/Program.cs</c> 里
+    /// 既有 <c>private static void RunXxx(</c> 的声明，又有 <c>nameof(RunXxx)</c> 的调用点——只声明不接进清单的
+    /// 段在报告里不会出现，<c>demo.sh</c> 逐屏对账时找不到它，等于没有；③ 断言名必须在测试工程里真有这一条
+    /// （与 <see cref="Narrative_EveryBlockCitesASectionThatActuallyExists"/> 同一判据，这里自判一次是为了
+    /// 让「可跑证据」这一条自己站得住，不依赖另一条门是否还在）；④ 至少 <see cref="SmokeSegmentFloor"/> 块
+    /// 点到冒烟段名。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判这些证据在真机上跑过</b>（真机 0 台，G-D5 仍是 <c>[ ]</c>），
+    /// 也不判措辞与字数（那两条各有各的门）。它只保证「答辩现场指着念的每一条，都能在仓里当场跑起来」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun()
+    {
+        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        var blocksWithSmokeSegment = 0;
+
+        foreach (var row in Blocks())
+        {
+            var runnable = new List<string>();
+            var smokeSegments = new List<string>();
+
+            foreach (Match match in Regex.Matches(row.Citations, "`([^`]+)`"))
+            {
+                var token = match.Groups[1].Value;
+
+                // 文档与源码路径不是「能跑的证据」：它们证明「东西在」，不证明「跑得起来」。
+                if (token.EndsWith(".md", StringComparison.Ordinal) || token.EndsWith(".cs", StringComparison.Ordinal)) continue;
+
+                if (IsSmokeSegment(token))
+                {
+                    Assert.True(smoke.Contains($"private static void {token}(", StringComparison.Ordinal),
+                        $"「{row.Name}」引的冒烟段「{token}」在 ApifoxHelper.Smoke/Program.cs 里没有声明："
+                        + "答辩现场照着念的段名必须真的存在，否则 demo.sh 逐屏对账时找不到它。");
+                    Assert.True(smoke.Contains($"nameof({token})", StringComparison.Ordinal),
+                        $"「{row.Name}」引的冒烟段「{token}」没有接进运行清单（找不到 nameof({token})）："
+                        + "只声明不调用的段在报告里不会出现，等于没有这一段。");
+                    runnable.Add(token);
+                    smokeSegments.Add(token);
+                    continue;
+                }
+
+                var parts = token.Split('.');
+                if (parts.Length != 2) continue; // 其余形状由 Narrative_EveryBlockCitesASectionThatActuallyExists 判红。
+
+                var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
+                Assert.True(File.Exists(testFile), $"「{row.Name}」引用的测试类不存在：{parts[0]}。");
+                Assert.True(Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]"),
+                    $"「{row.Name}」引用的断言不存在：{token}。");
+                runnable.Add(token);
+            }
+
+            Assert.True(runnable.Count > 0,
+                $"「{row.Name}」一块可跑证据都没有（冒烟段名 RunXxx 或断言名 类名.断言名）："
+                + "只有文档小节与源码路径的出处，在被追问「能不能当场跑一遍」时答不出东西。");
+
+            if (smokeSegments.Count > 0) blocksWithSmokeSegment++;
+        }
+
+        Assert.True(blocksWithSmokeSegment >= SmokeSegmentFloor,
+            $"五块里只有 {blocksWithSmokeSegment} 块点到了冒烟段名（地板 {SmokeSegmentFloor}）："
+            + "答辩现场能当场复跑的是冒烟段（bash .winecheck/demo.sh），只指断言的块在「现场复跑」这一问上答不出东西。");
     }
 }

@@ -246,6 +246,17 @@ public class AcceptanceChecklistTests
                 var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
                 if (!File.Exists(testFile))
                 {
+                    // 不是测试类，可能是界面层真有的符号（第一百八十九轮：DPI 那一族，如 `DpiScale.ScaleFactor`）。
+                    // 动作单第 3、4 条要量「因子」，读数位置就是它——只认测试类的话，这一格只能写成一句没有落点的
+                    // 「看 DPI 因子」，而「从哪读」正是真机当天最容易现场编的一格。
+                    var nativeFile = Path.Combine(Repo.Root, "Desktop", "Native", parts[0] + ".cs");
+                    if (File.Exists(nativeFile)
+                        && Regex.IsMatch(File.ReadAllText(nativeFile), @"\b" + Regex.Escape(parts[1]) + @"\s*\("))
+                    {
+                        resolved++;
+                        continue;
+                    }
+
                     unresolved.Add(citation + "（测试类不存在）");
                     continue;
                 }

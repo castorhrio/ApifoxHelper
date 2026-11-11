@@ -725,6 +725,149 @@ public class RealMachineEvidenceTests
         }
     }
 
+    // ---------- 第一百八十九轮（简报 P0-2）：DPI 变更「结果三个数」的照抄三列 ----------
+
+    /// <summary>「DPI 变更结果三个数」那一节的标题前缀（三级标题，落在 G-D5 动作单那一节之内）。</summary>
+    private const string DpiNumbersHeading = "### DPI 变更「结果三个数」的照抄三列";
+
+    /// <summary>三个数（封闭的，顺序即归档文件里的行序）：因子 / 客户区宽 / 说明行可用宽。</summary>
+    private static readonly string[] DpiChangeNumbers = ["因子", "客户区宽", "说明行可用宽"];
+
+    /// <summary>这一节的一行：动作序号 / 数 / 量什么 / 从哪读 / 归档到哪（文件 · 字段）。</summary>
+    private readonly record struct DpiNumberRow(int Action, string Number, string Measure, string Read, string Archive);
+
+    /// <summary>这一节那一节的正文行（标题行到下一个二级/三级标题之前）。</summary>
+    private static string[] DpiNumberLines()
+    {
+        var lines = ActionListLines();
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(DpiNumbersHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的 G-D5 动作单里缺「{DpiNumbersHeading}」这一节：第 3、4 条要量的三个数"
+            + "（因子 / 客户区宽 / 说明行可用宽）各自从哪读、落进归档文件的哪个字段，又得真机当天现场想。");
+        var end = Array.FindIndex(lines, start + 1,
+            l => l.StartsWith("## ", StringComparison.Ordinal) || l.StartsWith("### ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    private static List<DpiNumberRow> DpiNumberRows()
+    {
+        var rows = new List<DpiNumberRow>();
+        foreach (var line in DpiNumberLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (cells.Count == 0 || !Regex.IsMatch(cells[0], @"^\d+$")) continue;
+            Assert.True(cells.Count == 5,
+                $"「DPI 变更结果三个数」有一行不是 5 列（实际 {cells.Count} 列，应为 动作 / 数 / 量什么 / 从哪读 / 归档到哪）：{cells[0]}。");
+            rows.Add(new DpiNumberRow(int.Parse(cells[0]), cells[1], cells[2], cells[3], cells[4]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// 一个反引号记号是不是仓里真有的符号（<c>类名.成员</c>，成员按方法声明找）。
+    /// <para>
+    /// 只认 <c>Desktop/Native/</c> 下的类：这一节要点的符号只有 DPI 那一族（<c>DpiScale.ScaleFactor</c>），
+    /// 而它们全在那一层。写成「仓里任意同名文件」会让一个拼错的类名被别处的同名文件救活。
+    /// </para>
+    /// </summary>
+    private static bool SymbolExists(string token)
+    {
+        var parts = token.TrimEnd('(', ')').Split('.');
+        if (parts.Length != 2) return false;
+        var file = Path.Combine(Repo.Root, "Desktop", "Native", parts[0] + ".cs");
+        return File.Exists(file)
+            && Regex.IsMatch(File.ReadAllText(file), @"\b" + Regex.Escape(parts[1]) + @"\s*\(");
+    }
+
+    /// <summary>
+    /// DPI 变更「结果三个数」的照抄三列：第 3、4 条各三个数一行不缺、三列不空、从哪读只点预置槽位或仓内符号、
+    /// 归档目录与动作单同名且文件名与上一节该条一致（第一百八十九轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：动作单第 3、4 条要求量「该屏因子 / 客户区宽 / 说明行可用宽」三个数，
+    /// 第一百八十七轮的「照抄即可」三列也点了「数写在哪个控件上」与「归档文件名」——但<b>这三个数各自从哪读、
+    /// 落进归档文件的哪个字段</b>仍要现场想。真机当天最贵的不是量，是「量到了却不知道往哪写」：
+    /// 写进 <c>mixed-dpi-读数.txt</c> 却和 README 的示例格式不一样，下一个人读不出来；或者把「因子」记成
+    /// 「缩放百分比」，与仓内算式（该屏 DPI ÷ 96）不是同一口径。
+    /// </para>
+    /// <para>
+    /// <b>判四件事</b>：① 第 3、4 条各自三个数（<see cref="DpiChangeNumbers"/>，顺序也判）一行不缺、
+    /// 也不许多出第四个；② 每行三列都不许空着；③ 「从哪读」只许点 <see cref="PresetControlSlots"/> 里该条的
+    /// 控件名，或仓里真有的符号（<see cref="SymbolExists"/>）——自己发明一个读数位置即红；
+    /// ④ 「归档到哪」的目录必须与动作单该行点到的归档目录<b>同名</b>，文件名必须是上一节该条已点到的那个
+    /// （两边各写一套名字即红），且写明字段名（<c>factor=</c> 这种）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机有没有跑</b>（本机没有 Windows 图形子系统），也不判这三个数在真机上
+    /// 到底是多少——它只保证「当天照着念的读数位置与归档字段，都是仓里已经定好的那一个」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DpiChangeNumbers_HaveThreeColumnsAndArchiveToTheSameDirectory()
+    {
+        var rows = DpiNumberRows();
+        var actions = ActionRows().ToDictionary(r => r.Number);
+        var runbook = RunbookRows().ToDictionary(r => r.Action);
+
+        // ① 第 3、4 条各三个数，一行不缺、不许多出第四个（顺序也判：归档文件里的行序就是这三行）。
+        Assert.Equal([3, 4], rows.Select(r => r.Action).Distinct().OrderBy(n => n));
+        foreach (var action in new[] { 3, 4 })
+        {
+            var numbers = rows.Where(r => r.Action == action).Select(r => r.Number).ToList();
+            Assert.Equal(DpiChangeNumbers, numbers);
+        }
+
+        foreach (var row in rows)
+        {
+            // ② 三列都不许空着：空着的那一格正是真机当天要现场编的东西。
+            foreach (var (label, cell) in new[]
+                     {
+                         ("量什么", row.Measure), ("从哪读", row.Read), ("归档到哪", row.Archive),
+                     })
+            {
+                Assert.True(cell.Length >= 4,
+                    $"第 {row.Action} 条「{row.Number}」的「{label}」格太短或空着（{cell}）：真机当天照着念不出来。");
+            }
+
+            // ③ 从哪读：只许点预置槽位清单里该条的控件名，或仓里真有的符号。
+            var reads = Backticked(row.Read);
+            Assert.True(reads.Count >= 1,
+                $"第 {row.Action} 条「{row.Number}」的「从哪读」一个反引号记号都没有：读数位置必须是仓里定好的控件名或符号。");
+            foreach (var token in reads)
+            {
+                var preset = PresetControlSlots[row.Action];
+                Assert.True(preset.Contains(token, StringComparer.Ordinal) || SymbolExists(token),
+                    $"第 {row.Action} 条「{row.Number}」的「从哪读」点了「{token}」——它既不是预置槽位清单里的控件名"
+                    + "（" + string.Join(" / ", preset) + "），也不是 Desktop/Native 下真有的符号。"
+                    + "真机当天照着念的读数位置必须是仓里定好的那一个。");
+            }
+
+            // ④ 归档到哪：目录与动作单同名、文件名与上一节该条一致、字段名写明。
+            var dirs = DirectoriesIn(row.Archive);
+            var expectedDirs = DirectoriesIn(actions[row.Action].Archive);
+            Assert.True(dirs.Count > 0, $"第 {row.Action} 条「{row.Number}」的「归档到哪」没点到归档目录。");
+            Assert.True(dirs.OrderBy(d => d, StringComparer.Ordinal).SequenceEqual(expectedDirs.OrderBy(d => d, StringComparer.Ordinal)),
+                $"第 {row.Action} 条「{row.Number}」的归档目录（" + string.Join(" ／ ", dirs.Select(d => d + "/"))
+                + "）与动作单该行点到的（" + string.Join(" ／ ", expectedDirs.Select(d => d + "/"))
+                + "）不同名：两套目录名，真机当天就会归档到没人判的地方。");
+
+            var files = Backticked(row.Archive).Where(f => f.EndsWith(".txt", StringComparison.Ordinal)).ToList();
+            Assert.True(files.Count == 1,
+                $"第 {row.Action} 条「{row.Number}」的「归档到哪」必须点到一个 .txt 读数文件（实际 {files.Count} 个）："
+                + "三个数落在同一个读数文件里，不另起一套命名。");
+            // 这一节写全路径（照抄时不用再拼目录），上一节写裸文件名——按文件名比，不按写法比。
+            var fileName = Path.GetFileName(files[0]);
+            Assert.True(runbook[row.Action].Files.Contains(fileName, StringComparison.Ordinal),
+                $"第 {row.Action} 条「{row.Number}」点的归档文件「{fileName}」在上一节该条的归档文件名里找不到："
+                + "两边各写一套名字，真机当天就会归档到没人判的名字上。");
+
+            Assert.True(Regex.IsMatch(row.Archive, @"`[a-z][a-z-]*=`"),
+                $"第 {row.Action} 条「{row.Number}」的「归档到哪」没写明字段名（形如 `factor=`）："
+                + "只写文件名不写字段，三个数挤在一个文件里，下一个人读不出哪个是哪个。");
+        }
+    }
+
     /// <summary>「首程四站逐站预期」那一节的标题前缀（二级标题，落在归档 README 里）。</summary>
     private const string JourneyHeading = "## 首程四站逐站预期";
 
