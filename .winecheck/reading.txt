@@ -1,0 +1,78 @@
+# 三档冒烟读数记录——由 .winecheck/demo.sh 写出，不是手抄的。
+# 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs——README.md 与 docs/NOTES.md 里
+#   「当前源码…N 通过 / 0 失败 ×3」必须逐字等于下面 tier= 记的数；section= 的段集合必须
+#   等于冒烟器源码里注册的段集合；每档的总数必须等于「第一段之前的构造清单类条数」+ 该档各段之和。
+# 这份记的是 wine + Xvfb 模拟器的读数，不是 Windows 真机结果（G-D5 仍 [ ]，到期日 2026-11-20）。
+script=demo.sh
+tool=wine + Xvfb
+date=2026-11-12
+source=f8a628b00f954e74661cb299df3b98780d3454a5
+tier=96 passed=218 failed=0 exit=0
+tier=120 passed=218 failed=0 exit=0
+tier=192 passed=218 failed=0 exit=0
+section=RunEndToEnd tier=96 passed=3 failed=0
+section=RunWriteBackEndToEnd tier=96 passed=6 failed=0
+section=RunScanResultsInteraction tier=96 passed=5 failed=0
+section=RunFontStackRuntime tier=96 passed=1 failed=0
+section=RunCandidatesInteraction tier=96 passed=6 failed=0
+section=RunSupplementsInteraction tier=96 passed=6 failed=0
+section=RunDecisionsInteraction tier=96 passed=6 failed=0
+section=RunContractsInteraction tier=96 passed=5 failed=0
+section=RunProfileFormLayout tier=96 passed=8 failed=0
+section=RunProfileLoadFailure tier=96 passed=5 failed=0
+section=RunTaskLoadFailure tier=96 passed=5 failed=0
+section=RunReportsLoadFailure tier=96 passed=4 failed=0
+section=RunDecisionsLoadFailure tier=96 passed=6 failed=0
+section=RunJournalLoadFailure tier=96 passed=6 failed=0
+section=RunDetailBreak tier=96 passed=5 failed=0
+section=RunStatusFullText tier=96 passed=4 failed=0
+section=RunDialogStatusFullText tier=96 passed=12 failed=0
+section=RunDialogStatusSweep tier=96 passed=60 failed=0
+section=RunNoticeCopyClick tier=96 passed=8 failed=0
+section=RunBuildCommandCopyClick tier=96 passed=9 failed=0
+section=RunCaptionFit tier=96 passed=3 failed=0
+section=RunFullJourney tier=96 passed=10 failed=0
+section=RunEndToEnd tier=120 passed=3 failed=0
+section=RunWriteBackEndToEnd tier=120 passed=6 failed=0
+section=RunScanResultsInteraction tier=120 passed=5 failed=0
+section=RunFontStackRuntime tier=120 passed=1 failed=0
+section=RunCandidatesInteraction tier=120 passed=6 failed=0
+section=RunSupplementsInteraction tier=120 passed=6 failed=0
+section=RunDecisionsInteraction tier=120 passed=6 failed=0
+section=RunContractsInteraction tier=120 passed=5 failed=0
+section=RunProfileFormLayout tier=120 passed=8 failed=0
+section=RunProfileLoadFailure tier=120 passed=5 failed=0
+section=RunTaskLoadFailure tier=120 passed=5 failed=0
+section=RunReportsLoadFailure tier=120 passed=4 failed=0
+section=RunDecisionsLoadFailure tier=120 passed=6 failed=0
+section=RunJournalLoadFailure tier=120 passed=6 failed=0
+section=RunDetailBreak tier=120 passed=5 failed=0
+section=RunStatusFullText tier=120 passed=4 failed=0
+section=RunDialogStatusFullText tier=120 passed=12 failed=0
+section=RunDialogStatusSweep tier=120 passed=60 failed=0
+section=RunNoticeCopyClick tier=120 passed=8 failed=0
+section=RunBuildCommandCopyClick tier=120 passed=9 failed=0
+section=RunCaptionFit tier=120 passed=3 failed=0
+section=RunFullJourney tier=120 passed=10 failed=0
+section=RunEndToEnd tier=192 passed=3 failed=0
+section=RunWriteBackEndToEnd tier=192 passed=6 failed=0
+section=RunScanResultsInteraction tier=192 passed=5 failed=0
+section=RunFontStackRuntime tier=192 passed=1 failed=0
+section=RunCandidatesInteraction tier=192 passed=6 failed=0
+section=RunSupplementsInteraction tier=192 passed=6 failed=0
+section=RunDecisionsInteraction tier=192 passed=6 failed=0
+section=RunContractsInteraction tier=192 passed=5 failed=0
+section=RunProfileFormLayout tier=192 passed=8 failed=0
+section=RunProfileLoadFailure tier=192 passed=5 failed=0
+section=RunTaskLoadFailure tier=192 passed=5 failed=0
+section=RunReportsLoadFailure tier=192 passed=4 failed=0
+section=RunDecisionsLoadFailure tier=192 passed=6 failed=0
+section=RunJournalLoadFailure tier=192 passed=6 failed=0
+section=RunDetailBreak tier=192 passed=5 failed=0
+section=RunStatusFullText tier=192 passed=4 failed=0
+section=RunDialogStatusFullText tier=192 passed=12 failed=0
+section=RunDialogStatusSweep tier=192 passed=60 failed=0
+section=RunNoticeCopyClick tier=192 passed=8 failed=0
+section=RunBuildCommandCopyClick tier=192 passed=9 failed=0
+section=RunCaptionFit tier=192 passed=3 failed=0
+section=RunFullJourney tier=192 passed=10 failed=0

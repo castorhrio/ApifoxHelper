@@ -127,6 +127,7 @@ bash .winecheck/prepare-real-machine.sh # 真机到手前的第 0 条四项准�
 | `OUT` | `/tmp/ah-demo` | `demo.sh` 三档报告、讲稿与控制台日志的落点 |
 | `TIERS` | `96 120 192` | 要跑的 `LogPixels` 档（答辩前自查可只给一档） |
 | `PUBLISH` | `0` | 设 `1` 时脚本自己重发冒烟器（`build -t:Rebuild` + `publish` + 写源码指纹），见上一节 |
+| `READING` | `$REPO/.winecheck/reading.txt` | 读数记录的落点。三档跑完（**不论这一场收口与否**）脚本把「哪一支脚本、哪台机器、哪一天、哪一版源码、每档几条、每段几条」写在这里；`README.md` 与 `docs/NOTES.md` 念的那句「当前源码三档读数 N 通过 / 0 失败 ×3」由 `ApifoxHelper.Tests/ReadingConsistencyTests` 拿这份记录逐字对账，不再靠人抄。只想自查、不想动这份记录时设 `READING=/tmp/reading.txt` |
 
 ## 产物位置
 
@@ -138,6 +139,50 @@ bash .winecheck/prepare-real-machine.sh # 真机到手前的第 0 条四项准�
 | 应用日志 | `/tmp/ah-app.log` |
 | 冒烟报告（UTF-8，逐行 PASS/FAIL） | `/tmp/ah-smoke-report.txt` |
 | 演示三档产物（`demo.sh`） | `/tmp/ah-demo/report-<档位>.txt`、`/tmp/ah-demo/narration-<档位>.txt`、`/tmp/ah-demo/console-<档位>.log` |
+| **读数记录（入库）** | `.winecheck/reading.txt`——`demo.sh` 与 `demo.ps1` 跑完三档各自写出，同一份格式；文档念的数由门与它对账（见上一表的 `READING`） |
+
+## Windows 侧那支（`demo.ps1`）
+
+`demo.sh` 是 bash，从未在 Windows（含 Git Bash / WSL / MSYS）跑过。`demo.ps1` 是同一份讲稿的那一支：
+逐段同名、同读数、同一份逐屏表取法、同一份读数记录格式——由 `ApifoxHelper.Tests/WineCheckScriptsTests`
+的两条门钉住（`DemoPs1_NamesTheSameSectionsAsDemoSh`、`BothDemoScripts_WriteTheSameReadingRecord`）。
+
+```powershell
+pwsh -File .winecheck/demo.ps1                    # 三档
+pwsh -File .winecheck/demo.ps1 -Tiers 96          # 只跑 100% 档自查
+pwsh -File .winecheck/demo.ps1 -Publish 1         # 让脚本自己重发冒烟器
+```
+
+旋钮与 `demo.sh` 同名（`REPO` / `NOTES` / `OUT` / `TIERS` / `PUBLISH` / `READING` / `WINE_BIN` /
+`WINEPREFIX` / `DISPLAY`），也可以按 PowerShell 的写法用 `-Repo` / `-Notes` … 传参。
+
+**这一支验到哪一层了（第二百零七轮 · 2026-11-12 实测，逐条可复跑）**：
+
+1. **语法**：用 PowerShell 7.6.9（Linux 上的 `pwsh`，dotnet 全局工具）的
+   `System.Management.Automation.Language.Parser::ParseFile` 解析过一遍——**0 处语法错误、1560 个 token**。
+   这一条由 `DemoPs1_ParsesWithARealPowerShellParserWhenOneIsHere` 钉住：机器上有 PowerShell 就真解析，
+   没有 PowerShell 的那台机器上判不到，此时**这一节就是唯一的登记**（所以别把它删掉）。
+   另有一条不依赖任何外部工具的纯文本结构门 `DemoPs1_Structure_IsBalanced`（括号配平、引号与
+   here-string 闭合、关键字成块），并带一条自测证明它抓得住注入的破坏。
+2. **整支跑通**：第二百零七轮第一次真跑（Linux 容器内 pwsh 7.6.9 + wine 10.0 + Xvfb，三档跑完，退出码按
+   实际读数给）。**第一次跑就被挡下**：它算出的源码指纹与 `demo.sh` 算出的不是同一个，于是判
+   「冒烟器不是当前源码发出来的」并非零退出。根因在 `Get-SourceFingerprint` 用了 `Sort-Object` 默认的
+   **区域语言序**（`ApiRoutes.cs` 排在 `ApifoxRoutes.cs` 之后），而 `demo.sh` 用 `LC_ALL=C sort` 的
+   **字节序**——同一份源码两个指纹，两支脚本会互相把对方的产物判成过期。改成 `[Array]::Sort(..., Ordinal)`
+   后两支对同一份源码算出同一个指纹（`f8a628b0…`）。
+3. **100% 档读数同源**：`demo.ps1` 写出的 `narration-96.txt` 与 `demo.sh` 的那一份**逐字节相同**
+   （只差输出目录），218 通过 / 0 失败。
+4. **125% / 200% 两档的读数不同，如实记在这里**：`demo.ps1` 那一跑里冒烟器**控件自己报的 DPI 跟着档位走**
+   （120 / 192），而 `demo.sh` 那一跑里它恒为 96（同一份产物、同一个前缀、同一个屏幕，两边各复跑两次
+   都可复现，机制未归因）。在「进程 DPI 真生效」的那个上下文里，`RunProfileFormLayout` 量到
+   **配置表单 125% 档 4 行超预算（60px > 50px）、200% 档 10 行超预算（88px > 65px）**，
+   `RunProfileFormLayout` 的提示行子段在 200% 档另有 **2 条超预算（78px > 65px）**，两档读数因此是
+   217/1 与 216/2。这不是真机结论，但它是「G-D5 真机到手大概先撞什么」的一次提前量测——
+   `docs/NOTES.md` 第二百零七轮记录与真机复核清单里各挂了一条。
+
+**这一节判不到什么**：不判 Windows PowerShell 5.1 的语法差异（7 的解析器判不了 5.1）；不判 cmdlet 名、
+参数合法性与任何运行时行为；**更不判 Windows 真机**——上面那一次是在 Linux 容器里用 wine 跑的，
+G-D5 真机仍是 0 台、到期日 2026-11-20。
 
 ## 已知限制（不要拿它当 Windows 真机证据）
 

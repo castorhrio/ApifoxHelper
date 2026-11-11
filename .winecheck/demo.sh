@@ -21,6 +21,10 @@ NOTES=${NOTES:-$REPO/docs/NOTES.md}
 OUT=${OUT:-/tmp/ah-demo}
 TIERS=${TIERS:-96 120 192}
 PUBLISH=${PUBLISH:-0}
+# 读数记录落在**仓里**（不放 /tmp）：README 与 docs/NOTES.md 念的那个三档读数是跑出来的，
+# 门（ApifoxHelper.Tests/ReadingConsistencyTests）拿文档与这份记录逐字对账，不再拿人写的加法对账。
+# 只想自查、不想动这份记录时设 READING=/tmp/reading.txt。
+READING=${READING:-$REPO/.winecheck/reading.txt}
 mkdir -p "$OUT"
 
 [ -f "$NOTES" ] || { echo "找不到逐屏表的出处：$NOTES"; exit 1; }
@@ -95,6 +99,29 @@ seg_stat() {
     END { printf "%d %d", p + 0, f + 0 }' "$1"
 }
 
+# 一份报告按段拆开：每段一行「section=RunXxx passed=N failed=M」。
+# 切段只认带 [RunXxx] 的标题——报告里第一个段之前那批 PASS（构造清单、控件工厂、字段宽度实测）
+# 没有自己的段标题，它们归读数记录里的 bucket= 那一行；结尾「== 结果：…==」也不切段。
+# 读数记录要能被 ApifoxHelper.Tests/ReadingConsistencyTests 拿去与「冒烟器源码里注册的段集合」
+# 对账，所以这里**照报告的原文取段名**，不发明第二份段名单。
+section_stats() {
+  awk -v tier="$TIER" '
+    function flush() { if (id != "") printf "section=%s tier=%s passed=%d failed=%d\n", id, tier, p, f }
+    /^== / {
+      if (match($0, /\[Run[A-Za-z0-9_]+\]/)) {
+        flush()
+        id = substr($0, RSTART + 1, RLENGTH - 2); p = 0; f = 0
+      }
+      next
+    }
+    /^PASS / { p++ }
+    /^FAIL/ { f++ }
+    END { flush() }' "$1"
+}
+
+# 读数记录的正文（tier= 与 section= 两类行），三档跑完整份写出。
+READING_TIERS=""
+READING_SECTIONS=""
 TOTAL_FAIL=0
 TOTAL_MISSING=0
 for TIER in $TIERS; do
@@ -129,6 +156,11 @@ for TIER in $TIERS; do
   FAIL_LINES=$(grep -c '^FAIL ' "$REPORT" || true)
   PASS_LINES=$(grep -c '^PASS ' "$REPORT" || true)
   echo "  报告：$PASS_LINES 通过 / $FAIL_LINES 失败（退出码 $RUN_RC）→ $REPORT"
+
+  # 读数记录：只把报告原文里的数抄进去（总计 + 逐段），加法留给门去核——
+  # 脚本这里先加好，等于让同一份自述既当证据又当结论。
+  READING_TIERS="${READING_TIERS}tier=$TIER passed=$PASS_LINES failed=$FAIL_LINES exit=$RUN_RC"$'\n'
+  READING_SECTIONS="$READING_SECTIONS$(section_stats "$REPORT")"$'\n'
 
   : >"$NARRATION"
   {
@@ -176,6 +208,23 @@ xvfb-run -a bash -c '
   export WINEPREFIX DISPLAY
   "$WINE_BIN" reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d 96 -f >/dev/null 2>&1 || true
 ' || true
+
+# 读数记录落盘（三档跑完就写，**不管这一场收口没收口**）：失败的那一次同样要留下数，
+# 否则「跑挂了就没有对账材料」会让这份记录只存在于顺利的那些次。
+{
+  echo "# 三档冒烟读数记录——由 .winecheck/demo.sh 写出，不是手抄的。"
+  echo "# 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs——README.md 与 docs/NOTES.md 里"
+  echo "#   「当前源码…N 通过 / 0 失败 ×3」必须逐字等于下面 tier= 记的数；section= 的段集合必须"
+  echo "#   等于冒烟器源码里注册的段集合；每档的总数必须等于「第一段之前的构造清单类条数」+ 该档各段之和。"
+  echo "# 这份记的是 wine + Xvfb 模拟器的读数，不是 Windows 真机结果（G-D5 仍 [ ]，到期日 2026-11-20）。"
+  echo "script=demo.sh"
+  echo "tool=wine + Xvfb"
+  echo "date=$(date +%F)"
+  echo "source=$(source_fingerprint)"
+  printf '%s' "$READING_TIERS"
+  printf '%s' "$READING_SECTIONS"
+} >"$READING" 2>/dev/null || echo "  读数记录写不进 $READING（设 READING= 指到可写的路径）——文档里那个数这一次没有可对账的出处。"
+echo "  读数记录：$READING"
 
 cat <<'CALIBER'
 

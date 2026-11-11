@@ -91,28 +91,60 @@ public class HintRowTests
     }
 
     /// <summary>
-    /// 二十六处提示行全部经工厂出厂，三份私有 <c>AddHint</c> 不得复活。
-    /// 条数逐文件核（不是只看总数）：少一处调用点，意味着某一屏的提示行退回就地拼形状。
+    /// 三份私有 <c>AddHint</c> 不得复活——这一条只管「是否经工厂出厂」，<b>不看条数</b>。
+    /// 第二百零七轮（简报 P1-1）把它与下面的登记比对分开：写在一起时，
+    /// 下一轮<b>正经新增一屏提示行</b>会被报成「有的地方退回就地拼」，那是把人对着错的方向改代码。
     /// </summary>
     [Fact]
     public void EveryHintRow_GoesThroughTheFactory()
     {
-        var total = 0;
-        foreach (var (file, calls) in CallSites)
+        foreach (var source in Repo.NativeSources())
         {
-            var found = Regex.Matches(NativeFile(file), @"(?m)^\s*Ui\.HintRow\(grid, ").Count;
-            Assert.True(found == calls,
-                $"{file} 里经 Ui.HintRow 出厂的提示行是 {found} 处，登记的是 {calls} 处——提示行只许经工厂出厂，数量对不上就是有的地方退回就地拼。");
-            total += found;
+            Assert.False(Regex.IsMatch(source.Text, @"(?m)^\s*private void AddHint\("),
+                $"{source.Name} 又写回一份私有 AddHint——同一件事四种写法就是从这里长回来的。");
+        }
+    }
+
+    /// <summary>
+    /// 工厂调用点的<b>登记</b>要与源码对得上，且对不上时分方向点名（第二百零七轮，简报 P1-1）。
+    /// <para>
+    /// 原来这里写死 <c>Assert.Equal(26, total)</c> 加逐文件条数：新增一屏提示行时它一定红，
+    /// 而红话说的是「退回就地拼形状」——一句把下一位引向错方向的诊断。现在拆成三种情况各自说：
+    /// 多了（该登记一处）、少了（该查是不是退回了就地拼）、以及**整个文件没登记 / 登记了一个没有工厂调用的文件**。
+    /// 登记本身就是那份名单的权威：<b>总数不再单独写死一份</b>（26 这个数只从登记表算出来）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CallSites_RegistryMatchesTheSource_AndSaysWhichDirection()
+    {
+        var discovered = Repo.NativeSources()
+            .Select(s => (Name: s.Name, Calls: Regex.Matches(s.Text, @"(?m)^\s*Ui\.HintRow\(grid, ").Count))
+            .Where(s => s.Calls > 0)
+            .ToDictionary(s => s.Name, s => s.Calls, StringComparer.Ordinal);
+        var registered = CallSites.ToDictionary(s => s.File, s => s.Calls, StringComparer.Ordinal);
+
+        var problems = new List<string>();
+        foreach (var (file, calls) in registered)
+        {
+            var found = discovered.TryGetValue(file, out var n) ? n : 0;
+            if (found == calls) continue;
+            problems.Add(found > calls
+                ? $"{file} 有 {found} 处经 Ui.HintRow 出厂，登记表 {nameof(CallSites)} 只记了 {calls} 处——新增的这一处确实经工厂出厂的话，把登记改到 {found}（这条门不许把工厂调用删掉来变绿）"
+                : $"{file} 只剩 {found} 处经 Ui.HintRow 出厂，登记的是 {calls} 处——少的那几处要么退回了就地拼形状，要么这一屏的提示行被删了而登记没跟上");
         }
 
-        Assert.Equal(26, total);
-
-        foreach (var (file, _) in CallSites)
+        foreach (var file in discovered.Keys.Except(registered.Keys, StringComparer.Ordinal))
         {
-            Assert.False(Regex.IsMatch(NativeFile(file), @"(?m)^\s*private void AddHint\("),
-                $"{file} 又写回一份私有 AddHint——同一件事四种写法就是从这里长回来的。");
+            problems.Add($"{file} 有 {discovered[file]} 处 Ui.HintRow 却没在 {nameof(CallSites)} 里登记——提示行的口径没进这本账，下一轮就没人知道它是第几族的写法");
         }
+
+        foreach (var file in registered.Keys.Except(discovered.Keys, StringComparer.Ordinal))
+        {
+            problems.Add($"{nameof(CallSites)} 登记了 {file}，可它现在已经没有一处 Ui.HintRow——登记指向一屏不再存在的写法，这本账就空转了");
+        }
+
+        Assert.True(problems.Count == 0,
+            "提示行的工厂调用点登记与源码对不上：" + string.Join("；", problems) + "。");
     }
 
     /// <summary>

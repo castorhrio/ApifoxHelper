@@ -338,11 +338,12 @@ public class WineCheckScriptsTests
     /// 三份产物文件名（report- / narration- / console-）两边同形；⑤ 两边读的环境变量名同一套。
     /// </para>
     /// <para>
-    /// <b>它不做什么</b>：不跑 <c>demo.ps1</c>，也不跑 <c>pwsh</c>——本容器没有 PowerShell
-    /// （第二百零五轮实测：<c>pwsh</c> 与 <c>powershell</c> 都不在 PATH，wine 的
-    /// <c>powershell.exe</c> 打出的第一行是 <c>fixme:powershell:wmain stub.</c>，那是个 stub）。
-    /// 所以「语法可解析」这一条本轮<b>没有跑到</b>，如实记在 <c>docs/NOTES.md</c> 本轮记录里：
-    /// 这份脚本落到仓、与 <c>demo.sh</c> 逐段同名是可核对的，它能不能在真机上跑起来要等机器。
+    /// <b>它不做什么</b>：这一条只做两份文本的段名比对，不跑 <c>demo.ps1</c>、也不解析它。
+    /// 「语法可解析」与「整支跑通」是第二百零七轮补上的另两件事：<see cref="DemoPs1_ParsesWithARealPowerShellParserWhenOneIsHere"/>
+    /// 在有解析器的机器上真解析（本容器有 dotnet 全局工具 powershell 7.6.9，落在 <c>~/.dotnet/tools/pwsh</c>
+    /// 而不在 PATH——第二百零五轮那句「容器没有 PowerShell」是照着 PATH 说的，当时那条判据成立、结论不成立），
+    /// <see cref="DemoPs1_Structure_IsBalanced"/> 在不依赖外部工具的机器上守住结构，
+    /// 跑到哪一层的逐条记录在 <c>.winecheck/README.md</c>「Windows 侧那支」一节。
     /// </para>
     /// </summary>
     [Fact]
@@ -410,8 +411,11 @@ public class WineCheckScriptsTests
     /// 另有一支「逐屏表某一行不是 5 列」的同族守卫（格式错的行静默跳过 = 那一屏整屏不出现在讲稿里），
     /// 判它自己点名并退出。
     /// </para>
-    /// <para>不跑 pwsh（本机没有，理由见上一条），因此这一条判的是源码形状；真机上这一支会不会真的非零退出，
-    /// 由下一次带机器的一轮补。</para>
+    /// <para>本条判的是<b>源码形状</b>（三个计数与两处退出都得在文本里真实存在）。再往上的两层第二百零七轮
+    /// 各自补上了：语法由 <see cref="DemoPs1_ParsesWithARealPowerShellParserWhenOneIsHere"/> 用真解析器判，
+    /// 「整支跑通」由那一次 pwsh 7.6.9 + wine 的实跑判（读数与修掉的指纹分歧记在
+    /// <c>.winecheck/README.md</c>「Windows 侧那支」一节）。<b>真机上这一支的非零退出仍未验</b>——
+    /// 那一台机器还没到手，G-D5 仍 <c>[ ]</c>。</para>
     /// </summary>
     [Fact]
     public void DemoPs1_ExitsNonZeroWhenAScreenIsMissing()
@@ -445,5 +449,363 @@ public class WineCheckScriptsTests
             "demo.ps1 里「列数不对」那一支切不出块边界（写法被改动，或这一支的收尾大括号不在四空格那一档——本条按块判，先要能切出块）。");
         Assert.True(cellsGuard.Value.Contains("exit 1"),
             "demo.ps1 里「列数不对」那一支没有在自己的块内退出——静默跳过的那一屏不会出现在讲稿里，正是第一百六十七轮在 demo.sh 上修掉的同一族缺陷。");
+    }
+
+    // ── 第二百零七轮（简报 P0-2）：这一支真的跑过、也能被真的解析 ──────────
+
+    /// <summary>
+    /// <c>demo.ps1</c> 的<b>纯文本级</b>结构门：括号配平、引号与 here-string 闭合、关键字块成块。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百零五轮到第二百零六轮之间，这一支只判过「与 demo.sh 逐段同名」——
+    /// 那是两份文本在互相点头，<b>没有一条判过它自己是不是一份能解析的 PowerShell</b>。
+    /// 第二百零七轮第一次真跑之前，谁也说不出它能不能跑起来。
+    /// </para>
+    /// <para>
+    /// <b>取法</b>：先把字符串字面量、here-string 与注释整段抹成空格（长度与换行位置不变），
+    /// 再在剩下的「代码」上数 <c>() {} []</c> 的配平、检每一处 <c>'</c> / <c>"</c> / <c>@'</c> / <c>@"</c>
+    /// 是否闭合、检每一个 <c>if / elseif / else / foreach / for / while / switch / try / catch / finally / function</c>
+    /// 同一行是否开了块。不抹字符串就数括号，会被 <c>'（报告里没有这一段）'</c> 这类中文标点与
+    /// 正则字面量里的 <c>\[</c> 骗到——那时红的是判据，不是脚本。
+    /// </para>
+    /// <para>
+    /// <b>它判不到什么</b>（写在脸上，别拿它当「这一支能跑」）：不判 cmdlet 名存不存在、不判参数是否合法、
+    /// 不判变量拼错、不判运行时行为，也不判 Windows PowerShell 5.1 与 pwsh 7 的语法差异。
+    /// 「能跑」那一条在下面 <see cref="DemoPs1_ParsesWithARealPowerShellParserWhenOneIsHere"/>，
+    /// 以及第二百零七轮那一次真跑（读数见 <c>.winecheck/reading.txt</c> 与 <c>docs/NOTES.md</c> 本轮记录）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoPs1_Structure_IsBalanced()
+    {
+        var ps1 = File.ReadAllText(Path.Combine(Directory, "demo.ps1"));
+        var problems = PowerShellStructureProblems(ps1);
+        Assert.True(problems.Count == 0,
+            "demo.ps1 的结构过不去：" + string.Join(" ／ ", problems)
+            + "。这一支是 Windows 侧答辩现场要跑的脚本——少一个 } 在 Linux 侧不会让任何别的门红，"
+            + "到了现场才第一次报错就太晚了。");
+    }
+
+    /// <summary>
+    /// <b>判据自己得是活的</b>：把 <c>demo.ps1</c> 故意改坏三处（删一个 <c>}</c>、删一个 <c>"</c>、
+    /// 把 <c>foreach …) {</c> 的 <c>{</c> 抹掉），结构门必须逐条报出来。
+    /// 第二百零五轮实测过一次反面：写法不当时「切不出块边界」的门会在<b>正确</b>的源码上红，
+    /// 而真正的破坏反倒没人报。这条自测就是为了让「它绿着」不等于「它什么都看不见」。
+    /// </summary>
+    [Fact]
+    public void DemoPs1_StructureDetector_ReportsTheBreaksItMustCatch()
+    {
+        var ps1 = File.ReadAllText(Path.Combine(Directory, "demo.ps1"));
+        Assert.Empty(PowerShellStructureProblems(ps1)); // 前提：本体是干净的，下面的「变红」才只可能来自注入的破坏。
+
+        var withoutBrace = ps1.Remove(ps1.LastIndexOf('}'), 1);
+        Assert.NotEmpty(PowerShellStructureProblems(withoutBrace));
+
+        // 删掉一条已知成对的单引号语句里的开引号：剩下的那个引号会一路报到行尾（未闭合字符串）。
+        const string knownPair = "$ErrorActionPreference = 'Stop'";
+        var at = ps1.IndexOf(knownPair, StringComparison.Ordinal);
+        Assert.True(at >= 0, "取法退化：demo.ps1 里找不到那条语句，注入测试成了空转。");
+        var brokenQuote = ps1.Remove(at + knownPair.IndexOf('\''), 1);
+        Assert.NotEmpty(PowerShellStructureProblems(brokenQuote));
+
+        var openBlock = Regex.Match(ps1, @"(?m)^(\s*foreach \(\$tier in [^\n]*?) \{$");
+        Assert.True(openBlock.Success, "取法退化：找不到逐档循环的那一行，关键字成块这一条没在被测的东西上验过。");
+        var headless = ps1.Replace(openBlock.Value, openBlock.Groups[1].Value);
+        Assert.NotEmpty(PowerShellStructureProblems(headless));
+    }
+
+    /// <summary>
+    /// 有 PowerShell 解析器时，<b>用真解析器</b>解析 <c>demo.ps1</c>，语法错误必须为 0。
+    /// <para>
+    /// 第二百零七轮起这一条在本容器是<b>活的</b>：容器里装了 dotnet 全局工具 powershell 7.6.9
+    /// （<c>~/.dotnet/tools/pwsh</c>），实测 0 处语法错误、1560 个 token。上一轮的简报写
+    /// 「容器无 PowerShell、这一层做不到」——那件事在这台机器上已经不成立了，所以这条门把它钉住。
+    /// </para>
+    /// <para>
+    /// <b>它判到哪一层要说清</b>：<c>Parser::ParseFile</c> 只判语法（能不能解析成 AST），
+    /// 不判 cmdlet 存不存在、不判参数、更不判 Windows PowerShell 5.1 的差异。真跑一遍是另一件事，
+    /// 记在 <c>docs/NOTES.md</c> 本轮记录里（那一跑抓到的是源码指纹的区域序 / 字节序分歧，不是语法）。
+    /// </para>
+    /// <para>
+    /// <b>没有解析器的那台机器上判不到</b>——这种情况不许静默绿：<c>.winecheck/README.md</c> 必须把
+    /// 「语法由哪一台的哪个版本实测过、以及它不判行为」登记在案（下面那条 <c>..._ParseVerification_IsRegistered</c>
+    /// 不分路径都判这份登记）。同 <c>HtmlWrapTests.ThisBrowser_CannotTell…</c> 一个做法：判不到就说判不到。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoPs1_ParsesWithARealPowerShellParserWhenOneIsHere()
+    {
+        var parser = LocatePowerShell();
+        if (parser is null) return; // 判不到：由登记在案那条门守着（它在任何机器上都判）。
+
+        var path = Path.Combine(Directory, "demo.ps1").Replace('\'', ' ');
+        var script =
+            "$t=$null;$e=$null;" +
+            "$null=[System.Management.Automation.Language.Parser]::ParseFile('" +
+            path.Replace("'", "''") + "',[ref]$t,[ref]$e);" +
+            "'ERRORS=' + $e.Count;" +
+            "foreach($x in $e){'L' + $x.Extent.StartLineNumber + ' ' + $x.Message};" +
+            "'TOKENS=' + $t.Count;'HOST=' + $PSVersionTable.PSVersion";
+
+        var psi = new ProcessStartInfo(parser)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+        };
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-NonInteractive");
+        psi.ArgumentList.Add("-Command");
+        psi.ArgumentList.Add(script);
+        using var process = Process.Start(psi)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit(120_000);
+
+        var reported = Regex.Match(output, @"ERRORS=(\d+)");
+        Assert.True(reported.Success,
+            $"PowerShell 解析器没有报出台数（退出码 {process.ExitCode}）。stdout={output} stderr={error}");
+        Assert.True(int.Parse(reported.Groups[1].Value) == 0,
+            "demo.ps1 有语法错误，真解析器点名的位置："
+            + string.Join(" ／ ", output.Split('\n').Where(l => l.StartsWith("L")).Select(l => l.Trim()).Take(5))
+            + "。这一支要在 Windows 答辩现场第一次跑，语法错到那时才看见就晚了。");
+        Assert.Matches(@"TOKENS=[1-9]\d{2,}", output); // 真读进去了几百个 token，不是「解析了空文件」。
+    }
+
+    /// <summary>
+    /// <c>demo.ps1</c> 被验到哪一层，<c>.winecheck/README.md</c> 必须自己写清：哪个解析器、哪一个版本、
+    /// 跑到的是「语法 + 整支跑通」还是只有语法，以及「这不等于 Windows 真机」。
+    /// 不分路径都判——没有解析器的那台机器上，这份登记就是唯一的凭据。
+    /// </summary>
+    [Fact]
+    public void DemoPs1_ParseVerification_IsRegisteredInTheReadme()
+    {
+        var readme = Repo.Source(".winecheck", "README.md");
+        Assert.Contains("demo.ps1", readme, StringComparison.Ordinal);
+        Assert.Matches(@"(PowerShell|pwsh)\s*7\.\d+", readme);
+        Assert.Contains("语法", readme, StringComparison.Ordinal);
+        Assert.Contains("真机", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 两支演示脚本写出的<b>读数记录格式必须同源</b>：同一批键、同一份表头口径。
+    /// 记录是门与文档对账的凭据（<c>ReadingConsistencyTests</c>），两边各写一种格式，
+    /// 换一支脚本跑就变成「读数没有出处」——那正是本轮要修的断链点。
+    /// </summary>
+    [Fact]
+    public void BothDemoScripts_WriteTheSameReadingRecord()
+    {
+        var sh = Repo.Source(".winecheck", "demo.sh");
+        var ps1 = Repo.Source(".winecheck", "demo.ps1");
+        foreach (var key in new[] { "script=", "tool=", "date=", "source=", "tier=", "section=" })
+        {
+            Assert.True(sh.Contains(key, StringComparison.Ordinal), $"demo.sh 写读数记录却没有 {key} 这一行。");
+            Assert.True(ps1.Contains(key, StringComparison.Ordinal), $"demo.ps1 写读数记录却没有 {key} 这一行。");
+        }
+
+        // 逐段计数的口径也要同一条：只认带 [RunXxx] 的段标题（否则两份记录的段集合会各自漂）。
+        Assert.Contains(@"\[Run[A-Za-z0-9_]+\]", sh, StringComparison.Ordinal);
+        Assert.Contains(@"\[Run[A-Za-z0-9_]+\]", ps1, StringComparison.Ordinal);
+
+        // 记录本体在不在、对不对，由 ReadingConsistencyTests 判；这里只钉「两支写得同源」。
+        Assert.Contains("READING", sh, StringComparison.Ordinal);
+        Assert.Contains("READING", ps1, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 纯文本级 PowerShell 结构检查（<see cref="DemoPs1_Structure_IsBalanced"/> 的实现）。
+    /// 返回问题清单，空清单 = 过得去。
+    /// </summary>
+    private static List<string> PowerShellStructureProblems(string text)
+    {
+        var problems = new List<string>();
+        var code = BlankPowerShellLiterals(text, problems);
+
+        var stack = new Stack<(char Ch, int Line)>();
+        var lines = code.Split('\n');
+        for (var n = 0; n < lines.Length; n++)
+        {
+            foreach (var c in lines[n])
+            {
+                switch (c)
+                {
+                    case '(' or '{' or '[':
+                        stack.Push((c, n + 1));
+                        break;
+                    case ')' or '}' or ']':
+                        var closer = c switch { ')' => '(', '}' => '{', _ => '[' };
+                        if (stack.Count == 0) problems.Add($"第 {n + 1} 行的 {c} 没有配对的开括号");
+                        else
+                        {
+                            var (open, openLine) = stack.Pop();
+                            if (open != closer) problems.Add($"第 {n + 1} 行的 {c} 对不上第 {openLine} 行的 {open}");
+                        }
+
+                        break;
+                }
+            }
+        }
+
+        while (stack.Count > 0)
+        {
+            var (open, openLine) = stack.Pop();
+            problems.Add($"第 {openLine} 行的 {open} 到文件末尾还没合上");
+        }
+
+        // 关键字必须成块：同一行没有 { 就是块被抹掉了（现场报错会是「表达式或语句中缺少 }」这类含糊话）。
+        foreach (Match m in Regex.Matches(code,
+                     @"(?<![A-Za-z0-9_$.])(function|if|elseif|else|foreach|for|while|switch|try|catch|finally)(?![A-Za-z0-9_$])"))
+        {
+            var end = code.IndexOf('\n', m.Index);
+            var tail = code[(m.Index + m.Length)..(end < 0 ? code.Length : end)];
+            if (tail.Contains('{') || tail.Contains('}')) continue;
+            problems.Add($"关键字 {m.Groups[1].Value} 所在那一行既没有 {{ 也没有 }}（块被写坏了？）");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 把 PowerShell 的字符串字面量、here-string 与注释整段抹成空格——<b>长度与换行位置一字不变</b>，
+    /// 这样抹完之后按行数出来的行号仍然是原文件的行号。闭合不了的引号 / here-string 直接记成问题。
+    /// </summary>
+    private static string BlankPowerShellLiterals(string text, List<string> problems)
+    {
+        var blanked = text.ToCharArray();
+        var line = 1;
+        var i = 0;
+
+        void BlankRange(int from, int to)
+        {
+            for (var k = from; k < to && k < blanked.Length; k++)
+            {
+                if (blanked[k] != '\n') blanked[k] = ' ';
+            }
+        }
+
+        while (i < text.Length)
+        {
+            var c = text[i];
+            if (c == '\n') { line++; i++; continue; }
+
+            // 块注释 <# … #>
+            if (c == '<' && i + 1 < text.Length && text[i + 1] == '#')
+            {
+                var end = text.IndexOf("#>", i + 2, StringComparison.Ordinal);
+                if (end < 0) { problems.Add($"第 {line} 行开的 <# 块注释到文件末尾还没合上"); break; }
+                BlankRange(i, end + 2);
+                line += CountInRange(text, i, end + 2, '\n');
+                i = end + 2;
+                continue;
+            }
+
+            // 行注释 #…
+            if (c == '#')
+            {
+                var end = text.IndexOf('\n', i);
+                if (end < 0) end = text.Length;
+                BlankRange(i, end);
+                i = end;
+                continue;
+            }
+
+            // here-string @' … '@ / @" … "@（收尾必须顶在一行的行首，与 PowerShell 一致）
+            if (c == '@' && i + 1 < text.Length && (text[i + 1] == '\'' || text[i + 1] == '"'))
+            {
+                var quote = text[i + 1];
+                var closer = quote + "@";
+                var fromContent = i + 2;
+                var end = -1;
+                for (var probe = text.IndexOf('\n', fromContent) + 1; probe > 0 && probe < text.Length;
+                     probe = text.IndexOf('\n', probe) + 1)
+                {
+                    if (text.AsSpan(probe).StartsWith(closer.AsSpan(), StringComparison.Ordinal)) { end = probe; break; }
+                }
+
+                if (end < 0) { problems.Add($"第 {line} 行开的 here-string {quote}@ 没有顶格收尾"); break; }
+                var stop = end + closer.Length;
+                BlankRange(i, stop);
+                line += CountInRange(text, i, stop, '\n');
+                i = stop;
+                continue;
+            }
+
+            // 单引号串（'' 是转义），双引号串（` 是转义）
+            if (c is '\'' or '"')
+            {
+                var start = i;
+                var k = i + 1;
+                var closed = false;
+                while (k < text.Length)
+                {
+                    var next = k + 1 < text.Length ? text[k + 1] : '\0';
+                    // 转义：'' 与 `` （收尾的那个引号后面不跟同类引号，所以下一条才是收尾）
+                    if (text[k] == c && next == c) { k += 2; continue; }
+                    if (c == '"' && text[k] == '`') { k += 2; continue; }
+                    if (text[k] == '\n') break; // 单行串不跨行
+                    if (text[k] == c) { closed = true; k++; break; }
+                    k++;
+                }
+
+                if (!closed)
+                {
+                    problems.Add($"第 {line} 行开的 {c} 字符串没在本行合上");
+                    i = k;
+                    continue;
+                }
+
+                BlankRange(start, k);
+                i = k;
+                continue;
+            }
+
+            i++;
+        }
+
+        return new string(blanked);
+    }
+
+    /// <summary>一段区间里某个字符有几个（抹字符串时要跟着挪行号）。</summary>
+    private static int CountInRange(string text, int from, int to, char needle)
+    {
+        var n = 0;
+        for (var i = from; i < to && i < text.Length; i++) if (text[i] == needle) n++;
+        return n;
+    }
+
+    /// <summary>
+    /// 找一台 PowerShell：<c>PATH</c> 上的 <c>pwsh</c> / <c>powershell</c>，加上 dotnet 全局工具目录
+    /// 与 Windows 的两个常规装法。找不到返回 null——调用方据此走「这台机器判不到」那一支。
+    /// </summary>
+    private static string? LocatePowerShell()
+    {
+        var names = new[] { "pwsh", "powershell" };
+        var dirs = new List<string>();
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path)) dirs.AddRange(path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(home)) dirs.Add(Path.Combine(home, ".dotnet", "tools"));
+        dirs.AddRange(["/usr/bin", "/usr/local/bin",
+            @"C:\Program Files\PowerShell\7", @"C:\Program Files (x86)\PowerShell\7"]);
+
+        foreach (var dir in dirs.Distinct(StringComparer.Ordinal))
+        {
+            foreach (var name in names)
+            {
+                foreach (var leaf in new[] { name, name + ".exe" })
+                {
+                    try
+                    {
+                        var candidate = Path.Combine(dir, leaf);
+                        if (File.Exists(candidate)) return candidate;
+                    }
+                    catch (ArgumentException)
+                    {
+                        // 这一台上不合法的目录写法（比如 Windows 路径出现在 Linux 上）跳过就行。
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 }

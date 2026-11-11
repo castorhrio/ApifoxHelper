@@ -26,7 +26,8 @@ param(
     [string]$Repo = ${env:REPO},
     [string]$WinePrefix = ${env:WINEPREFIX},
     [string]$Display = ${env:DISPLAY},
-    [string]$Publish = ${env:PUBLISH}
+    [string]$Publish = ${env:PUBLISH},
+    [string]$Reading = ${env:READING}
 )
 $ErrorActionPreference = 'Stop'
 
@@ -37,6 +38,9 @@ if (-not $SmokeExe) { $SmokeExe = '/tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe' }
 if (-not $Out) { $Out = '/tmp/ah-demo' }
 if (-not $Tiers) { $Tiers = '96 120 192' }
 if (-not $Publish) { $Publish = '0' }
+# 读数记录落在**仓里**（不放 /tmp），与 demo.sh 的 READING 同一旋钮：README 与 docs/NOTES.md 念的
+# 那个三档读数是跑出来的，门（ApifoxHelper.Tests/ReadingConsistencyTests）拿文档与这份记录逐字对账。
+if (-not $Reading) { $Reading = Join-Path $Repo '.winecheck/reading.txt' }
 if (-not $WinePrefix) { $WinePrefix = Join-Path $homeDir '.wine-ah' }
 if (-not $Display) { $Display = ':99' }
 ${env:WINEPREFIX} = $WinePrefix
@@ -73,11 +77,18 @@ function Get-Sha1Hex([byte[]]$bytes) {
 # 那正是这一条要的保守方向：宁可要求重发一次，也不把上一版的读数念成当前的。
 function Get-SourceFingerprint {
     $tests = (Join-Path $Repo 'ApifoxHelper.Tests').Replace('\', '/')
-    $files = @(Get-ChildItem -LiteralPath $Repo -Recurse -Filter '*.cs' |
+    # 先把路径归一成 / 分隔，再排——排序键必须就是参与哈希的那串字符，否则「按什么排」与「按什么算」不是一回事。
+    $files = [string[]] @(Get-ChildItem -LiteralPath $Repo -Recurse -Filter '*.cs' |
         Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
         Where-Object { -not $_.FullName.Replace('\', '/').StartsWith($tests) } |
-        Sort-Object { $_.FullName } |
         ForEach-Object { $_.FullName.Replace('\', '/') })
+    # 排字面量这一段：Sort-Object 默认按当前区域的语言序（忽略大小写与标点），会把
+    # Api/ApiRoutes.cs 排到 Api/ApifoxRoutes.cs 之后（'f' < 'R' 在字母序里成立、在字节序里不成立），
+    # 而 demo.sh 用的是 LC_ALL=C sort——字节序。第二百零七轮第一次真跑本脚本就是被这一点挡在门外：
+    # 同一份源码两支脚本各算一个指纹，本脚本据此判定「冒烟器不是当前源码发出来的」并非零退出。
+    # 更坏的是用它 PUBLISH=1 跑一次会写下自己那份指纹，下一支 demo.sh 又反过来认不出来——
+    # 两台机器之间来回踢。口径以 demo.sh 为准：这里显式取字节序（Ordinal）。
+    [Array]::Sort($files, [System.StringComparer]::Ordinal)
     $lines = @($files | ForEach-Object { (Get-Sha1Hex ([System.IO.File]::ReadAllBytes($_))) + '  ' + $_ })
     return (Get-Sha1Hex ([System.Text.Encoding]::UTF8.GetBytes(($lines -join "`n") + "`n")))
 }
@@ -150,6 +161,38 @@ function Get-SegmentStat([string]$reportPath, [string]$id) {
     return @($pass, $fail)
 }
 
+# 一份报告按段拆开：每段一行「section=RunXxx tier=档位 passed=N failed=M」。切段只认带 [RunXxx]
+# 的标题，其余 == 行（开头的系统版本行、结尾的结果行）不切段也不清空——与 demo.sh 的 section_stats
+# 同一条口径。报告里第一个段之前那批 PASS（构造清单、控件工厂、字段宽度实测）没有自己的段标题，
+# 它们由门拿冒烟器源码算，不在这里发明第二份名单。
+function Get-SectionStats([string]$reportPath, [string]$tier) {
+    $stats = @()
+    $id = ''
+    $pass = 0
+    $fail = 0
+    foreach ($line in (Get-Content -LiteralPath $reportPath)) {
+        if ($line -like '== *') {
+            $found = [regex]::Match($line, '\[Run[A-Za-z0-9_]+\]')
+            # 不切段也不清空：报告里的 == 行只有带 [RunXxx] 的那批是段标题，
+            # 其余（开头的系统版本行、结尾的结果行）原样跳过——在这里收尾会把最后一段重复记一次。
+            if (-not $found.Success) { continue }
+            if ($id) { $stats += "section=$id tier=$tier passed=$pass failed=$fail" }
+            $id = $found.Value.Substring(1, $found.Value.Length - 2)
+            $pass = 0
+            $fail = 0
+            continue
+        }
+        if (-not $id) { continue }
+        if ($line.StartsWith('PASS ')) { $pass++ }
+        elseif ($line.StartsWith('FAIL')) { $fail++ }
+    }
+    if ($id) { $stats += "section=$id tier=$tier passed=$pass failed=$fail" }
+    return $stats
+}
+
+# 读数记录的正文（tier= 与 section= 两类行），三档跑完整份写出。
+$readingTiers = ''
+$readingSections = ''
 $totalFail = 0
 $totalMissing = 0
 foreach ($tier in @($Tiers -split ' ' | Where-Object { $_ })) {
@@ -190,6 +233,11 @@ foreach ($tier in @($Tiers -split ' ' | Where-Object { $_ })) {
     $failLines = @($reportLines | Where-Object { $_.StartsWith('FAIL ') }).Count
     $passLines = @($reportLines | Where-Object { $_.StartsWith('PASS ') }).Count
     Write-Host "  报告：$passLines 通过 / $failLines 失败（退出码 $runRc）→ $report"
+
+    # 读数记录：只把报告原文里的数抄进去（总计 + 逐段），加法留给门去核——
+    # 脚本这里先加好，等于让同一份自述既当证据又当结论。
+    $readingTiers += "tier=$tier passed=$passLines failed=$failLines exit=$runRc`n"
+    $readingSections += (((Get-SectionStats $report $tier) -join "`n") + "`n")
 
     if ($useWine) {
         $caliber = '以上全部是 Linux 容器内 wine 10.0 + Xvfb 模拟器证据，不是 Windows 真机结果。'
@@ -242,6 +290,29 @@ foreach ($tier in @($Tiers -split ' ' | Where-Object { $_ })) {
 # 把缩放改回 100%，别把下一个用同一前缀的人留在 200% 档。这一步同样要在活显示里写（原因见上面那段）。
 if ($useWine) {
     & $WineBin reg add 'HKCU\Control Panel\Desktop' /v LogPixels /t REG_DWORD /d 96 -f *> $null
+}
+
+# 读数记录落盘（三档跑完就写，**不管这一场收口没收口**）：失败的那一次同样要留下数，
+# 否则「跑挂了就没有对账材料」会让这份记录只存在于顺利的那些次。整份覆盖，字节口径同讲稿。
+$readingLines = @(
+    '# 三档冒烟读数记录——由 .winecheck/demo.ps1 写出，不是手抄的。',
+    '# 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs——README.md 与 docs/NOTES.md 里',
+    '#   「当前源码…N 通过 / 0 失败 ×3」必须逐字等于下面 tier= 记的数；section= 的段集合必须',
+    '#   等于冒烟器源码里注册的段集合；每档的总数必须等于「第一段之前的构造清单类条数」+ 该档各段之和。',
+    '# 这份记的是模拟器/本机跑出来的读数，不是 Windows 真机复核结果（G-D5 仍 [ ]，到期日 2026-11-20）。',
+    'script=demo.ps1',
+    ("tool=" + $(if ($useWine) { 'pwsh + wine' } else { 'pwsh 本机' })),
+    ('date=' + (Get-Date -Format 'yyyy-MM-dd')),
+    ('source=' + (Get-SourceFingerprint))
+)
+$readingLines += @($readingTiers -split "`n" | Where-Object { $_ })
+$readingLines += @($readingSections -split "`n" | Where-Object { $_ })
+try {
+    [System.IO.File]::WriteAllText($Reading, (($readingLines -join "`n") + "`n"), $Utf8NoBom)
+    Write-Host "  读数记录：$Reading"
+}
+catch {
+    Write-Host "  读数记录写不进 $Reading（设 READING= 指到可写的路径）——文档里那个数这一次没有可对账的出处。"
 }
 
 Write-Host @'

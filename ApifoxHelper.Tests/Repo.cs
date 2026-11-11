@@ -47,6 +47,26 @@ internal static class Repo
 
     public static string Source(params string[] relative) => File.ReadAllText(Path.Combine([Root, .. relative]));
 
+    /// <summary>冒烟器源码（读多次不重开文件：段名单、桶数、读数对账都要用它）。</summary>
+    public static string SmokeProgram { get; } = Source("ApifoxHelper.Smoke", "Program.cs");
+
+    /// <summary>
+    /// 冒烟器 <c>Main</c> 里<b>注册</b>过的段名（<c>Section("…", nameof(RunXxx))</c>）。
+    /// <para>
+    /// 这是「段」的唯一权威名单，两处对账都取它：<c>GateSourceConsistencyTests</c> 判「声明了就要注册」，
+    /// <c>ReadingConsistencyTests</c> 判「读数记录里跑出来的段 == 冒烟器注册的段」。放在这里是为了让它们
+    /// <b>共用同一条取法</b>——两份各写一个正则，就会有一处改了另一处没跟上，而那时「对得上」
+    /// 只是两份口径各自漂移后的巧合。
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> SmokeSectionNames() =>
+        System.Text.RegularExpressions.Regex.Matches(SmokeProgram, @"Section\(""[^""]*"",\s*nameof\((Run[A-Za-z0-9_]*)\)\)")
+            .Cast<System.Text.RegularExpressions.Match>()
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
     private static string FindRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

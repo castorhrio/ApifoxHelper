@@ -326,4 +326,268 @@ public class ReadingConsistencyTests
             "逐屏对账表里这些段数与冒烟器对不上：" + string.Join(" ／ ", wrong)
             + "。答辩现场念的就是这个数——改一段就回来改表，别让表比代码旧。");
     }
+
+    // ---------- 第二百零七轮（简报 P0-1）：念出来的数要有「跑出来的出处」 ----------
+
+    /// <summary>
+    /// 读数记录 <c>.winecheck/reading.txt</c>——由 <c>demo.sh</c> / <c>demo.ps1</c> 跑完三档写出，
+    /// 不是人抄的。下面四条门把「文档念的数」接到这份记录上，不再接到人写的加法上。
+    /// </summary>
+    private const string ReadingPath = ".winecheck/reading.txt";
+
+    /// <summary>一次跑出来的一档：档位 + 通过 / 失败 + 冒烟器退出码。</summary>
+    private sealed record TierRun(int Tier, int Passed, int Failed, int Exit);
+
+    /// <summary>一次跑出来的一段：段名 + 档位 + 通过 / 失败。</summary>
+    private sealed record SectionRun(string Section, int Tier, int Passed, int Failed);
+
+    /// <summary>一份读数记录（来历四行 + 每档总计 + 每段计数）。</summary>
+    private sealed record Reading(string Script, string Tool, string Date, string Source,
+        List<TierRun> Tiers, List<SectionRun> Sections);
+
+    /// <summary>
+    /// 读那份记录。缺文件即红并给出「怎么补出来」的一条命令——这份记录是跑出来的，
+    /// 不在磁盘上就说明有人删了它，或者上一轮改了冒烟器却没重跑（两种都不能拿现在的文档数去答辩）。
+    /// </summary>
+    private static Reading ReadingRecord()
+    {
+        var path = Path.Combine(Repo.Root, ReadingPath.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(File.Exists(path),
+            $"{ReadingPath} 不在——README 与验收表里那个「当前源码三档读数」没有跑出来的出处了。"
+            + "补一次：bash .winecheck/demo.sh（三档跑完它自己写回原位）。");
+
+        var script = ""; var tool = ""; var date = ""; var source = "";
+        var tiers = new List<TierRun>();
+        var sections = new List<SectionRun>();
+        foreach (var raw in File.ReadAllLines(path))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            var at = line.IndexOf('=');
+            if (at <= 0) continue;
+            var key = line[..at];
+            var value = line[(at + 1)..];
+            switch (key)
+            {
+                case "script": script = value; break;
+                case "tool": tool = value; break;
+                case "date": date = value; break;
+                case "source": source = value; break;
+                case "tier":
+                    var t = Regex.Match(line, @"^tier=(\d+) passed=(\d+) failed=(\d+) exit=(-?\d+)$");
+                    Assert.True(t.Success, $"{ReadingPath} 有一行 tier= 不是「tier=N passed=N failed=N exit=N」：{line}");
+                    tiers.Add(new TierRun(int.Parse(t.Groups[1].Value), int.Parse(t.Groups[2].Value),
+                        int.Parse(t.Groups[3].Value), int.Parse(t.Groups[4].Value)));
+                    break;
+                case "section":
+                    var s = Regex.Match(line, @"^section=(Run[A-Za-z0-9_]+) tier=(\d+) passed=(\d+) failed=(\d+)$");
+                    Assert.True(s.Success, $"{ReadingPath} 有一行 section= 不是「section=RunXxx tier=N passed=N failed=N」：{line}");
+                    sections.Add(new SectionRun(s.Groups[1].Value, int.Parse(s.Groups[2].Value),
+                        int.Parse(s.Groups[3].Value), int.Parse(s.Groups[4].Value)));
+                    break;
+                default:
+                    Assert.Fail($"{ReadingPath} 出现没有约定的键 {key}（这一份只能由两支演示脚本写，手改就是把出处变成自述）：{line}");
+                    break;
+            }
+        }
+
+        return new Reading(script, tool, date, source, tiers, sections);
+    }
+
+    /// <summary>
+    /// 文档里「当前源码…N 通过 / M 失败 ×3」这一处<b>声称</b>（带行号，红了要点到人）。
+    /// 只判带「当前源码」四个字的那几处——历史读数（135 / 180 / 200 / 206 / 208 / 218 的旧值）
+    /// 是当时的证据，本来就该各不相同，把它们也拉平等于把记录改坏（与本文件第一条门同一边界）。
+    /// </summary>
+    private static readonly Regex CurrentReadingWithFailures = new(
+        @"当前源码[^\n。]{0,60}?(?<n>\d+) 通过 / (?<f>\d+) 失败 ×3",
+        RegexOptions.Compiled);
+
+    private static List<(string File, int Line, int Passed, int Failed)> CurrentReadingClaims()
+    {
+        var claims = new List<(string, int, int, int)>();
+        foreach (var file in new[] { "README.md", "docs/NOTES.md" })
+        {
+            var lines = Repo.Source(file.Replace('/', Path.DirectorySeparatorChar)).Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                foreach (Match m in CurrentReadingWithFailures.Matches(lines[i]))
+                {
+                    claims.Add((file, i + 1, int.Parse(m.Groups["n"].Value), int.Parse(m.Groups["f"].Value)));
+                }
+            }
+        }
+
+        return claims;
+    }
+
+    /// <summary>
+    /// 读数记录必须自己说清是哪一支脚本、哪一台机器、哪一天、哪一版源码跑出来的，
+    /// 并且自己写明<b>这不是真机结果</b>——这份记录将来会被拿去答辩，来历不明的读数最危险。
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判这份记录比当前源码新</b>。那是 <c>demo.sh</c> 在跑的时候按源码内容指纹
+    /// 拦的事（<c>smoke-source.sha</c> 对不上它就拒绝念）。把同一条判据搬进 <c>dotnet test</c>，
+    /// 等于「改一行产品代码、没先跑一次 wine，整个测试工程就红」——一道当场解不开的闸门比没有闸门更糟，
+    /// 而这一条在演示脚本里已经解得开（重跑一次就行）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ReadingRecord_NamesItsScriptToolDateSourceAndKeepsTheSimulatorCaliber()
+    {
+        var record = ReadingRecord();
+        Assert.True(record.Script == "demo.sh" || record.Script == "demo.ps1",
+            $"{ReadingPath} 的 script= 是「{record.Script}」——这一份只能由 .winecheck/demo.sh 或 demo.ps1 写出。");
+        Assert.Matches(@"^[0-9a-f]{40}$", record.Source);
+        Assert.Matches(@"^\d{4}-\d{2}-\d{2}$", record.Date);
+        Assert.False(string.IsNullOrWhiteSpace(record.Tool), $"{ReadingPath} 没有 tool=：念数的人不知道这是在哪台机器上跑的。");
+        Assert.NotEmpty(record.Tiers);
+        Assert.Contains("不是 Windows 真机", Repo.Source(ReadingPath), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 记录里跑出来的段集合 == 冒烟器 <c>Main</c> 里注册的段集合（<see cref="Repo.SmokeSectionNames"/>，
+    /// 与 <c>GateSourceConsistencyTests</c> 同一条取法，本仓不养第二份段名单）。
+    /// <para>
+    /// 这是「把冒烟器删掉一段即红」那一处变异验证的落点：<b>不用重跑</b>。注册表少一段而记录里还有它，
+    /// 说明有人拿着旧读数念新代码；反过来记录里少一段，说明这一段没跑成。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ReadingRecord_RunsExactlyTheSectionsTheSmokeProgramRegisters()
+    {
+        var record = ReadingRecord();
+        var registered = Repo.SmokeSectionNames();
+        Assert.True(registered.Count >= 12, $"冒烟器只解析出 {registered.Count} 个注册段（地板 12）——取法退化了。");
+
+        var problems = new List<string>();
+        foreach (var tier in record.Tiers)
+        {
+            var ran = record.Sections.Where(s => s.Tier == tier.Tier).Select(s => s.Section)
+                .Distinct(StringComparer.Ordinal).ToList();
+            var missing = registered.Except(ran, StringComparer.Ordinal).ToList();
+            var extra = ran.Except(registered, StringComparer.Ordinal).ToList();
+            if (missing.Count > 0) problems.Add($"{tier.Tier} 档没有跑过 {string.Join(" / ", missing)}（冒烟器注册了它们）");
+            if (extra.Count > 0) problems.Add($"{tier.Tier} 档跑出了 {string.Join(" / ", extra)}，冒烟器里没有注册这些段");
+        }
+
+        Assert.True(problems.Count == 0,
+            "读数记录里的段与冒烟器注册的段不是同一批：" + string.Join("；", problems)
+            + "。段集合对不上时，那份记录的总数就不属于当前这段代码——重跑 bash .winecheck/demo.sh 再改文档。");
+    }
+
+    /// <summary>
+    /// <b>本门的主判据</b>：文档里每一处「当前源码…N 通过 / M 失败 ×3」必须逐字等于最近一次跑出来的读数，
+    /// 一处对不上即红，并点名是哪份文件的哪一行。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：那串加法（218 = 200 + 6 + 1 + 1 + 9 + 1）第一百九十三轮已经判过「加得起来」，
+    /// 但<b>加得起来的算式照样可以是另一个数的算式</b>——真正的风险是文档里的 N 与当场跑出来的 N 不同，
+    /// 而那件事此前只能靠人每轮记得回头改。这是 G-D5 不可得时答辩现场唯一能念的数，值得脱离人手。
+    /// </para>
+    /// <para>
+    /// <b>「×3」也判</b>：文档写 ×3，记录里就得真有三档、且三档同一个数；只跑到一档时这一条会红，
+    /// 而不是让「×3」变成一句没有出处的话。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CurrentSourceReading_EqualsTheRunThatProducedTheRecord()
+    {
+        var record = ReadingRecord();
+        var claims = CurrentReadingClaims();
+        Assert.NotEmpty(claims);
+
+        var passed = record.Tiers.Select(t => t.Passed).Distinct().ToList();
+        var failed = record.Tiers.Select(t => t.Failed).Distinct().ToList();
+        Assert.True(record.Tiers.Count == 3,
+            $"{ReadingPath} 记了 {record.Tiers.Count} 档（文档写的是 ×3）——补跑：bash .winecheck/demo.sh");
+        Assert.True(record.Tiers.Select(t => t.Tier).Distinct().Count() == 3,
+            $"{ReadingPath} 里出现重复档位：{string.Join(" / ", record.Tiers.Select(t => t.Tier))}");
+
+        var drift = new List<string>();
+        foreach (var (file, line, claimedPassed, claimedFailed) in claims)
+        {
+            if (passed.Count != 1 || failed.Count != 1 || passed[0] != claimedPassed || failed[0] != claimedFailed)
+            {
+                drift.Add($"{file}:{line} 念的是「{claimedPassed} 通过 / {claimedFailed} 失败 ×3」");
+            }
+        }
+
+        Assert.True(drift.Count == 0,
+            "文档念的数与最近一次跑出来的数不是同一个。跑出来的是："
+            + string.Join("；", record.Tiers.Select(t => $"{t.Tier} 档 {t.Passed} 通过 / {t.Failed} 失败（退出码 {t.Exit}）"))
+            + $"（出处 {ReadingPath}，{record.Script} · {record.Date} · 源码 {record.Source[..10]}）。"
+            + "对不上的行：" + string.Join(" ／ ", drift)
+            + "。要么按跑出来的改文档（并在括号里写清这一段是哪一轮加上去的），要么重跑 "
+            + "bash .winecheck/demo.sh——别把上一版的读数念成当前的。");
+    }
+
+    /// <summary>
+    /// 冒烟器<b>第一段之前</b>那批的条数（全部静态可数，一个都不写死）：
+    /// 真实控件构造清单 <c>Cases()</c> 的 <c>yield return</c> 数 + 控件工厂 <c>ControlCases()</c> 的
+    /// <c>yield return</c> 数 + 「字段宽度实测」调用次数 + 「DPI 缩放实测」调用次数 × 源码里那个缩放档数组的长度。
+    /// <para>
+    /// 这一段不进任何 <c>Section</c>，所以读数记录的逐段之和里没有它们；两边一减一加才对得上总数。
+    /// 结尾那两条「冒烟清单覆盖」按报告的切段口径落在最后一个段名下，不在这里重复计一次。
+    /// </para>
+    /// </summary>
+    private static int SmokeBucketCount()
+    {
+        int Declared(string signature) =>
+            Regex.Matches(BodyOf(signature), @"(?m)^\s*yield return").Count;
+
+        var cases = Declared("private static IEnumerable<(string Name, Func<Control> Build)> Cases(");
+        var controls = Declared("private static IEnumerable<(string Name, Func<Control> Build)> ControlCases(");
+        var width = Regex.Matches(Repo.SmokeProgram, @"(?m)^\s+MeasureFieldWidths\(").Count;
+        var scaled = Regex.Matches(Repo.SmokeProgram, @"(?m)^\s+MeasureFieldWidthsAtScale\(").Count;
+        var tiers = Regex.Matches(Repo.SmokeProgram, @"foreach \(var percent in new\[\] \{([^}]*)\}\)")
+            .Select(m => Regex.Matches(m.Groups[1].Value, @"\d+").Count)
+            .ToList();
+
+        Assert.True(cases >= 12 && controls >= 1 && width >= 1 && scaled == tiers.Count,
+            $"冒烟器结构的取法退化了（构造清单 {cases}、控件工厂 {controls}、字段宽度 {width}、缩放 {scaled}/{tiers.Count}）——"
+            + "这时算出来的桶数不可信，别拿它去核读数记录。");
+
+        return cases + controls + width + tiers.Sum();
+    }
+
+    /// <summary>取一个声明到下一个顶格 <c>private static</c> 之间的正文（段体里有 lambda，不配花括号）。</summary>
+    private static string BodyOf(string signature)
+    {
+        var from = Repo.SmokeProgram.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(from >= 0, $"冒烟器里找不到 {signature}。");
+        var next = Repo.SmokeProgram.IndexOf("\n    private static", from + signature.Length, StringComparison.Ordinal);
+        return next < 0 ? Repo.SmokeProgram[from..] : Repo.SmokeProgram[from..next];
+    }
+
+    /// <summary>
+    /// 每一档的总数必须等于「第一段之前那批（静态可数）」+「该档各段之和（跑出来的）」。
+    /// <para>
+    /// 这条门是记录与源码之间的<b>加法对账</b>：往构造清单里加一条用例、给字段宽度多加一档、
+    /// 注册表里多一段，都会让这一处立刻对不上（不必等 wine 重跑），而「答辩念的数与当场跑出来的对不上」
+    /// 最难发现的一类正是这种<b>谁都没改错、只是没人回头加一遍</b>的漂。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ReadingRecord_AddsUpToTheSmokeProgramsOwnStructure()
+    {
+        var record = ReadingRecord();
+        var buckets = SmokeBucketCount();
+        var wrong = new List<string>();
+
+        foreach (var tier in record.Tiers)
+        {
+            var attempted = record.Sections.Where(s => s.Tier == tier.Tier)
+                .Sum(s => s.Passed + s.Failed);
+            var reported = tier.Passed + tier.Failed;
+            if (reported != buckets + attempted)
+            {
+                wrong.Add($"{tier.Tier} 档报 {reported} 条，源码结构算出来是 {buckets + attempted} 条"
+                    + $"（第一段之前 {buckets} + 各段之和 {attempted}）");
+            }
+        }
+
+        Assert.True(wrong.Count == 0,
+            "读数记录加不到冒烟器的结构上：" + string.Join("；", wrong)
+            + $"。两种原因：冒烟器的结构变了而记录还是上一次那一次跑的（重跑 bash .winecheck/demo.sh），"
+            + $"或者记录被手改过（{ReadingPath} 只能由两支演示脚本写出）。");
+    }
 }

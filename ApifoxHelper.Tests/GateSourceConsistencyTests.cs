@@ -202,12 +202,7 @@ public class GateSourceConsistencyTests
     /// 注册表是「段」的权威定义：只有注册过的段才会出现在报告的分段表里，演示脚本也按它逐屏对账。
     /// </para>
     /// </summary>
-    private static List<string> RegisteredSections() =>
-        Regex.Matches(SmokeProgram, @"Section\(""[^""]*"",\s*nameof\((Run[A-Za-z0-9_]*)\)\)")
-            .Select(m => m.Groups[1].Value)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(n => n, StringComparer.Ordinal)
-            .ToList();
+    private static List<string> RegisteredSections() => [.. Repo.SmokeSectionNames()];
 
     /// <summary>
     /// 冒烟器里的构造辅助，不是段：<c>Run(name, build)</c> 造一个控件、<c>RunAction(name, action)</c> 跑一段动作。
