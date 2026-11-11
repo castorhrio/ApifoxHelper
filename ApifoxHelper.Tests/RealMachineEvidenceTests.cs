@@ -1140,4 +1140,46 @@ public class RealMachineEvidenceTests
         Assert.Contains(self, block, StringComparison.Ordinal);
         Assert.Contains("不判这四项做过没有", block, StringComparison.Ordinal);
     }
+
+    // ---------- 第二百零四轮（简报 P0-2）：九个归档目录必须真实存在于磁盘上 ----------
+
+    /// <summary>
+    /// 九个归档目录必须真实存在于磁盘上，且各带一个 <c>.gitkeep</c> 占位（第二百零四轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="Readme_CoversEveryArchiveDirectoryTheActionListNames"/> 判的是
+    /// 「动作单与 README 两边同名」，<see cref="ArchiveDirectories_AreEitherAllAbsentOrAllNamedByTheReadme"/>
+    /// 判的是「仓里多出来的目录不许是 README 没点到的」——两条都<b>不判目录在不在</b>：九个目录一个都没有时
+    /// 两条都是绿的（前者只看文档，后者在「一个都没有」时直接 return）。于是「真机到手当天
+    /// <c>prepare-real-machine.sh</c> 会不会撞『目录不存在』」这件事在仓里没有答案，而机器若在到期日当天到，
+    /// 现场第一件事就是建目录。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① <c>docs/evidence/real-machine/</c> 下 <see cref="ExpectedDirectories"/> 的九个目录
+    /// 逐个 <see cref="Directory.Exists(string)"/> 为真；② 每个目录里有一个 <c>.gitkeep</c> 占位——
+    /// git 不跟踪空目录，没有占位的话 clone 下来目录又没了，「目录在仓里」这件事仍然没有实物。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判目录里有真机证据</b>（真机 0 台，目录里只有 <c>.gitkeep</c>，空目录 = 未达成），
+    /// 也<b>不判真机跑没跑</b>。它只保证「机器到手当天不会卡在第一步」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryArchiveDirectory_ExistsOnDisk()
+    {
+        Assert.True(Directory.Exists(EvidenceRoot),
+            $"缺 docs/evidence/real-machine/ 目录：真机证据的落点不在，动作单七条都没有归档处。");
+
+        foreach (var dir in ExpectedDirectories)
+        {
+            var full = Path.Combine(EvidenceRoot, dir);
+            Assert.True(Directory.Exists(full),
+                $"docs/evidence/real-machine/{dir}/ 不存在：真机到手当天 prepare-real-machine.sh 会撞「目录不存在」，"
+                + "而机器若在到期日当天到，现场第一件事就是建目录。目录清单在 " + nameof(ExpectedDirectories) + "。");
+
+            // git 不跟踪空目录：没有 .gitkeep 占位，clone 下来目录又没了，「目录在仓里」仍然没有实物。
+            Assert.True(File.Exists(Path.Combine(full, ".gitkeep")),
+                $"docs/evidence/real-machine/{dir}/ 里没有 .gitkeep 占位：git 不跟踪空目录，"
+                + "没有占位的话这个目录提交不进仓，下一个人 clone 下来又得自己建。");
+        }
+    }
 }

@@ -493,4 +493,162 @@ public class DefenseNarrativeTests
             "三句答法里没有一句点到可复跑命令（.winecheck/demo.sh）或冒烟段名（RunXxx）："
             + "被追问「能不能当场跑一遍」时，三句全是自述，答不出东西。");
     }
+
+    // ---------- 第二百零四轮（简报 P0-1）：降级答辩逐屏演示脚本 ----------
+
+    /// <summary>「降级答辩逐屏演示脚本」那一节的标题前缀（二级标题，落在「降级答辩脚本」之后）。</summary>
+    private const string DemoScriptHeading = "## 降级答辩逐屏演示脚本（可当场跑";
+
+    /// <summary>每屏台词的字数上限。简报给的数是 60。</summary>
+    private const int DemoLineCeiling = 60;
+
+    /// <summary>屏数区间（简报给的数是 7–10 屏）。</summary>
+    private const int DemoScreenFloor = 7;
+
+    private const int DemoScreenCeiling = 10;
+
+    /// <summary>演示脚本的一行：序号 / 屏 / 一句台词 / 当场跑的命令 / 念哪一行读数。</summary>
+    private readonly record struct DemoScreen(string Number, string Screen, string Line, string Command, string Reading);
+
+    /// <summary>演示脚本那一节的正文行（标题行到下一个二级标题之前）。</summary>
+    private static string[] DemoScriptLines()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(DemoScriptHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 缺「{DemoScriptHeading}…）」一节：答辩现场要做的动作是「跑一条命令 → 念报告里那一行读数」，"
+            + "而这三步此前没有一页能照着走——讲的人得自己从逐屏表里挑屏、自己拼命令、自己到讲稿里找那一行。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    private static List<DemoScreen> DemoScreens()
+    {
+        var rows = new List<DemoScreen>();
+        foreach (var line in DemoScriptLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (cells.Count == 0 || !Regex.IsMatch(cells[0], @"^\d+$")) continue;
+            Assert.True(cells.Count == 5,
+                $"演示脚本有一行不是 5 列（实际 {cells.Count} 列，应为 序号 / 屏 / 一句台词 / 当场跑的命令 / 念哪一行读数）：{cells[0]}。");
+            rows.Add(new DemoScreen(cells[0], cells[1], cells[2], cells[3], cells[4]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// 上一节「降级答辩脚本」逐屏表「证据出处」一列里引用的冒烟段名。
+    /// <para>
+    /// <c>.winecheck/demo.sh</c> 只给<b>逐屏表引到的段</b>写讲稿行（它按 <c>^\| \d</c> 取行、从第 4 格
+    /// <c>grep -oE 'Run[A-Za-z0-9]+'</c>）。所以「这一屏念哪一行读数」点到的段若不在这一份清单里，
+    /// 讲稿里根本不会有那一行——照着念就是空手。取法与脚本同一口径（只取表格行、只取证据出处那一格）。
+    /// </para>
+    /// </summary>
+    private static HashSet<string> CitedSmokeSegments()
+    {
+        var notes = Repo.Source("docs", "NOTES.md").Split('\n');
+        var start = Array.FindIndex(notes, l => l.StartsWith("## 降级答辩脚本", StringComparison.Ordinal));
+        Assert.True(start >= 0, "docs/NOTES.md 缺「## 降级答辩脚本」一节（演示脚本的屏单出处）。");
+        var end = Array.FindIndex(notes, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        var cited = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var line in notes[start..(end < 0 ? notes.Length : end)])
+        {
+            if (!Regex.IsMatch(line, @"^\| \d")) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (cells.Count != 5) continue;
+            foreach (Match m in Regex.Matches(cells[3], @"Run[A-Za-z0-9]+")) cited.Add(m.Value);
+        }
+
+        return cited;
+    }
+
+    /// <summary>
+    /// 降级答辩逐屏演示脚本：每屏一句能念的台词 + 一条当场能跑的命令 + 一行真能念到的读数
+    /// （第二百零四轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="ScriptTemplate_EveryBlockHasAPronounceableSentence"/> 判住了
+    /// 「五块讲稿每句都指向能跑的证据」，<see cref="DeferredAnswer_WhenPressedForRealMachine_HasThreeSentencesAndPointsAtRunnable"/>
+    /// 判住了「被追问时的三句答法」——但两处都是<b>要点与答话</b>，不是<b>现场动作</b>。答辩现场真正要做的
+    /// 是「打开终端 → 跑一条命令 → 念报告里那一行读数」，而这三步此前没有一页能照着走：讲的人得自己从
+    /// 逐屏表里挑屏、自己拼命令、自己到 <c>/tmp/ah-demo/narration-&lt;档位&gt;.txt</c> 里找那一行。
+    /// 现场拼出来的命令最容易写错一个档位或一个段名，而写错之后讲稿里那一行根本不存在——照着念就是空手。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 屏数在 <see cref="DemoScreenFloor"/>–<see cref="DemoScreenCeiling"/> 之间、
+    /// 编号从 1 起连续、每屏四格不空；② 每句台词非空、≤<see cref="DemoLineCeiling"/> 字、不含
+    /// <see cref="CopyRules.BannedWords"/>、不含反引号（带反引号的句子念不出来）；③ 每屏「当场跑的命令」
+    /// 必须点到 <c>.winecheck/demo.sh</c>；④ 每屏「念哪一行读数」点到的 <c>RunXxx</c> 必须<b>既在
+    /// <c>ApifoxHelper.Smoke/Program.cs</c> 里有声明与 <c>nameof</c> 调用点、又被上一节逐屏表引用</b>
+    /// （<see cref="CitedSmokeSegments"/>）——只满足一半的段在讲稿里不会出现；⑤ 这一节写着限定词
+    /// <see cref="WineQualifier"/>（模拟器读数不许说成真机结果），并点名本门。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机跑没跑</b>（真机 0 台，G-D5 仍是 <c>[ ]</c>），也不判台词好不好听——
+    /// 措辞会漂，钉措辞的门最后只会被改措辞绕过。它只保证「现场照着念的每一屏，都能在仓里当场跑出那一行读数」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoScript_EveryScreenNamesACommandThatRuns()
+    {
+        var rows = DemoScreens();
+
+        // ① 屏数在区间内、编号从 1 起连续。
+        Assert.True(rows.Count >= DemoScreenFloor && rows.Count <= DemoScreenCeiling,
+            $"演示脚本有 {rows.Count} 屏，简报要的是 {DemoScreenFloor}–{DemoScreenCeiling} 屏："
+            + "少于下限现场讲不完主链路，多于上限一屏一句就变成又一份文档。");
+        Assert.Equal(Enumerable.Range(1, rows.Count).Select(n => n.ToString()), rows.Select(r => r.Number));
+
+        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        var cited = CitedSmokeSegments();
+
+        foreach (var row in rows)
+        {
+            // ① 四格不空：空着的那一格正是现场要临时编的东西。
+            foreach (var (label, cell) in new[]
+                     {
+                         ("屏", row.Screen), ("一句台词", row.Line), ("当场跑的命令", row.Command), ("念哪一行读数", row.Reading),
+                     })
+            {
+                Assert.True(cell.Length >= 4, $"演示脚本第 {row.Number} 屏的「{label}」格太短或空着（{cell}）：现场照着念不出来。");
+            }
+
+            // ② 台词：能念、不空、不超长、不带反引号、不含空话禁词。
+            Assert.True(row.Line.Length <= DemoLineCeiling,
+                $"演示脚本第 {row.Number} 屏的台词 {row.Line.Length} 字，超过 {DemoLineCeiling} 字上限：超过就不是一句能当场念完的话。");
+            Assert.DoesNotContain("`", row.Line, StringComparison.Ordinal);
+            foreach (var word in CopyRules.BannedWords)
+            {
+                Assert.DoesNotContain(word, row.Line, StringComparison.Ordinal);
+            }
+
+            // ③ 命令必须点到那条唯一可复跑的脚本。
+            Assert.Contains(".winecheck/demo.sh", row.Command, StringComparison.Ordinal);
+
+            // ④ 读数：段名必须真能跑到——既有声明与 nameof 调用点，又被逐屏表引用（讲稿里才会有那一行）。
+            var segments = Regex.Matches(row.Reading, @"Run[A-Za-z0-9]+").Select(m => m.Value).Distinct(StringComparer.Ordinal).ToList();
+            Assert.True(segments.Count > 0,
+                $"演示脚本第 {row.Number} 屏的「念哪一行读数」一个冒烟段名（RunXxx）都没点到："
+                + "念完指不出一行读数，等于又一次自述。");
+            foreach (var segment in segments)
+            {
+                Assert.True(smoke.Contains($"private static void {segment}(", StringComparison.Ordinal),
+                    $"演示脚本第 {row.Number} 屏引的冒烟段「{segment}」在 ApifoxHelper.Smoke/Program.cs 里没有声明："
+                    + "现场照着念的段名必须真的存在。");
+                Assert.True(smoke.Contains($"nameof({segment})", StringComparison.Ordinal),
+                    $"演示脚本第 {row.Number} 屏引的冒烟段「{segment}」没有接进运行清单（找不到 nameof({segment})）："
+                    + "只声明不调用的段在报告里不会出现。");
+                Assert.True(cited.Contains(segment),
+                    $"演示脚本第 {row.Number} 屏引的冒烟段「{segment}」没有被「降级答辩脚本」逐屏表引用："
+                    + "demo.sh 只给逐屏表引到的段写讲稿行，这一屏照着念时讲稿里不会有那一行。");
+            }
+        }
+
+        // ⑤ 限定词与自指：模拟器读数不许说成真机结果；这一节点名本门。
+        var section = string.Join('\n', DemoScriptLines());
+        Assert.Contains(WineQualifier, section, StringComparison.Ordinal);
+        var self = $"{nameof(DefenseNarrativeTests)}.{nameof(DemoScript_EveryScreenNamesACommandThatRuns)}";
+        Assert.Contains(self, section, StringComparison.Ordinal);
+    }
 }

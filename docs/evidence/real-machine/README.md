@@ -1,8 +1,9 @@
 # 真机证据归档（真机到位当天第一份要读的文件）
 
-> **空目录 = 未达成。** 这个目录里现在只有这一份 README：`journey/`、`100/`、`125/`、`200/`、`mixed-dpi/`、
-> `scale-change/`、`fonts/`、`apifox-write/`、`smoke/` 九个归档子目录**一个都不存在**——那就是 G-D5 与
-> SHARED-3/4/7/8 至今未达成的全部原因：没有 Windows 真机，现有 GUI 证据全部来自 Linux 容器里的 wine 模拟器。
+> **空目录 = 未达成。** 九个归档子目录（`journey/`、`100/`、`125/`、`200/`、`mixed-dpi/`、`scale-change/`、
+> `fonts/`、`apifox-write/`、`smoke/`）**第二百零四轮起已连同 `.gitkeep` 占位进仓**，但每一个都是空的——
+> 空目录 = 未达成，所以 G-D5 与 SHARED-3/4/7/8 至今仍未达成：没有 Windows 真机，现有 GUI 证据全部来自
+> Linux 容器里的 wine 模拟器。目录先建好只是为了让机器到手当天不卡在「目录不存在」这一步。
 >
 > **这份文件解决什么**：`docs/NOTES.md` 的「G-D5 真机复核清单（可勾选）」是一张**动作单**（跑什么、量什么、
 > 放哪里、什么算过），但它是给人读的登记。真机到位那天真正要回答的是更细的一层：**每个目录里该有哪几个文件、
@@ -20,8 +21,10 @@
 > 跑 `bash .winecheck/prepare-real-machine.sh` 一次做完第 0 条的 ①②③（三档冒烟 / 构建与用例 / 建九个目录），
 > 最后把 `docs/NOTES.md` 的七条动作单打印出来（④）。**目录名只有一份出处**：脚本里那条
 > `mkdir -p docs/evidence/real-machine/{…}`，与下面产出物清单逐字一致。
-> **建好的空目录提交不进仓**（git 不跟踪空目录），所以「目录在仓里」这件事永远不会有实物——
-> 第 0 条 ③ 的证据因此是**脚本本身**（跑一次即建好九个目录），不是目录。命令与清单是否一致由
+> **目录在仓里这件事现在有实物**（第二百零四轮）：九个目录各带一个 `.gitkeep` 占位提交进仓，
+> 由 `ApifoxHelper.Tests/RealMachineEvidenceTests.cs` 的
+> `RealMachineEvidenceTests.EveryArchiveDirectory_ExistsOnDisk` 判——删掉任一个目录、或目录里没有 `.gitkeep`
+> 占位，都即红（git 不跟踪空目录，没有占位的话 clone 下来目录又没了）。命令与清单是否一致另由
 > `ApifoxHelper.Tests/AcceptanceChecklistTests.cs` 的
 > `AcceptanceChecklistTests.BeforeMachineArrives_EveryItemCarriesItsExecutionStatus` 判：清单里少一个目录名、
 > 或脚本里多一个清单没有的目录名，都即红——两套名字等于两套判据。
@@ -72,7 +75,8 @@
 
 ## 机械门判什么、不判什么
 
-- 判：`ApifoxHelper.Tests/RealMachineEvidenceTests.cs` 核「**登记与产出物对得上**」——本表 7 行与
+- 判：`ApifoxHelper.Tests/RealMachineEvidenceTests.cs` 核「**登记与产出物对得上**」——九个归档目录真实存在于磁盘上
+  （`EveryArchiveDirectory_ExistsOnDisk`，第二百零四轮）、本表 7 行与
   `docs/NOTES.md` G-D5 动作单 7 行逐行对应、归档子目录两边同名、动作单每行「量什么」的每一项都被本表
   「量测项」列点到、勾成 `[x]` 的那一条其归档目录里必须真有文件。
 - **不判：真机有没有跑。** 本机没有 Windows 图形子系统，跑没跑只有人知道；门只保证「不许半勾、

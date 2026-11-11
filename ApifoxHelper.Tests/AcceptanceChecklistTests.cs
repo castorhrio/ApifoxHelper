@@ -750,4 +750,84 @@ public class AcceptanceChecklistTests
         Assert.Contains("\"$NOTES\"", script, StringComparison.Ordinal);
         Assert.Contains("G-D5 真机复核清单", script, StringComparison.Ordinal);
     }
+
+    // ---------- 第二百零四轮（简报 P0-3）：G-D5 到期日的时效门 ----------
+
+    /// <summary>
+    /// 「到期日」后面紧跟的那个固定日期（<c>到期日 2026-11-20</c> / <c>到期日 **2026-11-20**</c> /
+    /// <c>到期日：**2026-11-20**</c> 三种写法都认）。
+    /// </summary>
+    private static readonly Regex DueDatePattern = new(@"到期日[^\d\n]{0,8}(\d{4}-\d{2}-\d{2})", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 会过期的动态倒计时（<c>距今 9 天</c> 这一类）。写死在文档里的倒计时第二天就是错的读数，
+    /// 而它不会让任何代码出错——只能靠机械门挡。
+    /// </summary>
+    private static readonly Regex StaleCountdown = new(@"距今\s*\d+\s*天", RegexOptions.Compiled);
+
+    /// <summary>
+    /// G-D5 到期日必须是未来日期，或明确记为「已过期并降级」；且「距今 N 天」这类动态读数不许写死在文档里
+    /// （第二百零四轮，简报 P0-3）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>docs/NOTES.md</c> 多处记「到期日 2026-11-20（第一百八十轮记：距今 9 天）」，
+    /// 但<b>没有任何门判这个倒计时</b>——「距今 9 天」是写那一刻的读数，第二天就错了，而它读起来像事实。
+    /// 到期日这件事本身也没有门：日期被改成过去、或两处各写一个日期，都不会让任何断言变红。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① G-D5 行里写着固定到期日（<c>YYYY-MM-DD</c>），不是「距今 N 天」这类相对读数；
+    /// ② <c>docs/NOTES.md</c> 与 <c>README.md</c> 里所有「到期日 + 日期」的写法<b>只许是同一个日期</b>
+    /// （两处各写一个日期就是两套说法）；③ 到期日若已过去，G-D5 行必须同时写着「已过期」与「降级」——
+    /// 过期了却仍按「未来日期」讲，就是把没到的机器说成会到；④ 两份文件里都不许出现「距今 N 天」。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机跑没跑</b>（真机 0 台，G-D5 仍是 <c>[ ]</c>），也不判到期日选得对不对——
+    /// 它只保证「到期日这件事本身不会悄悄过期，也不会在文档里分叉」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Gd5DueDate_IsNotStaleOrFuture()
+    {
+        var row = Rows().Single(r => r.Item.StartsWith("G-D5", StringComparison.Ordinal));
+
+        // ① 到期日必须是固定日期：相对读数（「距今 N 天」）第二天就错，不能当到期日。
+        var match = DueDatePattern.Match(row.Verdict);
+        Assert.True(match.Success,
+            "G-D5 行里没有「到期日 YYYY-MM-DD」这样的固定日期：到期日写成相对读数（「距今 N 天」）第二天就错，"
+            + "而它读起来像事实。");
+        var dueText = match.Groups[1].Value;
+        var due = DateOnly.ParseExact(dueText, "yyyy-MM-dd");
+
+        // ② 两份文件里所有「到期日 + 日期」只许是同一个日期：两处各写一个日期就是两套说法。
+        foreach (var file in new[] { "docs/NOTES.md", "README.md" })
+        {
+            var text = Repo.Source(file.Replace('/', Path.DirectorySeparatorChar));
+            var dates = DueDatePattern.Matches(text)
+                .Select(m => m.Groups[1].Value)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            Assert.True(dates.Count == 1 && dates[0] == dueText,
+                $"{file} 里的到期日不是同一个日期（G-D5 行写 {dueText}，这份文件里还有："
+                + string.Join(" ／ ", dates) + "）：两处各写一个日期，读的人不知道哪个是权威。");
+        }
+
+        // ③ 未来日期，或明确记为「已过期并降级」。
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        if (due < today)
+        {
+            Assert.True(row.Verdict.Contains("已过期", StringComparison.Ordinal)
+                        && row.Verdict.Contains("降级", StringComparison.Ordinal),
+                $"G-D5 的到期日 {dueText} 已经过去（今天 {today:yyyy-MM-dd}），而这一行既没写「已过期」也没写「降级」："
+                + "过期了却仍按「未来日期」讲，就是把没到的机器说成会到。");
+        }
+
+        // ④ 动态倒计时不许写死在文档里：它是写那一刻的读数，第二天就错。
+        foreach (var file in new[] { "docs/NOTES.md", "README.md" })
+        {
+            var text = Repo.Source(file.Replace('/', Path.DirectorySeparatorChar));
+            var stale = StaleCountdown.Matches(text).Select(m => m.Value).Distinct(StringComparer.Ordinal).ToList();
+            Assert.True(stale.Count == 0,
+                $"{file} 里写死了动态倒计时：" + string.Join(" ／ ", stale)
+                + "。这类读数第二天就错，而它读起来像事实——改成固定到期日（到期日 YYYY-MM-DD），时效由本门判。");
+        }
+    }
 }
