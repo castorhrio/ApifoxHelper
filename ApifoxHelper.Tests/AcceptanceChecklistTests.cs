@@ -128,6 +128,35 @@ public class AcceptanceChecklistTests
     }
 
     /// <summary>
+    /// G-D3 的「GUI 证据」格必须收敛成单一句式：以「最近一次真跑：」开头（第一百八十轮，简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第一百七十九轮把「第一百七十九轮在当前源码上复跑核对」补进这一格时，
+    /// 没有删掉原来那句「第一百七十七轮三档复跑含本段」——于是同一格里并列两句话，
+    /// <b>读者要自己判断哪个是权威读数</b>。这与 <c>HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun</c>
+    /// 的口径不一致：那一族要求「挂账必须写明最近一次真跑是哪一轮」，写法是单一句式。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 这一格以「最近一次真跑：」开头（权威读数只有一个入口）；
+    /// ② 旧读数不许被顺手删掉——第一百七十七轮的 180 通过 / 0 失败 ×3 与 <c>RunDialogStatusSweep</c>
+    /// 仍在同一格里（收敛是「重排成一句」，不是「删掉出处」）。<b>不判</b>轮次数字本身对不对
+    /// （那是 <c>NativeDialogSmokeTests.Notes_RecordsThatTheThreeTierRerunIncludesTheDialogStatusSweep</c> 的事）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Checklist_StatusGateGuiEvidence_NamesTheLastRealRunInOneSentence()
+    {
+        var row = Rows().Single(r => r.Item.StartsWith("G-D3", StringComparison.Ordinal));
+
+        Assert.True(row.Gui.StartsWith("最近一次真跑：", StringComparison.Ordinal),
+            $"G-D3 的 GUI 证据格没有以「最近一次真跑：」开头：{row.Gui}。"
+            + "同一格并列两句话时，读者要自己判断哪个是权威读数——收敛成单一句式，旧读数放进「读数出处」。");
+
+        // 收敛不是删掉出处：第一百七十七轮那次的读数与段名必须还在同一格里。
+        Assert.Contains("第一百七十七轮", row.Gui, StringComparison.Ordinal);
+        Assert.Contains("RunDialogStatusSweep", row.Gui, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 格式错的行必须判红，不许被解析器静默跳过（第一百六十七轮，简报 P0-2）。
     /// <para>
     /// <b>存在的理由</b>：本节的其余断言都从 <see cref="Rows"/> 取数，而它按「五列且首格是勾选框」筛行。

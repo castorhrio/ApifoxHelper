@@ -365,6 +365,61 @@ public class RealMachineEvidenceTests
     }
 
     /// <summary>
+    /// 到期日 2026-11-20 那天「谁在何时决定、回写到哪一行、由哪条断言核回写」三行必须在
+    /// （第一百八十轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：上面那几条门判的是「登记与产出物对得上」，但它们与验收表上那个勾选框之间
+    /// <b>没有机械联动</b>——真机到位那天，只要往 <c>journey/</c> 丢一张无关截图，
+    /// <see cref="CheckedAction_RequiresItsArchiveDirectoryToHoldFiles"/> 就绿，而 G-D5 那一行该不该勾
+    /// 仍要人现场判。反过来，到期日（2026-11-20）到了机器还没来，此前只有一句「按降级答辩脚本逐屏答辩」，
+    /// <b>那天做什么、做完写哪里，是口头约定</b>。两种读法都错：把门绿读成「已经达成」，或把到期日读成
+    /// 「还差什么说不清」。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：动作单那一节的 blockquote 里必须同时有 ① 到期日与「降级」两个关键词；
+    /// ② 三行结构（<c>①</c> 谁/何时、<c>②</c> 回写哪里、<c>③</c> 哪条断言核回写）各被点到一次；
+    /// ③ 回写落点点名两处（<c>docs/NOTES.md</c> 的 G-D5 行与 <c>README.md</c> 的已知限制）——
+    /// 只写一处等于另一处会漂；④ 核回写的那条断言被点名，且它真的存在（就是本方法，自指是刻意的：
+    /// 改掉那一行而不同时改断言，这条门自己就红）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机跑没跑</b>（本机没有 Windows 图形子系统，跑没跑只有人知道），
+    /// 也<b>不判到期日那天到底选了哪一支</b>——那要等 2026-11-20 当天由人判定后回写。
+    /// 这条门只保证「到期日动作不是口头约定」：三行被删掉、被改成一句话、或回写落点少一处，即红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DueDate_HasADecisionAction()
+    {
+        var blockquote = string.Join('\n', ActionListLines()
+            .Where(l => l.TrimStart().StartsWith(">", StringComparison.Ordinal)));
+
+        // ① 到期日与降级路径两个关键词都在：这一节此前只写了「到期日 2026-11-20、责任人见降级答辩脚本」，
+        //    没有「那天做什么」。
+        Assert.Contains("2026-11-20", blockquote, StringComparison.Ordinal);
+        Assert.Contains("降级", blockquote, StringComparison.Ordinal);
+
+        // ② 三行结构：谁/何时、回写哪里、哪条断言核回写，各被点到一次。
+        foreach (var marker in new[] { "①", "②", "③" })
+        {
+            Assert.True(blockquote.Contains(marker, StringComparison.Ordinal),
+                $"动作单那一节的 blockquote 里没有「{marker}」那一行：到期日动作必须是三行（谁/何时、回写哪里、哪条断言核回写），"
+                + "写成一句话就又回到「口头约定」。");
+        }
+
+        // ③ 回写落点必须点名两处：只写一处，另一处就会漂成第二套说法。
+        Assert.True(blockquote.Contains("docs/NOTES.md", StringComparison.Ordinal),
+            "到期日动作没点名回写到 docs/NOTES.md 的 G-D5 行：判定结果不落到验收表那一行，读表的人看不到。");
+        Assert.True(blockquote.Contains("README.md", StringComparison.Ordinal),
+            "到期日动作没点名回写到 README.md 的已知限制：缺口公开声明的锚点在那儿，只改验收表等于两套说法。");
+
+        // ④ 核回写的那条断言必须点名，且它真的存在（自指：改掉那一行而不同时改断言，这条门自己就红）。
+        var self = $"{nameof(RealMachineEvidenceTests)}.{nameof(DueDate_HasADecisionAction)}";
+        Assert.True(blockquote.Contains(self, StringComparison.Ordinal),
+            $"到期日动作没点名「由哪条断言核回写」（应写 {self}）：没有断言核的回写路径，等于没有回写路径。");
+    }
+
+    /// <summary>
     /// 动作单那一节点名这道门，并写清它<b>不判真机有没有跑</b>。
     /// <para>
     /// 存在理由：下一轮读到「G-D5 有机械门了」很容易顺手把「有门」读成「过了」。这一句必须写在动作单里
