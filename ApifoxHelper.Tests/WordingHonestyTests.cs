@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace ApifoxHelper.Tests;
@@ -244,5 +245,108 @@ public class WordingHonestyTests
         var notes = Repo.Source("docs", "NOTES.md");
         Assert.Contains("## Windows 真机 / wine 模拟器验证清单", notes);
         Assert.DoesNotContain("## 真机/模拟器验证清单", notes);
+    }
+
+    // ---------- 降级答辩现场问答三行（第一百七十八轮，简报 P1-1） ----------
+
+    private const string QaHeading = "## 降级答辩现场问答三行";
+
+    /// <summary>
+    /// 现场问答三行存在、且每行的引用落到实物（第一百七十八轮，简报 P1-1）。
+    /// <para>
+    /// <b>为什么要有这一节</b>：上一节（<see cref="DegradationScript_ExistsAndCoversEveryScreen"/>）钉住了逐屏表，
+    /// 但答辩现场被追问「那你现在能不能演示 X」时，仍要靠人现场组织语言——而现场组织的语言最容易把
+    /// 「wine 量到」说成「跑过了」。三行定稿把最常被问的三句与各自的挂账对上，念完就能指给对方看。
+    /// </para>
+    /// <para>
+    /// <b>只判三件事，不判措辞</b>：① 三行都在（行数正好 3，问句与答案都不许空着）；
+    /// ② 每行的「引用哪一条挂账」至少有一个反引号引用，且该引用<b>落到实物</b>——仓内文件存在、
+    /// 或 <c>类名.断言名</c> 在测试工程里真有这一条；③ 行里点到的「第 N 条」必须是 G-D5 动作单里
+    /// 真实存在的那一条（动作单删了一行、这里还指着它，即红）。
+    /// </para>
+    /// <para>
+    /// <b>为什么不判措辞</b>：措辞会漂，钉措辞的门最后只会被改措辞绕过（本仓一贯取舍，见
+    /// <see cref="AcceptanceChecklistTests"/> 对「门钉一种写法」的说明）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DegradationScript_AnswersTheThreeExpectedQuestions()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var script = notes.IndexOf("## 降级答辩脚本", StringComparison.Ordinal);
+        Assert.True(script >= 0, "NOTES.md 缺少「## 降级答辩脚本」一节。");
+        var start = notes.IndexOf(QaHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"NOTES.md 缺少「{QaHeading}」一节（现场被追问时的三行定稿）。");
+        // 它是降级脚本的现场用法，必须排在脚本之后：排在前面就成了「另一份东西」，读脚本的人不会翻到。
+        Assert.True(start > script, $"「{QaHeading}」必须排在「## 降级答辩脚本」之后。");
+        var end = notes.IndexOf("\n## ", start + 1, StringComparison.Ordinal);
+        var section = end < 0 ? notes[start..] : notes[start..end];
+
+        // ① 三行都在：表头与分隔行不算，问句与答案都不许空着。
+        var rows = section.Split('\n')
+            .Where(line => line.TrimStart().StartsWith("|", StringComparison.Ordinal))
+            .Select(line => line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList())
+            .Where(c => c.Count == 3)
+            .Where(c => c[0] != "被问到什么" && !c[0].All(ch => ch is '-' or ' ' or ':'))
+            .ToList();
+        Assert.True(rows.Count == 3, $"现场问答表有 {rows.Count} 行，简报要的是 3 行（最常被问的三句）。");
+
+        var actionNumbers = ActionListNumbers(notes);
+        foreach (var row in rows)
+        {
+            Assert.True(row[0].Length >= 6, $"有一行的「被问到什么」太短，读不出问的是什么：{row[0]}。");
+            Assert.True(row[1].Length >= 10, $"「{row[0]}」这一行没有给出可念的一句话答案。");
+
+            // ② 引用必须落到实物。
+            var citations = Regex.Matches(row[2], @"`([^`]+)`").Select(m => m.Groups[1].Value).ToList();
+            Assert.True(citations.Count > 0, $"「{row[0]}」这一行没有引用任何挂账：现场答完指不出东西，等于又一次自述。");
+            foreach (var citation in citations)
+            {
+                Assert.True(CitationResolves(citation),
+                    $"「{row[0]}」引用的「{citation}」在仓里找不到（既不是存在的文件，也不是测试工程里真有的断言）。");
+            }
+
+            // ③ 「第 N 条」必须指向动作单里真实存在的那一条。
+            foreach (Match m in Regex.Matches(row[2], @"第 (\d+) 条"))
+            {
+                var n = int.Parse(m.Groups[1].Value);
+                Assert.True(actionNumbers.Contains(n),
+                    $"「{row[0]}」指着 G-D5 动作单第 {n} 条，但动作单里没有这一条（现有：{string.Join("、", actionNumbers.OrderBy(x => x))}）。");
+            }
+        }
+    }
+
+    /// <summary>G-D5 动作单里真实存在的动作序号（「| [ ] | 1. …」里的 1）。</summary>
+    private static HashSet<int> ActionListNumbers(string notes)
+    {
+        var lines = notes.Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == "## G-D5 真机复核清单（可勾选）");
+        Assert.True(start >= 0, "NOTES.md 缺少「## G-D5 真机复核清单（可勾选）」一节。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        var numbers = new HashSet<int>();
+        foreach (var line in lines[start..(end < 0 ? lines.Length : end)])
+        {
+            var m = Regex.Match(line, @"^\|\s*\[[ x]\]\s*\|\s*(\d+)\.");
+            if (m.Success) numbers.Add(int.Parse(m.Groups[1].Value));
+        }
+
+        Assert.True(numbers.Count >= 6, $"G-D5 动作单只解析出 {numbers.Count} 条动作（地板 6）。");
+        return numbers;
+    }
+
+    /// <summary>反引号里的引用是否落到实物：仓内文件存在，或 <c>类名.断言名</c> 在测试工程里真有这一条。</summary>
+    private static bool CitationResolves(string citation)
+    {
+        if (citation.EndsWith(".cs", StringComparison.Ordinal) || citation.EndsWith(".md", StringComparison.Ordinal)
+            || citation.EndsWith(".sh", StringComparison.Ordinal) || citation.EndsWith(".ps1", StringComparison.Ordinal))
+        {
+            return File.Exists(Path.Combine(Repo.Root, citation.Replace('\\', '/')));
+        }
+
+        if (!Regex.IsMatch(citation, @"^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$")) return false;
+        var parts = citation.Split('.');
+        var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
+        return File.Exists(testFile)
+               && Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]");
     }
 }

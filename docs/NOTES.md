@@ -18,7 +18,7 @@
 | [x] | G-D2 设计基线：单一视觉来源，颜色/字号/间距只从令牌取 | 达成（机械抽检在，无就地发明值） | `docs/DESIGN.md`、`Desktop/Native/UiTokens.cs`、`TokenWiringTests.ColorTokens_MatchDesignDoc`、`TokenWiringTests.NativeSources_NoColorLiteralsOutsideUiTokens`、`TokenWiringTests.SpacingTiers_MatchDesignDoc` | 第一百六十二轮三档缩放实测 |
 | [x] | G-D3 状态完备：每屏有状态表，空态/加载/执行中/错误/禁用/部分完成逐态定义 | 达成（读取失败态每屏都有「重试」；长内容区一律经滚动工厂；状态行放不下给入口） | `ApifoxHelper.Tests/LoadFailureRetryCoverageTests.cs` 的 `LoadFailureRetryCoverageTests.EveryFailureScreen_HasOneRetryButtonFromTheSharedLabel`、`ScrollHostTests.DesignDoc_DeclaresLongContentHost`、`StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost` | 第一百六十七轮三屏四段 12 通过 / 0 失败 ×3（本节第二段） |
 | [x] | G-D4 中文排版：对照共享审查清单 A 节机械检查 | 达成（可源码判定的条目全绿）。第一百六十九轮把这一行原先挂到「渲染期属性」的三条里两条拉回可判：**中英文空隙**静态可判（还原字面量 = 剥插值空洞 + 解转义，再判紧贴），**行首行尾禁则**在唯一会折行的交付面（导出 HTML）上落成 `HtmlStyle` 的 `line-break:strict;word-break:normal`，**第一百七十轮起同一份产物交给 headless Chromium 排版量过一次**（禁字起行 0 处、开号收尾 0 处，窄容器 17 档合计 61 行）；**正文行长**同一面落成 `max-width:40em`，真浏览器里解析成 640px 而视口 1280px。**本机不可判别的那半截要说清**：`auto`/`strict`/`loose` 与不写排出来逐档相同，禁则成立不能归因给那条声明，读数与挂账见「真浏览器布局门（HTML 折行）」一节。**第一百七十一轮起这一节的挂账还必须写明「最近一次真跑是哪一轮、哪一天」**，并由 `HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun` 不分路径核（那一行被写坏会一直绿到真需要读它的那天）；同轮答辩口径补第四块「排版归因」，把「禁则为什么成立、功劳不记在一条属性头上」正面写进口径而不是等被追问。仍随 G-D5 真机复核的只剩「界面标签在实际字体度量下到底折不折行」与字距非负。五条硬项各自的落地面见 `docs/DESIGN.md` §6「中文排版」 | `TypographyTests.NoFakeItalic`、`TypographyTests.FontStack_MatchesDesignDocOrder`、`TypographyTests.Copy_ChineseQuotesOnlyUseCornerBrackets`、`TypographyTests.FontFloor_Is12Px`、`TypographyTests.Copy_AvoidsEmptySloganWords`、`TypographyTests.ChineseCopy_LeavesASpaceBetweenChineseAndLatin`、`TypographyTests.DesignSection3_HasExactlyFourFontTiers`、`TypographyTests.DesignDoc6_DeclaresTheTypographyClauseWithFiveItems`、`ReportTypographyTests.HtmlStyle_EnforcesTheChineseLineBreakProhibition`、`ReportTypographyTests.RenderedCopy_LeavesASpaceBetweenChineseAndLatin`、`HtmlWrapTests.DeliveredHtml_KeepsForbiddenPunctuationOffTheLineStart`、`HtmlWrapTests.DeliveredHtml_WrapsInsideTheFortyEmColumnNotTheViewport`、`HtmlWrapTests.TheDetector_ReportsTheBreakItForcedInsideTheArtifactOwnSentences`、`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo`、`DefenseNarrativeTests.Narrative_EveryBlockCitesASectionThatActuallyExists`、`HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun` | 第一百六十九轮 wine 三档 135 通过 / 0 失败 ×3（重发冒烟器后 `.winecheck/demo.sh` 复跑；`PASS ProfileAdvancedDialog（模块与模板）` 在本轮改动之后，**构造通过不等于说明行放得下**——`RunCaptionFit` 量的是同步预览 / 报告与交接 / 代码证据三屏，这一屏的文字宽 / 可用宽随 G-D5；**模拟器，不是真机**） |
-| [ ] | G-D5 真机观感：100% 与 200% DPI 截图各一套并按状态归档，观感由人复核 | **未达成（环境供给缺口）**：真机 0 台，`docs/evidence/real-machine/` 不存在；现有 GUI 证据全部来自 Linux 容器内 wine 10.0 + Xvfb。到期日 2026-11-20，届时仍不可得按「降级答辩脚本」逐屏答辩；机器一到手，第一天照下一节「G-D5 真机复核清单（可勾选）」逐条跑。**第一百七十四轮把第 1 条不依赖 Windows 的那半截量到了**：`dotnet publish` 按 `publish.ps1` 的参数在 Linux 上出自包含单文件（退出码 0、目录内一个文件、字节读数记在该节引言），README 念的用法与产物路径逐字对到脚本字面量——**这一行仍留空框**，缺的是「双击它 → 首程四站」与真机截图，本机一次都没量到 | `ApifoxHelper.Tests/WordingHonestyTests.cs` 的 `WordingHonestyTests.RealMachineClaims_RequireEvidencePaths`、`WordingHonestyTests.DegradationScript_ExistsAndCoversEveryScreen`、`WordingHonestyTests.Readme_StatesTheRealMachineGap`、`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`、`ApifoxHelper.Tests/PublishScriptTests.cs` 的 `PublishScriptTests.PublishUsage_DocumentedSwitchesAreTheDeclaredOnes`、`PublishScriptTests.PublishedPaths_InReadme_AreTheOnesTheScriptComputes`、`PublishScriptTests.LocalPublishReading_IsRecordedAndKeepsTheRealMachineGap`、本节下方的「降级答辩脚本」 | 第一百六十七轮 wine 三档 135/0 ×3（`.winecheck/demo.sh` 一条命令复跑；**模拟器，不是真机**） |
+| [ ] | G-D5 真机观感：100% 与 200% DPI 截图各一套并按状态归档，观感由人复核 | **未达成（环境供给缺口）**：真机 0 台，`docs/evidence/real-machine/` 里只有一份 README（第一百七十八轮新增，九个归档子目录一个都不存在）；现有 GUI 证据全部来自 Linux 容器内 wine 10.0 + Xvfb。到期日 2026-11-20，届时仍不可得按「降级答辩脚本」逐屏答辩；机器一到手，第一天照下一节「G-D5 真机复核清单（可勾选）」逐条跑。**第一百七十四轮把第 1 条不依赖 Windows 的那半截量到了**：`dotnet publish` 按 `publish.ps1` 的参数在 Linux 上出自包含单文件（退出码 0、目录内一个文件、字节读数记在该节引言），README 念的用法与产物路径逐字对到脚本字面量——**这一行仍留空框**，缺的是「双击它 → 首程四站」与真机截图，本机一次都没量到 | `ApifoxHelper.Tests/WordingHonestyTests.cs` 的 `WordingHonestyTests.RealMachineClaims_RequireEvidencePaths`、`WordingHonestyTests.DegradationScript_ExistsAndCoversEveryScreen`、`WordingHonestyTests.Readme_StatesTheRealMachineGap`、`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`、`ApifoxHelper.Tests/PublishScriptTests.cs` 的 `PublishScriptTests.PublishUsage_DocumentedSwitchesAreTheDeclaredOnes`、`PublishScriptTests.PublishedPaths_InReadme_AreTheOnesTheScriptComputes`、`PublishScriptTests.LocalPublishReading_IsRecordedAndKeepsTheRealMachineGap`、`RealMachineEvidenceTests.Readme_CoversEveryArchiveDirectoryTheActionListNames`、`RealMachineEvidenceTests.CheckedAction_RequiresItsArchiveDirectoryToHoldFiles`、本节下方的「降级答辩脚本」 | 第一百六十七轮 wine 三档 135/0 ×3（`.winecheck/demo.sh` 一条命令复跑；**模拟器，不是真机**） |
 | [ ] | G-D6 退场：原 Web 页面从用户路径移除 | **未达成**：页面层已冻结、默认入口已翻转为原生（见 G-D1），但 `--web` 回退仍在，退场清单未执行——按决定，最终移除排在 G-D5 真机复核之后 | `Desktop/DesktopApp.cs`、`LaunchOptionsTests.WebFlag_SelectsTransitionShell`（回退入口存在即「未退场」，这条断言钉的是回退行为不是退场完成） | 不经界面（入口路由判定） |
 
 ### 二、SHARED 写入安全不变量（`docs/方案.md` §8 产品红线）
@@ -43,7 +43,9 @@
 >
 > **口径与上面一致**：本表全部 `[ ]`，且**在真机到场之前一条都不许勾**——wine 三档的证据（`.winecheck/demo.sh`）不能替真机打勾：截图没归档之前，把模拟器量到的数字说成机器上跑出来的那几种措辞都是禁词（`WordingHonestyTests.RealMachineClaims_RequireEvidencePaths` 钉住这一条）。到期日 **2026-11-20**、责任人见「降级答辩脚本」一节。某条量不成（缺副屏、缺 CLI 登录态、缺专用测试项目授权），就在该行下面补一句「仍未量到 + 缺什么」，**不许留空、也不许改写成通过**。
 >
-> **「归档到哪里」里的目录是目标不是实物**：`docs/evidence/real-machine/` 现在不存在（真机 0 台），那正是这一节存在的理由；机械门只核实行里的**文件、断言名与冒烟段名**（`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`）。
+> **「归档到哪里」里的目录是目标不是实物**：`docs/evidence/real-machine/` 里现在只有一份 README（真机 0 台，九个归档子目录一个都不存在），那正是这一节存在的理由；机械门只核实行里的**文件、断言名与冒烟段名**（`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`）。
+>
+> **这一节的机械门在 `ApifoxHelper.Tests/RealMachineEvidenceTests.cs`**（第一百七十八轮，简报 P0-1）：它判的是「**登记与产出物对得上**」——动作单 7 行的「量什么」逐项被 `docs/evidence/real-machine/README.md` 的产出物清单点到、归档子目录两边同名、勾成 `[x]` 的那一条其归档目录里必须真有文件；**它不判真机有没有跑**（本机没有 Windows 图形子系统，跑没跑只有人知道）。真机到位当天第一份要读的是那份 README，不是这一节——**有门不等于过了**，G-D5 在验收表上仍是 `[ ]`。
 >
 > **与本文件另外两张表的关系**：「Windows 真机 / wine 模拟器验证清单」B 段（第一百二十九轮）与「Windows 真机全链路清单」（第一百三十四轮）是**按屏逐项**的登记，本表是**按天可执行**的动作单。真机到位后先跑本表 1–7，再回到那两张表逐屏打勾；三处结论不一致时，以本表量到的数字为准并回写那两张，不留两套说法。
 
@@ -1794,6 +1796,18 @@
 3. **只有源码与编译证据的屏**（第 6/7/8/11 行）：这些屏的交互依赖真实 Apifox CLI 登录态、项目权限或本机 .NET SDK，本环境不具备。讲的时候说「代码与用例在，真实端到端未跑」，不说「已验证」。
 4. **一次没复现的 ≈200% 档观察（如实记，不写成缺陷，已有两次复量数字）**：第一百六十五轮第一次在 `LogPixels=192` 全量复跑时（那一次页面构造即崩、23 段失败），「配置表单：新建对话框的行高没有死空白」判失败——7 行行高 76px 超阈值 58px，实测 Label 高 68px 而该档正文行高 34px，疑似**字体派生的高度被再乘一次缩放因子**。把构造期崩溃修掉之后，同一档又跑了两次（含第一百六十五轮最终一轮），该段**都是 0 失败、没有复现**。第一百六十六轮三档全量复跑再次量到同一段的真实行高：**≈200% 档最高行 54px（仓库根目录 / Apifox 项目 ID / 分支 / 第16行，阈值 58px），对照 ≈100% 档同名行 37px**（≈130% 档 42px），那条 76px 的观察**第三次没复现**，且本轮拿到的是逐行数字而不只是「通过」。所以这一条仍记为「一次没复现的观察」，不写成已确认缺陷、也不写成已排除：真机到位后按 `RunProfileFormLayout` 那段在 200% 档复量一次即可判定。
 
+## 降级答辩现场问答三行（第一百七十八轮，简报 P1-1）
+
+> **这一节是什么**：上一节的逐屏表管「每一屏的证据在哪」，这一节管**现场被追问时怎么答**。答辩现场最常被问的三句，答案其实都已经在仓里，但此前要靠人现场组织语言——现场组织的语言最容易把「wine 量到」说成「跑过了」。三行定稿，每行都指到一条挂账：被追问时照着念，念完指给对方看。
+>
+> 机械门：`ApifoxHelper.Tests/WordingHonestyTests.cs` 的 `WordingHonestyTests.DegradationScript_AnswersTheThreeExpectedQuestions` 只判「三行都在、每行的引用落到实物」，**不判措辞**——措辞会漂，钉措辞的门最后只会被改措辞绕过。
+
+| 被问到什么 | 现场怎么答（一句话） | 引用哪一条挂账 |
+| --- | --- | --- |
+| 「现在能不能演示真机上的 100% / 200% 观感？」 | 不能：真机 0 台，G-D5 未达成（环境供给缺口），现有 GUI 证据全部来自 wine 模拟器，现场按逐屏表讲。 | `docs/NOTES.md` 的「G-D5 真机复核清单（可勾选）」第 2 条 + `WordingHonestyTests.RealMachineClaims_RequireEvidencePaths` |
+| 「wine 三档全绿，算不算跑过了？」 | 不算：wine 是模拟器，同一段在两处判定一致才算，真机读数要按 `docs/evidence/real-machine/README.md` 归档。 | `docs/evidence/real-machine/README.md` + `RealMachineEvidenceTests.CheckedAction_RequiresItsArchiveDirectoryToHoldFiles` |
+| 「那到底卡在哪一条、什么时候能补上？」 | 卡在 G-D5 第 1 条、第 2 条、第 3 条（双击首程四站、三档截图、混合 DPI 重算），到期日 2026-11-20，机器到手当天照动作单跑。 | `docs/NOTES.md` 的「G-D5 真机复核清单（可勾选）」第 1 条、第 2 条、第 3 条 + `AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate` |
+
 ## 初审答辩口径（真机不可得时）
 
 > **这一节是什么**：上一节的「降级答辩脚本」按屏讲**证据**（G-D5 未达成怎么交代），这一节讲**这个工具凭什么值得做**——初审现场要念的五块，每块不超过 80 字，五块念完不到一分钟。都在 demo.sh 的讲稿之外：脚本管逐屏对账，这里管差异化、AI 必要性、可经营、排版归因、产品完整度这五件事。
@@ -2336,3 +2350,28 @@
 - **文档接线**：`docs/NOTES.md` 新增「规则提取的边界：用途说明只有模型能写」一节；答辩口径表「AI 必要性」行换文案换出处；「答辩时主动交代的四件事」第 2 条换成当前源码的三档读数并写明 1576px 是屏幕上界；`README.md`「已知限制」同步三档读数与「五块」（原文写「四块」，第一百七十五轮补第五块后没跟着改，本轮一并改对）。
 - **本轮未做（如实挂账）**：① 简报 P1-1（`RunDialogStatusSweep` 按 `Cases(...)` 读屏单的 Linux 侧机械门）与 P1-2（`AcceptanceChecklistTests` 证据列认 `async Task` 形状）本轮未动，仍按第一百七十三、一百七十六轮的口径登记在案；② 简报 P2 三项（`ApifoxCli.Parse` 双份内存、`/plan/payload/{actionId}` 路径穿越理论风险、`--web` 其余路由边界门）按简报口径**登记不做**；③ 多显示器混合缩放与运行中改缩放（真机复核清单第 3、4 条）本机仍模拟不了，读数一个没拿到。
 - **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**（`dotnet publish` 全部命中本机 NuGet 缓存；wine / Xvfb 为本机既有），**未新建任何调度器、未动其他项目**；产品源码（`Desktop/`、`Api/`、`Sync/`、`Reports/`、`Comments/`）**一行未改**，改动只在测试工程（1 新）、`docs/NOTES.md`、`README.md`。
+
+## 交付轮「真机路径纳入机械门 + 现场问答三行」（2026-11-11 第一百七十八轮，简报 P0-1 / P1-1）
+
+- **接续前确认**：开局 `git status` 干净，HEAD `8b644b2`（第一百七十七轮）。`Desktop/Native/` 下 100+ 个原生交互切片文件、`ApifoxHelper.Tests` 2495 条用例全部在位，本轮**一行未删未改**；`docs/evidence/real-machine/` 此前不存在（真机 0 台），本轮新建的只有一份 README，**九个归档子目录一个都没建**——建了就等于替真机打勾。
+- **本轮定位**：严格按简报「建议本轮只做 P0-1 + P1-1」执行。**不新增产品功能、不改任何产品源码**（`Desktop/`、`Api/`、`Sync/`、`Reports/`、`Comments/` 一行未动）、不动视觉令牌与九条写入安全不变量、不装依赖、不调模型、不连 Apifox、不新建调度器。
+- **已交付 ①（P0-1，evidence）`docs/evidence/real-machine/README.md`**：真机到位当天第一份要读的文件。它把动作单 7 条各自的**产出物清单**写死——每行的归档目录、文件名模式、每个文件里必须有的数字、什么算过，外加「量测项」一列（动作单该行「量什么」必须逐项点到）。开头一句判据底座：**空目录 = 未达成**；另写清「只有截图没有数字 = 未达成」「只有数字没有截图 = 未达成」「wine 的读数不能填进这些文件」。
+- **已交付 ②（P0-1，gate）`ApifoxHelper.Tests/RealMachineEvidenceTests.cs`（6 条）**：
+  - `Readme_ExistsAndSaysAnEmptyDirectoryMeansUnmet`：README 在、「空目录 = 未达成」在、7 行行号 1–7 各一次、每行的产出物 / 数字 / 判据都不许空着。
+  - `Readme_CoversEveryArchiveDirectoryTheActionListNames`：归档子目录**两边同名**（动作单点到的 README 必须逐个点到，反向也判），外加 `ExpectedDirectories` 地板清单（`journey` / `100` / `125` / `200` / `mixed-dpi` / `scale-change` / `fonts` / `apifox-write` / `smoke`）——挡「两边同时删掉一个目录」这种在「同名」判据下是绿的改法。
+  - `Readme_MeasureKeys_AreAllNamedByTheActionListRow`：动作单 7 行「量什么」的每一项，都被 README 对应行的「量测项」列点到（当前合计 24 项，地板 14）。**改一处漏一处即红**。
+  - `ArchiveDirectories_AreEitherAllAbsentOrAllNamedByTheReadme`：归档根下的子目录要么一个都不存在，要么每一个都被 README 点到（挡「随手建了个名字不一样的目录」）。
+  - `CheckedAction_RequiresItsArchiveDirectoryToHoldFiles`（负向）：勾成 `[x]` 的那一条，其归档目录里必须真有文件——**防「只跑一半就说 G-D5 过」**。
+  - `Notes_NamesThisGateAndSaysWhatItDoesNotJudge`：动作单那一节必须点名这道门、必须写「不判真机有没有跑」、必须指到那份 README。
+- **已交付 ③（P0-1，clarify）`docs/NOTES.md` G-D5 节补机械门说明**：新增一段「这一节的机械门在 `ApifoxHelper.Tests/RealMachineEvidenceTests.cs`……**它不判真机有没有跑**……**有门不等于过了**，G-D5 在验收表上仍是 `[ ]`」。同时把两处「`docs/evidence/real-machine/` 不存在」改成「只有一份 README，九个归档子目录一个都不存在」——目录现在真的在了，口径要跟着改，不能留一句已经不成立的话。
+- **已交付 ④（P1-1，clarify + gate）现场问答三行**：`docs/NOTES.md` 新增 `## 降级答辩现场问答三行（第一百七十八轮，简报 P1-1）`，紧排在「降级答辩脚本」之后（**必须是 `##` 级**：`DemoScriptTests.Rows()` 与 `.winecheck/demo.sh` 都按 `^\| \d` 取逐屏表行并要求 5 列，三列表塞进那一节会同时打红两处）。三行分别是「能不能演示真机观感」「wine 全绿算不算跑过」「卡在哪一条、什么时候补上」，每行都指到一条挂账。机械门 `WordingHonestyTests.DegradationScript_AnswersTheThreeExpectedQuestions` 只判三件事：三行都在、每行引用落到实物（仓内文件存在或 `类名.断言名` 真有这一条）、行里点到的「第 N 条」是 G-D5 动作单里真实存在的那一条；**不判措辞**。
+- **验证（Linux 可验证的全做了）**：`dotnet test` **2502 通过 / 0 失败**（2495 + 7 条新门）。六处变异逐支验红、`sha1sum -c` 还原后全绿：
+  1. 把动作单第 5 条「量什么」整格删空 → `Readme_MeasureKeys_AreAllNamedByTheActionListRow` 红；
+  2. 把动作单第 1 条勾成 `[x]`（归档目录仍为空）→ `CheckedAction_RequiresItsArchiveDirectoryToHoldFiles` 红（`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate` 同时红）；
+  3. 删掉 README 第 3 行的 `mixed-dpi/` → `Readme_CoversEveryArchiveDirectoryTheActionListNames` 红（`Readme_ExistsAndSaysAnEmptyDirectoryMeansUnmet` 同时红）；
+  4. 把「不判真机有没有跑」改成「不判别的」→ `Notes_NamesThisGateAndSaysWhatItDoesNotJudge` 红；
+  5. 删掉现场问答表第 2 行 → `DegradationScript_AnswersTheThreeExpectedQuestions` 红；
+  6. 把第 3 行的引用改成不存在的断言名 → 同一条红。
+  另核 `.winecheck/demo.sh` 的逐屏表提取仍取到 **17 行**（新节排在脚本节之后，`awk` 遇下一个 `## ` 即停，不受影响）。
+- **本轮未做（如实挂账）**：① **不写自动跑真机的脚本**——那是真机到位后的另一件事，本轮只把「登记与产出物对得上」变成结构上不允许误报；② 简报 P2 三项（`ErrorCopy` 单点收口、混合 DPI 第四遍读数、`PublishScriptTests` 的「单文件起得来但截图空白」）按简报口径**登记不做**；③ **Windows 真机 GUI 仍不可验证**：本机无 `Microsoft.WindowsDesktop.App` 运行时、无 Windows 图形子系统，G-D5 与 SHARED-3/4/7/8 仍 `[ ]`，到期日 2026-11-20。
+- **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**，**未新建任何调度器、未动其他项目**；改动只在 `docs/evidence/real-machine/README.md`（新）、`ApifoxHelper.Tests/RealMachineEvidenceTests.cs`（新）、`ApifoxHelper.Tests/WordingHonestyTests.cs`（+1 条门）、`docs/NOTES.md`。
