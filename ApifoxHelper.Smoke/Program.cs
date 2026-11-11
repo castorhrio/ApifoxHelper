@@ -260,6 +260,9 @@ internal static class Program
         Section("对话框状态行的完整错误入口（三屏各四段：嵌入页面文件的 / 独立文件的 / 真实保存失败的，真实控件）", nameof(RunDialogStatusFullText));
         RunDialogStatusFullText(services, dataRoot);
 
+        Section("对话框状态行逐屏（15 处对话框各三段：短句不给 → 长句按口径重判 → 回短句收起，真实控件）", nameof(RunDialogStatusSweep));
+        RunDialogStatusSweep(services, profile, task, slot);
+
         Section("说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）", nameof(RunCaptionFit));
         RunCaptionFit(services, dataRoot);
 
@@ -4198,6 +4201,129 @@ internal static class Program
             },
             cleanup: () => File.WriteAllText(profileJson, profileBackup));
     }
+
+    /// <summary>
+    /// 15 处对话框状态行的「放得下不给 / 放不下给 / 回短句收起」三段，按冒烟清单逐屏走一遍
+    /// （第一百七十六轮，简报 P0-1 的 R2 收口）。
+    /// <para>
+    /// <b>为什么要有这一段</b>：<see cref="RunDialogStatusFullText"/> 只挑了三处代表屏走完整四段，
+    /// 其余 12 处此前只有 <c>StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost</c>
+    /// 的接线门——那门判的是「状态行经宿主写」，判不出「这一屏的入口显隐与判定一致」。
+    /// 真机到位那天这张表要进 G-D5 复核清单，12 处里只要有一处实际放不下而入口没给，
+    /// 用户就看不到完整失败原因（这正是「产品完整度」里最朴素的一条）。
+    /// </para>
+    /// <para>
+    /// <b>为什么按清单走而不是再列一份屏单</b>：屏单从 <see cref="Cases"/> 读——新增对话框自动进这一段，
+    /// 漏掉不会有第二份名单替它兜底（与 <c>demo.sh</c> 从逐屏表读行同一取舍）。没有状态行宿主的屏
+    /// （<c>StatusTextDialog</c> 这类只读视图）如实记「这一屏没有状态行」，不算失败也不算通过。
+    /// </para>
+    /// <para>
+    /// <b>长句用产品自己那一份拼装</b>：<c>LoadFailureState.FailureStatus</c> 是产品路径上真正落进状态行
+    /// 的那一句（标题 + 脱敏后的 <c>Exception.Message</c>），不手写一句超长文字——那样量到的是
+    /// 冒烟器的想象力。短句取「已保存」这类真实短句，不用空串（空串在判定里走的是另一支）。
+    /// </para>
+    /// <para>
+    /// <b>量不到就如实写</b>：某一档这一屏放得下时，「放不下给」这一支在本档没量到，报告里逐屏写明，
+    /// 不伪造一个放不下的数字（与 <see cref="RunDialogStatusFullText"/> 同一口径）。
+    /// 状态行宽度为 0 时判失败而不是放过——那时「放不下」不是文字太长，是这一行还没有宽度，
+    /// 拿它判会得到一条永远绿的假门（第一百六十一轮踩过同一形状）。
+    /// </para>
+    /// </summary>
+    private static void RunDialogStatusSweep(IServiceProvider services, ProjectProfile profile, CheckTask task, DocSlot slot)
+    {
+        // 真实失败原因的形状：.NET 的 IOException 带文件全路径，动辄两三百字符。
+        var longText = LoadFailureState.FailureStatus(
+            LoadFailureState.Tasks.Title,
+            "The process cannot access the file "
+            + "'C:\\Users\\someone\\AppData\\Local\\ApifoxHelper\\tasks\\20261111-093000-ab12cd\\task.json' "
+            + "because it is being used by another process. 关闭占用该文件的程序后点「重试」再读一次。");
+        const string shortText = "已保存";
+
+        var swept = 0;
+        var offered = 0;
+        var noStatus = new List<string>();
+        var seen = new HashSet<Type>();
+        foreach (var (name, build) in Cases(services, profile, task, slot))
+        {
+            using var control = build();
+            if (control is not Form dialog) continue;
+            // 同一类对话框在清单里可能出现两次（例如「默认确认委托」那一条也 new 了一次）：
+            // 逐屏扫的是屏，不是用例，重复的只走一次。
+            if (!seen.Add(dialog.GetType())) continue;
+            var host = FindAll<StatusLineHost>(dialog).FirstOrDefault();
+            if (host is null)
+            {
+                noStatus.Add(name);
+                continue;
+            }
+
+            // 必须真的 Show：`Control.Visible` 读的是**有效可见性**，祖先没显示时它恒为 false——
+            // 不 Show 就判入口显隐，量到的是「窗体还没显示」而不是「这一行放不下」（本轮实测：
+            // 15 屏全部报「入口可见=False」，而按宽度该给入口）。Show 会触发各屏自己的加载，
+            // 与 RunDialogStatusFullText 同一取舍：宁可多跑一次加载，也不拿一个恒假的读数当结论。
+            dialog.Show();
+            Application.DoEvents();
+
+            var screen = name;
+            RunAction($"对话框状态行逐屏：{screen}——短句放得下，不给「查看完整错误」入口（真实控件）", () =>
+            {
+                host.SetText(shortText, UiTokens.Text);
+                Application.DoEvents();
+                var (preferred, available, shouldOffer) = StatusEntryRule(host.Label);
+                if (available <= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"这一屏的状态行没有宽度（{available}px）：量不到就不是「放得下」，别把它读成通过。");
+                }
+                if (host.FullTextButton.Visible != shouldOffer)
+                {
+                    throw new InvalidOperationException(
+                        $"短句「{shortText}」（文字 {preferred}px、入口不占位时这一行 {available}px）下入口可见={host.FullTextButton.Visible}，"
+                        + $"按口径该「{(shouldOffer ? "给" : "不给")}」。");
+                }
+                if (shouldOffer)
+                {
+                    throw new InvalidOperationException(
+                        $"短句「{shortText}」在这一行（{available}px）就判放不下（文字 {preferred}px）：入口会在最不该出现的时候出现。");
+                }
+                swept++;
+            });
+
+            RunAction($"对话框状态行逐屏：{screen}——真实失败长句按同一口径重判（放不下才给入口）", () =>
+            {
+                host.SetText(longText, UiTokens.BadText);
+                Application.DoEvents();
+                var (preferred, available, shouldOffer) = StatusEntryRule(host.Label);
+                if (host.FullTextButton.Visible != shouldOffer)
+                {
+                    throw new InvalidOperationException(
+                        $"失败原因 {longText.Length} 字（文字 {preferred}px、入口不占位时这一行 {available}px）下入口可见={host.FullTextButton.Visible}，"
+                        + $"按口径该「{(shouldOffer ? "给" : "不给")}」：读不到全文时不该没有入口。");
+                }
+                if (shouldOffer) offered++;
+                _lines.Add($"     {screen}：失败原因 {longText.Length} 字，文字 {preferred}px / 这一行 {available}px，"
+                    + $"入口可见={host.FullTextButton.Visible}"
+                    + (shouldOffer ? "" : "——这一档这一屏放得下，「放不下给」这一支在本档这一屏没量到（不伪造一个放不下的数字）"));
+            });
+
+            RunAction($"对话框状态行逐屏：{screen}——回到短句后入口收得回来", () =>
+            {
+                host.SetText(shortText, UiTokens.Text);
+                Application.DoEvents();
+                var (preferred, available, shouldOffer) = StatusEntryRule(host.Label);
+                if (host.FullTextButton.Visible != shouldOffer)
+                {
+                    throw new InvalidOperationException(
+                        $"回到短句「{shortText}」（文字 {preferred}px、这一行 {available}px）后入口可见={host.FullTextButton.Visible}，"
+                        + $"按口径该「{(shouldOffer ? "给" : "不给")}」。");
+                }
+            });
+        }
+
+        _lines.Add($"     逐屏扫过 {swept} 屏有状态行的对话框；「放不下给」这一档量到 {offered} 屏；"
+            + $"没有状态行的屏（如实记，不算失败）：{(noStatus.Count == 0 ? "无" : string.Join("、", noStatus))}");
+    }
+
 
     /// <summary>某个控件所在行里的那个下拉框（按同一行里的按钮文字定位那一行）。</summary>
     private static ComboBox ComboInRowOf(Control root, string buttonLabel) =>

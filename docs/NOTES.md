@@ -2299,3 +2299,16 @@
   **未新建任何调度器、未动其他项目**；产品源码改动仅限 `Api/ErrorCopy.cs`（两条常量）、
   `Api/ApifoxRoutes.cs` 与 `Desktop/Native/ProfileAdvancedDialog.cs`、`Desktop/Native/ApifoxPicker.cs`
   （四处字面量换成引用同一份常量），共 6 处引用、0 处行为改动；变异注入都只在实验期间存在并按备份字节还原。
+
+## 交付轮「15 处对话框状态行的入口显隐第一次逐屏走真实控件（3 屏代表 → 15 屏全量）」（2026-11-11 第一百七十六轮，简报 P0-1 的 R2 收口）
+
+- **接续前确认**：开局工作树干净，`main` 与 `origin/main` 同步（HEAD `20d9362`），主工程与测试工程 `dotnet build -t:Rebuild` 0 警告 0 错误、`dotnet test` **2490 用例全绿**，基线成立；第一百七十五轮与 `20d9362` 的 DPI 接线门逐字保留，未回退任何已有实现。
+- **本轮唯一的产品侧推进（真实原生交互，不是机械门）**：`ApifoxHelper.Smoke/Program.cs` 新增冒烟段 `RunDialogStatusSweep`——把「状态行放不下才给『查看完整错误』入口」这条口径从**三处代表屏**（`RunDialogStatusFullText`）扩到**全部 15 处有状态行的对话框**，每屏三段：短句「已保存」不给入口 → 真实失败长句（`LoadFailureState.FailureStatus` 拼装，193 字，产品路径上真正落进状态行的那一句）按同一口径重判 → 回短句后入口收得回来。屏单**从 `Cases(...)` 读**，不另列一份名单：新增对话框自动进这一段，漏掉不会有第二份名单替它兜底（与 `demo.sh` 从逐屏表读行同一取舍）。没有状态行宿主的 9 屏（`ScanWarningsDialog` / `EvidenceDialog` / `PropagationDialog` / `BuildLogDialog` / `CheckResultsDialog` / `EndpointTraceDialog` / `JournalDialog` / `NoticeDialog` / `StatusTextDialog`）如实记「这一屏没有状态行」，不算失败也不算通过。
+- **本轮实测抓到的第一处（自己写的门自己先红）**：第一版为了避开各屏 `Show()` 触发的加载，改用 `CreateControl + PerformLayout` 不显示窗体——结果 **15 屏全部报「入口可见=False」而按宽度该给入口**。根因不是产品缺陷，是 `Control.Visible` 读的是**有效可见性**：祖先窗体没显示时它恒为 `false`，拿它判入口显隐量到的是「窗体还没显示」。改成真的 `Show() + Application.DoEvents()`（与 `RunDialogStatusFullText` 同一取舍）后 15 屏全绿。这一条记下来的理由：**不显示窗体就判可见性，会得到一条永远绿的假门**，与第一百六十一轮「拿 `label.Width` 当可用宽度」是同一族。
+- **wine 实测（当前源码，不是上一轮遗留）**：`PUBLISH=1 TIERS=96 bash .winecheck/demo.sh`——脚本自己 `build -t:Rebuild` + `publish` + 写源码指纹，然后跑 100% 档 → **180 通过 / 0 失败（退出码 0）**（第一百六十七轮那份是 135 通过，本轮 +45 = 15 屏 × 3 段）。逐屏证据行落在报告里，形如「`ProfileDialog（新建配置）`：失败原因 193 字，文字 1522px / 这一行 626px，入口可见=True」。**这是 Linux 容器内 wine 10.0 + Xvfb 模拟器证据，不是 Windows 真机结果。**
+- **本轮未做（如实挂账，不写成已做）**：
+  1. **≈125% 与 ≈200% 两档在本轮改动之后没有复跑**——只跑了 100% 档。三档全量复跑（`PUBLISH=1 bash .winecheck/demo.sh`，约 3 分钟）留给下一轮开工第一件事；在那之前**不得引用 120/192 两档的读数作为本轮代码的证据**（`demo.sh` 的源码指纹门会拦住拿旧产物念新结论）。
+  2. **Linux 侧机械门未落**：`RunDialogStatusSweep` 目前只有 wine 侧的真实控件证据，没有一条断言钉住「它按 `Cases(...)` 读屏单而不是硬编码一份名单」。下一轮补 `NativeDialogSmokeTests` 一条（变异：把 `Cases(` 换成硬编码数组 → 红）。
+  3. **简报 P0-1（G-D5 当天记录模板 + 门）与 P1-1（验收表证据列认 `async Task` 断言）本轮未动**，仍按第一百七十三、一百七十四轮的口径登记在案——`AcceptanceChecklistTests` 的引用面仍只覆盖「文件名」与「返回 void 的类名.方法名」两种形状，`MockApifoxCliTests.Shared2_StaleConfirmedHash_IsRefusedBeforeAnyCliCall` 这类 `async Task` 断言仍进不了证据列。
+  4. **简报 P0-2（第一百七十五轮「产品源码有改动、三档未复跑」那条挂账）本轮只收口了 100% 档**：`PUBLISH=1` 重发冒烟器成功（源码指纹已刷新到当前源码），100% 档 180/0；120/192 两档见第 1 条。
+- **本轮未连接或写入 Apifox，未调用任何模型服务，未安装任何依赖**（`dotnet publish` 全部命中本机 NuGet 缓存；wine / Xvfb 为本机既有），**未新建任何调度器、未动其他项目**；产品源码（`Desktop/`、`Api/`、`Sync/`、`Reports/`）**一行未改**，改动只在冒烟器 `ApifoxHelper.Smoke/Program.cs`（新增一段 + 一处 `Section` 注册）。
