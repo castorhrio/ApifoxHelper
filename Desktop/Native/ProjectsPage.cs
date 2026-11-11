@@ -427,7 +427,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
 /// 改动应用到同一配置对象，随「保存」一起落盘。
 /// </para>
 /// </summary>
-internal sealed class ProfileDialog : Form
+internal sealed class ProfileDialog : DpiAwareForm
 {
     private static readonly string[] SwaggerChoices = ["无（暂不核对 Apifox 结构）", "文件（OpenAPI 3.0 JSON）", "URL（http/https 的 JSON 地址）"];
 

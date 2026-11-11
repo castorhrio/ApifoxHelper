@@ -17,7 +17,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 清单支持点击列头排序（第九十八轮，口径见 <see cref="EndpointTraceSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始、表头带方向标记；排序状态留在本次打开期间，关闭即忘。
 /// </summary>
-internal sealed class EndpointTraceDialog : Form
+internal sealed class EndpointTraceDialog : DpiAwareForm
 {
     private readonly TaskStore _tasks;
     private readonly CheckTask _task;

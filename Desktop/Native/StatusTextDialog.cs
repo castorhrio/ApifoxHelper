@@ -17,7 +17,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 折行会把路径断在任意位置，而用户要抄的往往正是那段路径。
 /// </para>
 /// </summary>
-internal sealed class StatusTextDialog : Form
+internal sealed class StatusTextDialog : DpiAwareForm
 {
     private readonly TextBox _text;
 

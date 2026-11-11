@@ -29,7 +29,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// <see cref="SyncSelectSort"/> 与 <see cref="ListSort"/>）：同一列再点反向、换一列从升序开始、
 /// 表头带方向标记，排序只改呈现顺序——勾选页的勾选按接口键记在 SyncSelect，排序不丢勾选。
 /// </summary>
-internal sealed class SyncPreviewDialog : Form
+internal sealed class SyncPreviewDialog : DpiAwareForm
 {
     private readonly TaskStore _tasks;
     private readonly SyncPlanService _plans;

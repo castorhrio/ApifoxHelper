@@ -36,7 +36,9 @@ public class NativeDialogSmokeTests
     /// <summary>磁盘上 <c>Desktop/Native</c> 里所有继承 <c>Form</c> 的对话框类名（按名字排序）。</summary>
     private static List<string> DialogClassesOnDisk() =>
         Repo.NativeSources()
-            .SelectMany(s => Regex.Matches(s.Text, @"(?m)^\s*(?:internal|public)\s+(?:sealed\s+)?class\s+(\w+Dialog)\s*:\s*Form\b")
+            // 基类自第一百七十五轮起是 DpiAwareForm（DPI 变更要在那一层接消息），两个名字都认——
+            // 判据仍是「磁盘上真实存在的 *Dialog 类」，不看用例怎么写，也不放掉任何一个。
+            .SelectMany(s => Regex.Matches(s.Text, @"(?m)^\s*(?:internal|public)\s+(?:sealed\s+)?class\s+(\w+Dialog)\s*:\s*(?:Form|DpiAwareForm)\b")
                 .Select(m => m.Groups[1].Value))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(n => n, StringComparer.Ordinal)

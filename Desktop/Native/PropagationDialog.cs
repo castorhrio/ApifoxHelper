@@ -16,7 +16,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 这一屏存在的理由正是「注释有没有真的写进源码、出现在 XML、被 Swagger 读到」，
 /// 「把 XML 未收录的那几条集中看」只能逐行扫——排序只改呈现顺序，不改核对结果与筛选口径。
 /// </summary>
-internal sealed class PropagationDialog : Form
+internal sealed class PropagationDialog : DpiAwareForm
 {
     private readonly TaskStore _tasks;
     private readonly string _taskId;

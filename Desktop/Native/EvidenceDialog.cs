@@ -13,7 +13,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// （打开即选中第一条证据，片段区随之显示它的代码——这一屏存在的理由就是看代码）。
 /// 清单三格文字、计数行、片段区说明行与片段文字取 <see cref="EvidenceEntries"/> 一份（与测试工程单一口径）。
 /// </summary>
-internal sealed class EvidenceDialog : Form
+internal sealed class EvidenceDialog : DpiAwareForm
 {
     /// <summary>
     /// 标识列（DESIGN.md §6「列表行」的 Ctrl+C 条款）：首列是「分类」（路由、校验、守卫、查询过滤…），

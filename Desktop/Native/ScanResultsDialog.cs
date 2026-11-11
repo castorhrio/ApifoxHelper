@@ -28,7 +28,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 筛到零行=列表区一句话与「换一个筛选」这一步，覆盖率行、计数行与两个聚合入口照旧（见 <see cref="ShowFilteredEmpty"/>；
 /// 它与「整份数据不可得」是两种空，后者才随提示把那些入口一起收掉）。
 /// </summary>
-internal sealed class ScanResultsDialog : Form
+internal sealed class ScanResultsDialog : DpiAwareForm
 {
     private static readonly string[] FilterChoices = ["全部位置", "缺失", "空", "已失效", "有效", "其他问题"];
 
@@ -578,7 +578,7 @@ internal sealed class ScanResultsDialog : Form
 /// 手工填写说明对话框：为所选注释位置输入纯文本说明成为候选。
 /// 文字校验与生成/导入共用 DraftService.ValidateText 单一口径，校验不通过内联显示、不关闭对话框。
 /// </summary>
-internal sealed class ManualDraftDialog : Form
+internal sealed class ManualDraftDialog : DpiAwareForm
 {
     private readonly DocSlot _slot;
     private readonly TextBox _text = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
@@ -659,7 +659,7 @@ internal sealed class ManualDraftDialog : Form
 /// 分析警告与降级清单（只读）：扫描警告、未解析符号与不可回写的外部类型逐行列出；
 /// 条目口径在 ScanOverview（与冻结页面同一前缀），数据来自扫描落盘的任务文件，无写入动作。
 /// </summary>
-internal sealed class ScanWarningsDialog : Form
+internal sealed class ScanWarningsDialog : DpiAwareForm
 {
     public ScanWarningsDialog(CheckTask task, IReadOnlyList<string> items)
     {

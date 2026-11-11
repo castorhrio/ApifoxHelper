@@ -18,7 +18,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 条目清单支持点击列头排序（第九十九轮，口径见 <see cref="DecisionSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始、表头带方向标记；排序状态留在本次打开期间，关闭即忘。
 /// </summary>
-internal sealed class DecisionsDialog : Form
+internal sealed class DecisionsDialog : DpiAwareForm
 {
     private enum EntryKind
     {

@@ -23,7 +23,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 输入即筛选、只改可见行，计数行仍按整份计划统计；同一页两个框，Enter 与 Esc 看焦点各接一次，
 /// Ctrl+F 只交给文件清单那个框（与同步预览两页各一个框同一取舍）。
 /// </summary>
-internal sealed class ApplyPlanDialog : Form
+internal sealed class ApplyPlanDialog : DpiAwareForm
 {
     private readonly TaskStore _tasks;
     private readonly CommentPlanService _plans;

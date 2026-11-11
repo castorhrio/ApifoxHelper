@@ -21,7 +21,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 清单支持点击列头排序（第一百零七轮，口径见 <see cref="SupplementSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始，排序只改呈现顺序——选中仍按接口身份恢复，未保存的输入不因排序而丢。
 /// </summary>
-internal sealed class SupplementsDialog : Form
+internal sealed class SupplementsDialog : DpiAwareForm
 {
     private sealed class EditorBox(SupplementEntries.Editor editor)
     {

@@ -14,7 +14,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 契约清单支持点击列头排序（第一百零一轮，口径见 <see cref="ContractSort"/> 与 <see cref="ListSort"/>）：
 /// 与差异确认、注释候选同一只壳，同一个手势在别处有、在这一处没有属同壳不同行为。
 /// </summary>
-internal sealed class ContractsDialog : Form
+internal sealed class ContractsDialog : DpiAwareForm
 {
     private static readonly string[] FilterChoices = ["全部契约", "待确认", "已确认", "已拒绝", "已阻断", "已失效"];
 

@@ -43,19 +43,36 @@ namespace ApifoxHelper.Desktop.Native;
 /// 不猜一个数把布局撑坏。
 /// </para>
 /// <para>
-/// <b>本实现没有覆盖的（挂账，真机复核时要量）</b>：缩放只在对话框构造时按<b>主屏</b>的屏幕 DC
-/// 做一次。没有接窗体消息处理里的 <c>WM_DPICHANGED</c>，也不按 PerMonitorV2 逐屏取 DPI——
-/// 于是「窗口建好之后拖到另一块缩放不同的显示器」与「运行中改系统缩放比例」两种情况下，
-/// 对话框仍停在创建那一刻的尺寸。进程入口确实是 PerMonitorV2（<c>Desktop/DesktopApp.cs</c>），
-/// 但那只是让系统按所在屏给出正确的像素，不等于本类会跟着重算。主屏 100% + 副屏 200%
-/// 这种混合缩放在真机上最可能踩到，本环境只有一块虚拟屏（Xvfb），这一档从没量过，
-/// 随 G-D5 真机截图复核；补它要动窗体的消息处理（改行为），不在这一轮的范围里。
+/// <b>挂账（第一百七十五轮把变更接上了，量到的仍是空框）</b>：创建期按<b>主屏</b>的屏幕 DC 取一次因子，
+/// 变更期由基类 <see cref="DpiAwareForm"/> 覆写 <c>WndProc</c> 认出 <c>WM_DPICHANGED</c>，从
+/// <c>wParam</c> 高位取<b>要去的那一块屏</b>的 DPI，跟着新因子重算——「窗口建好之后拖到另一块缩放
+/// 不同的显示器」与「运行中改系统缩放比例」两种情况从此不再停在创建那一刻的尺寸。
+/// 公开事件 <c>Form.DpiChanged</c> 那一条路本轮先试过、被 wine 实测否掉：消息进得到窗口过程
+/// （<c>wParam</c> = 12583008，即 192 左移 16 位再并上 96），事件订阅却没被调用、框架算出的新 DPI 还是旧的 96
+/// （与第一百六十二、一百六十三轮量到的「窗口 DC 与 <c>DeviceDpi</c> 恒报 96」同一族）——
+/// 挂在事件上，本机连「有没有跑到」都判不出来。但这两档的<b>实测读数一个都没有</b>：
+/// 本环境只有一块 Xvfb 虚拟屏、副屏 0 块，wine 也不会<b>自发</b>这条消息
+/// （<c>LogPixels</c> 要重启前缀才生效，那是三档静态量测，不是运行中变更），
+/// 所以「系统自己发这条消息时屏幕上放得下」这一句从没量过，随 G-D5 第 3、4 条复核。
+/// 另两条如实记下：① 本实现<b>不消费系统建议的窗口矩形</b>（消息参数里那块 suggested rect），
+/// 只把客户区按设计尺寸与新因子重算、位置仍由系统摆——PerMonitorV2 的完整逐屏支持（逐屏取 DPI、
+/// 按建议矩形摆放）是另一件事，登记在 <c>docs/NOTES.md</c>，不混进这一条已修里；② 进程入口确实是
+/// PerMonitorV2（<c>Desktop/DesktopApp.cs</c>），但那只是让系统按所在屏给出正确的像素，
+/// 不等于本类在两屏之间被真机验证过。
 /// </para>
 /// </summary>
 internal static class DpiScale
 {
     /// <summary><c>GetDeviceCaps</c> 的 <c>LOGPIXELSY</c>：屏幕 DC 的纵向 DPI。</summary>
     private const int LogPixelsY = 90;
+
+    /// <summary>
+    /// DPI 变更消息号：Win32 里那条消息写作 <c>WM_DPICHANGED</c>，值是 736。窗口进入另一块不同缩放的屏、
+    /// 或系统缩放被改时，系统给<b>每一个</b>顶层窗口发这一条。这里按十进制写：本仓的门要求
+    /// 十六进制字面量只许出现在 <c>UiTokens.cs</c>（那是颜色唯一定义位，<c>TokenWiringTests</c> 判），
+    /// 而消息号与颜色共用同一个形状——为了一个号去放宽那条门，代价比省下一个括号大。
+    /// </summary>
+    internal const int WmDpiChanged = 736;
 
     /// <summary>
     /// 给对话框装上 DPI 缩放：设计尺寸按 96dpi 逻辑像素给，窗体随系统字体缩放等比放大。
@@ -67,8 +84,13 @@ internal static class DpiScale
     /// 缩放因子与「要不要真的缩放」都不在本文件算：那是纯算术，取
     /// <see cref="DpiScaleFactor"/>（与测试工程共享编译，Linux 侧有真值表）。
     /// </para>
+    /// <para>
+    /// 参数类型是 <see cref="DpiAwareForm"/> 而不是 <see cref="Form"/>：需要固定设计尺寸的窗体
+    /// 必须同时是「会跟着 DPI 变更重算」的窗体。这两件事原先分开写着就会漂移——某一屏接了缩放
+    /// 却没登记台账，在 200% 副屏上停在创建那一刻的尺寸，而这种屏不会在任何读数里被认出来。
+    /// </para>
     /// </summary>
-    public static void Apply(Form form, Size designSize)
+    public static void Apply(DpiAwareForm form, Size designSize)
     {
         form.Font = UiTokens.Body.Value;
         // 关掉框架自己的自动缩放：见类注释——wine 下它按窗口 DC 重算基准，会把刚放大的窗体缩回去。
@@ -77,6 +99,47 @@ internal static class DpiScale
         form.ClientSize = designSize;
         var factor = ScaleFactor();
         if (DpiScaleFactor.ShouldScale(factor)) form.Scale(new SizeF(factor, factor));
+        form.Tracking = new DpiTracking(designSize, factor);
+    }
+
+    /// <summary>
+    /// DPI 变更那一次重算（第一百七十五轮，简报 P0-1）。基类的 <c>WndProc</c> 在 <c>base</c> 之后调进来。
+    /// <para>
+    /// <b>读消息，不读那个公开事件</b>：<c>Form.DpiChanged</c> 是 net8.0 的公开事件，本轮先在 wine 里
+    /// 把这条消息发给一个真实窗体量过一次——窗体过程收到了它（<c>wParam</c> = 12583008，高 192 低 96），
+    /// 而事件订阅那一次<b>没有被调用</b>、框架自己算出来的新 DPI 回的是 <b>96</b>（屏上的数在 wine 里滞后，
+    /// 与第一百六十二、一百六十三轮量到的「窗口 DC 恒报 96」「<c>DeviceDpi</c> 恒报 96」同一族）。
+    /// 挂在事件上，这一档在真机上到底走不走得通本机判不出来；挂在消息上，读到的是系统写进
+    /// <c>wParam</c> 高位的那个「要去的那一块屏的 DPI」，不经过框架那一层解释。
+    /// </para>
+    /// <para>
+    /// <b>两个数各按一种口径算，不能混</b>：控件树走<b>相对</b>步长（<see cref="DpiScaleFactor.ScaleStep"/>）——
+    /// 它此刻的边界已经是按 <c>applied</c> 放大过的那一份，直接乘目标因子会让
+    /// 100%→200%→100%→200% 一档一档叠上去；客户区走<b>绝对</b>重算
+    /// （<see cref="DpiScaleFactor.ScaledExtent"/>：设计尺寸 × 新因子）。绝对那一句不是重复劳动：
+    /// 系统在同一条消息里也会按建议矩形改窗口边界，而那一段在本机既收不到也量不到，
+    /// 把最终尺寸定成「只由 (designSize, 新因子) 决定」，框架在那之前动了什么就不影响这一屏的结论。
+    /// 这是设计选择，不是实测结论——实测仍随 G-D5 第 3、4 条。
+    /// </para>
+    /// <para>
+    /// <c>Tracking</c> 为空是可能的：<see cref="DpiAwareForm"/> 只保证「会重算」，不保证这一屏真经
+    /// <see cref="Apply"/> 出厂过（编译器管得住类型，管不住有没有人调用）。没登记就不重算，
+    /// 与修复前同一行为——而不是拿一个空的设计尺寸去缩放。
+    /// </para>
+    /// </summary>
+    internal static void RescaleOnDpiChanged(DpiAwareForm form, long wParam)
+    {
+        var track = form.Tracking;
+        if (track is null) return;
+        var newDpi = DpiScaleFactor.NewDpiFromWParam(wParam);
+        if (!DpiScaleFactor.IsUsableDpi(newDpi)) return;
+        var target = DpiScaleFactor.FromScreenDpi(newDpi);
+        if (!DpiScaleFactor.ShouldRescale(track.AppliedFactor, target)) return;
+        var step = DpiScaleFactor.ScaleStep(track.AppliedFactor, target);
+        form.Scale(new SizeF(step, step));
+        form.ClientSize = new Size(DpiScaleFactor.ScaledExtent(track.DesignSize.Width, target),
+                                    DpiScaleFactor.ScaledExtent(track.DesignSize.Height, target));
+        track.AppliedFactor = target;
     }
 
     /// <summary>

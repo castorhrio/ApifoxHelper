@@ -15,7 +15,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 两张清单都支持点击列头排序（第九十七轮，口径见 <see cref="CheckResultSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始、表头带方向标记；排序状态留在本次打开期间，关闭即忘。
 /// </summary>
-internal sealed class CheckResultsDialog : Form
+internal sealed class CheckResultsDialog : DpiAwareForm
 {
     /// <summary>筛选下拉的取值顺序（与选项文案一一对应）。</summary>
     private static readonly string[] FilterValues = ["", "new", "structure", "docs", "unchanged", "blocked", "sourceOnly"];

@@ -109,16 +109,62 @@ public class MockApifoxCliTests
     }
 
     /// <summary>
+    /// 「不联网」的封闭禁用清单（第一百七十五轮，简报 P0-2）。
+    /// <para>
+    /// <b>为什么原来那一条不够</b>：原来判的是 <c>DoesNotContain("http")</c> 与
+    /// <c>DoesNotContain("net.connect")</c>。字面 <c>http</c> 挡住了，而
+    /// <c>require('dns')</c>、<c>tls.connect</c>、<c>WebSocket</c>、<c>fetch()</c> 一个都不在里面——
+    /// 一个能被人加一句就绕开的门，等于在替「这个脚本会连外面的东西」作证。
+    /// </para>
+    /// </summary>
+    private static readonly string[] OfflineForbiddenApis = ["net", "dns", "http", "https", "fetch", "WebSocket", "tls"];
+
+    /// <summary>
+    /// mock 脚本唯一允许加载的模块：文件系统与路径。多出一个就要在这里写下它为什么不算联网。
+    /// <para>
+    /// 这一份白名单补的是禁用清单<b>枚举不完</b>的那一半：第三方 HTTP 客户端（axios、undici、node-fetch）
+    /// 的名字不可能全列出来，但它们在 JS 里只有一个入口——<c>require</c>。
+    /// </para>
+    /// </summary>
+    private static readonly string[] OfflineAllowedModules = ["fs", "path"];
+
+    /// <summary>
     /// mock 只许活在测试工程里：产品源码、主工程与冒烟工程都不许出现它的名字，脚本自己也不许联网。
     /// 这条不是形式主义——「测试用的假服务端被产品代码引用」一旦发生，上面所有断言就都不算了。
+    /// <para>
+    /// <b>两份联网判据各挡什么</b>：禁用清单挡<b>内置</b>网络 API（含 <c>node:</c> 前缀那种写法，
+    /// 因为 <c>:</c> 是标识边界，<c>'net'</c> 照样被认出来）；模块白名单挡<b>任何</b> <c>require</c> 进来的
+    /// 网络实现，并且要求参数是字符串字面量——<c>require('h' + 'ttp')</c> 与 <c>require(name)</c>
+    /// 这种拼出来的模块名同样判红。<b>挡不住的那一种要如实说清</b>：脚本运行时自己生成再 eval 的字符串，
+    /// 静态扫源码判不到；这一条与全部证据的边界同一（这是仓内 mock，不是网络审计工具）。
+    /// </para>
     /// </summary>
     [Fact]
     public void Boundary_TheMockStaysInsideTheTestProject()
     {
         Assert.True(File.Exists(MockCliRun.SourceScript), $"mock CLI 脚本不在仓库里：{MockCliRun.SourceScript}。");
         var script = File.ReadAllText(MockCliRun.SourceScript);
-        Assert.DoesNotContain("http", script, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("net.connect", script, StringComparison.Ordinal);
+
+        foreach (var api in OfflineForbiddenApis)
+        {
+            // 标识边界而不是子串：子串判法会因为脚本里出现 network 这种词而假红，
+            // 而一条经常假红的门，下一轮只会被人放宽回没有门（本仓第一百六十九轮同一教训）。
+            Assert.False(Regex.IsMatch(script, $@"\b{Regex.Escape(api)}\b", RegexOptions.IgnoreCase),
+                $"mock 脚本里出现了网络 API「{api}」：这份假服务端必须只在本地文件系统上跑。");
+        }
+
+        var required = Regex.Matches(script, @"require\((?<arg>[^)]*)\)");
+        foreach (Match match in required)
+        {
+            var arg = match.Groups["arg"].Value.Trim();
+            var literal = Regex.Match(arg, @"^(['""])(?<name>[a-zA-Z0-9_/@\-.]+)\1$");
+            Assert.True(literal.Success,
+                $"mock 脚本里 require 的参数不是字符串字面量：{arg}——拼出来或传进来的模块名，白名单挡不住。");
+            var name = literal.Groups["name"].Value;
+            name = name.StartsWith("node:", StringComparison.Ordinal) ? name[5..] : name;
+            Assert.Contains(name, OfflineAllowedModules, StringComparer.Ordinal);
+        }
+
         Assert.Contains("不访问网络", script, StringComparison.Ordinal);
 
         var product = Directory.GetFiles(Repo.Root, "*.cs", SearchOption.AllDirectories)

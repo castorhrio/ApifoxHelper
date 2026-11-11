@@ -14,7 +14,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 字段解析与文案经 ProfileAdvanced 单一口径，全部通过后整体应用到配置对象，随外层「保存」经
 /// ProfileStore 规整与落盘；本对话框自身不落盘。
 /// </summary>
-internal sealed class ProfileAdvancedDialog : Form
+internal sealed class ProfileAdvancedDialog : DpiAwareForm
 {
     private readonly ApifoxCli _cli;
     private readonly ProjectProfile _profile;

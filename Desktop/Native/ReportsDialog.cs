@@ -12,7 +12,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 状态表：预览可读=正文区 + 四个导出入口；任务数据读取失败=内联提示与下一步；
 /// 导出结果（含失败原因）在底部状态行如实显示，不弹窗。
 /// </summary>
-internal sealed class ReportsDialog : Form
+internal sealed class ReportsDialog : DpiAwareForm
 {
     private readonly ReportExportService _exports;
     private readonly string _taskId;

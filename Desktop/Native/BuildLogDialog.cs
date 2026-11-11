@@ -9,7 +9,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 构建在任务页发起并经用户确认，本对话框无写入动作；超时与非零退出码如实显示，不显示成完成。
 /// 状态表：尚未构建=空态指引；读取失败=内联错误与下一步；正常=概要行（与任务页构建状态行同一口径）+ 输出尾部。
 /// </summary>
-internal sealed class BuildLogDialog : Form
+internal sealed class BuildLogDialog : DpiAwareForm
 {
     private readonly TaskStore _tasks;
     private readonly string _taskId;

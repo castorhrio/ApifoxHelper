@@ -19,7 +19,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 记录清单支持点击列头排序（第一百零四轮，口径见 <see cref="JournalSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始，排序只改呈现顺序——计数行与未结束动作那句话仍按整份日志统计。
 /// </summary>
-internal sealed class JournalDialog : Form
+internal sealed class JournalDialog : DpiAwareForm
 {
     /// <summary>
     /// 标识列（DESIGN.md §6「列表行」的 Ctrl+C 条款）：首列是时间（同一秒可能有多条、认不出是哪一步），

@@ -13,7 +13,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 不导出；密钥只在配置已保存后可设置（与冻结页面同一门控），本对话框对配置对象本身的
 /// 落盘不负责——改动随外层「保存」写入。
 /// </summary>
-internal sealed class GenerationDialog : Form
+internal sealed class GenerationDialog : DpiAwareForm
 {
     private readonly CredentialStore _credentials;
     private readonly ProfileStore _profiles;

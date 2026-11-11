@@ -12,7 +12,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 字段解析与文案经 ProfileAnalysis 单一口径；数字越界钳制与 JSON 命名取值校验随外层「保存」
 /// 由 ProfileStore 执行；本对话框自身不落盘——改动应用到同一配置对象，随外层「保存」写入。
 /// </summary>
-internal sealed class ProfileAnalysisDialog : Form
+internal sealed class ProfileAnalysisDialog : DpiAwareForm
 {
     private readonly ProjectProfile _profile;
 

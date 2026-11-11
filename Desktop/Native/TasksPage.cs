@@ -1370,7 +1370,7 @@ internal sealed class TasksPage : UserControl, INativePage
 /// <summary>
 /// 新建任务对话框：选配置、可选模块、路径前缀、指定接口与版本备注；「创建并扫描」立即开始源码扫描作业。
 /// </summary>
-internal sealed class NewTaskDialog : Form
+internal sealed class NewTaskDialog : DpiAwareForm
 {
     private readonly ProfileStore _profiles;
     private readonly ComboBox _profile = new() { DropDownStyle = ComboBoxStyle.DropDownList };

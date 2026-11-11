@@ -11,7 +11,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 确认类动作（执行同步、覆盖式写入、退出）仍用原生确认对话框（§6 例外条款），不经过这里。
 /// 文字取 <see cref="NoticeText"/> 一份，本对话框不就地拼写。
 /// </summary>
-internal sealed class NoticeDialog : Form
+internal sealed class NoticeDialog : DpiAwareForm
 {
     public NoticeDialog(string heading, string body, string? mono = null, string? note = null)
     {

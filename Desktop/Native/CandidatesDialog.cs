@@ -19,7 +19,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 接受是「接受并下一条」（第一百一十一轮，落点见 <see cref="ListAdvance.NextAfterAccept"/>）：
 /// 逐条清队列时选中交给下一条，搁置 / 驳回 / 保存修改 / 撤销接受仍留在原处。
 /// </summary>
-internal sealed class CandidatesDialog : Form
+internal sealed class CandidatesDialog : DpiAwareForm
 {
     private static readonly string[] FilterChoices = ["全部候选", "待审阅", "已接受", "已搁置", "已驳回", "证据已变化"];
 

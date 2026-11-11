@@ -13,7 +13,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 往返写入与逐项回读核对全部在服务层单一口径，本层只做输入、确认、进度与结果展示。
 /// 作用域与冻结页面 write-probe 路由同一键（profile:{id}），同一配置同时只允许一个探测作业。
 /// </summary>
-internal sealed class CapabilitiesDialog : Form
+internal sealed class CapabilitiesDialog : DpiAwareForm
 {
     private readonly CompatService _compat;
     private readonly FileStore _store;
