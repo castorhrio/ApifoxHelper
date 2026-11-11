@@ -597,4 +597,214 @@ public class RealMachineEvidenceTests
         Assert.Contains("2026-11-20", sheet, StringComparison.Ordinal);
         Assert.Contains("不判", sheet, StringComparison.Ordinal);
     }
+
+    // ---------- 第一百八十七轮（简报 P0-1）：真机动作单「照抄即可」化 ----------
+
+    /// <summary>「照抄即可」三列那一节的标题前缀（三级标题，落在 G-D5 动作单那一节之内）。</summary>
+    private const string RunbookHeading = "### 七条动作的「照抄即可」三列";
+
+    /// <summary>三列小节的一行：动作序号 / 量什么数 / 数写在哪个控件上 / 归档文件名。</summary>
+    private readonly record struct RunbookRow(int Action, string Measure, string Slots, string Files);
+
+    /// <summary>三列小节那一节的正文行（标题行到下一个二级/三级标题之前）。</summary>
+    private static string[] RunbookLines()
+    {
+        var lines = ActionListLines();
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(RunbookHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的 G-D5 动作单里缺「{RunbookHeading}」这一节：真机到位当天仍要现场想"
+            + "「这个数写在哪个控件上、落进哪个文件名」，而现场想出来的判据等于没有判据。");
+        var end = Array.FindIndex(lines, start + 1,
+            l => l.StartsWith("## ", StringComparison.Ordinal) || l.StartsWith("### ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    private static List<RunbookRow> RunbookRows()
+    {
+        var rows = new List<RunbookRow>();
+        foreach (var line in RunbookLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            var number = Regex.Match(cells[0], @"^(\d+)\.");
+            if (!number.Success) continue;
+            Assert.True(cells.Count == 4,
+                $"「照抄即可」三列有一行不是 4 列（实际 {cells.Count} 列，应为 动作 / 量什么数 / 数写在哪个控件上 / 归档文件名）：{cells[0]}。");
+            rows.Add(new RunbookRow(int.Parse(number.Groups[1].Value), cells[1], cells[2], cells[3]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// 每条动作「数写在哪个控件上」的<b>预置槽位清单</b>（封闭的，第一百八十七轮，简报 P0-1）。
+    /// <para>
+    /// 写成字面量而不是从文档里抓，是为了挡住「自己发明一个控件名」：真机当天照着念的控件名如果只存在于
+    /// 这一份文档里，量的时候眼睛不知道往哪看，而「量到了」这句话仍然写得出来。加一条动作要同时改这里、
+    /// 动作单与 README，三处都改才算过。
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<int, string[]> PresetControlSlots = new()
+    {
+        [1] = ["系统显示设置", "主窗口边框", "阶段条", "下一步按钮", "注释缺口计数行"],
+        [2] = ["系统显示设置", "主窗口边框", "说明行", "状态行", "内容区滚动条", "底部按钮行"],
+        [3] = ["系统显示设置", "主窗口边框", "说明行", "副屏可用区"],
+        [4] = ["系统显示设置", "主窗口边框", "说明行"],
+        [5] = ["界面控件字体", "进程默认字体", "对话框字体", "数字列"],
+        [6] = ["计划预览计数行", "任务日志 journal.jsonl", "远端详情快照", "状态行"],
+        [7] = ["报告首行", "段标题行", "退出码"],
+    };
+
+    /// <summary>一个单元格里反引号点到的名字（去重、保序）。</summary>
+    private static List<string> Backticked(string cell) =>
+        Regex.Matches(cell, "`([^`]+)`").Select(m => m.Groups[1].Value.Trim()).Distinct(StringComparer.Ordinal).ToList();
+
+    /// <summary>
+    /// 七条动作的「照抄即可」三列：控件槽位只许点预置清单里的名字、归档文件名必须与 README 逐字一致、
+    /// 量什么数把 README 的量测项一项不落地说一遍（第一百八十七轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第一百七十八轮把「跑什么 / 放哪里 / 什么算过」钉住了，但真机到位当天仍有两处
+    /// 得现场想——<b>这个数写在界面的哪个控件上</b>、<b>这一行数落进哪个文件名</b>。前者决定量的时候眼睛往哪看，
+    /// 后者决定归档时不要另起一套命名。两处都是「现场想出来的判据」，而现场想出来的判据等于没有判据。
+    /// </para>
+    /// <para>
+    /// <b>判三件事</b>：① 每条动作的控件槽位<b>只许点 <see cref="PresetControlSlots"/> 里的名字</b>，
+    /// 且清单里每一个都要被点到（发明一个控件名即红，漏掉一个槽位也即红）；
+    /// ② 每条动作点到的归档文件名必须<b>逐字出现在 README 那一行的产出物清单里</b>（两边各写一套名字即红）；
+    /// ③ 每条动作的「量什么数」把 README 那一行「量测项」列的每一项都说一遍（改一处漏一处即红）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机有没有跑</b>（本机没有 Windows 图形子系统），也不判这些数在真机上
+    /// 到底是多少——它只保证「当天照着念的控件名与文件名，都是仓里已经定好的那一个」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ActionRunbook_NamesOnlyPresetControlSlotsAndRealArchiveFiles()
+    {
+        var rows = RunbookRows();
+        Assert.Equal(Enumerable.Range(1, 7), rows.Select(r => r.Action).OrderBy(n => n));
+
+        var artifacts = ArtifactRows().ToDictionary(r => r.Action);
+        foreach (var row in rows)
+        {
+            // ① 控件槽位：只许点预置清单里的名字，且清单里每一个都要点到。
+            var slots = Backticked(row.Slots);
+            Assert.True(slots.Count >= 2,
+                $"第 {row.Action} 条只点了 {slots.Count} 个控件槽位：一个槽位的「数写在哪里」等于没写。");
+            var preset = PresetControlSlots[row.Action];
+            var invented = slots.Where(s => !preset.Contains(s, StringComparer.Ordinal)).ToList();
+            Assert.True(invented.Count == 0,
+                $"第 {row.Action} 条点了预置清单外的控件名：" + string.Join(" ／ ", invented)
+                + "。真机当天照着念的控件名必须是仓里定好的那一个（清单在 " + nameof(PresetControlSlots) + "）。");
+            var missingSlots = preset.Where(p => !slots.Contains(p, StringComparer.Ordinal)).ToList();
+            Assert.True(missingSlots.Count == 0,
+                $"第 {row.Action} 条漏了这些控件槽位：" + string.Join(" ／ ", missingSlots)
+                + "。漏一个槽位，那个数当天就没人知道往哪看。");
+
+            // ② 归档文件名必须与 README 那一行逐字一致。
+            var files = Backticked(row.Files);
+            Assert.True(files.Count >= 1, $"第 {row.Action} 条没点归档文件名：归档时只能另起一套命名。");
+            foreach (var file in files)
+            {
+                Assert.True(Regex.IsMatch(file, @"\.(png|json|jsonl|txt)$"),
+                    $"第 {row.Action} 条点的「{file}」不是产出物文件名（应为 .png / .json / .jsonl / .txt）。");
+                Assert.True(artifacts[row.Action].Files.Contains(file, StringComparison.Ordinal),
+                    $"第 {row.Action} 条点的归档文件名「{file}」在 README 第 {row.Action} 行的产出物清单里找不到："
+                    + "两边各写一套名字，真机当天就会归档到没人判的名字上。");
+            }
+
+            // ③ 量什么数把 README 的量测项一项不落地说一遍。
+            var keys = artifacts[row.Action].Keys.Split(['、', '/', '；', ';'])
+                .Select(k => k.Trim().Trim('`', '*', ' '))
+                .Where(k => k.Length > 0)
+                .ToList();
+            var missingKeys = keys.Where(k => !row.Measure.Contains(k, StringComparison.Ordinal)).ToList();
+            Assert.True(missingKeys.Count == 0,
+                $"第 {row.Action} 条的「量什么数」漏了 README 点到的量测项：" + string.Join(" ／ ", missingKeys)
+                + "。三列是动作单的照抄版，不是另一份清单。");
+        }
+    }
+
+    /// <summary>「首程四站逐站预期」那一节的标题前缀（二级标题，落在归档 README 里）。</summary>
+    private const string JourneyHeading = "## 首程四站逐站预期";
+
+    /// <summary>四站表的一行：站 / 读哪一行 / 看哪个控件 / 点到哪一步 / 预期屏幕主张 / 归档文件名。</summary>
+    private readonly record struct JourneyRow(string Station, string Read, string Control, string Step, string Claim, string File);
+
+    private static string[] JourneyLines()
+    {
+        var lines = ReadmeText().Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(JourneyHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"缺「{JourneyHeading}」一节：产出物清单第 1 行只说「四站各一张截图」，真机当天仍要现场设计"
+            + "「每站读哪一行、点哪颗按钮、屏幕上该出现什么」。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    private static List<JourneyRow> JourneyRows()
+    {
+        var rows = new List<JourneyRow>();
+        foreach (var line in JourneyLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (cells[0] is not ("一" or "二" or "三" or "四")) continue;
+            Assert.True(cells.Count == 6,
+                $"四站表有一行不是 6 列（实际 {cells.Count} 列，应为 站 / 读哪一行 / 看哪个控件 / 点到哪一步 / 预期屏幕主张 / 归档文件名）：{cells[0]}。");
+            rows.Add(new JourneyRow(cells[0], cells[1], cells[2], cells[3], cells[4], cells[5]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// 首程四站逐站预期：四站各一行、每格不空、归档文件名与产出物清单第 1 行逐字一致
+    /// （第一百八十七轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：产出物清单第 1 行说「四站各一张截图 + `task.json` 与 `symbols.json` 副本」，
+    /// 但真机到位当天最容易卡住的不是拍照，是<b>每一站到底读哪一行、点哪颗按钮、屏幕上应该出现什么</b>。
+    /// 现场设计这一步，一天就废了——而「预期屏幕主张」这一格空着，走完四站也判不出「走通了没有」。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 四站各一行（一 / 二 / 三 / 四 各一次）；② 每行六格都不许空着；
+    /// ③ 每行点到的归档文件名必须逐字出现在产出物清单第 1 行里（两边各写一套名字即红）；
+    /// ④ 四站的名字（新建配置 / 新建任务 / 扫描 / 注释缺口）都在这一节里。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机有没有跑</b>，也不判「预期屏幕主张」写得对不对——那是真机当天
+    /// 照着核对的事，门只保证「当天有东西可核对」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void JourneyStations_EachHasItsExpectedClaimAndArchiveFile()
+    {
+        var rows = JourneyRows();
+        Assert.Equal(["一", "二", "三", "四"], rows.Select(r => r.Station));
+
+        var files = ArtifactRows().Single(r => r.Action == 1).Files;
+        foreach (var row in rows)
+        {
+            foreach (var (label, cell) in new[]
+                     {
+                         ("读哪一行", row.Read), ("看哪个控件", row.Control), ("点到哪一步", row.Step),
+                         ("预期屏幕主张", row.Claim), ("归档文件名", row.File),
+                     })
+            {
+                Assert.True(cell.Length >= 6,
+                    $"四站表第 {row.Station} 站的「{label}」格太短或空着（{cell}）：真机当天照着念不出来。");
+            }
+
+            var file = row.File.Trim('`');
+            Assert.True(files.Contains(file, StringComparison.Ordinal),
+                $"四站表第 {row.Station} 站点的归档文件名「{file}」在产出物清单第 1 行里找不到："
+                + "两边各写一套名字，真机当天就会归档到没人判的名字上。");
+        }
+
+        var section = string.Join('\n', JourneyLines());
+        foreach (var station in new[] { "新建配置", "新建任务", "扫描", "注释缺口" })
+        {
+            Assert.Contains(station, section, StringComparison.Ordinal);
+        }
+    }
 }

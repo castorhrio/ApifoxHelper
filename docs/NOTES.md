@@ -19,7 +19,7 @@
 | [x] | G-D3 状态完备：每屏有状态表，空态/加载/执行中/错误/禁用/部分完成逐态定义 | 达成（读取失败态每屏都有「重试」；长内容区一律经滚动工厂；状态行放不下给入口） | `ApifoxHelper.Tests/LoadFailureRetryCoverageTests.cs` 的 `LoadFailureRetryCoverageTests.EveryFailureScreen_HasOneRetryButtonFromTheSharedLabel`、`ScrollHostTests.DesignDoc_DeclaresLongContentHost`、`StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost` | 最近一次真跑：第一百八十五轮（`bash .winecheck/demo.sh` 在当前源码上复跑三档，**含本段**，206 通过 / 0 失败 ×3、逐屏对账 0 处对不上）；读数出处：第一百七十七轮三档复跑 `RunDialogStatusSweep` 15 屏 × 3 段 = 45 段在三档各跑一次（180 通过 / 0 失败 ×3 = 第一百六十六轮的 135 + 45）；第一百六十七轮三屏四段 12 通过 / 0 失败 ×3（本节第二段）；第一百八十四轮把 `RunDialogStatusSweep` 每屏补到四段（加「点开读全」一段，15 屏 × 4 段 = 60 段，三档各跑一次），200 = 180 + 15（那一轮新增的 15 段「点开读全」）+ 5（第一百八十三轮新增）；**第一百八十五轮新增提示对话框「复制路径」真点闭环 6 段（`RunNoticeCopyClick`，三档各跑一次），206 = 200 + 6** |
 | [x] | G-D4 中文排版：对照共享审查清单 A 节机械检查 | 达成（可源码判定的条目全绿）。第一百六十九轮把这一行原先挂到「渲染期属性」的三条里两条拉回可判：**中英文空隙**静态可判（还原字面量 = 剥插值空洞 + 解转义，再判紧贴），**行首行尾禁则**在唯一会折行的交付面（导出 HTML）上落成 `HtmlStyle` 的 `line-break:strict;word-break:normal`，**第一百七十轮起同一份产物交给 headless Chromium 排版量过一次**（禁字起行 0 处、开号收尾 0 处，窄容器 17 档合计 61 行）；**正文行长**同一面落成 `max-width:40em`，真浏览器里解析成 640px 而视口 1280px。**本机不可判别的那半截要说清**：`auto`/`strict`/`loose` 与不写排出来逐档相同，禁则成立不能归因给那条声明，读数与挂账见「真浏览器布局门（HTML 折行）」一节。**第一百七十一轮起这一节的挂账还必须写明「最近一次真跑是哪一轮、哪一天」**，并由 `HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun` 不分路径核（那一行被写坏会一直绿到真需要读它的那天）；同轮答辩口径补第四块「排版归因」，把「禁则为什么成立、功劳不记在一条属性头上」正面写进口径而不是等被追问。仍随 G-D5 真机复核的只剩「界面标签在实际字体度量下到底折不折行」与字距非负。五条硬项各自的落地面见 `docs/DESIGN.md` §6「中文排版」 | `TypographyTests.NoFakeItalic`、`TypographyTests.FontStack_MatchesDesignDocOrder`、`TypographyTests.Copy_ChineseQuotesOnlyUseCornerBrackets`、`TypographyTests.FontFloor_Is12Px`、`TypographyTests.Copy_AvoidsEmptySloganWords`、`TypographyTests.ChineseCopy_LeavesASpaceBetweenChineseAndLatin`、`TypographyTests.DesignSection3_HasExactlyFourFontTiers`、`TypographyTests.DesignDoc6_DeclaresTheTypographyClauseWithFiveItems`、`ReportTypographyTests.HtmlStyle_EnforcesTheChineseLineBreakProhibition`、`ReportTypographyTests.RenderedCopy_LeavesASpaceBetweenChineseAndLatin`、`HtmlWrapTests.DeliveredHtml_KeepsForbiddenPunctuationOffTheLineStart`、`HtmlWrapTests.DeliveredHtml_WrapsInsideTheFortyEmColumnNotTheViewport`、`HtmlWrapTests.TheDetector_ReportsTheBreakItForcedInsideTheArtifactOwnSentences`、`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo`、`DefenseNarrativeTests.Narrative_EveryBlockCitesASectionThatActuallyExists`、`HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun` | 第一百六十九轮 wine 三档 135 通过 / 0 失败 ×3（重发冒烟器后 `.winecheck/demo.sh` 复跑；`PASS ProfileAdvancedDialog（模块与模板）` 在本轮改动之后，**构造通过不等于说明行放得下**——`RunCaptionFit` 量的是同步预览 / 报告与交接 / 代码证据三屏，这一屏的文字宽 / 可用宽随 G-D5；**模拟器，不是真机**）。**当前源码最近一次三档复跑为第一百八十五轮 206 通过 / 0 失败 ×3（`bash .winecheck/demo.sh`，逐屏对账 0 处对不上）**——那一格记的是本轮新增「复制路径」真点闭环 6 段（206 = 200 + 6），与本行判的排版读数不是同一件事：本行判的是**导出 HTML 的折行**，它以「真浏览器布局门（HTML 折行）」一节登记的那一次真浏览器运行（第一百七十一轮 · 2026-11-11 · Playwright chromium-1248）为准，wine 三档复跑不动那一节的账 |
 | [ ] | G-D5 真机观感：100% 与 200% DPI 截图各一套并按状态归档，观感由人复核 | **未达成（环境供给缺口）**：真机 0 台，`docs/evidence/real-machine/` 里只有一份 README（第一百七十八轮新增，九个归档子目录一个都不存在）；现有 GUI 证据全部来自 Linux 容器内 wine 10.0 + Xvfb。到期日 2026-11-20（第一百八十轮记：距今 9 天）；届时仍不可得按「降级答辩脚本」逐屏答辩，**判定动作与回写路径见下一节开头那三行**（谁在何时决定、回写到哪一行、由哪条断言核回写）；机器一到手，第一天照下一节「G-D5 真机复核清单（可勾选）」逐条跑。**第一百七十四轮把第 1 条不依赖 Windows 的那半截量到了**：`dotnet publish` 按 `publish.ps1` 的参数在 Linux 上出自包含单文件（退出码 0、目录内一个文件、字节读数记在该节引言），README 念的用法与产物路径逐字对到脚本字面量——**这一行仍留空框**，缺的是「双击它 → 首程四站」与真机截图，本机一次都没量到 | `ApifoxHelper.Tests/WordingHonestyTests.cs` 的 `WordingHonestyTests.RealMachineClaims_RequireEvidencePaths`、`WordingHonestyTests.DegradationScript_ExistsAndCoversEveryScreen`、`WordingHonestyTests.Readme_StatesTheRealMachineGap`、`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`、`ApifoxHelper.Tests/PublishScriptTests.cs` 的 `PublishScriptTests.PublishUsage_DocumentedSwitchesAreTheDeclaredOnes`、`PublishScriptTests.PublishedPaths_InReadme_AreTheOnesTheScriptComputes`、`PublishScriptTests.LocalPublishReading_IsRecordedAndKeepsTheRealMachineGap`、`RealMachineEvidenceTests.Readme_CoversEveryArchiveDirectoryTheActionListNames`、`RealMachineEvidenceTests.CheckedAction_RequiresItsArchiveDirectoryToHoldFiles`、本节下方的「降级答辩脚本」 | 第一百六十七轮 wine 三档 135/0 ×3（`.winecheck/demo.sh` 一条命令复跑；**模拟器，不是真机**）；**读数更新（第一百八十五轮）：当前源码三档 206 通过 / 0 失败 ×3、逐屏对账 0 处对不上**（`bash .winecheck/demo.sh`）；「提示对话框复制路径」这项里，**「粘贴出来的是不是屏幕上那一行」已在 Linux 侧 wine 模拟器量过**（第一百八十五轮 `RunNoticeCopyClick`：真点那颗按钮 → 按钮说「复制成功」→ 把剪贴板读回来逐字比对（52 字逐字相同）→ 按钮宽度三档点了之后未变 → 真点那颗「关闭」关掉这一屏；**模拟器，不是真机**），**仍随本行挂账到真机复核的是**「按钮实际观感、Tab 可达、用户在自己机器上粘贴时的手感」这三项——挂账位置在 `ApifoxHelper.Tests/NoticeCopyTests.cs` 的类注释里（那一处已按本轮结果改写），真机到位时按那一处逐项量 |
-| [ ] | G-D6 退场：原 Web 页面从用户路径移除 | **未达成**：页面层已冻结、默认入口已翻转为原生（见 G-D1），但 `--web` 回退仍在，退场清单未执行——按决定，最终移除排在 G-D5 真机复核之后 | `Desktop/DesktopApp.cs`、`LaunchOptionsTests.WebFlag_SelectsTransitionShell`（回退入口存在即「未退场」，这条断言钉的是回退行为不是退场完成） | 不经界面（入口路由判定） |
+| [ ] | G-D6 退场：原 Web 页面从用户路径移除 | **未达成**：页面层已冻结、默认入口已翻转为原生（见 G-D1），但 `--web` 回退仍在——按决定，最终移除排在 G-D5 真机复核之后。第一百八十七轮把「退场那天要删哪几行」从一句话落成**七条可勾选**（见本文件「G-D6 退场清单（可勾选）」一节，第 4 条路由去留是决定项） | `Desktop/DesktopApp.cs`、`LaunchOptionsTests.WebFlag_SelectsTransitionShell`（回退入口存在即「未退场」，这条断言钉的是回退行为不是退场完成）、`AcceptanceChecklistTests.ExitChecklist_EveryItemPointsToRealSymbols`（判七条每一行点到的文件 / 断言 / 符号都真的在仓里） | 不经界面（入口路由判定） |
 
 ### 二、SHARED 写入安全不变量（`docs/方案.md` §8 产品红线）
 
@@ -81,6 +81,30 @@
 
 **第 6 条的前置信息（真机到位前由用户填，空着就是「还没授权，不许写」）**：授权人 ______；测试项目 ID ______；分支名 ______；可写范围（接口/模型清单）______。
 
+### 七条动作的「照抄即可」三列（量什么数 / 数写在哪个控件上 / 归档文件名）
+
+> **这一节解决什么**：上面那 7 行动作单与 `docs/evidence/real-machine/README.md` 的产出物清单已经把「跑什么、放哪里、
+> 什么算过」钉住了，但真机到位当天仍有两处得现场想：**这个数到底写在界面的哪个控件上**、**这一行数落进哪个文件名**。
+> 前者决定「量的时候眼睛往哪看」，后者决定「归档时不要另起一套命名」。这一节把这两列补到照抄粒度——
+> 动作单与 README 一个字都不改（改的是粒度，不是判定）。
+>
+> **机械门**：`ApifoxHelper.Tests/RealMachineEvidenceTests.cs` 的
+> `RealMachineEvidenceTests.ActionRunbook_NamesOnlyPresetControlSlotsAndRealArchiveFiles` 判三件事——
+> ① 每条动作的「数写在哪个控件上」只许点**预置槽位清单里的名字**（自己发明一个控件名即红）；
+> ② 每条动作点到的归档文件名必须**逐字出现在 README 那一行的产出物清单里**（两边各写一套名字即红）；
+> ③ 每条动作的「量什么数」把它在 README 里被点到的量测项一项不落地说一遍（改一处漏一处即红）。
+> 它**不判真机有没有跑**（同本节开头那句：有门不等于过了）。
+
+| 动作 | 量什么数 | 数写在哪个控件上 | 归档文件名 |
+| --- | --- | --- | --- |
+| 1. 首程四站 | 逐站可达（四站各一张截图）、每站只给一个「下一步」且那颗按钮真实存在；客户区宽高、当前缩放档、该站「下一步」按钮上的文字；`task.json` 里的阶段数、`symbols.json` 里的注释位点总数 | `系统显示设置`（缩放档：设置 → 系统 → 显示 → 缩放）、`主窗口边框`（客户区宽高）、`阶段条`（阶段数）、`下一步按钮`（按钮上的文字）、`注释缺口计数行`（注释位点总数） | `journey-1-新建配置.png`、`journey-2-新建任务.png`、`journey-3-扫描.png`、`journey-4-注释缺口.png`、`task.json`、`symbols.json` |
+| 2. 三档 DPI 各一套 | 客户区宽高、说明行与状态行的文字宽 / 可用宽、是否出现横向滚动条、底部按钮是否被裁；与 wine 三档可用宽 988 / 1243 / 1576px 逐屏对照 | `系统显示设置`（这一档是 100% / 125% / 200%）、`主窗口边框`（客户区宽高）、`说明行`（文字宽 / 可用宽）、`状态行`（文字宽 / 可用宽）、`内容区滚动条`（有 / 无）、`底部按钮行`（是否被裁） | `<档位>-主窗口.png`、`<档位>-新建配置.png`、`<档位>-补充说明.png`、`<档位>-模型服务.png` |
+| 3. 多显示器混合缩放 | 拖动之后窗体尺寸、控件宽、说明行可用宽有没有按副屏那一档重算；因子（该屏 DPI ÷ 96）、客户区宽、说明行可用宽三行数 | `系统显示设置`（两块屏各自的缩放档）、`主窗口边框`（窗体尺寸与客户区宽）、`说明行`（可用宽）、`副屏可用区`（被屏幕可用区截断时，截断前后两个数都写） | `mixed-dpi-拖动前.png`、`mixed-dpi-拖动后.png`、`mixed-dpi-读数.txt` |
+| 4. 运行中改缩放 | 已开着的那一屏是否跟随、新建的那一屏用的是新因子还是旧因子；两屏各自的因子与客户区宽 | `系统显示设置`（改档前后各记一次）、`主窗口边框`（两屏客户区宽）、`说明行`（可用宽） | `scale-change-已开着.png`、`scale-change-新建.png`、`scale-change-读数.txt` |
+| 5. 真机字体度量 | 三类文字是否同一份实际渲染名、数字列在筛选 / 刷新前后会不会左右跳 | `界面控件字体`、`进程默认字体`、`对话框字体`（三行各抄一个实际命中的字体名）、`数字列`（左右边界各记一个数） | `fonts-计数行与差异文本.png`、`fonts-渲染字体名.txt` |
+| 6. SHARED-3/4/7/8 端到端 | 只写了计划内资源（计划内资源条数与远端资源条数）、执行前重读并核对指纹、创建防重与 ID 回绑、未确认的高风险项不进计划且没有任何删除动作（删除动作一条都不许有）；部分失败后停在第几个动作 | `计划预览计数行`（计划内几条 / 远端几条）、`任务日志 journal.jsonl`（每个动作的指纹与最终状态）、`远端详情快照`（写入前后的远端条数与 ID）、`状态行`（失败那一屏的原文，不许出现「全部成功」） | `plan.json`、`journal.jsonl`、`remote-before.json`、`remote-after.json`、`partial-failure.txt` |
+| 7. 冒烟器在真机跑一次 | 报告总通过 / 失败数、每一段的段名（段标题带 `[RunXxx]`）、与 wine 是否出现同一段的判断不同 | `报告首行`（总通过 / 失败数）、`段标题行`（段名逐个抄）、`退出码`（进程退出码） | `smoke-report.txt` |
+
 ### 到期日当天执行单（2026-11-20，5 分钟走完）
 
 > **这一页解决什么**：上面那三行定死了「谁在何时决定、回写到哪一行、由哪条断言核回写」，但**当天要跑什么命令、读哪份文件、写回哪一行**此前散在三处（本节开头的三行 blockquote、本文件的「降级答辩脚本」、`docs/evidence/real-machine/README.md`）。到期日当天人的注意力有限，散在三处 = 现场翻文档 = 出错。这一页把三步收成一条线，**照编号走，不跳步**。
@@ -103,6 +127,32 @@
    - 写回哪：两处同时写——`docs/NOTES.md` 顶部验收表的 G-D5 行「当前结论」格，与 `README.md`「已知限制」第 1 条；「按降级路径执行」或「延后至 <日期>」这句判定两处必须逐字一致，只改一处等于留下两套说法
 
 > **走完之后**：`RealMachineEvidenceTests.DueDateRunSheet_HasThreeStepsEachAnchoredToARealArtifact` 判这一页三步各被点到一次、每步至少引一条仓内实物（命令 / 文件 / 断言）、第 3 步点名的两处回写落点与本节开头 ② 逐字一致；`RealMachineEvidenceTests.DueDate_HasADecisionAction` 判三行本身在不在。**两条门绿不等于 G-D5 达成**——它们只保证「当天走得完、写回不漂」。
+
+## G-D6 退场清单（可勾选）
+
+> **这一节是什么**：验收表里 G-D6（原 Web 页面从用户路径移除）留 `[ ]`，原因只有一条——`--web` 回退还在。
+> 按决定，最终移除**排在 G-D5 真机复核之后**（真机 0 台，到期日 2026-11-20），所以本轮**不执行退场**，
+> 只把「退场那天要删哪几行、改哪几段、哪条断言跟着删」落成逐项可勾选。此前它只是一句话；
+> 一句话的退场清单在任何一轮都能被读成「还剩一件事」，而实际是七件、分散在五个文件里。
+>
+> **怎么用**：G-D5 那一节全部勾完之后再动这一节，按编号自上而下删。**第 4 条是决定项，必须先答再动手**——
+> 删了页面却留着 `/api/session` 的会话令牌注入，等于把凭据接口留在没有调用方的服务上。每勾一条，
+> 就在本文件的当轮记录里写一句「删掉的是哪一行、哪条断言跟着删」。
+>
+> **机械门**：`ApifoxHelper.Tests/AcceptanceChecklistTests.cs` 的
+> `AcceptanceChecklistTests.ExitChecklist_EveryItemPointsToRealSymbols` 判本表每一行反引号里点到的
+> **文件 / 断言名 / 代码符号**都真的在仓里（编一个不存在的类名即红，把一个符号挪到别的文件也即红）。
+> 它**不判退场有没有执行**——G-D6 在验收表上仍是 `[ ]`，勾选框只由「删干净 + 三档复跑全绿」关闭。
+
+| 勾选 | 退场项 | 删 / 改哪一处（精确到文件与符号） | 验收标准 |
+| --- | --- | --- | --- |
+| [ ] | 退场 1 · 删 `--web` 的参数解析 | `Desktop/LaunchOptions.cs`：`case "--web":` 分支与 `web = true;`、记录上那个 `bool Web = false` 形参、`Usage` 文案里的 `[--web]` 与第二行那句 `--web 打开冻结的过渡壳` | `ApifoxHelper.exe` 带 `--web` 时按既有「未知参数」口径拒绝并退出（不是静默忽略）；`--native` 仍被接受（它是兼容写法，与退场无关） |
+| [ ] | 退场 2 · 删过渡壳分支 | `Desktop/DesktopApp.cs`：`if (options.Web)` 分支与其中的 `new MainForm(host)` | 入口只剩三条：`options.Headless`、原生默认、无参默认；两壳不再并存，删完后这段代码里不再出现任何 `Web` 分支 |
+| [ ] | 退场 3 · 删过渡壳窗口与 WebView2 依赖 | `Desktop/MainForm.cs`（`MainForm` 整份）与 `ApifoxHelper.csproj` 里的 `PackageReference` `Microsoft.Web.WebView2`、`ExcludeWebView2Wpf` 那条 Target | `dotnet build` 0 警告 0 错误；产物不再需要 WebView2 运行时（与第 7 条删 README 的运行时要求同步） |
+| [ ] | 退场 4 · 路由去留（**决定项，先答再动**） | `Api/HelperHost.cs` 的 `WebAssets.Map(_app, Security)` 一行；`Api/ApiRoutes.cs` 的 `app.MapGet("/api/session"` 与 `app.MapPost("/api/local/pick-folder"` 两支；`Api/ApifoxRoutes.cs` 整份 | 二选一并在本文件写清选了哪一支：① 页面层独有的路由随页面一起删（原生壳走进程内服务）；② 保留本地服务能力，但删掉首页 / 静态资源与会话令牌注入。**不许留一半** |
+| [ ] | 退场 5 · 删页面层资源 | `Api/WebAssets.cs`（`WebAssets` 整份）与 `Web/index.html`、`Web/app.js`、`Web/app.css`，以及 `ApifoxHelper.csproj` 里那三条 `EmbeddedResource Include="Web\index.html"` 一类条目（`Web\app.js`、`Web\app.css` 各一条） | 产物里不再有页面资源（解包后搜不到 `Web.index.html` 这个 LogicalName）；`Api/HelperHost.cs` 里那行 `WebAssets.Map` 已在第 4 条删掉 |
+| [ ] | 退场 6 · 删测试与冒烟里的回退断言 | `ApifoxHelper.Tests/LaunchOptionsTests.cs` 的 `LaunchOptionsTests.WebFlag_SelectsTransitionShell`（整条删）与 `LaunchOptionsTests.Headless_CanCombineWithShellFlag_BothRecorded` 里的 `--web` 那半 | 测试总数按删除条数下降且全绿；**不许**把 `--web` 改判成「忽略未知参数」蒙过去（那等于把退场做成静默忽略） |
+| [ ] | 退场 7 · 改文档口径 | `README.md`：`过渡壳窗口功能` 整节、命令行参数那节的 `--web` 一行、WebView2 运行时要求那一条；`docs/NOTES.md` 顶部验收表的 G-D6 行与 G-D1 行里「`--web` 只是显式回退」那句 | 三处文档同一轮改完；`WordingHonestyTests` 与 `AcceptanceChecklistTests` 全绿；G-D6 行改 `[x]` 时三档复跑读数必须已更新到当轮 |
 
 ## 已核实的环境事实（2026-10-31）
 

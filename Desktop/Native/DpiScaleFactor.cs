@@ -79,6 +79,69 @@ internal static class DpiScaleFactor
     public static float ScaleStep(float appliedFactor, float targetFactor) => targetFactor / appliedFactor;
 
     /// <summary>
+    /// 台账上的「已经应用到哪一档」能不能参与比值。只有正数才行。
+    /// <para>
+    /// <b>为什么这一条也要判</b>：<see cref="ScaleStep"/> 是除法（目标 ÷ 已应用）。台账上若是 0，
+    /// 步长算出无穷大，<c>Control.Scale</c> 拿到一个非有限数——那不是「缩放没生效」，是整棵子树的
+    /// 边界变成 NaN 之后再也回不来，且<b>不会有任何一条既有断言报红</b>（真值表只喂正数）。
+    /// 台账由 <see cref="DpiScale.Apply"/> 写下，正常路径只可能是正数；这一条挡的是「有人写了个 0 进来」
+    /// 那一类，而不是在猜一个真实的档位。
+    /// </para>
+    /// </summary>
+    public static bool IsUsableFactor(float factor) => factor > 0f;
+
+    /// <summary>
+    /// 一次 DPI 变更要落的三种结果：控件树的缩放步长、客户区的绝对尺寸、以及台账要推进到的那一档。
+    /// 四个数一起给，是因为它们在 <see cref="DpiScale.RescaleOnDpiChanged"/> 里必须同进同出——
+    /// 只给出其中一个、另外几个在窗体里另算，就是这一族最初那两处漂移的由来。
+    /// </summary>
+    /// <param name="Step">控件树的相对缩放步长（<see cref="ScaleStep"/>）。</param>
+    /// <param name="ClientWidth">客户区宽度（设计宽 × 目标因子，<see cref="ScaledExtent"/>）。</param>
+    /// <param name="ClientHeight">客户区高度（同上）。</param>
+    /// <param name="AppliedFactor">这次要推进到的目标因子。</param>
+    /// <remarks>
+    /// 写成引用型 record 而不是 <c>record struct</c>：<see cref="PlanRescale"/> 用 <c>null</c> 表示
+    /// 「这一条消息不动布局」，而 <c>struct?</c> 在调用侧要写 <c>plan.Value.Step</c> 才能取到字段——
+    /// 那一层 <c>.Value</c> 正是「有人顺手在窗体里再算一遍」的入口。引用型 record 让
+    /// <c>if (plan is null) return;</c> 之后直接 <c>plan.Step</c>，窗体那一侧只剩三个动作。
+    /// 每次 DPI 变更只分配一个对象，与一次整棵控件树重排相比可以忽略。
+    /// </remarks>
+    public sealed record DpiRescalePlan(
+        float Step,
+        int ClientWidth,
+        int ClientHeight,
+        float AppliedFactor);
+
+    /// <summary>
+    /// 一次 DPI 变更的<b>全部判断与全部算术</b>：该不该重算、按几倍缩放控件树、客户区多大、
+    /// 台账推进到哪一档。回 <c>null</c> = 这一条消息不动任何布局。
+    /// <para>
+    /// <b>为什么这些判断要在一处</b>：第一百六十二轮的溢出与第一百七十五轮那两档挂账，缺的从来不是
+    /// 「会不会算」，而是<b>每一处调用都自己判一遍</b>——四处判断各写一份时，改一处漏一处不会有东西报红，
+    /// 而漏掉的那一处在真机上表现为「拖到副屏没重算」这种没人量得到的样子。抽到这里之后，
+    /// 窗体那一侧只剩三个动作（缩放控件树、设客户区、推进台账），判断只有一份，真值表在 Linux 上跑的就是它。
+    /// </para>
+    /// <para>
+    /// <b>五类输入都回得出来</b>（真值表见 <c>ApifoxHelper.Tests/DpiScaleTests.cs</c>）：
+    /// 新 DPI 高于当前 / 低于当前 / 等于当前 / DPI 为 0 或负数 / 台账因子为 0 或负数。
+    /// 后两类与「等于当前」一律回 <c>null</c>——<b>不动布局</b>，也不抛异常。这条「不抛」是判据本体：
+    /// 变更消息是系统发过来的，处理里抛出去等于把一次缩放变成一次未处理异常。
+    /// </para>
+    /// </summary>
+    public static DpiRescalePlan? PlanRescale(int newDpi, float appliedFactor, int designWidth, int designHeight)
+    {
+        if (!IsUsableDpi(newDpi)) return null;
+        if (!IsUsableFactor(appliedFactor)) return null;
+        var target = FromScreenDpi(newDpi);
+        if (!ShouldRescale(appliedFactor, target)) return null;
+        return new DpiRescalePlan(
+            ScaleStep(appliedFactor, target),
+            ScaledExtent(designWidth, target),
+            ScaledExtent(designHeight, target),
+            target);
+    }
+
+    /// <summary>
     /// 按因子取客户区的一条边长。远离零取整：<c>(int)</c> 的截断会让每一档都系统性偏小半个像素，
     /// 而这一屏的判据正是「放得下 / 放不下」，差的那半像素落在错误一侧时，读数就与真机不一致。
     /// </summary>

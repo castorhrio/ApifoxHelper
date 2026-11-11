@@ -170,10 +170,14 @@ public class DpiScaleTests
         var cumulative = 1f;
         foreach (var dpi in new[] { 192, 96, 192 })
         {
-            var target = DpiScaleFactor.FromScreenDpi(dpi);
-            if (!DpiScaleFactor.ShouldRescale(applied, target)) continue;
-            cumulative *= DpiScaleFactor.ScaleStep(applied, target);
-            applied = target;
+            // 走的是生产路径（PlanRescale），不是把三个算式在测试里再拼一遍：
+            // 拼一遍的话，窗体那一侧漏掉其中一步，这一条照样绿。
+            var plan = DpiScaleFactor.PlanRescale(dpi, applied, 1020, 740);
+            if (plan is null) continue;
+            cumulative *= plan.Step;
+            applied = plan.AppliedFactor;
+            // 客户区永远按「设计尺寸 × 目标因子」绝对重算，与中间走了几步无关（100% 那一档就是 1020）。
+            Assert.Equal(DpiScaleFactor.ScaledExtent(1020, plan.AppliedFactor), plan.ClientWidth);
         }
 
         Assert.Equal(2f, cumulative);
@@ -198,6 +202,81 @@ public class DpiScaleTests
     [InlineData(1025, 1.5f, 1538)]   // 半像素：远离零取整，不是截断
     public void ScaledClientExtent_GrowsWithTheFactorAndRoundsAwayFromZero(int designExtent, float factor, int expected) =>
         Assert.Equal(expected, DpiScaleFactor.ScaledExtent(designExtent, factor));
+
+    /// <summary>
+    /// 变更期五类输入的真值表（第一百八十六轮，简报 P0-2）：新 DPI 高于当前 / 低于当前 / 等于当前 /
+    /// DPI 为 0 或负数 / 台账因子为 0 或负数。
+    /// <para>
+    /// <b>为什么这一条值得单独钉</b>：第一百七十五轮把变更接上了，但「接上了」与「接对了」之间隔着
+    /// 五类输入——本机既没有副屏、wine 也不自发那条消息，所以这五类在真机上各是什么表现<b>一个都没量过</b>。
+    /// 能提前钉住的只有一件事：<b>无论哪一类输入，都不许抛异常、也不许算出非正尺寸</b>。
+    /// 抛出去等于把一次缩放变成一次未处理异常（消息是系统发来的，没人接得住）；
+    /// 算出 0 或负数等于把一屏布局压成一条线，而那种屏在任何读数里都不会被认出来。
+    /// </para>
+    /// <para>
+    /// 前两档（高于 / 低于当前）必须给出<b>正</b>步长与<b>正</b>客户区，且客户区按设计尺寸 × 目标因子
+    /// 绝对重算（不是「在当前尺寸上再乘一次」）；后三档一律回 <c>null</c> = 不动布局。
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(192, 1f, 2f, 2040, 1480)]      // 高于当前：100% → 200%
+    [InlineData(96, 2f, 0.5f, 1020, 740)]      // 低于当前：200% → 100%（缩小在变更期是恢复，不是猜）
+    [InlineData(120, 1f, 1.25f, 1275, 925)]    // 高于当前：100% → 125%
+    [InlineData(192, 1.25f, 1.6f, 2040, 1480)] // 高于当前：125% → 200%（步长是比值 1.6，不是 2）
+    public void PlanRescale_HigherOrLowerDpi_GivesPositiveStepAndAbsoluteExtent(
+        int newDpi, float applied, float step, int clientWidth, int clientHeight)
+    {
+        var plan = DpiScaleFactor.PlanRescale(newDpi, applied, 1020, 740);
+
+        Assert.NotNull(plan);
+        Assert.Equal(step, plan!.Step);
+        Assert.Equal(clientWidth, plan.ClientWidth);
+        Assert.Equal(clientHeight, plan.ClientHeight);
+        Assert.Equal(DpiScaleFactor.FromScreenDpi(newDpi), plan.AppliedFactor);
+
+        // 判据本体：不产生非正尺寸、不产生非正步长（0 会让 Control.Scale 把整棵子树压成一条线）。
+        Assert.True(plan.Step > 0f, $"步长必须为正，实际 {plan.Step}。");
+        Assert.True(plan.ClientWidth > 0 && plan.ClientHeight > 0,
+            $"客户区必须为正，实际 {plan.ClientWidth}×{plan.ClientHeight}。");
+    }
+
+    /// <summary>
+    /// 另外三类输入（等于当前 / DPI 读不出 / 台账因子不可用）一律<b>不动布局</b>，且不抛异常。
+    /// <para>
+    /// 「等于当前」回 <c>null</c> 而不是回一个步长 1 的计划：<c>Scale(1,1)</c> 在数学上是恒等，
+    /// 但仍会重排整棵子树——「因子没变就不该重排」这句话要靠这一条成立。
+    /// 「DPI 读不出」回 <c>null</c> 而不是回落到 1：变更期把读不出的 DPI 当成 100%，等于把一屏已经放大的
+    /// 布局整个收回去（口径见 <see cref="DpiScaleFactor"/> 的类注释）。
+    /// 「台账因子为 0 或负数」回 <c>null</c>：步长是除法，0 会算出无穷大，<c>Control.Scale</c> 拿到非有限数
+    /// 之后整棵子树的边界再也回不来，而<b>不会有任何一条既有断言报红</b>（真值表此前只喂正数）。
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(120, 1.25f)]   // 等于当前：因子没变
+    [InlineData(96, 1f)]       // 等于当前（100% 档）
+    [InlineData(0, 1f)]        // DPI 读不出
+    [InlineData(-96, 1f)]      // DPI 为负
+    [InlineData(192, 0f)]      // 台账因子为 0：比值会除出无穷
+    [InlineData(192, -1f)]     // 台账因子为负
+    public void PlanRescale_UnusableInput_ReturnsNoPlanAndNeverThrows(int newDpi, float applied)
+    {
+        var plan = DpiScaleFactor.PlanRescale(newDpi, applied, 1020, 740);
+        Assert.Null(plan);
+    }
+
+    /// <summary>
+    /// 台账因子可用性只有一条口径：正数才算可用（<see cref="DpiScaleFactor.IsUsableFactor"/>）。
+    /// 这一条与上一支分开写，是因为上一支判的是「计划回 null」，而这一支判的是<b>那个判子本身</b>——
+    /// 把判子改成 <c>&gt;= 0</c> 时，0 那一档会从「不动布局」变成「除出无穷」，上一支仍绿。
+    /// </summary>
+    [Theory]
+    [InlineData(1f, true)]
+    [InlineData(0.5f, true)]
+    [InlineData(2f, true)]
+    [InlineData(0f, false)]
+    [InlineData(-1f, false)]
+    public void UsableFactor_OnlyPositiveValuesDriveARescale(float factor, bool expected) =>
+        Assert.Equal(expected, DpiScaleFactor.IsUsableFactor(factor));
 
     /// <summary>
     /// <c>DpiScale.Apply</c> 的接线：字体与设计基准同源、关掉框架自动缩放、按设计尺寸给客户区、
@@ -262,63 +341,108 @@ public class DpiScaleTests
             "Apply 末尾没登记台账：重算那一段拿不到设计尺寸与已应用因子，挂账那两档照旧停在创建那一刻。");
 
         var body = RescaleBody();
+
+        // ① 判断与算术只有一处：整次重算由 PlanRescale 一次给出（第一百八十六轮收口）。
         Assert.True(
-            Regex.IsMatch(body, @"^\s*var newDpi = DpiScaleFactor\.NewDpiFromWParam\(wParam\);$", RegexOptions.Multiline),
-            "新 DPI 不是从消息的 wParam 取的：换成框架那一份读数，wine 实测它会滞后在旧屏那一档。");
+            Regex.IsMatch(body, @"^\s*var plan = DpiScaleFactor\.PlanRescale\($", RegexOptions.Multiline),
+            "变更处理没有经 DpiScaleFactor.PlanRescale 取整次重算的计划：判断又散回窗体这一侧了。");
+        Assert.Contains("DpiScaleFactor.NewDpiFromWParam(wParam),", body, StringComparison.Ordinal);
+        Assert.Contains("track.AppliedFactor,", body, StringComparison.Ordinal);
+        Assert.Contains("track.DesignSize.Width,", body, StringComparison.Ordinal);
+        Assert.Contains("track.DesignSize.Height);", body, StringComparison.Ordinal);
         Assert.True(
-            Regex.IsMatch(body, @"^\s*if \(!DpiScaleFactor\.IsUsableDpi\(newDpi\)\) return;$", RegexOptions.Multiline),
-            "没有先挡掉读不出的 DPI：一个空的读数会把已经放大的布局整个收回去。");
+            Regex.IsMatch(body, @"^\s*if \(plan is null\) return;$", RegexOptions.Multiline),
+            "没有挡掉「这一条消息不动布局」那一支：空计划被当成计划用，等于拿一个空的设计尺寸去缩放。");
+
+        // ② 窗体这一侧只剩三个动作：缩放控件树（按比值步长）、设客户区（绝对尺寸）、推进台账。
         Assert.True(
-            Regex.IsMatch(body, @"^\s*var target = DpiScaleFactor\.FromScreenDpi\(newDpi\);$", RegexOptions.Multiline),
-            "变更期没有经 FromScreenDpi 算因子（缩放比只应有一处算法）。");
+            Regex.IsMatch(body, @"^\s*form\.Scale\(new SizeF\(plan\.Step, plan\.Step\)\);$", RegexOptions.Multiline),
+            "缩放控件树用的不是计划里那个比值步长。");
         Assert.True(
-            Regex.IsMatch(body, @"^\s*if \(!DpiScaleFactor\.ShouldRescale\(track\.AppliedFactor, target\)\) return;$", RegexOptions.Multiline),
-            "没有与台账上那一档比就该不该重排：因子没变也会重排整棵子树。");
+            Regex.IsMatch(body, @"^\s*form\.ClientSize = new Size\(plan\.ClientWidth, plan\.ClientHeight\);$", RegexOptions.Multiline),
+            "没有按计划里的绝对尺寸设客户区（绝对那一句是让最终尺寸与框架先做了什么无关的那一步）。");
         Assert.True(
-            Regex.IsMatch(body, @"^\s*var step = DpiScaleFactor\.ScaleStep\(track\.AppliedFactor, target\);$", RegexOptions.Multiline),
-            "没有按比值算缩放步长：控件树此刻已经是上一档放大过的那一份。");
-        Assert.True(
-            Regex.IsMatch(body, @"^\s*form\.Scale\(new SizeF\(step, step\)\);$", RegexOptions.Multiline),
-            "缩放控件树用的不是那个比值步长。");
-        Assert.True(
-            Regex.IsMatch(body, @"^\s*form\.ClientSize = new Size\(DpiScaleFactor\.ScaledExtent\(track\.DesignSize\.Width, target\),$", RegexOptions.Multiline),
-            "没有按设计尺寸与新因子绝对设客户区（绝对那一句是让最终尺寸与框架先做了什么无关的那一步）。");
-        Assert.Contains("DpiScaleFactor.ScaledExtent(track.DesignSize.Height, target)", body, StringComparison.Ordinal);
-        Assert.True(
-            Regex.IsMatch(body, @"^\s*track\.AppliedFactor = target;$", RegexOptions.Multiline),
+            Regex.IsMatch(body, @"^\s*track\.AppliedFactor = plan\.AppliedFactor;$", RegexOptions.Multiline),
             "台账没有推进到目标那一档：下一次变更会拿旧因子算比值。");
 
-        // 顺序：算步长 → 缩放控件树 → 绝对设客户区 → 推进台账。
-        // 推进排在算步长之前等于把旧因子丢了（下一档的比值算成 1）；绝对那一句排在缩放之前，
-        // 等于把刚乘完的边界又按设计尺寸覆掉一半。
-        var step = IndexOfCode(body, "var step = DpiScaleFactor.ScaleStep(track.AppliedFactor, target);");
-        var scale = IndexOfCode(body, "form.Scale(new SizeF(step, step))");
-        var clientSize = IndexOfCode(body, "form.ClientSize = new Size(DpiScaleFactor.ScaledExtent(track.DesignSize.Width");
-        var advance = IndexOfCode(body, "track.AppliedFactor = target;");
-        Assert.True(step >= 0 && step < scale && scale < clientSize && clientSize < advance,
-            $"变更处理这四步的顺序错了（算步长 {step} → 缩放 {scale} → 设客户区 {clientSize} → 推进台账 {advance}）。");
+        // ③ 顺序：取计划 → 缩放控件树 → 绝对设客户区 → 推进台账。
+        //    推进排在缩放之前等于把旧因子丢了（下一档的比值算成 1）；绝对那一句排在缩放之前，
+        //    等于把刚乘完的边界又按设计尺寸覆掉一半。
+        var planAt = IndexOfCode(body, "var plan = DpiScaleFactor.PlanRescale(");
+        var scale = IndexOfCode(body, "form.Scale(new SizeF(plan.Step, plan.Step))");
+        var clientSize = IndexOfCode(body, "form.ClientSize = new Size(plan.ClientWidth, plan.ClientHeight)");
+        var advance = IndexOfCode(body, "track.AppliedFactor = plan.AppliedFactor;");
+        Assert.True(planAt >= 0 && planAt < scale && scale < clientSize && clientSize < advance,
+            $"变更处理这四步的顺序错了（取计划 {planAt} → 缩放 {scale} → 设客户区 {clientSize} → 推进台账 {advance}）。");
 
-        // ① 不许再回主屏取一次因子。
+        // ④ 判断与算术不许在窗体这一侧再写一遍（第一百八十六轮）：四处判断各写一份正是这一族最初的形态，
+        //    改一处漏一处不会有东西报红，而漏掉的那一处在真机上表现为「拖到副屏没重算」。
+        foreach (var decision in new[]
+                 {
+                     "IsUsableDpi", "IsUsableFactor", "ShouldRescale", "ScaleStep", "ScaledExtent", "FromScreenDpi",
+                 })
+        {
+            Assert.False(CodeScan.HasLine(body, decision),
+                $"变更处理里又自己判了一遍 / 算了一遍（{decision}）：这些判断只应有一处，在 DpiScaleFactor.PlanRescale 里。");
+        }
+
+        // ⑤ 不许再回主屏取一次因子。
         foreach (var primaryScreen in new[] { "ScaleFactor()", "ScreenDpi()" })
         {
             Assert.False(CodeScan.HasLine(body, primaryScreen),
                 $"变更处理里又去取主屏的因子（{primaryScreen}）：窗口已经在副屏上时，这一档永远算不回副屏那一档。");
         }
 
-        // ② 不许在窗体代码里另算一份缩放比。
+        // ⑥ 不许在窗体代码里另算一份缩放比。
         Assert.False(Regex.IsMatch(CodeScan.Text(body), @"/\s*96"),
             "变更处理里直接除了一个 96：缩放比只应有一处算法（DpiScaleFactor.FromScreenDpi）。");
 
-        // ③ 不许按目标因子缩放控件树（只有比值那一种写法）。
-        Assert.False(CodeScan.HasLine(body, "form.Scale(new SizeF(target, target)"),
+        // ⑦ 不许按目标因子缩放控件树（只有比值那一种写法）。
+        Assert.False(CodeScan.HasLine(body, "form.Scale(new SizeF(plan.AppliedFactor, plan.AppliedFactor)"),
             "按目标因子缩放控件树：第一次看不出问题，来回切一次布局就叠成 4 倍。");
 
-        // ④ 不许读框架那一份 DPI 读数（wine 实测在这条消息里滞后）。
+        // ⑧ 不许读框架那一份 DPI 读数（wine 实测在这条消息里滞后）。
         foreach (var late in new[] { "DeviceDpi", "GetDpiForWindow" })
         {
             Assert.False(CodeScan.HasLine(body, late),
                 $"变更处理里读了 {late}：本轮 wine 实测这条消息到达时它还停在旧屏那一档，读了就等于永不重算。");
         }
+    }
+
+    /// <summary>
+    /// <c>wParam</c> 高位取 DPI 的移位常量只有一处（第一百八十六轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个盲区</b>：<see cref="DpiScaleFactor.NewDpiFromWParam"/> 里那个 <c>&gt;&gt; 16</c> 是
+    /// 「高位字 = 要去的那块屏」这条口径的<b>唯一</b>落点。它一旦被抄到第二处（例如窗体过程里顺手
+    /// <c>(int)(m.WParam &gt;&gt; 16)</c> 再传下去），两处就各自演化：改一处漏一处不会有东西报红，
+    /// 而取错一侧的后果不是「算错一个像素」，是<b>整次重算不发生</b>（因子算回 1，与修复前同一行为）——
+    /// 这一条在本机上不会有任何东西报红，所以只能靠「只许写一处」来钉。
+    /// </para>
+    /// <para>
+    /// <b>为什么放过 <c>UiTokens.cs</c></b>：那里也有一个 <c>&gt;&gt; 16</c>，取的是颜色的红通道
+    /// （<c>Color.FromArgb((rgb &gt;&gt; 16) &amp; 0xFF, …)</c>），与 DPI 消息无关。把它一起判红，
+    /// 下一轮只会把这条门放宽成没门——两个域各判各的，才是这条门能长期活着的前提。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HighWordShift_IsWrittenOnceAndOnlyInThePureFile()
+    {
+        var offenders = Repo.NativeSources()
+            .Where(src => src.Name is not ("DpiScaleFactor.cs" or "UiTokens.cs"))
+            .SelectMany(src => CodeLines(src.Text)
+                .Where(line => Regex.IsMatch(line, @">>\s*16\b"))
+                .Select(line => $"{src.Name}：{line.Trim()}"))
+            .ToList();
+        Assert.True(offenders.Count == 0,
+            "这些代码行自己从 wParam 里取了一次高位字（移位常量只应有一处，在 DpiScaleFactor.NewDpiFromWParam）："
+            + string.Join(" ／ ", offenders));
+
+        // 反向：那一处必须还在，且只有一处（删掉它，上面那条门会因为「没人取」而永远绿）。
+        var factor = Repo.Source("Desktop", "Native", "DpiScaleFactor.cs");
+        var shifts = CodeLines(factor).Where(line => Regex.IsMatch(line, @">>\s*16\b")).ToList();
+        Assert.True(shifts.Count == 1,
+            $"DpiScaleFactor.cs 里取高位字的代码行有 {shifts.Count} 处（应恰好 1 处，在 NewDpiFromWParam 里）。");
+        Assert.Contains("NewDpiFromWParam", shifts[0], StringComparison.Ordinal);
     }
 
     /// <summary>

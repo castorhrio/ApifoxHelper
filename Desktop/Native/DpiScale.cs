@@ -113,6 +113,14 @@ internal static class DpiScale
     /// <c>wParam</c> 高位的那个「要去的那一块屏的 DPI」，不经过框架那一层解释。
     /// </para>
     /// <para>
+    /// <b>判断与算术都不在本方法里</b>（第一百八十六轮收口）：该不该重算、按几倍缩放控件树、
+    /// 客户区多大、台账推进到哪一档，全部由 <see cref="DpiScaleFactor.PlanRescale"/> 一次给出；
+    /// 本方法只剩三个动作——缩放控件树、设客户区、推进台账。抽出去的理由是「四处判断各写一份」这一族：
+    /// 改一处漏一处不会有东西报红，而漏掉的那一处在真机上表现为「拖到副屏没重算」这种没人量得到的样子。
+    /// 现在真值表（含新 DPI 高于 / 低于 / 等于当前、DPI 为 0 或负数、台账因子为 0 或负数五类输入）
+    /// 在 Linux 上跑的就是这一份判断。
+    /// </para>
+    /// <para>
     /// <b>两个数各按一种口径算，不能混</b>：控件树走<b>相对</b>步长（<see cref="DpiScaleFactor.ScaleStep"/>）——
     /// 它此刻的边界已经是按 <c>applied</c> 放大过的那一份，直接乘目标因子会让
     /// 100%→200%→100%→200% 一档一档叠上去；客户区走<b>绝对</b>重算
@@ -131,15 +139,15 @@ internal static class DpiScale
     {
         var track = form.Tracking;
         if (track is null) return;
-        var newDpi = DpiScaleFactor.NewDpiFromWParam(wParam);
-        if (!DpiScaleFactor.IsUsableDpi(newDpi)) return;
-        var target = DpiScaleFactor.FromScreenDpi(newDpi);
-        if (!DpiScaleFactor.ShouldRescale(track.AppliedFactor, target)) return;
-        var step = DpiScaleFactor.ScaleStep(track.AppliedFactor, target);
-        form.Scale(new SizeF(step, step));
-        form.ClientSize = new Size(DpiScaleFactor.ScaledExtent(track.DesignSize.Width, target),
-                                    DpiScaleFactor.ScaledExtent(track.DesignSize.Height, target));
-        track.AppliedFactor = target;
+        var plan = DpiScaleFactor.PlanRescale(
+            DpiScaleFactor.NewDpiFromWParam(wParam),
+            track.AppliedFactor,
+            track.DesignSize.Width,
+            track.DesignSize.Height);
+        if (plan is null) return;
+        form.Scale(new SizeF(plan.Step, plan.Step));
+        form.ClientSize = new Size(plan.ClientWidth, plan.ClientHeight);
+        track.AppliedFactor = plan.AppliedFactor;
     }
 
     /// <summary>

@@ -319,4 +319,139 @@ public class AcceptanceChecklistTests
         // README 的「已知限制」要点名这一节：缺口公开声明的落点在那儿，动作单藏在 1800 行日志里等于没有。
         Assert.Contains("G-D5 真机复核清单（可勾选）", Repo.Source("README.md"), StringComparison.Ordinal);
     }
+
+    // ---------- G-D6 退场清单（第一百八十七轮，简报 P0-3） ----------
+
+    private const string ExitChecklistHeading = "## G-D6 退场清单（可勾选）";
+
+    /// <summary>退场清单的一行：勾选 / 退场项 / 删改哪一处 / 验收标准。</summary>
+    private readonly record struct ExitRow(string Check, string Item, string Where, string Standard);
+
+    private static string[] ExitChecklistLines()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == ExitChecklistHeading);
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 缺「{ExitChecklistHeading}」一节：G-D6 的退场此前只是一句话，"
+            + "一句话在任何一轮都能被读成「还剩一件事」，而实际是七件、分散在五个文件里。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    private static List<ExitRow> ExitRows()
+    {
+        var rows = new List<ExitRow>();
+        foreach (var line in ExitChecklistLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (cells[0] != "[x]" && cells[0] != "[ ]") continue;
+            Assert.True(cells.Count == 4,
+                $"退场清单有一行是勾选框却不是 4 列（实际 {cells.Count} 列，应为 勾选 / 退场项 / 删改哪一处 / 验收标准）：{cells[1]}。"
+                + "格式错的行不许被解析器静默跳过。");
+            rows.Add(new ExitRow(cells[0], cells[1], cells[2], cells[3]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>反引号里认定为「仓内实物」的引用：文件 / 目录、测试断言、代码符号。</summary>
+    private static readonly string[] SourceExtensions =
+        [".cs", ".md", ".csproj", ".html", ".js", ".css", ".json", ".jsonl", ".txt", ".ps1", ".sh"];
+
+    /// <summary>
+    /// G-D6 退场清单：七条各一行、每条都点到仓内真实存在的文件 / 断言 / 代码符号
+    /// （第一百八十七轮，简报 P0-3）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：G-D6 未达成，且按决定排在 G-D5 之后（真机 0 台，到期日 2026-11-20）。
+    /// 本轮<b>不执行退场</b>，但退场清单此前只有一句话——「删 `--web` 参数解析、删页面层引用、删过渡壳分支、
+    /// 删那条断言、改 README」这种写法在任何一轮都能被读成「还剩一件事」，而实际是七件、分散在五个文件里，
+    /// 且其中一件（路由去留）是<b>决定项</b>：删了页面却留着会话令牌注入，等于把凭据接口留在没有调用方的服务上。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 七条各一行（编号 1–7 各一次）；② 每条都点到<b>仓内实物</b>——文件路径必须存在、
+    /// <c>类名.断言名</c> 必须在测试工程里真的有这一条、代码符号（如 <c>case "--web":</c>、<c>MainForm</c>）
+    /// 必须真的出现在<b>同一行点到的文件</b>里（编一个不存在的类名即红，把一个符号挪到别的文件也即红）；
+    /// ③ 决定项（路由去留）被点名；④ 全部仍是 <c>[ ]</c>——退场没执行，勾上就是谎报。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判退场有没有执行</b>，也不判那天选哪一支路由方案（要人答）。它只保证
+    /// 「退场那天照着删的每一处，都是仓里真实存在的那一处」——清单里编一个不存在的符号，那天就删不动。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ExitChecklist_EveryItemPointsToRealSymbols()
+    {
+        var rows = ExitRows();
+        Assert.True(rows.Count >= 6, $"退场清单只有 {rows.Count} 行（地板 6：参数解析 / 壳分支 / 过渡壳窗口 / 路由去留 / 页面层 / 测试断言 / 文档口径）。");
+
+        // ④ 退场没执行：一条都不许勾。
+        Assert.True(rows.All(r => r.Check == "[ ]"),
+            "退场清单里有勾成 [x] 的行，而 G-D6 在验收表上仍是 [ ]：退场没执行，勾上就是谎报。");
+
+        foreach (var row in rows)
+        {
+            var citations = Regex.Matches(row.Where, @"`([^`]+)`").Select(m => m.Groups[1].Value.Trim()).ToList();
+            Assert.True(citations.Count > 0, $"「{row.Item}」没点到任何仓内实物：退场那天照着删什么？");
+
+            var citedFiles = new List<string>();
+            var symbols = 0;
+            foreach (var citation in citations)
+            {
+                // 文件 / 目录：必须真的在仓里。
+                // 判「像不像路径」而不是「有没有斜杠」：`app.MapGet("/api/session"` 这类代码符号也带斜杠，
+                // 把它当路径核会把一条正确的符号引用判成「文件不存在」——那正是「门红得没道理」的老毛病。
+                var looksLikePath = !citation.Contains('(') && !citation.Contains('"')
+                    && !citation.Contains('=') && !citation.Contains(';') && !citation.Contains(' ');
+                if (looksLikePath
+                    && (SourceExtensions.Any(e => citation.EndsWith(e, StringComparison.OrdinalIgnoreCase))
+                        || citation.Contains('/', StringComparison.Ordinal)))
+                {
+                    var full = Path.Combine(Repo.Root, citation.Replace('\\', '/'));
+                    Assert.True(File.Exists(full) || Directory.Exists(full),
+                        $"「{row.Item}」点到的路径不存在：{citation}。退场清单里编一个不存在的文件，那天就删不动。");
+                    if (File.Exists(full)) citedFiles.Add(full);
+                    continue;
+                }
+
+                // 测试断言：类名.方法名，方法必须真的在测试工程里。
+                if (Regex.IsMatch(citation, @"^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$"))
+                {
+                    var parts = citation.Split('.');
+                    var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
+                    Assert.True(File.Exists(testFile), $"「{row.Item}」引用的测试类不存在：{parts[0]}。");
+                    Assert.True(Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]"),
+                        $"「{row.Item}」引用的断言不存在：{citation}。");
+                    citedFiles.Add(testFile);
+                    symbols++;
+                    continue;
+                }
+
+                // 纯中文描述（例如「过渡壳窗口功能」这种节名）：不核，它不是符号。
+                if (!citation.Any(char.IsAsciiLetter)) continue;
+
+                // 代码符号：必须真的出现在同一行点到的文件里。
+                var haystack = string.Join('\n', citedFiles.Select(File.ReadAllText));
+                Assert.True(haystack.Contains(citation, StringComparison.Ordinal),
+                    $"「{row.Item}」点到的代码符号「{citation}」在这一行点到的文件里找不到："
+                    + "编一个不存在的符号即红，把一个符号挪到别的文件也即红——退场那天照着删的必须是真实存在的那一处。");
+                symbols++;
+            }
+
+            Assert.True(symbols >= 1,
+                $"「{row.Item}」只点了文件、没点到任何断言或代码符号：退场那天要删的是哪一行，读的人仍要自己找。");
+        }
+
+        // ③ 决定项必须被点名：路由去留是唯一需要人先答再动手的一条。
+        var section = string.Join('\n', ExitChecklistLines());
+        Assert.Contains("决定项", section, StringComparison.Ordinal);
+        Assert.Contains("路由", section, StringComparison.Ordinal);
+
+        // 验收表那一行必须指过来，且仍是空框（与 G-D5 同一口径：勾选框只由证据关闭）。
+        var gate = Rows().Single(r => r.Item.StartsWith("G-D6", StringComparison.Ordinal));
+        Assert.Equal("[ ]", gate.Check);
+        Assert.Contains("G-D6 退场清单（可勾选）", gate.Verdict, StringComparison.Ordinal);
+        Assert.Contains($"{nameof(AcceptanceChecklistTests)}.{nameof(ExitChecklist_EveryItemPointsToRealSymbols)}",
+            gate.Evidence, StringComparison.Ordinal);
+    }
 }
