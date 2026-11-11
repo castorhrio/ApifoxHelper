@@ -146,13 +146,17 @@ public class BuildCommandCopyTests
     }
 
     [Fact]
-    public void Dialog_ClearsTheCommandAndHidesTheButtonInTheHintState()
+    public void Dialog_ResetsTheCommandToThePlaceholderAndHidesTheButtonInTheHintState()
     {
         var source = Repo.Source("Desktop", "Native", "BuildLogDialog.cs");
-        // 空态 / 读取失败态：命令与按钮一起收掉——留着上一次的命令等于把「没跑过」说成「跑过」。
+        // 空态 / 读取失败态：命令回到占位、按钮收掉——留着上一次的命令等于把「没跑过」说成「跑过」。
+        // 第二百零一轮修：这里原先钉的是 `_command.Text = ""`（照着实现写的），与冒烟段
+        // 「尚未构建时命令行是占位」互相矛盾，Linux 侧全绿而 wine 里真构造这一屏才红。
+        // 空值该显示什么由 BuildCommandCopy.Line 一处决定，对话框不另写一套。
         var hint = MethodBody(source, "private void ShowHint(");
         Assert.Contains("_commandText = null;", hint);
-        Assert.Contains("_command.Text = \"\";", hint);
+        Assert.Contains("_command.Text = BuildCommandCopy.Line(null);", hint);
+        Assert.DoesNotContain("_command.Text = \"\";", hint);
         Assert.Contains("_copyButton.Visible = false;", hint);
     }
 

@@ -165,7 +165,14 @@ internal sealed class BuildLogDialog : DpiAwareForm
         _output.Visible = false;
         _summary.Text = "";
         _commandText = null;
-        _command.Text = "";
+        // 命令行回到占位，不是留一格空白（第二百零一轮修）：空白既不是信息也不是缺省，
+        // 用户看不出是「没跑过」还是「这一格坏了」——这正是 BuildCommandCopy.Line 对空值的口径，
+        // 空态与读取失败态没有理由另写一套。上一轮这里写的是 `_command.Text = ""`，
+        // 静态门照着实现写、Linux 侧全绿，只有 wine 里真构造这一屏才红
+        // （冒烟段「尚未构建时不出现「复制命令」按钮」按标签前缀找不到命令行）。
+        _command.Text = BuildCommandCopy.Line(null);
+        // 文字变了高度要跟着重量：宽度没变时 Layout 不会触发（与 ShowRecord 同一处算式）。
+        _command.Height = Ui.MonoBoxHeight(_command.Text, Math.Max(_command.Width, 1));
         _copyButton.Visible = false;
     }
 }
