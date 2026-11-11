@@ -121,6 +121,74 @@ public class NativeDialogSmokeTests
         Assert.True(result > call, "CheckDialogCoverage 没有排在结果行之前（失败不会计入退出码）。");
     }
 
+
+    /// <summary>
+    /// P0 接线门：<c>Desktop/Native</c> 里每个 <c>*Dialog</c> 类的基类必须是 <c>DpiAwareForm</c>。
+    /// <para>
+    /// 存在理由：第一百七十五轮把 25 个对话框批量换基类，只改了、没钉住——新增对话框若写回
+    /// <c>: Form</c>，Linux 侧不报红，真机拖动时才发现不重算。这是接线门的结构性缺口。
+    /// 这条断言只看代码行（正则），注释里的 <c>: Form</c> 不算；新增对话框若不改基类，这里立即红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryDialogClass_InheritsDpiAwareForm()
+    {
+        var offenders = Repo.NativeSources()
+            .SelectMany(s => Regex.Matches(s.Text, @"(?m)^\s*(?:internal|public)\s+(?:sealed\s+)?class\s+(\w+Dialog)\s*:\s*(\w+)\b")
+                .Select(m => new { File = s.Name, Class = m.Groups[1].Value, Base = m.Groups[2].Value }))
+            .Where(x => x.Base != "DpiAwareForm")
+            .Select(x => $"{x.File}：class {x.Class} : {x.Base}")
+            .ToList();
+        Assert.True(
+            offenders.Count == 0,
+            "以下对话框不继承 DpiAwareForm（DPI 变更不会重算，改回 : Form 即可复现）：" + string.Join(" / ", offenders));
+        // 地板：对话框数量掉下去说明扫描正则或目录坏了，检查会静默空转。
+        Assert.True(DialogClassesOnDisk().Count >= 20, $"只扫到 {DialogClassesOnDisk().Count} 个对话框类，扫描口径可能已失效。");
+    }
+
+    /// <summary>
+    /// P0 接线门：<c>DpiAwareForm.WndProc</c> 里 <c>base.WndProc</c> 必须排在重算之前（行首正则）。
+    /// <para>
+    /// 存在理由：这条消息框架自己也要用（更新窗口边界与它自己的 DPI 账），挡在前面等于替框架
+    /// 决定它该收到什么。把 base 挪到重算后，Linux 侧不会有任何东西报红，真机拖动时才发现不重算。
+    /// 只判代码行：注释里的 <c>base.WndProc</c> 不算。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DpiAwareForm_WndProc_BaseBeforeRescale()
+    {
+        var source = Repo.Source("Desktop", "Native", "DpiAwareForm.cs");
+        var start = source.IndexOf("protected override void WndProc(", StringComparison.Ordinal);
+        Assert.True(start >= 0, "DpiAwareForm.cs 里没有 WndProc 覆写（DPI 变更消息就没人认）。");
+        var tracking = source.IndexOf("internal sealed class DpiTracking", start, StringComparison.Ordinal);
+        Assert.True(tracking > start, "WndProc 与 DpiTracking 之间切不出那一段。");
+        var wndProc = source[start..tracking];
+
+        // base.WndProc 必须在重算之前（行首正则，只判代码行）。
+        Assert.True(
+            Regex.IsMatch(wndProc, @"^\s*base\.WndProc\(ref m\);$", RegexOptions.Multiline),
+            "DpiAwareForm.WndProc 里没有按行首出现的 base.WndProc(ref m);。");
+        Assert.True(
+            Regex.IsMatch(wndProc, @"^\s*DpiScale\.RescaleOnDpiChanged\(this, m\.WParam\.ToInt64\(\)\);$", RegexOptions.Multiline),
+            "DpiAwareForm.WndProc 里没有按行首出现的 DpiScale.RescaleOnDpiChanged(...)。");
+        // 顺序：base.WndProc 在 RescaleOnDpiChanged 之前。
+        var baseIdx = IndexOfCodeLine(wndProc, "base.WndProc(ref m);");
+        var rescaleIdx = IndexOfCodeLine(wndProc, "DpiScale.RescaleOnDpiChanged(this, m.WParam.ToInt64());");
+        Assert.True(baseIdx >= 0 && rescaleIdx >= 0 && baseIdx < rescaleIdx,
+            $"WndProc 里 base.WndProc 必须排在重算之前（base {baseIdx} / 重算 {rescaleIdx}）。");
+    }
+
+    /// <summary>按行首匹配代码行（不被注释行骗过，同 P0 接线门的判据口径）。</summary>
+    private static int IndexOfCodeLine(string body, string code)
+    {
+        var lines = body.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (Regex.IsMatch(lines[i], @"^\s*" + Regex.Escape(code) + "$")) return i;
+        }
+        return -1;
+    }
+
     // ---------- 页面类进冒烟清单（第一百五十五轮，控制仓简报 P1-2） ----------
 
     /// <summary>磁盘上 <c>Desktop/Native</c> 里所有继承 <c>UserControl</c> 的页面类名（按名字排序）。</summary>
