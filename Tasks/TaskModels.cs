@@ -94,11 +94,39 @@ public sealed class RemoteStage
 
 public sealed class CreateTaskRequest
 {
+    private List<string> _moduleNames = new();
+    private List<string> _pathPrefixes = new();
+    private List<string> _endpointKeys = new();
+
     public string ProfileId { get; set; } = "";
     public string? Name { get; set; }
-    public List<string> ModuleNames { get; set; } = new();
-    public List<string> PathPrefixes { get; set; } = new();
-    public List<string> EndpointKeys { get; set; } = new();
+
+    /// <summary>
+    /// 三个范围维度（模块 / 路径前缀 / 指定接口）都写成 null 容忍的 setter，同 <c>GenerateRequest.SlotIds</c>（第 212 轮同一修法）：
+    /// 这一份是 <c>POST /api/tasks</c> 的请求体本身，显式带 <c>"moduleNames": null</c> 时 System.Text.Json
+    /// 会用 null 覆盖属性初始值，<c>TaskStore.Create</c> 头三句清单操作就抛未处理异常（500）。
+    /// <b>这里的空 = 这一维不圈范围</b>：路径前缀与指定接口两者皆空即全项目（<c>TaskStore.InScope</c>），
+    /// 页面那两行留空送的就是空清单，所以归一目标与「未提供」同义，不是待拒的畸形输入。
+    /// 未知模块名仍按原句「配置中没有模块「…」。」拒绝。
+    /// </summary>
+    public List<string> ModuleNames
+    {
+        get => _moduleNames;
+        set => _moduleNames = value ?? new();
+    }
+
+    public List<string> PathPrefixes
+    {
+        get => _pathPrefixes;
+        set => _pathPrefixes = value ?? new();
+    }
+
+    public List<string> EndpointKeys
+    {
+        get => _endpointKeys;
+        set => _endpointKeys = value ?? new();
+    }
+
     public string? SourceVersionNote { get; set; }
     public bool OfflineMode { get; set; }
 }

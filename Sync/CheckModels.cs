@@ -128,21 +128,56 @@ public sealed class SupplementEntry
 
 public sealed class SupplementStore
 {
-    public List<SupplementEntry> Entries { get; set; } = new();
+    private List<SupplementEntry> _entries = new();
+
+    /// <summary>
+    /// 已保存的补充条目。这一份是 <c>PUT /api/tasks/{id}/supplement</c> 的请求体本身，
+    /// <b>空清单是在用的形状</b>：原生对话框把一个接口所有编辑位都勾成「保留现状」时提交的就是空条目集，
+    /// <c>SupplementService.Content</c> 数得出零个才算「内容没有变化、不写文件」。
+    /// 写成 null 容忍的 setter：显式带 <c>"entries": null</c> 时 System.Text.Json 会用 null 覆盖属性初始值，
+    /// 服务头一句 <c>foreach (var entry in body.Entries)</c> 就抛未处理异常（500），而不是按「没有条目」走。
+    /// </summary>
+    public List<SupplementEntry> Entries
+    {
+        get => _entries;
+        set => _entries = value ?? new();
+    }
 }
 
 public sealed class DecisionStore
 {
+    private Dictionary<string, string> _items = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _docChoices = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _modelBindings = new(StringComparer.Ordinal);
+
     /// <summary>accepted / excluded</summary>
-    /// <summary>高风险差异逐项确认的决策值：diffId → 决策值。未确认（含已排除）的接口不纳入结构同步。</summary>
-    public Dictionary<string, string> Items { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>
+    /// 高风险差异逐项确认的决策值：diffId → 决策值。未确认（含已排除）的接口不纳入结构同步。
+    /// 三个字典都写成 null 容忍的 setter，同 <see cref="SupplementStore.Entries"/>：这一份是
+    /// <c>PUT /api/tasks/{id}/decisions</c> 的请求体本身，<b>空字典是在用的形状</b>（清空全部决策），
+    /// 而显式 null 会让 <c>DecisionService</c> 头三句 <c>.Values</c> 抛未处理异常——该走到那三句
+    /// 逐值校验（400）的形状变成 500。<b>比较器保持有序逐字比对，不随归一改动。</b>
+    /// </summary>
+    public Dictionary<string, string> Items
+    {
+        get => _items;
+        set => _items = value ?? new(StringComparer.Ordinal);
+    }
 
     /// <summary>说明冲突的选择：DocChange.Id → keepRemote / useTarget。</summary>
-    public Dictionary<string, string> DocChoices { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string> DocChoices
+    {
+        get => _docChoices;
+        set => _docChoices = value ?? new(StringComparer.Ordinal);
+    }
 
     /// <summary>ID 字符串 / new</summary>
     /// <summary>模型绑定取值：源模型名 → 远端模型 ID（字符串）或 "new"。</summary>
-    public Dictionary<string, string> ModelBindings { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string> ModelBindings
+    {
+        get => _modelBindings;
+        set => _modelBindings = value ?? new(StringComparer.Ordinal);
+    }
 }
 
 public sealed class ModelMappingStore

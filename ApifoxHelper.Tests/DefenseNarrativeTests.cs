@@ -362,6 +362,128 @@ public class DefenseNarrativeTests
         }
     }
 
+    // ---------- 第二百一十四轮（简报 P0-2）：一口气念完的总字数 + 念出来的语气 ----------
+
+    /// <summary>五块连起来念一遍的总字数上限（简报与上面「口径」那段给的数都是 400）。</summary>
+    private const int OneBreathCeiling = 400;
+
+    /// <summary>
+    /// 五块连起来念得完：总字数 ≤<see cref="OneBreathCeiling"/>、本节写的那个读数与现算值逐字相同、
+    /// 且同一段可跑证据不许被两块引用。
+    /// <para>
+    /// <b>补的是哪一处债</b>：<c>docs/NOTES.md</c>「初审答辩口径（真机不可得时）」的「口径」那一段从第一百九十八轮起
+    /// 就写着「加门：<c>DefenseNarrativeTests.Narrative_FiveBlocksReadInOneBreath</c>」，而<b>测试工程里从来没有这一条</b>
+    /// （第二百一十四轮逐块改文案时去核才发现）。这不是少写一条门那么轻：那一段声明的两件事——总字数上限、
+    /// 证据不许重复引用——正是<b>只有把五块连起来念才会暴露</b>的两种毛病（单块 ≤80 字各自都绿，
+    /// 念到第五块已经两分半；两块指同一段冒烟证据，念出来是同一句话说了两遍）。散文里写着有、代码里没有，
+    /// 下一轮照着那段话读就会把它当成已核过的事实。本轮把这条实现补上，而不是把那句话删掉。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 五块「口径」列字符数之和 ≤400；② 本节散文里那句「当前 N 字」的 N 必须等于现算之和
+    /// （读数与门算的不是同一个数时，读的人拿它当另一个口径）；③ 每块的可跑证据取法仍然只有
+    /// <see cref="RunnableEvidence"/> 这一份，两块之间不许出现同一条（冒烟段名或断言名都算）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判念起来好不好听、不判单块字数（那条在
+    /// <see cref="Narrative_HasEveryExpectedBlockAndEachFitsTheEightyCharacterCeiling"/>）、不判证据存不存在
+    /// （那两条在 <see cref="Narrative_EveryBlockCitesASectionThatActuallyExists"/> 与
+    /// <see cref="Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun"/>）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Narrative_FiveBlocksReadInOneBreath()
+    {
+        var rows = Blocks();
+        var total = rows.Sum(row => row.Narrative.Length);
+
+        // ① 总字数。
+        Assert.True(total <= OneBreathCeiling,
+            $"五块连起来 {total} 字，超过 {OneBreathCeiling} 字上限：单块各不超一句，加起来却念不完一遍——"
+            + "初审现场给答辩人的是「一口气」，不是五分钟。逐块字数：「"
+            + string.Join("」「", rows.Select(row => $"{row.Name} {row.Narrative.Length}")) + "」。");
+
+        // ② 本节写的那个读数必须等于现算值。
+        var stated = Regex.Matches(Section(), @"当前 (?<n>\d+) 字");
+        Assert.True(stated.Count == 1,
+            $"这一节的散文里有 {stated.Count} 处「当前 N 字」，要恰好一处：多于一个就有两个读数可挑，"
+            + "零个则本条 ② 无从可核（改了文案要一起改这一句，这一句就是那条门钉着的话）。");
+        var declared = int.Parse(stated[0].Groups["n"].Value, CultureInfo.InvariantCulture);
+        Assert.True(declared == total,
+            $"这一节写「当前 {declared} 字」，五块之和现算是 {total} 字：改了口径列没改这一句，"
+            + "下一轮读这段话的人会拿它当另一个口径（这一条正是「散文写着有、门算的是另一回事」那种漂移）。");
+
+        // ③ 同一段可跑证据不许被两块引用。
+        var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            var (runnable, _) = RunnableEvidence(row.Name, row.Citations);
+            foreach (var evidence in runnable)
+            {
+                if (!owners.TryGetValue(evidence, out var previous))
+                {
+                    owners[evidence] = row.Name;
+                    continue;
+                }
+
+                Assert.Fail(
+                    $"「{row.Name}」与「{previous}」引用了同一段可跑证据 {evidence}：两块指同一个东西，"
+                    + "念出来就是同一句话说两遍——要么这两块在说同一件事（该合），要么其中一块本来就没有自己的证据可指。");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 念出来的十句里不许有套话结构（<see cref="CopyRules.EssayStructures"/>），并自证这份词表在本仓自己的文案面上是空的。
+    /// <para>
+    /// <b>补的是哪一处软肋</b>：这一族的旧门判<b>字数</b>（≤80）、判<b>禁词</b>（<see cref="CopyRules.BannedWords"/>）、
+    /// 判<b>出处</b>（能不能 resolve），三样都是可数的。<b>「这段话像不像一个真实产品的作者在说话」没有一条门判</b>——
+    /// 而冲第一口径里「去 AI 味道」与「初审答辩要能演示」这两条要的正是它。禁词表管不到「不仅…而且」「旨在」
+    /// 「大幅提升」「打造/助力/生态/抓手」这类<b>结构</b>：它们没有一个算「空话词」，念出来却像宣传册。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 五块口径 + 五句讲稿模板（<see cref="TemplateRows"/>，同一批东西的口播版）共十句里
+    /// 不得出现词表中的任何一条；② <b>这份词表自己得站得住</b>——每一条在「本仓真实文案面」
+    /// （<c>Desktop/Native/</c> 全部源码 + <c>Api/ErrorCopy.cs</c>）出现次数必须为 0。
+    /// 词表的取法就是「只收本仓一次都没写过的」，② 把这句取法变成可核对的：收错一个词（本仓正文其实天天在用），
+    /// 这条门会先红在自己身上，而不是等到有人写出一句正常话被判成违例。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判措辞好不好听、不判句子长短、不判引用是否 resolve（各有各的门）。它只在有人
+    /// （包括下一轮的自己）往这十句里塞回宣传腔结构时红一次。<b>钉措辞的门最后只会被改措辞绕过</b>，
+    /// 所以这里钉的是<b>结构</b>：词表是一份封闭清单，不在清单上的说法一概不管。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Narrative_BlocksSayNothingAnEssayWouldSay()
+    {
+        var spoken = Blocks().Select(row => (row.Name, Surface: "口径", Text: row.Narrative))
+            .Concat(TemplateRows().Select(row => (row.Name, Surface: "讲稿", Text: row.Sentence)))
+            .ToList();
+        Assert.Equal(ExpectedBlocks.Length * 2, spoken.Count);
+
+        foreach (var (name, surface, text) in spoken)
+        {
+            foreach (var structure in CopyRules.EssayStructures)
+            {
+                Assert.True(!text.Contains(structure, StringComparison.Ordinal),
+                    $"「{name}」的{surface}里出现「{structure}」：这一句念出来像宣传册，不像做这东西的人在讲自己做了什么。"
+                    + "禁的是结构（成效副词、愿望式开头、三方堆叠），不是把中文写成电报——"
+                    + "要绕过去请换成具体动作与具体数字，不要换一个同义的宣传词。");
+            }
+        }
+
+        // ② 词表自证：本仓自己的文案面必须一次都没写过这些词。
+        var ownVoice = Repo.NativeSources().Select(source => source.Text)
+            .Append(Repo.Source("Api", "ErrorCopy.cs"));
+        foreach (var structure in CopyRules.EssayStructures)
+        {
+            var hits = ownVoice.Count(text => text.Contains(structure, StringComparison.Ordinal));
+            Assert.True(hits == 0,
+                $"词表收了「{structure}」，但它在仓内 {hits} 个界面或错误文案文件里出现过：这条门会把仓里已有的说法判成违例。"
+                + "取法是「只收本仓一次都没写过的」——要么把它从词表去掉，要么改成搭配（如「有效提升」而不是「有效」）。");
+        }
+    }
+
     // ---------- 第一百九十五轮（简报 P0-1）：被追问真机时的三句答法 ----------
 
     /// <summary>「被追问真机时的三句答法」那一小节的标题前缀（第一百九十五轮，简报 P0-1）。</summary>

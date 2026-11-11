@@ -120,6 +120,11 @@
     <Compile Include="..\Api\ErrorCopy.cs" Link="Shared\ErrorCopy.cs" />
     <Compile Include="..\Sync\CheckModels.cs" Link="Shared\CheckModels.cs" />
     <Compile Include="..\Sync\PlanModels.cs" Link="Shared\PlanModels.cs" />
+    <!-- 请求体直接绑的三个保存/审阅服务：显式 null 走到服务第一句那一段要真执行，
+         不能只判源码形状（同 TaskStore / ProfileStore 的共享编译先例）。这三份同样不引用 WinForms 与 ASP.NET。 -->
+    <Compile Include="..\Sync\DecisionService.cs" Link="Shared\DecisionService.cs" />
+    <Compile Include="..\Sync\SupplementService.cs" Link="Shared\SupplementService.cs" />
+    <Compile Include="..\Source\ContractReviewService.cs" Link="Shared\ContractReviewService.cs" />
     <Compile Include="..\Contracts\DiffEngine.cs" Link="Shared\DiffEngine.cs" />
     <Compile Include="..\Contracts\DocModel.cs" Link="Shared\DocModel.cs" />
     <Compile Include="..\Infrastructure\Core.cs" Link="Shared\Core.cs" />

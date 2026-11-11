@@ -67,7 +67,20 @@ public sealed class PlanExclusion
 
 public sealed class CreatePlanRequest
 {
-    public List<string> EndpointKeys { get; set; } = new();
+    private List<string> _endpointKeys = new();
+
+    /// <summary>
+    /// 要纳入计划的接口身份。<b>这里的空与 <c>GenerateRequest.SlotIds</c> 的空不是同一个意思</b>：
+    /// 那一处空清单 = 全部缺口，这一处空清单 = 一个都没选，由 <c>SyncPlanService.CreateAsync</c> 那句
+    /// 「请至少选择一个接口。」定义。写成 null 容忍的 setter：请求体显式带 <c>"endpointKeys": null</c> 时
+    /// System.Text.Json 会用 null 覆盖属性初始值，路由那一句 <c>request.EndpointKeys.ToList()</c> 就抛
+    /// 未处理异常（500 分支那句「内部错误」），而不是走到上面那句本该给它的 400。
+    /// </summary>
+    public List<string> EndpointKeys
+    {
+        get => _endpointKeys;
+        set => _endpointKeys = value ?? new();
+    }
 }
 
 public sealed class ApplyPlanRequest
