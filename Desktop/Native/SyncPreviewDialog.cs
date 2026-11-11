@@ -545,8 +545,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
                 status.Font = UiTokens.Body.Value;
                 status.ForeColor = ToneColor(TaskDisplay.CheckStatusTone(check.Status));
                 var pending = SyncSelection.PendingCount(diff, _decisions, check.Key);
-                var pendingCell = row.SubItems.Add(SyncSelectSort.PendingCell(pending));
-                pendingCell.Font = UiTokens.Mono.Value;
+                var pendingCell = Ui.CountCell(row, SyncSelectSort.PendingCell(pending));
                 if (pending > 0) pendingCell.ForeColor = UiTokens.WarnText;
                 row.Checked = _select.IsChecked(check.Key);
                 _selectList.Items.Add(row);

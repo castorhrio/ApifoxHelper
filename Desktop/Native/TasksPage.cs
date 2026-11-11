@@ -522,13 +522,14 @@ internal sealed class TasksPage : UserControl, INativePage
             foreach (var task in tasks)
             {
                 var item = new ListViewItem(task.Name) { Tag = task };
+                // 逐子项样式在加入之前关掉：计数格的等宽字体是加进去那一刻交出去的（Ui.CountCell）。
+                item.UseItemStyleForSubItems = false;
                 item.SubItems.Add(task.ProfileSnapshot.Name);
                 var next = NextStep.Compute(task);
                 var nextCell = item.SubItems.Add(next.Title);
-                item.SubItems.Add(task.Stages.Source.Endpoints > 0 ? task.Stages.Source.Endpoints.ToString() : "—");
-                item.SubItems.Add(task.Stages.Source.Candidates > 0 ? task.Stages.Source.Candidates.ToString() : "—");
+                Ui.CountCell(item, task.Stages.Source.Endpoints > 0 ? task.Stages.Source.Endpoints.ToString() : "—");
+                Ui.CountCell(item, task.Stages.Source.Candidates > 0 ? task.Stages.Source.Candidates.ToString() : "—");
                 var remote = item.SubItems.Add(TaskDisplay.RemoteStatusText(task.Stages.Remote.Status));
-                item.UseItemStyleForSubItems = false;
                 nextCell.ForeColor = ToneColor(next.Tone);
                 remote.ForeColor = ToneColor(TaskDisplay.RemoteTone(task.Stages.Remote.Status));
                 item.SubItems.Add(task.UpdatedAt.LocalDateTime.ToString("MM-dd HH:mm"));

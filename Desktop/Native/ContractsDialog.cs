@@ -293,7 +293,7 @@ internal sealed class ContractsDialog : DpiAwareForm
             var wrapper = item.SubItems.Add(QueueText.ContractWrapper(contract.WrapperType));
             wrapper.ForeColor = UiTokens.Muted;
             item.SubItems.Add(QueueText.ContractDataType(contract.DataType));
-            item.SubItems.Add(contract.Branches.Count.ToString());
+            Ui.CountCell(item, contract.Branches.Count.ToString());
             var review = item.SubItems.Add(TaskDisplay.ContractStateText(contract.ReviewState));
             item.UseItemStyleForSubItems = false;
             review.ForeColor = ToneColor(TaskDisplay.ContractTone(contract.ReviewState));

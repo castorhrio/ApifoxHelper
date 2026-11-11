@@ -192,11 +192,10 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         {
             var row = new ListViewItem(coverage.EndpointKey) { Tag = coverage, UseItemStyleForSubItems = false };
             row.Font = UiTokens.Mono.Value;
-            row.SubItems.Add(EndpointTrace.CountText(coverage.MethodsRead.Count)).Font = UiTokens.Body.Value;
-            var unresolved = row.SubItems.Add(EndpointTrace.CountText(coverage.Unresolved.Count));
-            unresolved.Font = UiTokens.Body.Value;
+            Ui.CountCell(row, EndpointTrace.CountText(coverage.MethodsRead.Count));
+            var unresolved = Ui.CountCell(row, EndpointTrace.CountText(coverage.Unresolved.Count));
             if (coverage.Unresolved.Count > 0) unresolved.ForeColor = UiTokens.WarnText;
-            row.SubItems.Add(EndpointTrace.CountText(coverage.ExternalCalls.Count)).Font = UiTokens.Body.Value;
+            Ui.CountCell(row, EndpointTrace.CountText(coverage.ExternalCalls.Count));
             var (budgetText, budgetTone) = EndpointTrace.BudgetCell(coverage.BudgetExceeded);
             var budget = row.SubItems.Add(budgetText);
             budget.Font = UiTokens.Body.Value;

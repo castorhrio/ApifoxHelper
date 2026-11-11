@@ -67,7 +67,7 @@
 >
 > **「归档到哪里」里的目录是目标不是实物**：`docs/evidence/real-machine/` 的九个归档子目录第二百零四轮起已连同 `.gitkeep` 占位进仓（由 `RealMachineEvidenceTests.EveryArchiveDirectory_ExistsOnDisk` 判），但每一个都是空的——空目录 = 未达成，那正是这一节存在的理由；机械门只核实行里的**文件、断言名与冒烟段名**（`AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate`）。
 >
-> **这一节的机械门在 `ApifoxHelper.Tests/RealMachineEvidenceTests.cs`**（第一百七十八轮，简报 P0-1）：它判的是「**登记与产出物对得上**」——动作单 7 行的「量什么」逐项被 `docs/evidence/real-machine/README.md` 的产出物清单点到、归档子目录两边同名、勾成 `[x]` 的那一条其归档目录里必须真有文件；**它不判真机有没有跑**（本机没有 Windows 图形子系统，跑没跑只有人知道）。真机到位当天第一份要读的是那份 README，不是这一节——**有门不等于过了**，G-D5 在验收表上仍是 `[ ]`。
+> **这一节的机械门在 `ApifoxHelper.Tests/RealMachineEvidenceTests.cs`**（第一百七十八轮，简报 P0-1）：它判的是「**登记与产出物对得上**」——动作单 7 行的「量什么」逐项被 `docs/evidence/real-machine/README.md` 的产出物清单点到、归档子目录两边同名、勾成 `[x]` 的那一条其归档目录里必须真有文件；**它不判真机有没有跑**（本机没有 Windows 图形子系统，跑没跑只有人知道）。真机到位当天第一份要读的是那份 README，不是这一节——**有门不等于过了**，G-D5 在验收表上仍是 `[ ]`。**双写是本意，不要「统一」成一处**（第二百零五轮，简报 P2-2 登记）：动作单在这里按天写「做什么、量什么、算过」，那份 README 按目录写「产出物叫什么、放哪里」，同一件事两个方向；把它们合并成一份会同时丢掉一个方向。让两份不至于各说一套的是门而不是抄写——`RealMachineEvidenceTests` 三道门核的就是两边逐字对得上（目录名、产出物文件名、量测项），改一处漏一处即红。
 >
 > **与本文件另外两张表的关系**：「Windows 真机 / wine 模拟器验证清单」B 段（第一百二十九轮）与「Windows 真机全链路清单」（第一百三十四轮）是**按屏逐项**的登记，本表是**按天可执行**的动作单。真机到位后先跑本表 1–7，再回到那两张表逐屏打勾；三处结论不一致时，以本表量到的数字为准并回写那两张，不留两套说法。
 >
@@ -1909,7 +1909,7 @@
 >
 > 到期日：**2026-11-20**。责任人：**用户（答辩负责人）**提供机器并在真机执行；本代理负责机器到位后照「Windows 真机 / wine 模拟器验证清单」B 段逐条核对并回写本节。G-D5（真机观感）在验收表上如实标为**「未达成（环境供给缺口）」**，不标「部分达成」。
 >
-> **一条命令（第一百六十七轮起，简报 P0-1 的「可一键复跑」交付）**：`bash .winecheck/demo.sh`（缺省跑三档；`TIERS=96` 只跑 100% 档自查；冒烟器不在时设 `PUBLISH=1` 让它先 `dotnet publish`）。它做四件事：① 按 `LogPixels` 96 / 120 / 192 各跑一次冒烟，报告落 `/tmp/ah-demo/report-<档位>.txt`；② **把本节的逐屏表一行一行读进来**（屏单不在脚本里抄第二份，抄的会漂），从每行「证据出处」取出它引用的冒烟段名；③ 到该档报告里找那一段——段的标题行现在带着自己的方法名 `[RunXxx]`，id 由冒烟器调用点的 `nameof` 给出（段改名即编译不过），于是每一屏都能数出「这一段在这一档通过几条、失败几条」，逐档写成 `/tmp/ah-demo/narration-<档位>.txt` 讲稿，答辩现场念的是报告里的数字而不是这里抄的一句话；④ 任何一屏引用的段在报告里找不到、或某一行不是 5 列、或有失败行，**非零退出并点名是哪一屏哪一段**。只有源码与编译证据的那三屏（第 6/8/11 行）没有段可指，讲稿如实写「这一屏没有 wine 冒烟段——只有源码与编译证据」，不拿别的屏冒充。录制与讲述顺序见 `.winecheck/README.md`「演示与录制口径」；上面这几件事由 `ApifoxHelper.Tests/DemoScriptTests.cs` 钉住（抄一份屏单即红、段名漂了即红、把源码证据的屏讲成 wine 量到即红）。
+> **一条命令（第一百六十七轮起，简报 P0-1 的「可一键复跑」交付）**：`bash .winecheck/demo.sh`（缺省跑三档；`TIERS=96` 只跑 100% 档自查；冒烟器不在时设 `PUBLISH=1` 让它先 `dotnet publish`）。它做四件事：① 按 `LogPixels` 96 / 120 / 192 各跑一次冒烟，报告落 `/tmp/ah-demo/report-<档位>.txt`；② **把本节的逐屏表一行一行读进来**（屏单不在脚本里抄第二份，抄的会漂），从每行「证据出处」取出它引用的冒烟段名；③ 到该档报告里找那一段——段的标题行现在带着自己的方法名 `[RunXxx]`，id 由冒烟器调用点的 `nameof` 给出（段改名即编译不过），于是每一屏都能数出「这一段在这一档通过几条、失败几条」，逐档写成 `/tmp/ah-demo/narration-<档位>.txt` 讲稿，答辩现场念的是报告里的数字而不是这里抄的一句话；④ 任何一屏引用的段在报告里找不到、或某一行不是 5 列、或有失败行，**非零退出并点名是哪一屏哪一段**。只有源码与编译证据的那三屏（第 6/8/11 行）没有段可指，讲稿如实写「这一屏没有 wine 冒烟段——只有源码与编译证据」，不拿别的屏冒充。录制与讲述顺序见 `.winecheck/README.md`「演示与录制口径」；上面这几件事由 `ApifoxHelper.Tests/DemoScriptTests.cs` 钉住（抄一份屏单即红、段名漂了即红、把源码证据的屏讲成 wine 量到即红）。**Windows 侧（含 Git Bash / WSL / MSYS）的同一份讲稿在 `.winecheck/demo.ps1`**（第二百零五轮，简报 P0-2）：它与本脚本逐段同名、同读数——段名集合、档位段头、三份产物文件名、读的环境变量名由 `WineCheckScriptsTests.DemoPs1_NamesTheSameSectionsAsDemoSh` 判，缺段时自己点名并非零退出由 `DemoPs1_ExitsNonZeroWhenAScreenIsMissing` 判；机制上的两处不同写在脚本开头（Windows 10/11 的缩放档由系统显示设置决定，`LogPixels` 写了不生效，所以这支脚本在有 wine 时照本脚本改档、没有 wine 时按当前缩放各跑一次并在段头明写「本机未改缩放」；Xvfb 是 Linux 的假显示器）。**这一支从未跑过**：本容器没有 PowerShell（`pwsh` 与 `powershell` 都不在 PATH，wine 的 `powershell.exe` 第一行打的是 `fixme:powershell:wmain stub.`，那是 stub），所以「语法可解析」本轮没有跑到——落仓、与 demo.sh 逐段同名是可核对的两件事，它能不能在那台机器上跑起来要等机器到手，与 G-D5 同一族。
 >
 > 等价的手工四步（脚本失效时按此逐档跑）：`dotnet publish ApifoxHelper.Smoke -c Release -r win-x64 --self-contained -o /tmp/ah-smoke-pub` → `export WINEPREFIX=$HOME/.wine-ah` → `wine reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d <96|120|192> /f` → `xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=<路径>`。
 >
@@ -2836,3 +2836,42 @@
 - 真机三档 DPI 与主链路演示（G-D5）、SHARED-3/4/7/8 的真实 Apifox 端到端仍不可得。本轮未连接或写入 Apifox，未调用任何模型服务，未安装依赖，未新建调度器、未动其他项目。
 
 **读数**：`dotnet build` 0 警告 0 错误；`dotnet test` **2651 通过 / 0 失败**（较上一轮 2648 增 3 条：覆盖率门、声明即注册、脚本失败路径门）；G-D5 仍是 `[ ]`。
+
+## 第二百零五轮（2026-11-12）：观感 critique 落成 `docs/CRITIQUE.md` + 计数格的等宽口径收成一处 + Windows 侧降级答辩脚本
+
+**① 观感 critique 落成进仓文档（简报 P0-1，具名 pass：critique）**
+
+- **补的是哪个缺口**：第一百五十五轮那次 critique 写在 `docs/NOTES.md` 的一节里、按四组屏合并成一张表（「注释缺口 / 候选审阅 / 契约 / … —— 无」），逐屏读不到结论；冲第一口径下「观感 critique 缺失」是仅剩两条实质缺口之一，缺的不是判断而是**一份能照着干活的判断**。
+- **产出物**：`docs/CRITIQUE.md`（新文件，不进验收表）。十站按 `docs/方案.md` 3.1 首次配置 + 3.2 日常旅程九步定死（出处写在文件开头）；每站三条——现状一句话 / 像生成物或模板脸的地方在哪（没有就写「没有」）/ 这一屏在「安静 · 收敛 · 排版」这条线上最该改的一处，并各自交代这一处的去向（本轮已落地 / 本轮未动 / 下一轮 / 留下一轮 / 判不动）。文末两节：本轮落地的 pass、以及没动的那九处按哪一条排下一轮。
+- **证据口径**：源码逐屏通读 + `bash .winecheck/demo.sh` 三档报告与讲稿（本轮复跑，读数见下面第④节）。文中每一个宽度、字宽、「放得下」只有两种来源——报告里那一行的数字，或源码里的字面量；本环境没有 Windows 图形子系统，**没有第三条路**，真机观感一律随 G-D5，不在文档里宣判。
+- **门**：新增 `ApifoxHelper.Tests/CritiqueDocTests.cs` 七条——十站齐且每站三条不缺、每一站点到真实存在的 `.cs` 且全文引用不悬空、「像生成物」要么「没有」要么点到真实文件、「最该改」只许点具名 pass 名册（或明写判不动并指 G-D5）、每站必须交代去向、全文无 `CopyRules.BannedWords`、证据口径行在位且声称落地的符号在源码里真在。
+- **变异验证实测可红**：站号缺一、引用一个不存在的文件、塞进禁词、删掉「本文没动的」一节、删掉一条标签、去掉一站的去向——各红一条。**两条实测不能红，已如实写进门注释**：把「有」那句改成含糊话（同段别处仍有真实文件名就放过）、以及「声称已落地却不在该条点文件」（同条别处提过的文件名就让它绿）。措辞的门最后只会被措辞绕过，这里只留机械判得到的那两条。
+- **critique 的结论直接产出了本轮那一处动手**：第 3、6 站判出「§3 与 D5 的等宽口径在两屏上根本没执行」属**排版** ⇒ 落 typeset（见 ②）。其余八站判「本轮未动 / 下一轮 / 判不动」，账留在 `docs/CRITIQUE.md` 文末。
+
+**② 计数格的等宽口径收成一处（critique 判出的那一处，具名 pass：typeset，纯呈现层）**
+
+- **缺陷**：§3「等宽栈：计数、进度、ID、路径、差异文本必须等宽」与设计验收 D5「比例字体下跳宽即不合规」在原生界面只有一处执行过——检查结果对话框的数值列（`CheckResultsDialog.cs` 的 `AddCount` 设 Mono）。其余三种落法：任务列表「接口 / 注释候选」两列走控件默认比例字体、`EndpointTraceDialog.cs` 的三个计数列被就地设成 `Body`、`SyncPreviewDialog.cs` 勾选页的「待确认」在窗体里自己设一次 `Mono`。**后果不是难看而是可比性**：比例字体下「9」与「10」宽度不同，两次扫描之间数字一变整列左右抖，同一列的两个数没法用余光比较。
+- **交付**：新增 `Desktop/Native/Ui.cs` 的 `Ui.CountCell(row, text)`——等宽字体只在这一个落点交出，工厂**只交字体不格式化数字**；五处调用跟上（`TasksPage.cs` 两列、`EndpointTraceDialog.cs` 三列、`ContractsDialog.cs`「分支」、`SyncPreviewDialog.cs`「待确认」、`CheckResultsDialog.cs` 的 `AddCount` 改为委托）。取数与占位口径逐字留在各屏自己那一份：0 在接口追踪明细显示「—」，在契约的分支数列就是「0」——那一格讲的是「有几个」，不是同一件事就不写成同一句话。
+- **明确不进工厂的两支（不是漏掉）**：补充说明的「N 处」带中文单位，中文进拉丁等宽栈落到的是字形回退而不是等宽；两个主页面的「更新时间」是时间戳，§3 与 D5 的列举里没有名分。两支都由用例钉住，不许下一轮顺手「统一」掉。
+- **出厂顺序**：逐子项样式（`UseItemStyleForSubItems = false`）在计数格交出之前关掉——任务列表此前是在加完若干格之后才关，本轮把它提到建行之后第一件事（与注释回写对话框同一形状）。
+- **门**：新增 `ApifoxHelper.Tests/CountCellTests.cs` 八条。**五处变异验证实测可红**：任务列表那一格退回就地 `Add`、工厂不再设等宽、追踪明细写回 `.Font = Body`、出厂顺序回退、删掉 §6 那一行；还原以备份覆盖后全绿。
+- **同一轮如实记下没做的另一半**：标识格（接口身份、远端 ID、Apifox 项目 ID、源码路径）至今是各屏就地设一次，而清点结果显示**响应契约清单的首列（接口身份）与项目列表的「Apifox 项目」ID 列一处都没设**——同一类信息在另八张清单上等宽、在这一屏是比例字体。挂账写进 `docs/DESIGN.md` §8 新增的「数字等宽（§3 / D5）」一行，下一轮先定「标识格由谁设」再逐屏接，不要在工厂外开第五种落法。
+- **本轮为它复跑了 wine**（三档 217 通过 / 0 失败 ×3、逐屏对账 0 处对不上，第二百零五轮实测，模拟器不是真机）：这些屏构造与交互照旧通过；数字格在筛选 / 刷新前后的左右边界不跳、等宽栈实际命中的字体名，仍随 G-D5 复核。
+
+**③ Windows 侧降级答辩脚本 `.winecheck/demo.ps1`（简报 P0-2，具名 pass：harden）**
+
+- **缺口**：`demo.sh` 是 bash，从未在 Windows（含 Git Bash / WSL / MSYS）跑过。到期日 2026-11-20 当天若真机仍不可得，这份逐屏讲稿是唯一交付面，而它当时只有 Linux 一支。
+- **交付**：PowerShell 版，与 `demo.sh` **逐段同名、同读数**（不是「等价实现」）——同样把 `docs/NOTES.md` 的逐屏表一行一行读进来（屏单不在脚本里抄第二份）、同样逐档写 report / narration / console 三份、同样在缺段与「不是 5 列」两支守卫里自己点名并非零退出；源码指纹算式与 `source_fingerprint` 是同一条（排 bin/obj、排测试工程、逐文件 sha1、再对「`<sha1>  <路径>`」那份清单整体 sha1）。机制上的两处不同写在脚本开头并如实说明：Windows 10/11 那一档由系统显示设置决定、`LogPixels` 写了不生效，所以有 wine 时照 `demo.sh` 改档、没有 wine 时按当前缩放各跑一次并在段头明写「本机未改缩放」；Xvfb 是 Linux 的假显示器。
+- **门**：`WineCheckScriptsTests.DemoPs1_NamesTheSameSectionsAsDemoSh`（段名取法两边共用一条；集合相等并把差集打在失败信息里；地板 15 条，防「相等在空集合上」；关键段名逐个在；档位段头与三份产物文件名同形；`demo.sh` 认的每个环境变量这一支也认，多认的只许 `HOME` / `USERPROFILE`——那是取主目录不是旋钮）与 `DemoPs1_ExitsNonZeroWhenAScreenIsMissing`（缺段那一句带 `$seg`、`$tierMissing` 与 `$totalMissing` 两级递增、结尾「演示未收口」与 `exit 1` 必须在同一个条件块内、列数守卫按**块边界**判）。
+- **变异验证实测可红**：段名漂一个、缺段不点名、结尾条件调成恒假、删掉列数守卫本块的 `exit 1`、不认 `TIERS`——各红一条；还原后全绿。其中第四支是本轮抓到的一处假绿：原来的 `[\s\S]{0,200}?exit 1` 会越过本块去够下一支守卫里的 `exit 1`，改成按块切之后该变异才红。
+- **没跑到的那件事，如实写**：本容器**没有 PowerShell**——`pwsh` 与 `powershell` 都不在 PATH，wine 的 `powershell.exe` 第一行打的是 `fixme:powershell:wmain stub.`（那是个 stub）。所以简报 P0-2 那句「`pwsh -File … -WhatIf` 或等价 dry-run 在 Linux 侧跑通」本轮**没有做到**，这份脚本的语法是否可解析未经机器验证。可核对的是两件：脚本落仓、与 `demo.sh` 逐段同名（两条门判）。这一点同时写进了本节「降级答辩脚本」那一段与 `README.md`「已知限制」。
+- **附带两处文档**：`docs/NOTES.md`「降级答辩脚本」补一段 Windows 侧的落点与「这一支从未跑过」（简报 P0-2 附带项，该节其余内容逐字未动）；「G-D5 真机复核清单」的机械门那段补一句「**双写是本意，不要统一成一处**」（简报 P2-2）——动作单按天写、那份 README 按目录写，合并会同时丢掉一个方向，让两份不一致的是 `RealMachineEvidenceTests` 那三道门而不是抄写。
+- **`.winecheck/README.md` 的「脚本」表本轮不加 `demo.ps1` 一行**，理由如实写在这里：那张表的在册集合按 `*.sh` 取（`Scripts_OnDiskMatchTheReadmeRegistry`），把 `.ps1` 登记进去会被同一条门判成「说明指着不存在的脚本」。要让表覆盖两支脚本，得先改取法——那是独立一轮，不在这里顺手改门。
+
+**④ 未做与一笔要交代的账（如实挂账）**
+
+- 简报 P1-1（把 `AcceptanceChecklistTests.cs` 拆成三个文件）与 P1-2（G-D3 那一格的读数堆积移到 `>` 引用块）本轮**未动**：回合时间用在前两件与 critique 判出的那一处 typeset 上。
+- **读数那笔账要说清**：本轮为验证 typeset 切片复跑了 `bash .winecheck/demo.sh`（`PUBLISH=1`，重发冒烟器），三档各 **217 通过 / 0 失败 ×3**、逐屏对账 0 处对不上（第二百零五轮实测，**模拟器不是真机**）。而验收表 G-D3 / G-D4 / G-D5 三格与 `README.md` 里那几处「当前源码三档读数」仍写着 **208**——那是第一百九十三轮那一次的值，第 194–204 轮新增的冒烟段没有回写进那几格。**下一轮的第一件事**就是把这几处更新到本轮实测值、并把加法写清（`ReadingConsistencyTests` 判两处一致，`ReadingBreakdown_AddsUpToTheNumberItExplains` 判断加得起来）。本轮按简报「不重写 NOTES 验收表」的分寸没有动那几格，也不在这里另立第二个「当前源码」读数。
+- Windows GUI 与真机：G-D5 仍是 `[ ]`，SHARED-3 / 4 / 7 / 8 仍待真实 Apifox 端到端。本轮未连接或写入 Apifox，未调用任何模型服务，未安装依赖，未新建调度器、未动其他项目。
+
+**读数**：`dotnet build` 0 警告 0 错误；`dotnet test` **2671 全部通过 / 0 失败**（较第二百零四轮 2654 增 17 条：`CountCellTests` 8、`CritiqueDocTests` 7、`WineCheckScriptsTests` 新增 2）；`bash .winecheck/demo.sh`（`PUBLISH=1`）三档逐屏对账 0 处对不上（第二百零五轮实测，模拟器不是真机）。

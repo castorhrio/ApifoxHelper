@@ -519,11 +519,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         };
     }
 
-    /// <summary>数值列：等宽数字（D5），无值显示「—」。</summary>
-    private static ListViewItem.ListViewSubItem AddCount(ListViewItem row, int count)
-    {
-        var sub = row.SubItems.Add(count > 0 ? count.ToString() : "—");
-        sub.Font = UiTokens.Mono.Value;
-        return sub;
-    }
+    /// <summary>数值列：等宽数字（D5），无值显示「—」。字体经 Ui.CountCell 出厂（§3 等宽口径唯一落点）。</summary>
+    private static ListViewItem.ListViewSubItem AddCount(ListViewItem row, int count) =>
+        Ui.CountCell(row, count > 0 ? count.ToString() : "—");
 }

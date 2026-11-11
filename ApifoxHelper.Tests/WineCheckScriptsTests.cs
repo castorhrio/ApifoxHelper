@@ -292,11 +292,158 @@ public class WineCheckScriptsTests
             Assert.True(documented.Contains(name),
                 $"脚本读到环境变量 {name}，README 的表里没登记——它成了只有读源码才知道的暗配置。");
         }
+    }
 
-        foreach (var name in documented)
+    // ── 第二百零五轮（简报 P0-2）：Windows 侧那支与 demo.sh 逐段同名 ──────────
+
+    /// <summary>
+    /// 输出段名的取法（两份脚本共用一条）：单行字符串字面量里，去掉行首空格后，
+    /// 第一个全角冒号之前的那一段（不超过 12 个字、且不含 <c>$ （） 「」 。</c>）就是这一支脚本
+    /// 自己打出来的<b>段名</b>。这不是发明机制——它就是 <c>demo.sh</c> 打印讲稿与读数的那批前缀
+    /// （<c>报告：</c>、<c>讲稿：</c>、<c>讲什么：</c>、<c>引用段：</c>、<c>结论口径：</c>、<c>证据出处：</c>、
+    /// <c>演示未收口：</c>、<c>三档逐屏对账完成：</c>），答辩现场念的每一行都由这些前缀开头。
+    /// </summary>
+    private static readonly char[] LabelStopMarks = ['$', '（', '）', '「', '」', '。'];
+
+    private static SortedSet<string> SectionLabels(string text)
+    {
+        var labels = new SortedSet<string>(StringComparer.Ordinal);
+        // 字面量是单行的：[^"'] 不减掉换行会把 here-string 整块读成一份字面量，提出来的段名两边都不像谁。
+        foreach (Match literal in Regex.Matches(text, "[\"']([^\"'\n]*)[\"']"))
         {
-            Assert.True(used.Contains(name),
-                $"README 登记了环境变量 {name}，没有任何脚本再读它——从表里删掉，否则覆盖它什么也不会发生。");
+            var content = literal.Groups[1].Value.TrimStart(' ');
+            var at = content.IndexOf('：');
+            if (at <= 0 || at > 12) continue;
+            var label = content[..at];
+            if (label.Any(LabelStopMarks.Contains)) continue;
+            labels.Add(label);
         }
+
+        return labels;
+    }
+
+    /// <summary>
+    /// Windows 侧脚本（<c>.winecheck/demo.ps1</c>，第二百零五轮，简报 P0-2）与 <c>demo.sh</c> <b>逐段同名</b>。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>demo.sh</c> 是 bash，从未在 Windows（含 Git Bash / WSL / MSYS）跑过。
+    /// 到期日 2026-11-20 当天若真机仍不可得，降级答辩的唯一交付面就是这份讲稿——而它当时只有 Linux 一支。
+    /// 补一支 PowerShell 版的代价不是「再写一遍」，是<b>两份讲稿各说一套话</b>：段名漂了、读数格式漂了，
+    /// 现场念到的一行在另一台的报告里根本找不到。所以这里要求的不是「等价实现」，而是
+    /// <b>同名同读数</b>：两份脚本打印的段名集合必须一模一样，改一处就得改另一处。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 段名集合逐字相等（哪一支多一个、少一个都红，并把差集打出来）；② 集合不为空且
+    /// 地板 15 条（取法一旦退化，两份都会「相等在空集合上」，那等于没有门）；③ 六条关键段名（讲什么 /
+    /// 引用段 / 结论口径 / 证据出处 / 报告 / 讲稿）都在；④ 档位段头的前缀 <c>== 档位 LogPixels=</c> 与
+    /// 三份产物文件名（report- / narration- / console-）两边同形；⑤ 两边读的环境变量名同一套。
+    /// </para>
+    /// <para>
+    /// <b>它不做什么</b>：不跑 <c>demo.ps1</c>，也不跑 <c>pwsh</c>——本容器没有 PowerShell
+    /// （第二百零五轮实测：<c>pwsh</c> 与 <c>powershell</c> 都不在 PATH，wine 的
+    /// <c>powershell.exe</c> 打出的第一行是 <c>fixme:powershell:wmain stub.</c>，那是个 stub）。
+    /// 所以「语法可解析」这一条本轮<b>没有跑到</b>，如实记在 <c>docs/NOTES.md</c> 本轮记录里：
+    /// 这份脚本落到仓、与 <c>demo.sh</c> 逐段同名是可核对的，它能不能在真机上跑起来要等机器。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoPs1_NamesTheSameSectionsAsDemoSh()
+    {
+        var ps1Path = Path.Combine(Directory, "demo.ps1");
+        Assert.True(File.Exists(ps1Path), ".winecheck/demo.ps1 缺失（Windows 侧的降级答辩没有可跑的一支）。");
+
+        var sh = Repo.Source(".winecheck", "demo.sh");
+        var ps1 = File.ReadAllText(ps1Path);
+        var shLabels = SectionLabels(sh);
+        var ps1Labels = SectionLabels(ps1);
+
+        Assert.True(shLabels.Count >= 15,
+            $"demo.sh 只取到 {shLabels.Count} 个段名（地板 15）——取法退化了，两份「相等」可能是相等在空集合上。");
+        var onlySh = shLabels.Except(ps1Labels).ToList();
+        var onlyPs1 = ps1Labels.Except(shLabels).ToList();
+        Assert.True(onlySh.Count == 0 && onlyPs1.Count == 0,
+            $"两支脚本打印的段名不是同一套。只在 demo.sh 里：{string.Join("、", onlySh)}；只在 demo.ps1 里：{string.Join("、", onlyPs1)}"
+            + "——段名漂了的那一支，现场照着另一支念的那一行在它这里不存在。");
+        foreach (var key in new[] { "wine 前缀", "报告", "讲稿", "讲什么", "引用段", "结论口径", "证据出处", "演示未收口", "三档逐屏对账完成" })
+        {
+            Assert.True(ps1Labels.Contains(key), $"demo.ps1 没有打印「{key}」这一段——现场照着 demo.sh 的讲稿念的那一行在这支脚本里不存在。");
+        }
+
+        // 档位段头与三份产物：段名同名，产物的名字也必须同形，否则两份脚本各写一套落点。
+        foreach (var (name, text) in new[] { ("demo.sh", sh), ("demo.ps1", ps1) })
+        {
+            Assert.Contains("== 档位 LogPixels=", text, StringComparison.Ordinal);
+            Assert.Contains("report-", text, StringComparison.Ordinal);
+            Assert.Contains("narration-", text, StringComparison.Ordinal);
+            Assert.Contains("console-", text, StringComparison.Ordinal);
+            Assert.Contains("--report=", text, StringComparison.Ordinal);
+            Assert.Contains("smoke-source.sha", text, StringComparison.Ordinal);
+            Assert.False(Regex.IsMatch(text, @"#.*\bTODO\b"), $"{name} 里留着 TODO——降级答辩的面不能带未完成标记入库。");
+        }
+
+        // 两边读同一套环境变量（这是这些脚本唯一的取参入口，个人路径一律不许写死）。
+        // demo.ps1 允许多两个：HOME 与 USERPROFILE——那不是旋钮，是取主目录（Windows 上 HOME 常不存在，
+        // 回退 USERPROFILE）；除此之外多认一个名字，就是给自己开了一只 README 没登记的暗旋钮。
+        var shVars = Regex.Matches(sh, @"\$\{([A-Za-z_][A-Za-z0-9_]*):-").Cast<Match>()
+            .Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+        var ps1Vars = Regex.Matches(ps1, @"\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}").Cast<Match>()
+            .Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+        foreach (var knob in shVars)
+        {
+            Assert.True(ps1Vars.Contains(knob),
+                $"demo.sh 认环境变量 {knob}，demo.ps1 不认——同一份讲稿在两边不是同一条命令，切机器就得改脚本。");
+        }
+
+        var extra = ps1Vars.Where(v => !shVars.Contains(v) && v != "HOME" && v != "USERPROFILE").ToList();
+        Assert.True(extra.Count == 0,
+            $"demo.ps1 多认了环境变量 {string.Join("、", extra)}：demo.sh 没有的那一只从文档里查不到，覆盖它会发生什么没人知道。");
+    }
+
+    /// <summary>
+    /// <c>demo.ps1</c> 的失败路径：某一屏引用的段在报告里找不到时，必须<b>自己点名那一段</b>、
+    /// 计入本档、汇到总计，并在结尾那一支<b>真的</b>非零退出。
+    /// <para>
+    /// 判的是实现形状而不是「这句话在文件里」：<c>PrepareRealMachineScript_EveryStepNamesItsOwnFailure</c>
+    /// 同一族纪律。三处各判一件事——① 缺段那一句带着 <c>$seg</c>（不点名就等于把「对不上」藏进一句总话里）；
+    /// ② 缺段分支同时递增本档与总计两个计数（只增本档则结尾那支条件读不到它）；
+    /// ③ 结尾那一句「演示未收口」与 <c>exit 1</c> 必须在同一个 <c>if ($totalFail -gt 0 -or $totalMissing -gt 0)</c>
+    /// 块里——把它挪到块外，失败时照样打这句，成功时也打，那句话就成了自述。
+    /// 另有一支「逐屏表某一行不是 5 列」的同族守卫（格式错的行静默跳过 = 那一屏整屏不出现在讲稿里），
+    /// 判它自己点名并退出。
+    /// </para>
+    /// <para>不跑 pwsh（本机没有，理由见上一条），因此这一条判的是源码形状；真机上这一支会不会真的非零退出，
+    /// 由下一次带机器的一轮补。</para>
+    /// </summary>
+    [Fact]
+    public void DemoPs1_ExitsNonZeroWhenAScreenIsMissing()
+    {
+        var ps1 = File.ReadAllText(Path.Combine(Directory, "demo.ps1"));
+
+        // ① 缺段那一句：自己点名是哪一个段，并说明「先修这一处再答辩」。
+        var missing = Regex.Match(ps1, @"Write-Lines[^\n]*报告里没有这一段[^\n]*");
+        Assert.True(missing.Success, "demo.ps1 里没有「报告里没有这一段」那一句——某一屏引用的段找不到时它必须说出来。");
+        Assert.Contains("$seg", missing.Value, StringComparison.Ordinal);
+        Assert.Contains("逐屏表与冒烟器对不上", missing.Value, StringComparison.Ordinal);
+
+        // ② 递增两个计数：本档与总计，少一个就汇不到结尾那支条件。
+        Assert.True(Regex.IsMatch(ps1, @"\$tierMissing\+\+"), "demo.ps1 里缺段分支没有递增本档计数（$tierMissing++）。");
+        Assert.True(Regex.IsMatch(ps1, @"\$totalMissing\s*\+=\s*\$tierMissing"),
+            "demo.ps1 没有把本档的「对不上」汇进总计（$totalMissing += $tierMissing）——结尾那一步读的就是这个总数。");
+
+        // ③ 结尾那一步：条件是真的，且「演示未收口」与 exit 1 都在块内。
+        var guard = Regex.Match(ps1, @"if \(\$totalFail -gt 0 -or \$totalMissing -gt 0\)[\s\S]{0,400}?\n\}");
+        Assert.True(guard.Success,
+            "demo.ps1 结尾没有「失败或对不上就非零退出」这一支（或被写成恒不成立的条件）。");
+        Assert.Contains("演示未收口", guard.Value, StringComparison.Ordinal);
+        Assert.Contains("exit 1", guard.Value, StringComparison.Ordinal);
+
+        // ④ 逐屏表的行格式守卫：列数不对自己点名并退出，不静默跳过那一行。
+        // 取法必须按块边界：[\s\S]{0,200}?exit 1 会越过本块去够下一支守卫里的 exit 1（第二百零五轮实测：
+        // 把本块的 exit 1 删掉，那样写照样绿）。
+        Assert.Contains("不是 5 列", ps1, StringComparison.Ordinal);
+        var cellsGuard = Regex.Match(ps1, @"if \(\$cells\.Count -ne 5\) \{[\s\S]{0,300}?\n    \}");
+        Assert.True(cellsGuard.Success,
+            "demo.ps1 里「列数不对」那一支切不出块边界（写法被改动，或这一支的收尾大括号不在四空格那一档——本条按块判，先要能切出块）。");
+        Assert.True(cellsGuard.Value.Contains("exit 1"),
+            "demo.ps1 里「列数不对」那一支没有在自己的块内退出——静默跳过的那一屏不会出现在讲稿里，正是第一百六十七轮在 demo.sh 上修掉的同一族缺陷。");
     }
 }
