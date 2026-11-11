@@ -1428,18 +1428,18 @@ internal sealed class NewTaskDialog : DpiAwareForm
         var grid = Ui.FieldGrid(ProfileGridColumns.NarrowLabelWidth);
         AddRow(grid, "项目配置", _profile);
         AddRow(grid, "任务名称", Ui.Field(_name));
-        AddRow(grid, "", Ui.Caption("留空则用「配置名 月-日 时:分」。"));
+        Ui.HintRow(grid, "留空则用「配置名 月-日 时:分」。");
         var moduleHost = Ui.Hairline(_modules);
         moduleHost.Height = 96;
         AddRow(grid, "模块", moduleHost);
-        AddRow(grid, "", Ui.Caption("勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。"));
+        Ui.HintRow(grid, "勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。");
         AddRow(grid, "路径前缀", Ui.Field(_prefixes));
-        AddRow(grid, "", Ui.Caption("补充接口路径前缀，用「,」「;」分隔；可与模块并用。"));
+        Ui.HintRow(grid, "补充接口路径前缀，用「,」「;」分隔；可与模块并用。");
         AddRow(grid, "指定接口", Ui.Field(_keys));
-        AddRow(grid, "", Ui.Caption(TaskCreation.KeysHint));
+        Ui.HintRow(grid, TaskCreation.KeysHint);
         AddRow(grid, "版本备注", Ui.Field(_note));
         _note.PlaceholderText = TaskCreation.NotePlaceholder;
-        AddRow(grid, "", Ui.Caption(TaskCreation.NoteFallbackHint));
+        Ui.HintRow(grid, TaskCreation.NoteFallbackHint);
         AddRow(grid, "", _offline);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
@@ -1486,15 +1486,13 @@ internal sealed class NewTaskDialog : DpiAwareForm
         var row = grid.RowCount;
         grid.RowCount = row + 1;
         grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        // 没有标签的行不放占位控件：放了就把这一行撑到那个控件的高度（离线模式那一行此前
+        // 被默认尺寸的 Panel（200×100）撑到 100px 高）。提示行另有工厂 Ui.HintRow。
         if (label.Length > 0)
         {
             var caption = Ui.Body(label);
             caption.Margin = new Padding(0, UiTokens.Md, UiTokens.Sm, UiTokens.Xs);
             grid.Controls.Add(caption, 0, row);
-        }
-        else
-        {
-            grid.Controls.Add(new Panel { Margin = new Padding(0) }, 0, row);
         }
         field.Margin = new Padding(0, UiTokens.Sm, 0, UiTokens.Xs);
         grid.Controls.Add(field, 1, row);

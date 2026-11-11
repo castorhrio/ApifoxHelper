@@ -45,7 +45,7 @@ public class CaptionBrevityTests
     /// <summary>说明行句数上限（按句号计）。一句讲这块框是什么，第二句讲什么时候可用。</summary>
     private const int MaxCaptionSentences = 2;
 
-    /// <summary>说明行在源码里的三种写法（第一百六十轮）。</summary>
+    /// <summary>说明行在源码里的四种写法（第一百六十轮三种，第二百零六轮起加提示行工厂这一种）。</summary>
     internal enum CaptionForm
     {
         /// <summary><c>Ui.Caption("…")</c>：就地字面量。</summary>
@@ -56,6 +56,14 @@ public class CaptionBrevityTests
 
         /// <summary><c>Ui.Caption(共享常量)</c>：文字在共享口径文件里（如 <c>EvidenceEntries.SnippetCaption</c>）。</summary>
         SharedConstant,
+
+        /// <summary>
+        /// <c>Ui.HintRow(grid, "…")</c> 调用点：两列字段网格里的提示行（第二百零六轮，具名 pass：distill）。
+        /// 此前这一族有四种写法（配置页借 <c>AddRow(grid, "", Ui.Caption(…))</c>、三个配置子对话框各带一份
+        /// 私有 <c>AddHint</c>、新建任务对话框的 <c>AddRow</c>）；收成一处工厂后，门的提取口径必须跟着认这一种
+        /// 写法——认不到就等于那二十六行说明行不再被长度门看过，而界面照旧显示它们。
+        /// </summary>
+        HintRowCallSite,
     }
 
     /// <summary>一条说明行：文件、行号、文字与写法。</summary>
@@ -70,10 +78,10 @@ public class CaptionBrevityTests
     /// </summary>
     private static readonly (string File, string Argument, string Why)[] DynamicCaptions =
     [
-        ("GenerationDialog.cs", "text", "字段提示：文字由当前字段的标签与提示拼成，随字段变化"),
-        ("ProfileAdvancedDialog.cs", "text", "字段提示：同上"),
-        ("ProfileAnalysisDialog.cs", "text", "字段提示：同上"),
+        ("Ui.cs", "text", "提示行工厂 Ui.HintRow：本处只交出形状（字段列一句 Caption、标签列留空），文字由调用处传入；"
+            + "调用点的字面量与共享常量由 ExtractCaptions 按 HintRowCallSite 逐条提取，不藏在工厂里"),
         ("SupplementsDialog.cs", "editor.Label", "编辑位标题：文字来自编辑位自身"),
+        ("GenerationDialog.cs", "GenerationEntries.KeyHint + \"。\"", "密钥提示：取共享常量再补一个句号，句子本体在 GenerationEntries 一份，界面不另抄一遍"),
         ("ProjectsPage.cs", "ProfileFormLayout.ProjectListHint(_editing is not null)", "提示文字由共享口径按「新建/编辑」两种状态给出"),
         ("SyncPreviewDialog.cs", "caption", "底部区说明行：文字来自 BuildBottomHost 调用点，调用点已逐条提取"),
         ("NoticeDialog.cs", "note", "提示附注：文字由调用方给（NoticeText 的两个共享常量），对话框不就地拼写"),
@@ -95,7 +103,7 @@ public class CaptionBrevityTests
     }
 
     /// <summary>
-    /// 提取说明行（三种写法）。纯函数：输入是「文件名 + 全文」与常量表，不读磁盘，可单测。
+    /// 提取说明行（四种写法）。纯函数：输入是「文件名 + 全文」与常量表，不读磁盘，可单测。
     /// </summary>
     internal static List<Caption> ExtractCaptions(
         IEnumerable<(string Name, string Text)> sources,
@@ -111,6 +119,19 @@ public class CaptionBrevityTests
                 foreach (Match match in Regex.Matches(line, @"Ui\.Caption\(""([^""]*)""\)"))
                 {
                     found.Add(new Caption(name, i + 1, match.Groups[1].Value, CaptionForm.Literal));
+                }
+                // 提示行工厂：文字仍是调用处给的那一句（就地字面量，或一个能解析的共享常量）。
+                foreach (Match match in Regex.Matches(line, @"Ui\.HintRow\([^,]+,\s*""([^""]*)"""))
+                {
+                    found.Add(new Caption(name, i + 1, match.Groups[1].Value, CaptionForm.HintRowCallSite));
+                }
+                foreach (Match match in Regex.Matches(line, @"Ui\.HintRow\([^,]+,\s*(?<arg>[\w.]+)\s*\)"))
+                {
+                    var argument = match.Groups["arg"].Value;
+                    if (constants.TryGetValue(argument, out var shared))
+                    {
+                        found.Add(new Caption(name, i + 1, shared, CaptionForm.HintRowCallSite));
+                    }
                 }
                 foreach (Match match in Regex.Matches(line, @"BuildBottomHost\([^,]+,\s*""([^""]*)"""))
                 {
@@ -142,7 +163,7 @@ public class CaptionBrevityTests
             var lines = text.Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
-                foreach (var (_, argument) in CaptionArguments(lines[i]))
+                foreach (var (_, argument) in CaptionArguments(lines[i]).Concat(HintRowArguments(lines[i])))
                 {
                     if (argument.Length == 0) continue;
                     if (argument.StartsWith('"')) continue;   // 就地字面量：已由 ExtractCaptions 提取
@@ -153,6 +174,42 @@ public class CaptionBrevityTests
             }
         }
         return unresolved;
+    }
+
+    /// <summary>
+    /// 一行里所有 <c>Ui.HintRow(…)</c> 的<b>第二个</b>实参原文（第二百零六轮起的提示行工厂：
+    /// 第一个实参是网格，第二个才是那句话）。取法与 <see cref="CaptionArguments"/> 同一套：
+    /// 顶层逗号切一次，再按括号配对取到收尾的 <c>)</c>。
+    /// </summary>
+    private static IEnumerable<(int Column, string Argument)> HintRowArguments(string line)
+    {
+        var index = 0;
+        while (index < line.Length)
+        {
+            var open = line.IndexOf("Ui.HintRow(", index, StringComparison.Ordinal);
+            if (open < 0) yield break;
+            var cursor = open + "Ui.HintRow(".Length;
+            var depth = 1;
+            var textStart = -1;
+            while (cursor < line.Length)
+            {
+                var ch = line[cursor];
+                if (ch == '(') depth++;
+                else if (ch == ')') depth--;
+                else if (ch == ',' && depth == 1)
+                {
+                    if (textStart < 0) { textStart = cursor + 1; }   // 第一个逗号之后才是文字
+                }
+                if (depth == 0) break;
+                cursor++;
+            }
+            if (textStart >= 0)
+            {
+                // cursor 停在收尾的 )（不含），所以切出来就是完整的文字实参原文。
+                yield return (open, line[textStart..Math.Min(cursor, line.Length)].Trim());
+            }
+            index = open + "Ui.HintRow(".Length;
+        }
     }
 
     /// <summary>
@@ -243,18 +300,19 @@ public class CaptionBrevityTests
 
         // 反向：封闭清单里登记了却找不到对应写法，说明那条理由已经过期（清单不许留死条目）。
         var stale = DynamicCaptions
-            .Where(entry => !sources.Any(s => s.Name == entry.File && CaptionArguments(s.Text).Any(a => a.Argument == entry.Argument)))
+            .Where(entry => !sources.Any(s => s.Name == entry.File
+                && CaptionArguments(s.Text).Concat(HintRowArguments(s.Text)).Any(a => a.Argument == entry.Argument)))
             .Select(entry => $"{entry.File}（{entry.Argument}）")
             .ToList();
         Assert.True(stale.Count == 0, "DynamicCaptions 里这些登记在源码里找不到对应写法（理由已过期）：" + string.Join("、", stale));
     }
 
     /// <summary>
-    /// 提取器本身可单测（第一百六十轮）：三种写法各提取一条，局部变量形式提取不到
+    /// 提取器本身可单测（第一百六十轮，第二百零六轮补第四种）：四种写法各提取一条，局部变量形式提取不到
     /// ——后者正是 <see cref="NoCaptionEscapesTheGate"/> 存在的理由。
     /// </summary>
     [Fact]
-    public void Extractor_SeesAllThreeWritingForms()
+    public void Extractor_SeesAllFourWritingForms()
     {
         const string source = """
             var a = Ui.Caption("就地字面量说明行");
@@ -262,15 +320,23 @@ public class CaptionBrevityTests
             var c = Ui.Caption(Shared.Caption);
             var d = Ui.Caption(text);
             var e = Ui.Caption();
+            var f = Ui.HintRow(grid, "提示行说明行");
+            var g = Ui.HintRow(grid, Shared.Hint);
             """;
-        var constants = new Dictionary<string, string>(StringComparer.Ordinal) { ["Shared.Caption"] = "共享常量说明行" };
+        var constants = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Shared.Caption"] = "共享常量说明行",
+            ["Shared.Hint"] = "提示行共享常量",
+        };
         var sources = new[] { ("Fake.cs", source) };
 
         var captions = ExtractCaptions(sources, constants);
-        Assert.Equal(3, captions.Count);
+        Assert.Equal(5, captions.Count);
         Assert.Contains(captions, c => c is { Text: "就地字面量说明行", Form: CaptionForm.Literal });
         Assert.Contains(captions, c => c is { Text: "底部区说明行", Form: CaptionForm.BottomHostCallSite });
         Assert.Contains(captions, c => c is { Text: "共享常量说明行", Form: CaptionForm.SharedConstant });
+        Assert.Contains(captions, c => c is { Text: "提示行说明行", Form: CaptionForm.HintRowCallSite });
+        Assert.Contains(captions, c => c is { Text: "提示行共享常量", Form: CaptionForm.HintRowCallSite });
 
         // 局部变量形式提取不到（门的盲区），空标签不算说明行（文字来自数据）。
         var unresolved = UnresolvedCaptionArguments(sources, constants);
@@ -425,6 +491,7 @@ public class CaptionBrevityTests
         CaptionForm.Literal => "字面量",
         CaptionForm.BottomHostCallSite => "底部区调用点",
         CaptionForm.SharedConstant => "共享常量",
+        CaptionForm.HintRowCallSite => "提示行工厂调用点",
         _ => form.ToString(),
     };
 }

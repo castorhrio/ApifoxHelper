@@ -67,23 +67,23 @@ internal sealed class ProfileAnalysisDialog : DpiAwareForm
         AddRow(grid, "JSON 命名", _naming);
         AddRow(grid, "枚举输出为字符串", _enumAsString);
         AddRow(grid, "非空引用类型", _nonNullable);
-        AddHint(grid, "与 Swashbuckle SupportNonNullableReferenceTypes 一致。");
+        Ui.HintRow(grid, "与 Swashbuckle SupportNonNullableReferenceTypes 一致。");
         _wrappers.Height = 64;
         AddRow(grid, "通用响应封装", Ui.Field(_wrappers));
-        AddHint(grid, "每行：类型名=数据属性名，例如 PNOSActionResult=Data；用于追踪 data 的实际类型（响应契约）。");
+        Ui.HintRow(grid, "每行：类型名=数据属性名，例如 PNOSActionResult=Data；用于追踪 data 的实际类型（响应契约）。");
 
         AddSection(grid, "代码分析");
         AddRow(grid, "分析配置名", Ui.Field(_configuration));
         AddRow(grid, "编译常量", Ui.Field(_symbols));
-        AddHint(grid, "留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。");
+        Ui.HintRow(grid, "留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。");
         AddRow(grid, "调用深度", Field(_depth, ProfileAnalysis.FieldMaxTraceDepth));
         AddRow(grid, "方法预算", Field(_budget, ProfileAnalysis.FieldMaxMethodsPerEndpoint));
-        AddHint(grid, "数字留空用默认值。");
+        Ui.HintRow(grid, "数字留空用默认值。");
         _xmlDocPaths.Height = 56;
         AddRow(grid, "XML 文档路径", Field(_xmlDocPaths, ProfileAnalysis.FieldXmlDocPaths));
-        AddHint(grid, "可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。");
+        Ui.HintRow(grid, "可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。");
         AddRow(grid, "去掉 Async 后缀", _suppressAsync);
-        AddHint(grid, "与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。");
+        Ui.HintRow(grid, "与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。");
 
         AddSection(grid, "质量规则");
         AddRow(grid, "通用 data 属性名", Ui.Field(_dataProperty));
@@ -92,10 +92,10 @@ internal sealed class ProfileAnalysisDialog : DpiAwareForm
 
         AddSection(grid, "Apifox CLI");
         AddRow(grid, "读取并发", Field(_concurrency, ProfileAnalysis.FieldReadConcurrency));
-        AddHint(grid, "只读详情的并发数（1–8）；写入始终串行。");
+        Ui.HintRow(grid, "只读详情的并发数（1–8）；写入始终串行。");
         AddRow(grid, "node 路径", Ui.Field(_nodePath));
         AddRow(grid, "cli.js 路径", Ui.Field(_cliPath));
-        AddHint(grid, "可选；为空时自动查找 PATH 与全局 npm 目录。");
+        Ui.HintRow(grid, "可选；为空时自动查找 PATH 与全局 npm 目录。");
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，主行动（确定）在最右。
@@ -230,17 +230,6 @@ internal sealed class ProfileAnalysisDialog : DpiAwareForm
         grid.Controls.Add(caption, 0, row);
         field.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
         grid.Controls.Add(field, 1, row);
-    }
-
-    private void AddHint(TableLayoutPanel grid, string text)
-    {
-        var row = grid.RowCount;
-        grid.RowCount = row + 1;
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        grid.Controls.Add(new Panel { Margin = new Padding(0) }, 0, row);
-        var hint = Ui.Caption(text);
-        hint.Margin = new Padding(0, 0, 0, UiTokens.Xs);
-        grid.Controls.Add(hint, 1, row);
     }
 
     private void SetStatus(string message, Color color)

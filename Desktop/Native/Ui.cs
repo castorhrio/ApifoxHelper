@@ -279,6 +279,36 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 两列字段网格里的提示行（说明某一行怎么填、留空会怎样）：一句 Caption 档文字放进<b>字段列</b>，
+    /// 标签列空着——不放任何占位控件。
+    /// <para>
+    /// <b>为什么要有这一处</b>（第二百零六轮，具名 pass：distill）：同一件事此前有四种写法——配置编辑
+    /// 对话框借 <c>AddRow</c> 传一个空标签把说明塞进字段列、「模块与模板 / 序列化与分析 / 模型服务」三个配置
+    /// 子对话框各带一份私有 <c>AddHint</c>、新建任务对话框的 <c>AddRow</c> 在空标签格里放
+    /// <c>new Panel { Margin = 0 }</c>。后两种放的都是<b>默认尺寸的 Panel（200×100）</b>，于是每一行提示
+    /// 都被撑到 100px 高（三个子对话框 17 行提示、新建任务 5 行提示与那一行离线模式勾选）——正是第一百四十八轮
+    /// 在配置页修掉的那个根因（<see cref="ProfileFormLayout.SpacerSize"/>），当时只改了那一个文件，同一族的
+    /// 三处没跟上。取的形状就是配置页那一种——四种写法里唯一在 wine 三档逐行量过行高的一种。
+    /// </para>
+    /// <para>
+    /// 本工厂只管形状不管文字：二十六句提示逐字留在调用处（四处取共享口径、其余就地字面量），
+    /// 文字内容不在这一处统一。
+    /// </para>
+    /// </summary>
+    public static Label HintRow(TableLayoutPanel grid, string text)
+    {
+        var row = grid.RowCount;
+        grid.RowCount = row + 1;
+        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        // 标签列留空：放一个默认尺寸的 Panel 进去，这一行就按那个面板的 100px 高排。
+        // 带 Ui. 限定名是刻意的：说明行的长度门按「Ui.Caption（」这个记号取字，工厂这一处也要留在它视野里。
+        var hint = Ui.Caption(text);
+        hint.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
+        grid.Controls.Add(hint, 1, row);
+        return hint;
+    }
+
+    /// <summary>
     /// 两列字段网格（DESIGN.md §6「两列字段网格」，第一百二十三轮）：左列字段名固定宽、右列输入框吃剩余宽度，
     /// 列宽随网格<b>当前</b>宽度重算——配置编辑、新建任务与三个配置子对话框共用这一份形状。
     /// <para>

@@ -2505,12 +2505,14 @@ internal static class Program
     /// 一大段空白，四个高级按钮彼此间距极大，右侧还出滚动条」——用户原话「很抽象、没法用」。
     /// 这一屏是产品主链路的第一步（没有配置就没有任务、没有检查），而它此前只有「构造得起来」这一条证据。
     /// <para>
-    /// 七段，全部量真实控件：① 逐行量字段网格的行高，超过 <see cref="ProfileFormLayout.MaxRowHeight"/>
+    /// 八段，全部量真实控件：① 逐行量字段网格的行高，超过 <see cref="ProfileFormLayout.MaxRowHeight"/>
     /// 的行即失败（空标签格里的默认尺寸 <c>Panel</c> 会把行撑到 100px）；② 网格不出横向滚动条
     /// （七十余字的长说明把网格撑宽过）；③ 保存/取消在可视区内、不被滚动区盖住；④ 三个必填字段
     /// 连续且都在首屏；⑤ 四个高级入口在同一行、间距不超过 <see cref="ProfileFormLayout.AdvancedEntryGap"/>；
     /// ⑥ 未保存时「读取项目列表」停用并给出说明（不是点了才报错）；⑦ 编辑对话框字段回显一致、
-    /// 「读取项目列表」可用。
+    /// 「读取项目列表」可用；⑧「新建任务 / 模块与模板 / 序列化与分析 / 模型服务」四个对话框逐条量
+    /// 提示行的行高（第二百零六轮：那三处私有 <c>AddHint</c> 与新建任务的 <c>AddRow</c> 都放过
+    /// 默认尺寸的占位 Panel，① 修掉的根因在这一族里没跟上）。
     /// </para>
     /// <para>
     /// 它证明的是「这一屏排得下、点得到、说得清」，**不是「好看」**——观感与 DPI 缩放仍随 G-D5 真机复核。
@@ -2669,6 +2671,43 @@ internal static class Program
                 if (!button.Enabled) throw new InvalidOperationException("编辑已保存的配置时「读取项目列表」是停用的。");
                 _lines.Add($"     回显：名称「{name.Text}」、仓库「{profile.WorkspaceRoot}」、API 项目「{profile.ApiProject}」");
             });
+
+            RunAction("配置表单：四个子对话框的提示行没有死空白（真实布局）", () =>
+            {
+                // 第二百零六轮（distill）：提示行收成一处工厂 Ui.HintRow 之前，「模块与模板 / 序列化与分析 /
+                // 模型服务」三份私有 AddHint 与新建任务的 AddRow 都在标签列放默认尺寸的 Panel（200×100），
+                // 每一行提示都被撑到 100px 高。这一段逐条量那四个对话框的提示行行高——改回去即红。
+                var tall = new List<string>();
+                foreach (var (screen, open) in new (string, Func<Form>)[]
+                {
+                    ("新建任务", () => new NewTaskDialog(profiles)),
+                    ("模块与模板", () => new ProfileAdvancedDialog(cli, profile)),
+                    ("序列化与分析", () => new ProfileAnalysisDialog(profile)),
+                    ("模型服务", () => new GenerationDialog(credentials, profiles, profile, profileExists: true)),
+                })
+                {
+                    using var form = open();
+                    form.Show();
+                    Application.DoEvents();
+                    var grid = FindGrid(form) ?? throw new InvalidOperationException($"「{screen}」对话框里找不到两列字段网格。");
+                    var heights = grid.GetRowHeights();
+                    var rows = new List<string>();
+                    for (var row = 0; row < heights.Length; row++)
+                    {
+                        if (!IsHintRow(grid, row)) continue;
+                        rows.Add($"第{row}行={heights[row]}px");
+                        if (heights[row] > limit) tall.Add($"「{screen}」第 {row} 行 {heights[row]}px（{TallestInRow(grid, row)}）");
+                    }
+                    if (rows.Count == 0) throw new InvalidOperationException($"「{screen}」对话框里没有一条提示行——工厂调用点被删掉了？");
+                    _lines.Add($"     提示行行高（{screen}，阈值 {limit}px）：{string.Join("，", rows)}");
+                }
+
+                if (tall.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"{tall.Count} 条提示行超过 {limit}px（正文行高 {UiTokens.Body.Value.Height} + 行内留白 {ProfileFormLayout.RowPadding}）：{string.Join("，", tall)}");
+                }
+            });
         }
         finally
         {
@@ -2742,6 +2781,29 @@ internal static class Program
             ? "，内含 " + string.Join("/", tallest.Controls.Cast<Control>().Select(c => c.GetType().Name + " " + c.Height + "px"))
             : "";
         return $"{tallest.GetType().Name} 高 {tallest.Height}px、上下留白 {tallest.Margin.Top}+{tallest.Margin.Bottom}{inner}";
+    }
+
+    /// <summary>
+    /// 这一行是不是提示行：<b>标签列没有控件</b>、字段列里是一个 <c>Label</c>——
+    /// 即 <see cref="Ui.HintRow"/> 出厂的那个形状（第二百零六轮之前，三份私有 AddHint 与新建任务的
+    /// AddRow 会在标签列再放一个占位 Panel，这一判据正好把它们与字段行分开）。
+    /// <para>
+    /// <b>为什么不按字号认</b>：第一版按「那一格是 Caption 磅值」判，wine 实测 96 档认得出五行、
+    /// 120 与 192 档一条都认不出（冒烟器自己报「没有一条提示行」）。<c>Font.SizeInPoints</c> 随档位变
+    /// （窗体经 <c>DpiScale.Apply</c> 缩放后不再是 9），而「这一行的控件在哪一列」不变。
+    /// 判断要看形状，不能看一个会随缩放漂走的读数。
+    /// </para>
+    /// </summary>
+    private static bool IsHintRow(TableLayoutPanel grid, int row)
+    {
+        var hint = false;
+        foreach (Control control in grid.Controls)
+        {
+            if (grid.GetRow(control) != row) continue;
+            if (grid.GetColumn(control) == 0) return false;
+            if (control is Label) hint = true;
+        }
+        return hint;
     }
 
     /// <summary>字段名所在的行号（找不到返回 -1）。</summary>

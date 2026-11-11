@@ -197,7 +197,9 @@ public class CritiqueDocTests
 
     /// <summary>
     /// ⑦ 声称本轮落地的 pass 必须真在源码里：critique 与提交之间不许断裂。
-    /// 本轮落地的是 typeset 那一处（<c>Ui.CountCell</c>），符号必须真在 <c>Ui.cs</c> 里，
+    /// 第二百零五轮落地的是 typeset 那一处（<c>Ui.CountCell</c>），第二百零六轮落地的是 distill 那一处
+    /// （<c>Ui.HintRow</c>）——**按轮累加，不清零**：后一轮不许把前一轮声称过的东西覆盖掉，
+    /// 所以两处都还在这份文件里、两个符号也都还得在源码里。
     /// 而「本文没动的」那一节也得真列出没动的东西（不许写完判断就把账抹平）。
     /// </summary>
     [Fact]
@@ -212,10 +214,18 @@ public class CritiqueDocTests
         Assert.True(File.Exists(Path.Combine(Repo.Root, "ApifoxHelper.Tests", "CountCellTests.cs")),
             "critique 点名的门文件 ApifoxHelper.Tests/CountCellTests.cs 不在测试工程里。");
 
+        // 第二百零六轮那一处（distill，第 1 站的第三条）。
+        Assert.Contains("Ui.HintRow", Doc, StringComparison.Ordinal);
+        Assert.Contains("HintRowTests", Doc, StringComparison.Ordinal);
+        Assert.True(Repo.Source("Desktop", "Native", "Ui.cs").Contains("Label HintRow(TableLayoutPanel grid, string text)", StringComparison.Ordinal),
+            "critique 说第二百零六轮落地了 Ui.HintRow，而 Ui.cs 里没有这个符号——文档不许跑在代码前面。");
+        Assert.True(File.Exists(Path.Combine(Repo.Root, "ApifoxHelper.Tests", "HintRowTests.cs")),
+            "critique 点名的门文件 ApifoxHelper.Tests/HintRowTests.cs 不在测试工程里。");
+
         var pending = Regex.Match(Doc, @"## 本文没动的[^\n]*\n([\s\S]+)$");
         Assert.True(pending.Success, $"{DocPath} 缺「本文没动的」那一节：九处没动的判断要留在文件里，不能只留做掉的那一处。");
         Assert.True(Regex.Matches(pending.Groups[1].Value, @"(?m)^\d+\. ").Count >= 5,
-            "「本文没动的」少于五条——十站里只有两站本轮动手，剩下的账必须逐条排好，否则下一轮又得重读一遍。");
+            "「本文没动的」少于五条——十站里动手的只是少数站、少数处，剩下的账必须逐条排好，否则下一轮又得把这十站重读一遍。");
     }
 
     private static List<string> CitedCsFiles(string text) =>

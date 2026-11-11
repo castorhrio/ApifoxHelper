@@ -167,8 +167,8 @@ public class TaskCreationTests : IDisposable
         // 两个输入框都经工厂出厂并包 1px 描边（DESIGN.md §6）；提示与占位取共享常量，不复制字面。
         Assert.Contains("AddRow(grid, \"指定接口\", Ui.Field(_keys));", dialog);
         Assert.Contains("AddRow(grid, \"版本备注\", Ui.Field(_note));", dialog);
-        Assert.Contains("Ui.Caption(TaskCreation.KeysHint)", dialog);
+        Assert.Matches(@"(?m)^\s*Ui\.HintRow\(grid, TaskCreation\.KeysHint\);", dialog);
         Assert.Contains("_note.PlaceholderText = TaskCreation.NotePlaceholder;", dialog);
-        Assert.Contains("Ui.Caption(TaskCreation.NoteFallbackHint)", dialog);
+        Assert.Matches(@"(?m)^\s*Ui\.HintRow\(grid, TaskCreation\.NoteFallbackHint\);", dialog);
     }
 }

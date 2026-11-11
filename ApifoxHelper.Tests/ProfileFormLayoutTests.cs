@@ -141,7 +141,7 @@ public class ProfileFormLayoutTests
         Assert.Contains("_loadProjectsButton.Enabled = ProfileFormLayout.ProjectListEnabled(_editing is not null);", ProjectsPage);
         Assert.DoesNotMatch(@"(?m)^\s*if \(!IsDisposed\) _loadProjectsButton\.Enabled = true;", ProjectsPage);
         // 说明行取同一份文案（界面不另写一句）。
-        Assert.Contains("Ui.Caption(ProfileFormLayout.ProjectListHint(_editing is not null))", ProjectsPage);
+        Assert.Matches(@"(?m)^\s*Ui\.HintRow\(grid, ProfileFormLayout\.ProjectListHint\(_editing is not null\)\);", ProjectsPage);
     }
 
     // ── 保存/取消随时可点 ──────────────────────────────────────────────
