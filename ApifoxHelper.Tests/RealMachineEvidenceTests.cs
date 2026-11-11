@@ -435,4 +435,166 @@ public class RealMachineEvidenceTests
         // 真机当天第一份要读的是那份 README，动作单必须指过去（否则它藏在 evidence 目录里没人找得到）。
         Assert.Contains(ReadmeRelative, section, StringComparison.Ordinal);
     }
+
+    /// <summary>「到期日当天执行单」那一页的标题前缀（三级标题，落在 G-D5 动作单那一节之内）。</summary>
+    private const string RunSheetHeading = "### 到期日当天执行单";
+
+    /// <summary>执行单那一页的正文行（标题行到下一个二级/三级标题之前）。</summary>
+    private static string[] RunSheetLines()
+    {
+        var lines = ActionListLines();
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(RunSheetHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的 G-D5 动作单里缺「{RunSheetHeading}」这一页：到期日当天要跑什么命令、读哪份文件、"
+            + "写回哪一行，就又散回三处（三行 blockquote、降级答辩脚本、归档 README），现场翻文档 = 出错。");
+        var end = Array.FindIndex(lines, start + 1,
+            l => l.StartsWith("## ", StringComparison.Ordinal) || l.StartsWith("### ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    /// <summary>
+    /// 执行单的三步：按行首 <c>1. </c> / <c>2. </c> / <c>3. </c> 切块，每块含该步的标题行与下面三行。
+    /// </summary>
+    private static List<(int Number, string Text)> RunSheetSteps()
+    {
+        var steps = new List<(int, string)>();
+        var buffer = new System.Text.StringBuilder();
+        var number = 0;
+        foreach (var line in RunSheetLines())
+        {
+            var m = Regex.Match(line, @"^(\d+)\.\s");
+            if (m.Success)
+            {
+                if (number > 0) steps.Add((number, buffer.ToString()));
+                number = int.Parse(m.Groups[1].Value);
+                buffer.Clear();
+            }
+
+            if (number > 0) buffer.AppendLine(line);
+        }
+
+        if (number > 0) steps.Add((number, buffer.ToString()));
+        return steps;
+    }
+
+    /// <summary>
+    /// 一段文字里有没有引到<b>仓内实物</b>：反引号里的一条命令（其脚本/路径在仓里）、一个文件或目录路径、
+    /// 或一个真的存在的断言名（<c>XxxTests.Method</c>）。
+    /// <para>
+    /// 判「引到实物」而不是「有反引号」，是因为「跑一下脚本」「看那份 README」这种写法在反引号里也成立，
+    /// 而真机当天要的是<b>能照着敲的那一条</b>。
+    /// </para>
+    /// </summary>
+    private static bool CitesRealArtifact(string text)
+    {
+        foreach (Match m in Regex.Matches(text, "`([^`]+)`"))
+        {
+            var span = m.Groups[1].Value.Trim();
+
+            // 断言名：XxxTests.Method —— 方法名必须真的在测试工程里（写错一个字母即红）。
+            var assertion = Regex.Match(span, @"^(\w+Tests)\.(\w+)$");
+            if (assertion.Success && AssertionExists(assertion.Groups[1].Value, assertion.Groups[2].Value)) return true;
+
+            // 命令或路径：按空白与管道切开，逐段看是不是仓内实物。
+            foreach (var token in span.Split([' ', '|', '"', '\''], StringSplitOptions.RemoveEmptyEntries))
+            {
+                var path = token.Trim();
+                if (path.Length == 0 || path.StartsWith('-')) continue;
+                if (!path.Contains('/') && !path.EndsWith(".md", StringComparison.Ordinal)
+                    && !path.EndsWith(".sh", StringComparison.Ordinal) && !path.EndsWith(".cs", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var full = Path.Combine(Repo.Root, path.TrimEnd('/'));
+                if (File.Exists(full) || Directory.Exists(full)) return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>测试工程里有没有这个断言方法（按类名找文件、按方法名找声明）。</summary>
+    private static bool AssertionExists(string className, string methodName)
+    {
+        var file = Path.Combine(Repo.Root, "ApifoxHelper.Tests", className + ".cs");
+        return File.Exists(file)
+            && Regex.IsMatch(File.ReadAllText(file), $@"\b{Regex.Escape(methodName)}\s*\(");
+    }
+
+    /// <summary>
+    /// 到期日当天「5 分钟走得完」的执行单：三步各被点到一次、每步一行命令 / 一行读什么 / 一行写回哪、
+    /// 每步至少引一条仓内实物、第 3 步的两处回写落点与三行动作 ② 逐字一致（第一百八十一轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第一百八十轮把「谁在何时决定、回写到哪一行、由哪条断言核回写」三行落成了
+    /// （<see cref="DueDate_HasADecisionAction"/>），但<b>当天要跑什么命令、读哪份文件、写回哪一行仍散在三处</b>
+    /// （本节开头的三行 blockquote、<c>docs/NOTES.md</c> 的「降级答辩脚本」、<c>docs/evidence/real-machine/README.md</c>）。
+    /// 到期日当天人的注意力有限，散在三处 = 现场翻文档 = 出错。这一页把三步收成一条线。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 三步编号 1 / 2 / 3 各一次（少一步或多一步即红）；② 每步都有「命令：」「读什么：」
+    /// 「写回哪：」三行（缺一行，那一步就只剩一句口号）；③ 每步至少引一条仓内实物——命令的脚本、要读的文件、
+    /// 或核回写的断言名，且它<b>真的在仓里</b>（写错路径即红）；④ 第 3 步点名的两处回写落点
+    /// （<c>G-D5 行「当前结论」格</c> 与 <c>「已知限制」第 1 条</c>）与三行动作 ② 的措辞<b>逐字一致</b>——
+    /// 两处措辞漂开，就是两套说法。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判当天选哪一支</b>（「按降级路径执行」还是「延后至 &lt;日期&gt;」要人判），
+    /// <b>不判真机跑没跑</b>，也<b>不判 G-D5 算不算过</b>。它只保证「当天 5 分钟内走得完、写回不漂」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DueDateRunSheet_HasThreeStepsEachAnchoredToARealArtifact()
+    {
+        var steps = RunSheetSteps();
+
+        // ① 三步各一次：编号必须正好是 1 / 2 / 3（多一步是没人判的动作，少一步是断链）。
+        Assert.Equal([1, 2, 3], steps.Select(s => s.Number));
+
+        // ② 每步三行 + ③ 每步至少引一条仓内实物。
+        foreach (var (number, text) in steps)
+        {
+            foreach (var label in new[] { "命令：", "读什么：", "写回哪：" })
+            {
+                Assert.True(text.Contains(label, StringComparison.Ordinal),
+                    $"执行单第 {number} 步没有「{label}」那一行：每步要有一行命令、一行读什么、一行写回哪，"
+                    + "缺一行那一步就只剩一句口号，当天仍要现场想。");
+            }
+
+            Assert.True(CitesRealArtifact(text),
+                $"执行单第 {number} 步一条仓内实物都没引（命令的脚本 / 要读的文件 / 核回写的断言名，且它真的在仓里）："
+                + "「跑一下脚本」「看那份 README」这种写法当天照着敲不出来。");
+
+            // ③ 的加强版：**那一行命令本身**要指到仓内实物。整步引到不算——「读什么」那行引到文件、
+            //    命令那行写错一个路径，当天照着敲就是一条空命令，而整步判据照样绿。
+            //    只判「命令：」到第一个全角括号之前的那一段——括号里是解释，解释里提到 `README.md`
+            //    不该把一条写错路径的命令救活。
+            var commandLine = text.Split('\n').FirstOrDefault(l => l.Contains("命令：", StringComparison.Ordinal));
+            var command = commandLine is null
+                ? string.Empty
+                : commandLine[(commandLine.IndexOf("命令：", StringComparison.Ordinal) + "命令：".Length)..];
+            var paren = command.IndexOf('（');
+            if (paren >= 0) command = command[..paren];
+            Assert.True(CitesRealArtifact(command),
+                $"执行单第 {number} 步的「命令：」那一行没指到仓内实物（脚本 / 目录 / 文件，且它真的在仓里）："
+                + "当天照着敲的命令必须能敲通，写错一个路径就是一条空命令。");
+        }
+
+        // ④ 第 3 步的两处回写落点必须与三行动作 ② 逐字一致。
+        var blockquote = string.Join('\n', ActionListLines()
+            .Where(l => l.TrimStart().StartsWith(">", StringComparison.Ordinal)));
+        var step3 = steps.Single(s => s.Number == 3).Text;
+        foreach (var anchor in new[] { "G-D5 行「当前结论」格", "「已知限制」第 1 条" })
+        {
+            Assert.True(blockquote.Contains(anchor, StringComparison.Ordinal),
+                $"三行动作 ② 里没有「{anchor}」这个回写落点：回写路径的措辞在那一行定，执行单照抄它。");
+            Assert.True(step3.Contains(anchor, StringComparison.Ordinal),
+                $"执行单第 3 步没点名「{anchor}」：两处回写落点少一处，判定结果就只落一半，另一处漂成第二套说法。");
+        }
+
+        // ⑤ 到期日与「不判哪一支」的诚实口径都在这一页上（读这一页的人不必再翻回上面）。
+        var sheet = string.Join('\n', RunSheetLines());
+        Assert.Contains("2026-11-20", sheet, StringComparison.Ordinal);
+        Assert.Contains("不判", sheet, StringComparison.Ordinal);
+    }
 }
