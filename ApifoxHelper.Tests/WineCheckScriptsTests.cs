@@ -40,15 +40,63 @@ public class WineCheckScriptsTests
         }
     }
 
-    /// <summary>每个脚本都从环境变量取路径，且缺变量时立刻失败（`set -u`），不静默跑空。</summary>
+    /// <summary>
+    /// <b>驱动 wine 的脚本</b>（封闭名单）。
+    /// <para>
+    /// 第二百零八轮之前，下面那条门要求 <c>.winecheck/</c> 下<b>每一支</b> <c>.sh</c> 都设
+    /// <c>WINEPREFIX</c> 与 <c>DISPLAY</c>。新增的 <c>collect-real-machine.sh</c> 撞上了这条：
+    /// 它只读一个目录树、一个进程都不启动，照原样要求它设这两只旋钮，等于逼它留两只
+    /// 「README 里得登记、但覆盖了什么没人知道」的假旋钮——正是同文件另一条门
+    /// （<see cref="EnvironmentVariables_AreDocumentedExactlyAndStillUsed"/>）要防的那种暗旋钮。
+    /// </para>
+    /// <para>
+    /// 名单写成字面量而不是「从脚本里抓 wine 字样」，与本仓同一族做法一致（<c>Repo.ServiceDirectories</c>、
+    /// <c>RealMachineEvidenceTests.ExpectedDirectories</c>）：<b>抓出来的名单会跟着源码漂</b>，
+    /// 而这条门要防的恰恰是漂。名单的<b>单向</b>风险由 <see cref="WineInvocations"/> 兜住：
+    /// 名单外那一支一旦真的调用起 wine / X，门就红并把它点名进名单。
+    /// </para>
+    /// </summary>
+    private static readonly string[] WineDrivingScripts =
+        ["run_app.sh", "shot_dialog.sh", "fill.sh", "demo.sh", "prepare-real-machine.sh"];
+
+    /// <summary>「真的在驱动 wine」的形状：启动 wine 进程、问 wine 要路径、点窗口、改缩放档。</summary>
+    private static readonly string[] WineInvocations =
+        ["WINE_BIN", "winepath", "xdotool", "xvfb-run", "LogPixels"];
+
+    /// <summary>
+    /// 每个脚本都从环境变量取路径、缺变量时立刻失败（<c>set -u</c>），不静默跑空；
+    /// 而 <c>WINEPREFIX</c> / <c>DISPLAY</c> 只对<b>真的驱动 wine</b> 的那几支是硬要求。
+    /// </summary>
     [Fact]
     public void Scripts_TakeTheirPathsFromEnvironmentVariables()
     {
+        var onDisk = Scripts().Select(s => s.Name).ToList();
+        foreach (var name in WineDrivingScripts)
+        {
+            Assert.True(onDisk.Contains(name, StringComparer.Ordinal),
+                $"wine 驱动名单里的 {name} 不在磁盘上了——名单要么跟上现实，要么这条门判的就不是它以为在判的那几支。");
+        }
+
         foreach (var (name, text) in Scripts())
         {
             Assert.Contains("set -u", text, StringComparison.Ordinal);
-            Assert.Contains("WINEPREFIX=${WINEPREFIX:-", text, StringComparison.Ordinal);
-            Assert.Contains("DISPLAY=${DISPLAY:-", text, StringComparison.Ordinal);
+            var driving = WineDrivingScripts.Contains(name, StringComparer.Ordinal);
+
+            if (driving)
+            {
+                Assert.Contains("WINEPREFIX=${WINEPREFIX:-", text, StringComparison.Ordinal);
+                Assert.Contains("DISPLAY=${DISPLAY:-", text, StringComparison.Ordinal);
+                continue;
+            }
+
+            // 名单外：不碰 wine 是允许的，但路径仍不许写死——至少得有一只 ${VAR:-} 旋钮。
+            var invoked = WineInvocations.Where(text.Contains).ToList();
+            Assert.True(invoked.Count == 0,
+                $"{name} 不在 wine 驱动名单里，却用到了 {string.Join("、", invoked)}："
+                + "把它加进名单（它需要 WINEPREFIX 与 DISPLAY 的缺省），否则这一支换台机器就会静默跑空。");
+            Assert.True(Regex.IsMatch(text, @"\$\{[A-Za-z_][A-Za-z0-9_]*:-"),
+                $"{name} 既不驱动 wine，也没有任何 ${'{'}VAR:-默认{'}'} 旋钮："
+                + "它的路径一定是写死的，换一台机器就撞「找不到文件」，而那句话看起来像脚本自己的错。");
         }
     }
 
@@ -807,5 +855,160 @@ public class WineCheckScriptsTests
         }
 
         return null;
+    }
+
+    // ── 第二百零八轮（简报 P0-1）：真机证据归档核对这支脚本 ─────────────
+
+    /// <summary>
+    /// <c>collect-real-machine.sh</c>（第二百零八轮，简报 P0-1）自己的形状：<b>每一条「未通过」都自己点名、
+    /// 并且真的停住</b>，段尾那句「未收口」挂在块内、成功那句挂在块外，三个退出码都可达，
+    /// 并且它在 <c>.winecheck/README.md</c> 里有登记、登记里写明了它<b>不判内容</b>与<b>自己的 Windows 面</b>。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一支把「空目录 = 未达成」从文档里的自觉变成一条可跑的核对，
+    /// 判据全在它那三段的输出上。它跑在真机到手那一天——那天没有第二个人在场，
+    /// 「脚本停住了但没说为什么停」正是最贵的一种停法。同一族纪律已在
+    /// <see cref="PrepareRealMachineScript_EveryStepNamesItsOwnFailure"/> 与
+    /// <see cref="DemoPs1_ExitsNonZeroWhenAScreenIsMissing"/> 落过，这里按这一支的形状落第三次：
+    /// </para>
+    /// <para>
+    /// ① 第 ①② 段各至少一句「① / ② 未通过」，每一句都在失败路径上（本行或上一行有 <c>||</c>，
+    /// 或上一行是 <c>if …; then</c>），且每一句后面三行内真的 <c>exit 2</c>——只点名不停住，
+    /// 脚本会带着没读到的清单继续把「九个目录都空」念成结论；
+    /// ② 段尾「核对未收口」与 <c>exit 1</c> 必须在 <c>if [ "$PENDING_COUNT" -gt 0 ]; then … fi</c> 块内，
+    /// 而「归档核对通过」必须在块外——两句互换，成功与失败就会打同一句话；
+    /// ③ <c>exit 0 / 1 / 2</c> 三个都可达（缺一个就意味着某一类结果没法表达）；
+    /// ④ 它打印的口径里要有一句「本脚本不判」——操作者把退出码 0 读成「证据合格」是这一族最自然的误读；
+    /// ⑤ README 的登记在位：脚本名、这段核对的名字、不判内容、以及<b>它自己是 bash、真机需要 Git Bash / WSL</b>
+    /// 这一条挂账（没有 PowerShell 版这件事必须写在脸上，不许留到下一个人去撞）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不跑这一支脚本（跑它是 <c>RealMachineEvidenceTests.CollectScript_TreatsThePlaceholderAsEmptyAndNamesEveryDirectory</c>
+    /// 的活，那条在本容器每次都真执行）；也不判归档内容对不对——那要人看。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList()
+    {
+        var path = Path.Combine(Directory, "collect-real-machine.sh");
+        Assert.True(File.Exists(path),
+            ".winecheck/collect-real-machine.sh 缺失：「空目录 = 未达成」就仍只是文档里的自觉，"
+            + "真机当天还得靠人挨个翻目录，而翻一遍的代价是半天。");
+        var text = File.ReadAllText(path);
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+
+        // 段头切块（与 prepare-real-machine.sh 同一取法：按段头切，不按空行切——空行随排版漂）。
+        var boundaries = new[] { "①", "②", "③" };
+        var starts = boundaries
+            .Select(m => Array.FindIndex(lines, l => Regex.IsMatch(l, "^echo \"-- " + m + " ")))
+            .ToList();
+        for (var i = 0; i < boundaries.Length; i++)
+        {
+            Assert.True(starts[i] >= 0,
+                $"collect-real-machine.sh 里找不到第 {boundaries[i]} 段的段头（`echo \"-- {boundaries[i]} …--`）："
+                + "分段边界判不出来，「哪一步没过」也就无从核对。");
+        }
+
+        for (var i = 0; i < 2; i++)
+        {
+            var marker = boundaries[i];
+            var block = lines[starts[i]..(i + 1 < starts.Count ? starts[i + 1] : lines.Length)];
+            // 「注释掉的那一行」不算点名：第二百零八轮变异实测，把这一句整行前面加 `#` 注释掉，
+            // 只按文本取的判据照样绿——而脚本那时已经不会打出这句话了。取法必须落在真的会跑的那一行上。
+            var messages = block
+                .Select((line, index) => (Line: line, Index: index))
+                .Where(x => !x.Line.TrimStart().StartsWith('#')
+                             && Regex.IsMatch(x.Line, "echo \"" + marker + " 未通过"))
+                .ToList();
+            Assert.True(messages.Count > 0,
+                $"collect-real-machine.sh 第 {marker} 段没有一句「{marker} 未通过」：这一段跑不动时它会静默往下走，"
+                + "操作者只看到退出码，看不到是清单没读到、还是目录名两边对不上。");
+
+            // 按分支配对：每一个 exit 2 停靠点都得有自己那一句点名。
+            // 只判「这一段里至少有一句」是不够的——第二百零八轮实测：把 ② 段两条分支里的一条点名删掉，
+            // 另一条还在，门照样绿，而被删掉那一条失败时就是「停住了但没说为什么停」。
+            var stops = block
+                .Select((line, index) => (Line: line, Index: index))
+                .Where(x => x.Line.Trim() == "exit 2")
+                .ToList();
+            Assert.True(messages.Count == stops.Count,
+                $"collect-real-machine.sh 第 {marker} 段有 {stops.Count} 个 `exit 2` 停靠点，却只有 {messages.Count} 句"
+                + $"「{marker} 未通过」：有一条分支停住时不点名，操作者当天只能看到脚本退了场。");
+            foreach (var (_, stopIndex) in stops)
+            {
+                var named = messages.Any(x => x.Index < stopIndex && stopIndex - x.Index <= 3);
+                Assert.True(named,
+                    $"第 {marker} 段第 {starts[i] + stopIndex + 1} 行那个 `exit 2` 前面三行内没有本段的「{marker} 未通过」："
+                    + "只点名不停住、或只停住不点名，都是同一种停法——当天没人知道卡在哪。");
+            }
+
+            foreach (var (line, index) in messages)
+            {
+                var previous = index > 0 ? block[index - 1] : string.Empty;
+                var onFailurePath = line.Contains("||", StringComparison.Ordinal)
+                    || previous.Contains("||", StringComparison.Ordinal)
+                    || Regex.IsMatch(previous.Trim(), @"^(if|elif)\b.*; then$");
+                Assert.True(onFailurePath,
+                    $"「{marker} 未通过」那一句不在失败路径上（本行与上一行都没有 `||`，上一行也不是 `if …; then`）："
+                    + "它会在成功时也打出来，失败时反而可能不打。");
+
+                var stoppedWithinThreeLines = block.Skip(index + 1).Take(3).Any(l => l.Trim().StartsWith("exit 2"));
+                Assert.True(stoppedWithinThreeLines,
+                    $"「{marker} 未通过」那一句后面三行内没有 `exit 2`：只点名不停住，脚本会带着没读到的清单"
+                    + "把「九个目录都空」念成结论——那正是这一支要防的那种结论。");
+            }
+        }
+
+        // 段尾：未收口与 exit 1 必须在块内，通过那一句必须在块外。
+        var pendingOpen = Array.FindIndex(lines, l => l.Trim().Contains("if [ \"$PENDING_COUNT\" -gt 0 ]; then", StringComparison.Ordinal));
+        Assert.True(pendingOpen >= 0,
+            "collect-real-machine.sh 没有「if [ \"$PENDING_COUNT\" -gt 0 ]; then」那一步：还差东西的目录必须被汇成一句并非零退出。");
+        var pendingClose = Array.FindIndex(lines, pendingOpen + 1, l => l.Trim() == "fi");
+        Assert.True(pendingClose > pendingOpen, "那段 `if` 切不出收尾的 `fi`（块被写坏了？）——本条按块边界判。");
+        var pendingBlock = string.Join('\n', lines[pendingOpen..(pendingClose + 1)]);
+        Assert.Contains("未收口", pendingBlock, StringComparison.Ordinal);
+        Assert.Contains("exit 1", pendingBlock, StringComparison.Ordinal);
+        var tail = string.Join('\n', lines[(pendingClose + 1)..]);
+        Assert.Contains("归档核对通过", tail, StringComparison.Ordinal);
+        Assert.True(!pendingBlock.Contains("归档核对通过", StringComparison.Ordinal),
+            "「归档核对通过」写在了未收口那个块里：成功与失败打同一句话，退出码就只剩数字在说话。");
+
+        foreach (var code in new[] { "exit 0", "exit 1", "exit 2" })
+        {
+            Assert.True(text.Contains(code, StringComparison.Ordinal),
+                $"collect-real-machine.sh 里 {code} 不可达：三个退出码分别说的是「活儿干完了」「活儿没干完」"
+                + "与「这条核对本身跑不动」，少一个就有一类结果没法表达。");
+        }
+
+        // 它必须把自己不判的那一半写在输出里，而不只写在注释里——而且**两个方向都要有**：
+        // 第二百零八轮变异实测，只判「输出里任意一处有这句」时，把开头那一行的「本脚本不判」删掉照样绿
+        // （结尾成功那一句还顶着）。开头那一句是当天第一屏读到的口径，结尾那一句挡的是「退出码 0 = 证据合格」这一种误读。
+        var opening = lines[0..starts[0]];
+        Assert.True(opening.Any(l => l.Contains("echo", StringComparison.Ordinal) && l.Contains("不判", StringComparison.Ordinal)),
+            "collect-real-machine.sh 开头那一句口径里没有「不判」：操作者进场第一屏读到的是「核完九个目录」，"
+            + "不是「核完九个目录，且不判内容」——这两句话差的那一半正是当天要人看的那一半。");
+        Assert.True(tail.Contains("不判", StringComparison.Ordinal),
+            "成功那一句（退出码 0 那一支）没写「不判」：退出码 0 会被读成「证据合格」，而它只说「目录都不空」。");
+
+        // ⑥ 文件名只有一份出处：脚本里不许出现任何产出物文件名的字面量。
+        //    清单改了而脚本没跟上，正是这一族最贵的漂移（第一百六十九轮「run1.sh 的悬空引用」同一课）；
+        //    .md / .sh 是脚本自己要读的仓内文档，不算产出物。
+        foreach (var suffix in new[] { ".png", ".json", ".jsonl", ".txt" })
+        {
+            Assert.False(text.Contains(suffix, StringComparison.Ordinal),
+                $"collect-real-machine.sh 里出现了带 {suffix} 的字面量：产出物文件名只有一份出处"
+                + "（docs/evidence/real-machine/README.md 的清单），脚本抄一份就意味着改清单时这一支会静默落后，"
+                + "念出来的「该放什么」是上一版的。");
+        }
+
+        // README 登记：这一段核对的落点必须**独有**，不能被别处的文字替身救活。
+        // 第二百零八轮实测：原先只查「不判内容」「Git Bash」这两个词，把整节登记删掉门照样绿——
+        // 脚本表那一行里也写着「不判内容」，demo.ps1 那一节里也写着 Git Bash。
+        var readme = Repo.Source(".winecheck", "README.md");
+        Assert.Contains("## 真机证据归档核对", readme, StringComparison.Ordinal);
+        Assert.Contains("有东西 0 / 9", readme, StringComparison.Ordinal);
+        Assert.True(new[] { "0 = 九个", "1 = 还有", "2 = " }.Count(readme.Contains) == 3,
+            ".winecheck/README.md 没把这支脚本的三个退出码各写一行：退出码是当天唯一要读的东西，"
+            + "少一个就意味着有一类结果只有读源码才知道它是什么。");
+        Assert.Contains("真机上要有 Git Bash", readme, StringComparison.Ordinal);
     }
 }

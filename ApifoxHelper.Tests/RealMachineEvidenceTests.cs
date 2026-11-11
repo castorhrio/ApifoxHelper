@@ -1182,4 +1182,195 @@ public class RealMachineEvidenceTests
                 + "没有占位的话这个目录提交不进仓，下一个人 clone 下来又得自己建。");
         }
     }
+
+    // ---------- 第二百零八轮（简报 P0-1）：「空目录 = 未达成」第一次有一条可跑的核对 ----------
+
+    /// <summary>一个目录里「除隐藏占位之外」的文件数（与脚本同一口径：以 <c>.</c> 开头的都不算）。</summary>
+    private static int RealFileCount(string dir) =>
+        Directory.Exists(dir)
+            ? Directory.GetFiles(dir, "*", SearchOption.TopDirectoryOnly).Count(f => !Path.GetFileName(f).StartsWith('.'))
+            : 0;
+
+    /// <summary>
+    /// 每个归档目录「该放哪些产出物文件名」，从 README 那张表现读（<c>&lt;档位&gt;</c> 按目录名展开）。
+    /// 与本文件另外几条门共用 <see cref="ArtifactRows"/> 与 <see cref="DirectoriesIn"/> 同一取法，
+    /// 不另写第二份解析器——本仓已经因为「各写一份去注释」犯过四次。
+    /// </summary>
+    private static Dictionary<string, List<string>> ArtifactsByDirectory()
+    {
+        var map = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var row in ArtifactRows())
+        {
+            foreach (var dir in DirectoriesIn(row.DirCell))
+            {
+                if (!map.TryGetValue(dir, out var list)) map[dir] = list = [];
+                foreach (Match m in Regex.Matches(row.Files, "`([^`]+)`"))
+                {
+                    var name = m.Groups[1].Value;
+                    // 只收带点又不带斜杠的那个（文件名）；格里另有「一行三个数」这类说明性反引号记号。
+                    if (name.Contains('.') && !name.Contains('/'))
+                    {
+                        list.Add(name.Replace("<档位>", dir).Replace("<dpi>", dir));
+                    }
+                }
+            }
+        }
+
+        return map;
+    }
+
+    /// <summary>找 bash（PATH，再退到三个常规位置）。找不到返回 null，调用方走「这台机器判不到」那一支。</summary>
+    private static string? LocateBash()
+    {
+        var dirs = new List<string>();
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path)) dirs.AddRange(path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+        dirs.AddRange(["/bin", "/usr/bin", "/usr/local/bin"]);
+
+        foreach (var dir in dirs.Distinct(StringComparer.Ordinal))
+        {
+            try
+            {
+                var candidate = Path.Combine(dir, "bash");
+                if (File.Exists(candidate)) return candidate;
+            }
+            catch (ArgumentException)
+            {
+                // 这一台上不合法的目录写法（比如 Windows 路径出现在 Linux 上）跳过就行。
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>真的执行一次核对脚本；<paramref name="evidence"/> 为空时用仓里那个归档根。</summary>
+    private static (int Exit, string Output) RunCollectScript(string? evidence)
+    {
+        var psi = new ProcessStartInfo(LocateBash()!, Path.Combine(Repo.Root, ".winecheck", "collect-real-machine.sh"))
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            WorkingDirectory = Repo.Root,
+        };
+        psi.Environment["LANG"] = "C.UTF-8";
+        if (evidence is not null) psi.Environment["EVIDENCE"] = evidence;
+
+        using var process = Process.Start(psi)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(120_000), "collect-real-machine.sh 跑了 120 秒还没退出——它只该读一个目录树。");
+        return (process.ExitCode, output + error);
+    }
+
+    /// <summary>
+    /// 真的执行 <c>.winecheck/collect-real-machine.sh</c>，核它判的就是「有没有东西」这一件事，
+    /// 并且三个退出码都<b>跑得活</b>（第二百零八轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：「空目录 = 未达成」这句判据此前只在文档里，靠人自觉；
+    /// <see cref="CheckedAction_RequiresItsArchiveDirectoryToHoldFiles"/> 又只在<b>有人把那一行勾成 [x]</b>
+    /// 时才去看目录。于是真机当天最可能的状态——「跑了一半，谁也没勾，也没人去翻那九个目录」——
+    /// 在仓里没有任何东西能回答。这一条把那条核对真的跑一遍：它输出的正是当天唯一读得到的
+    /// 「还差哪几个目录、各该放什么」。
+    /// </para>
+    /// <para>
+    /// <b>判五件事</b>：① <b>占位不算东西</b>——只装 <c>.gitkeep</c> 的目录必须报「还差东西」；
+    /// 这一条若是反的，九个目录永远「已到位」，整支核对当场是死的（本仓对每一条判据都跑一遍反向，
+    /// 为的就是让「它绿着」不等于「它什么都看不见」）；② 退出码与磁盘实数<b>同源</b>——仓里跑一次，
+    /// 期望值由本测试按同一口径自己数一遍文件得出，两边不一致即红；③ 九个归档目录逐个被点名；
+    /// ④ 每个「还差东西」都带着 README 为它点到的<b>每一个</b>产出物文件名（<c>&lt;档位&gt;</c> 已按目录名展开）；
+    /// ⑤ 临时假树上把 0（都不空）/ 1（还有空的）/ 2（清单没点到的目录、清单点到的目录不在）三个退出码都跑活。
+    /// </para>
+    /// <para>
+    /// <b>它判到哪一层</b>：这一支不启动任何界面、不碰模拟器，所以这一层在 Linux 上量到就是它的<b>全部行为</b>；
+    /// 它不判真机跑没跑，也不判归档内容对不对（截图有没有裁切、那三个数落得对不对，都要人看）。
+    /// 本机没有 bash 时这一条判不到——那种情况不许静默绿：不分路径都跑的
+    /// <c>WineCheckScriptsTests.CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList</c>
+    /// 要求 <c>.winecheck/README.md</c> 把这段核对登记在案（同 <c>DemoPs1_ParsesWithARealPowerShellParserWhenOneIsHere</c>
+    /// 的做法：判不到就说判不到）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CollectScript_TreatsThePlaceholderAsEmptyAndNamesEveryDirectory()
+    {
+        if (LocateBash() is null) return; // 这台机器上没有 bash：判不到，由上面那条门把登记守住。
+
+        var artifacts = ArtifactsByDirectory();
+
+        // ② 与仓里的磁盘实数同源：期望退出码由本测试自己数出来，不照抄脚本的话。
+        var (exit, output) = RunCollectScript(evidence: null);
+        var pendingInRepo = ExpectedDirectories.Where(d => RealFileCount(Path.Combine(EvidenceRoot, d)) == 0).ToList();
+        var expectedExit = pendingInRepo.Count > 0 ? 1 : 0;
+        Assert.True(exit == expectedExit,
+            $"仓里跑一次核对，脚本退出码 {exit}、本测试按同一口径数出来应该是 {expectedExit}"
+            + $"（还空的目录：{string.Join("、", pendingInRepo)}）。两边各判一套，当天念的就不是同一句话。");
+
+        // ③ 九个归档目录逐个被点名。
+        foreach (var dir in ExpectedDirectories)
+        {
+            Assert.True(output.Contains(dir + "/", StringComparison.Ordinal),
+                $"核对输出里没点到 {dir}/：九个目录少点一个，当天就少一个落点被看过。");
+        }
+
+        // ①④ 每个「还差东西」的目录都带着 README 为它点到的每一个文件名；占位单独不算东西。
+        foreach (var dir in pendingInRepo)
+        {
+            Assert.True(output.Contains($"[还差东西] {dir}/", StringComparison.Ordinal),
+                $"{dir}/ 里只有隐藏占位（本仓当前九个目录都是这样），核对却没报「还差东西」："
+                + "把 .gitkeep 算成东西 = 九个目录永远已到位，这条核对当场就是死的。");
+            foreach (var file in artifacts[dir])
+            {
+                Assert.True(output.Contains(file, StringComparison.Ordinal),
+                    $"{dir}/ 报了还差东西，却没打出该放的「{file}」：当天只知道缺、不知道缺哪一件。");
+            }
+        }
+
+        // ⑤ 临时假树：三个退出码都得真的跑得出来。
+        var temp = Path.Combine(Path.GetTempPath(), "ah-collect-" + Guid.NewGuid().ToString("N")[..12]);
+        try
+        {
+            Directory.CreateDirectory(temp);
+            File.Copy(ReadmePath, Path.Combine(temp, "README.md"));
+            foreach (var dir in ExpectedDirectories)
+            {
+                var full = Path.Combine(temp, dir);
+                Directory.CreateDirectory(full);
+                File.WriteAllText(Path.Combine(full, ".gitkeep"), string.Empty);
+            }
+
+            var (placeholderOnly, _) = RunCollectScript(temp);
+            Assert.True(placeholderOnly == 1,
+                $"假树里九个目录都只有 .gitkeep，脚本退出码却是 {placeholderOnly}（应为 1）："
+                + "占位被算成了东西，当天九个目录永远显示已到位。");
+
+            foreach (var dir in ExpectedDirectories)
+            {
+                File.WriteAllText(Path.Combine(temp, dir, "01-fake.png"), "假产出物，只为把「不空」这一支跑到");
+            }
+
+            var (filled, filledOutput) = RunCollectScript(temp);
+            Assert.True(filled == 0,
+                $"假树里九个目录都有了真文件，脚本退出码却是 {filled}（应为 0）——「都不空」这一支不可达，"
+                + "真机当天跑完七条动作也拿不到一句「可以回去判什么算过了」。");
+            Assert.Contains($"有东西的目录 {ExpectedDirectories.Length} / {ExpectedDirectories.Length} 个", filledOutput, StringComparison.Ordinal);
+
+            var orphan = Path.Combine(temp, "150");
+            Directory.CreateDirectory(orphan);
+            var (orphanExit, orphanOutput) = RunCollectScript(temp);
+            Assert.True(orphanExit == 2 && orphanOutput.Contains("清单没点到的目录：150/", StringComparison.Ordinal),
+                $"磁盘上多出一个清单没点到的 150/，脚本退出码 {orphanExit}：那种目录既不会被判据看见，"
+                + "也不会被下一个人找到——两边各一套名字时必须停下来点名。");
+            Directory.Delete(orphan);
+
+            Directory.Delete(Path.Combine(temp, "125"), true);
+            var (absentExit, absentOutput) = RunCollectScript(temp);
+            Assert.True(absentExit == 2 && absentOutput.Contains("在磁盘上不存在：125/", StringComparison.Ordinal),
+                $"清单点到的 125/ 不在磁盘上，脚本退出码 {absentExit}：少一档就是少截一套图，"
+                + "而这一句必须把档位点名，否则当天会去翻别的目录。");
+        }
+        finally
+        {
+            if (Directory.Exists(temp)) Directory.Delete(temp, true);
+        }
+    }
 }

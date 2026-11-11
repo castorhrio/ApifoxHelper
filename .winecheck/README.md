@@ -41,6 +41,7 @@ xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke
 | `fill.sh` | 在已打开的「新建配置」对话框里真实键入名称、仓库根目录与 API 项目路径，截图并 OCR |
 | `demo.sh` | **降级答辩的一键复跑演示**：按 wine 三档缩放各跑一次冒烟，并把 `docs/NOTES.md`「降级答辩脚本」逐屏表的每一行与那一档的报告对上一次，逐档产出讲稿（用法见下一节） |
 | `prepare-real-machine.sh` | **真机到手前的第 0 条四项准备，一条命令跑完**：① 复跑三档冒烟（调 `demo.sh`）→ ② 复跑 `dotnet build` 与 `dotnet test` → ③ 建好 `docs/evidence/real-machine/` 的九个归档子目录 → ④ 把 `docs/NOTES.md` 的七条动作单打印出来。任一步不过即非零退出并打出是哪一步（用法见下一节） |
+| `collect-real-machine.sh` | **真机证据归档核对**：从 `docs/evidence/real-machine/README.md` 的产出物清单读目录名与应放文件名，逐个归档目录判「除隐藏占位（`.gitkeep` 这类）之外有没有东西」，还空着的逐条点名「哪一条动作还没归档、该往里放哪些文件」。退出码 `0` = 九个目录都不空、`1` = 还有目录空着（已点名）、`2` = 核对本身跑不动（清单读不到 / 解析不出七条动作 / 清单与磁盘的目录名对不上）。**不判内容对不对**（截图有没有裁切、读数三个数落得对不对要人看），也不替人打勾 |
 
 ### 已删脚本（由上表取代，不要复活）
 
@@ -62,6 +63,7 @@ bash .winecheck/demo.sh                 # 三档各跑一次；产物在 /tmp/ah
 PUBLISH=1 bash .winecheck/demo.sh       # 冒烟器还没发布时，让脚本自己 dotnet publish
 TIERS=96 bash .winecheck/demo.sh        # 只跑 100% 档（答辩前自查用，一集约 17 秒）
 bash .winecheck/prepare-real-machine.sh # 真机到手前的第 0 条四项准备：①②③ 跑完 + ④ 打印七条动作单
+bash .winecheck/collect-real-machine.sh # 真机证据归档核对：九个目录各自有没有东西、还空的该放什么（真机当天每跑完一条动作跑一次）
 ```
 
 | 产物 | 内容 |
@@ -125,6 +127,8 @@ bash .winecheck/prepare-real-machine.sh # 真机到手前的第 0 条四项准�
 | `REPO` | 脚本所在目录的上一级 | 仓库根（`demo.sh` 从这里的 `docs/NOTES.md` 读逐屏表） |
 | `NOTES` | `$REPO/docs/NOTES.md` | 逐屏表的出处——屏单只有这一份，脚本从它读行、不另抄一份 |
 | `OUT` | `/tmp/ah-demo` | `demo.sh` 三档报告、讲稿与控制台日志的落点 |
+| `EVIDENCE` | `$REPO/docs/evidence/real-machine` | 真机证据归档根（`collect-real-machine.sh` 核对的就是这一层；指到临时目录可以拿假树自测它的判据） |
+| `README` | `$EVIDENCE/README.md` | 产出物清单的出处——`collect-real-machine.sh` 的目录名与「该放什么」只从那张表读，脚本里不抄第二份 |
 | `TIERS` | `96 120 192` | 要跑的 `LogPixels` 档（答辩前自查可只给一档） |
 | `PUBLISH` | `0` | 设 `1` 时脚本自己重发冒烟器（`build -t:Rebuild` + `publish` + 写源码指纹），见上一节 |
 | `READING` | `$REPO/.winecheck/reading.txt` | 读数记录的落点。三档跑完（**不论这一场收口与否**）脚本把「哪一支脚本、哪台机器、哪一天、哪一版源码、每档几条、每段几条」写在这里；`README.md` 与 `docs/NOTES.md` 念的那句「当前源码三档读数 N 通过 / 0 失败 ×3」由 `ApifoxHelper.Tests/ReadingConsistencyTests` 拿这份记录逐字对账，不再靠人抄。只想自查、不想动这份记录时设 `READING=/tmp/reading.txt` |
@@ -183,6 +187,48 @@ pwsh -File .winecheck/demo.ps1 -Publish 1         # 让脚本自己重发冒烟�
 **这一节判不到什么**：不判 Windows PowerShell 5.1 的语法差异（7 的解析器判不了 5.1）；不判 cmdlet 名、
 参数合法性与任何运行时行为；**更不判 Windows 真机**——上面那一次是在 Linux 容器里用 wine 跑的，
 G-D5 真机仍是 0 台、到期日 2026-11-20。
+
+## 真机证据归档核对（`collect-real-machine.sh`）
+
+「空目录 = 未达成」这句话此前只写在 `docs/evidence/real-machine/README.md` 与 `docs/NOTES.md` 里，
+靠人自觉。这一支把它变成一条可跑的核对：**判的只有「有没有东西」**——一个归档目录里除了隐藏占位
+（`.gitkeep` 这类以 `.` 开头的文件）之外有没有文件；有就打「已有 N 件」并把盘上的文件名念出来，
+没有就打「还差东西」，再照着产出物清单打出这一条动作**该往里放哪些文件名**（清单里 `<档位>` 占位符
+按目录名展开，`100/` 下就是 `100-主窗口.png`）。
+
+**退出码念什么**：退出码 0 = 九个归档目录都不空了；退出码 1 = 还有目录空着（上面已逐个点名，G-D5 仍不能勾）；
+退出码 2 = 这条核对本身跑不动（清单读不到、解析不出七条动作、或清单与磁盘的目录名对不上）——那一天先修这一支，
+再谈证据。
+
+**目录名与「该放什么」只有一份出处**：那张表在 `docs/evidence/real-machine/README.md`，脚本 awk 读它，
+自己一个文件名都不写死——所以改清单不用改脚本，脚本里若抄了第二份清单，门会红
+（`WineCheckScriptsTests.CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList`）。
+
+**跑到了哪一层（第二百零八轮 · 2026-11-12，Linux 容器实测，退出码与读数都是当场跑出来的）**：
+
+| 场景 | 读数 | 退出码 |
+| --- | --- | --- |
+| 当前仓（九个目录只有 `.gitkeep`） | 有东西 0 / 9，九个目录逐个点名「还差东西」并打出该放的文件名 | `1` |
+| 临时树，九个目录各塞一件真文件 | 有东西 9 / 9 | `0` |
+| 临时树，磁盘上多一个清单没点到的目录 | `② 未通过：磁盘上有清单没点到的目录：150/` | `2` |
+| 临时树，清单点到的目录被删掉 | `② 未通过：清单点到的目录在磁盘上不存在：125/` | `2` |
+| 把清单文件删掉 | `① 未通过：找不到产出物清单：…` | `2` |
+
+后四种都在临时树上跑（`EVIDENCE` 指过去即可），**由 `RealMachineEvidenceTests` 真跑这一支脚本判**——
+它不跑图形界面、不碰 wine，所以这一层在 Linux 上就是它的**全部行为**，不存在「Linux 绿了真机还不知道」。
+第一条那一行（当前仓 0 / 9、退出码 1）就是本轮实测读数，也是 G-D5 至今未达成的直接证据。
+
+**第一次跑就抓到它自己的一个缺陷**（记下来，因为它是这一族的老毛病）：念「已有 N 件」那一行原本用
+`tr '\n' '、'` 把换行拼成顿号，实测吐出来的是 `0xE3` 一个碎片字节——`tr` 按字节处理，多字节分隔符
+只保留最后一个字节，后面的 `sed 's/、$//'` 也就无从删起。改成 `awk 'NR > 1 { printf "、" }'` 逐行打分隔符。
+仓里另外五支脚本没有同类 `tr` 用法（逐个查过）。
+
+**它不判什么**：不判内容对不对（截图有没有裁切、读数那三个数落得对不对、字段名写没写都要人看）、
+不打勾（勾由人按那份 README 的「什么算过」回写 `docs/NOTES.md`）、不判真机跑没跑（真机仍 0 台）。
+
+**它自己的 Windows 面（如实挂账，与 `demo.ps1` 同一族）**：这一支是 bash，真机上要有 Git Bash / WSL
+才跑得动；那台机器上若两者都没有，当天只能退回人工翻目录——**本轮没写 PowerShell 版**（简报把本轮范围
+钉在这一件核心上），这一条随 G-D5 一起挂到真机当天。上面那五行读数全部是在 Linux 容器里跑的。
 
 ## 已知限制（不要拿它当 Windows 真机证据）
 
