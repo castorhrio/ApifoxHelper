@@ -560,6 +560,84 @@ public class ReportTypographyTests
     }
 
     /// <summary>
+    /// 正文行长的<b>下限</b>：一行至少放得下 28 个中文字（第一百八十八轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个盲区</b>：上一支只判了上限（≤45em）与一个「过窄」的软下限（≥30em），
+    /// 而「过窄」那一条判的是 em 数，不是<b>字数</b>——两者在中文里恰好 1:1（一个汉字约 1em），
+    /// 但把 <c>max-width</c> 从 em 改成别的单位、或把 body 字号调小之后，em 数不变而每行字数会变。
+    /// 简报要的是「换算成字号后 ≥28 字/行」这个读数本身，所以这一支把换算写出来：
+    /// <b>每行字数 = max-width(em) ÷ 1em/字</b>，判它 ≥28。
+    /// </para>
+    /// <para>
+    /// 28 这个数不是新发明的口径：DESIGN §3 的正文容器上限 45em 与「约 40 个中文字」的取值说明
+    /// 已经把 em 与字数绑在一起，28 是「再窄就成竖排」的那条线（表格三列 + 内边距在 28 字宽下
+    /// 每列仍有 8 字余量）。下限存在的理由与上限对称：上限防「眼睛来回扫」，下限防「一行读成竖排」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HtmlStyle_ProseWidth_KeepsAtLeastTwentyEightCharactersPerLine()
+    {
+        var maxWidth = Regex.Match(ReportRender.HtmlStyle, @"body\{[^}]*max-width:(\d+(?:\.\d+)?)em");
+        Assert.True(maxWidth.Success, "body 规则里没有以 em 计的 max-width（px 不随字号缩放，量不出字数）。");
+        var em = double.Parse(maxWidth.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+
+        // 中文正文里 1 个汉字 ≈ 1em（DESIGN §3 的字号档按 em 记），所以每行字数 = em 数。
+        var charactersPerLine = em;
+        Assert.True(charactersPerLine >= 28,
+            $"正文一行只放得下约 {charactersPerLine:0.#} 个中文字（下限 28）：再窄一点，三列表格会被挤成竖排。");
+        Assert.True(charactersPerLine <= 45,
+            $"正文一行放得下约 {charactersPerLine:0.#} 个中文字（上限 45）：一行读下来眼睛要来回扫。");
+    }
+
+    /// <summary>
+    /// 字距不许是负值（第一百八十八轮，简报 P0-1；DESIGN §3「中文排版附加条款」）。
+    /// <para>
+    /// <b>为什么这一条能静态判</b>：负字距（<c>letter-spacing:-0.02em</c> 一类）是中文排版里最常见的
+    /// 「看起来更紧凑」的写法，代价是汉字之间互相咬合、小字号下笔画粘连。它<b>不需要真机</b>就能判：
+    /// 交付面（导出 HTML 的内联样式 + 冻结页面层的样式表）里只要出现负值就是错的，与渲染无关。
+    /// 此前这一条挂在「随 G-D5 真机复核」下面——那是把一件静态可判的事推给了机器。
+    /// </para>
+    /// <para>
+    /// <b>「未写」也算通过</b>：CSS 的 <c>letter-spacing</c> 默认值是 <c>normal</c>（等价 0），
+    /// 所以没写这一条声明时字距就是 0，判据是「没有负值」而不是「必须有这一条声明」。
+    /// 反过来，若哪天有人写了 <c>letter-spacing:0.01em</c> 这种正值，这一支照样绿——正字距不是缺陷。
+    /// </para>
+    /// <para>
+    /// <b>扫哪些面</b>：导出 HTML 的 <see cref="ReportRender.HtmlStyle"/>（用户会转发的那份），
+    /// 与 <c>Web/</c> 下冻结页面层的样式表（退场之前它仍在产物里）。界面层不扫：
+    /// WinForms 的 <c>Label</c> 没有字距属性，那里没有可写的负值。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DeliveredStyles_NeverUseNegativeLetterSpacing()
+    {
+        var surfaces = new List<(string Name, string Text)> { ("Reports/ReportRender.cs 的 HtmlStyle", ReportRender.HtmlStyle) };
+        var webDir = Path.Combine(Repo.Root, "Web");
+        if (Directory.Exists(webDir))
+        {
+            surfaces.AddRange(Directory.GetFiles(webDir, "*.css")
+                .OrderBy(f => f, StringComparer.Ordinal)
+                .Select(f => ($"Web/{Path.GetFileName(f)}", File.ReadAllText(f))));
+        }
+
+        foreach (var (name, text) in surfaces)
+        {
+            foreach (Match m in Regex.Matches(text, @"letter-spacing\s*:\s*(-?[\d.]+)\s*(em|px|rem|pt)?"))
+            {
+                var raw = m.Groups[1].Value;
+                var value = double.Parse(raw, System.Globalization.CultureInfo.InvariantCulture);
+                Assert.True(value >= 0,
+                    $"{name} 里出现了负字距（letter-spacing:{raw}{m.Groups[2].Value}）："
+                    + "汉字会互相咬合、小字号下笔画粘连；字距只许 0 或正值（不写即 0）。");
+            }
+
+            // 反向：负号写在别处的写法（`letter-spacing: -0.02em` 带空格）也要被上面那条正则接住，
+            // 这里再判一次「没有负号紧跟数字」的形态，防止有人把正则改成只认紧贴写法。
+            Assert.DoesNotMatch(@"letter-spacing\s*:\s*-", text);
+        }
+    }
+
+    /// <summary>
     /// 表格观感：<c>th</c>/<c>td</c> 必须有边框与内边距，表头有底色。
     /// 此前表格一条样式都没有——三列文字之间只有空白，列与列的分界靠猜，表头与数据同色同重。
     /// </summary>

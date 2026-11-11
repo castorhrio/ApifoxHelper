@@ -82,8 +82,11 @@ public class DpiScaleTests
     [Theory]
     [InlineData(96, true)]
     [InlineData(192, true)]
+    [InlineData(480, true)]        // 500%：Windows 自定义缩放的上界，仍在界内
     [InlineData(0, false)]
     [InlineData(-96, false)]
+    [InlineData(481, false)]       // 越过 500% 一档：不是真实档位
+    [InlineData(65535, false)]     // 负数 wParam 取高位字得到的那个数（见下一支）
     public void UnusableDpi_NeverDrivesARescale(int dpi, bool expected) =>
         Assert.Equal(expected, DpiScaleFactor.IsUsableDpi(dpi));
 
@@ -265,7 +268,102 @@ public class DpiScaleTests
     }
 
     /// <summary>
-    /// 台账因子可用性只有一条口径：正数才算可用（<see cref="DpiScaleFactor.IsUsableFactor"/>）。
+    /// 负数 <c>wParam</c> 必须落在「不动布局」那一侧（第一百八十八轮，简报 P0-1 ①）。
+    /// <para>
+    /// <b>补的是哪个盲区</b>：<see cref="DpiScaleFactor.NewDpiFromWParam"/> 取的是 <c>wParam</c> 的
+    /// 高位字，而 <c>wParam</c> 在窗口过程里是 <c>long</c>。一个<b>负数</b>进来时（<c>-1L</c>、<c>-96L</c>、
+    /// <c>-65536L</c> 都一样）高位字是 <c>0xFFFF</c>，取出来是 <b>65535</b>——一个「正数」。
+    /// 只判「正数」的门口会把它当成合法 DPI：因子 682.7、客户区 1020 × 682.7 = 696 354px、
+    /// <c>Control.Scale</c> 拿到 682 倍步长。那不是「缩放没生效」，是整棵控件树被撑到窗口管理器拒绝分配，
+    /// 而<b>不会有任何一条既有断言报红</b>（真值表此前只喂 96/120/144/192 这几个真实档位）。
+    /// </para>
+    /// <para>
+    /// 判据分两层，缺一层都能被绕过去：① 取出来的那个数必须落在
+    /// <see cref="DpiScaleFactor.IsUsableDpi"/> 为 <c>false</c> 的一侧；② 拿它走生产路径
+    /// （<see cref="DpiScaleFactor.PlanRescale"/>）必须回 <c>null</c> 且不抛异常。
+    /// 只判 ① 的话，把 <c>IsUsableDpi</c> 改成恒 <c>true</c> 而 <c>PlanRescale</c> 里另加一道判据，
+    /// 这一支仍绿；只判 ② 的话，门口那条口径被放宽到 65535 也不会有人知道。
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(-1L)]              // 全 1：高位字 0xFFFF
+    [InlineData(-96L)]             // 负的 DPI 读数被原样塞进 wParam
+    [InlineData(-65536L)]          // 只有高位字是 0xFFFF
+    [InlineData(long.MinValue)]    // 取出来是 0（低位字全 0）
+    public void NegativeWParam_LandsOnTheNoPlanSideAndNeverThrows(long wParam)
+    {
+        var dpi = DpiScaleFactor.NewDpiFromWParam(wParam);
+        Assert.False(DpiScaleFactor.IsUsableDpi(dpi),
+            $"负数 wParam（{wParam}）取高位字得到 {dpi}，而它被当成了可用 DPI："
+            + "这个数会算出 682 倍因子与 69 万像素宽的客户区，且没有任何既有断言会报红。");
+
+        var plan = DpiScaleFactor.PlanRescale(dpi, 1f, 1020, 740);
+        Assert.Null(plan);
+    }
+
+    /// <summary>
+    /// 台账因子异常大时必须回 <c>null</c>，而不是算出一个极小的步长（第一百八十八轮，简报 P0-1 ②）。
+    /// <para>
+    /// <b>为什么「产出正尺寸」不够</b>：台账 100、目标 2 时比值是 0.02——步长是正的、客户区也是正的，
+    /// 简报给的两条判据（回 null 或产出正尺寸）里它落在后者，看起来「没崩」。但
+    /// <c>Control.Scale(0.02)</c> 会把整棵控件树压成 2%，而台账随后被推进到 2，
+    /// <b>下一档再也算不回正确尺寸</b>（比值 2/2 = 1，什么都不做）。屏幕上是一屏挤成一条线的布局，
+    /// 日志里一个错都没有——比抛异常更难诊断。所以这一支判的是「不动布局」，
+    /// 与 <see cref="DpiScaleFactor.IsUsableFactor"/> 的上界同一口径。
+    /// </para>
+    /// <para>
+    /// 台账只由 <see cref="DpiScaleFactor.FromScreenDpi"/> 写下、入参已受
+    /// <see cref="DpiScaleFactor.MaxUsableDpi"/> 约束，所以正常路径不可能超过 5；
+    /// 这一支挡的是「有人写了个别的数进来」那一类，不是真实档位。
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(100f)]                  // 简报点名的那个数
+    [InlineData(682.6667f)]             // 65535 ÷ 96：负数 wParam 若漏过门口会写下的那个因子
+    [InlineData(float.MaxValue)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NaN)]
+    public void HugeAppliedFactor_ReturnsNoPlanAndNeverThrows(float applied)
+    {
+        var plan = DpiScaleFactor.PlanRescale(192, applied, 1020, 740);
+        Assert.Null(plan);
+    }
+
+    /// <summary>
+    /// 上界那一档本身仍然可用，且两个常量不许各自漂走（第一百八十八轮，简报 P0-1 / P2-1）。
+    /// <para>
+    /// <see cref="DpiScaleFactor.MaxUsableDpi"/>（480 = 500%）与
+    /// <see cref="DpiScaleFactor.MaxUsableFactor"/>（5）是同一个事实的两半：前者是 DPI 读数的上界，
+    /// 后者是台账因子的上界，而台账因子正是 DPI ÷ 96。改一个不改另一个，就会出现
+    /// 「DPI 480 可用、但算出的因子 5 被判不可用」这种自相矛盾的组合——那时
+    /// <see cref="DpiScaleFactor.PlanRescale"/> 会先算出目标因子 5、再拿它去和台账比，
+    /// 而下一档的台账 5 又过不了门口，表现为「500% 档拖一次就再也不重算」。
+    /// 这一条把两者绑在一起，并顺手判上界那一档真的能算出计划。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void UsableCeiling_IsTheFiveHundredPercentStepAndBothConstantsAgree()
+    {
+        Assert.Equal(480, DpiScaleFactor.MaxUsableDpi);
+        Assert.Equal(DpiScaleFactor.MaxUsableFactor, DpiScaleFactor.FromScreenDpi(DpiScaleFactor.MaxUsableDpi));
+
+        // 上界那一档：可用，且算出 5 倍因子、5 倍步长、按设计尺寸绝对重算的客户区。
+        var plan = DpiScaleFactor.PlanRescale(DpiScaleFactor.MaxUsableDpi, 1f, 1020, 740);
+        Assert.NotNull(plan);
+        Assert.Equal(5f, plan!.AppliedFactor);
+        Assert.Equal(5f, plan.Step);
+        Assert.Equal(5100, plan.ClientWidth);
+        Assert.Equal(3700, plan.ClientHeight);
+
+        // 越过一档即不可用（不是「尽量算一个」）。
+        Assert.Null(DpiScaleFactor.PlanRescale(DpiScaleFactor.MaxUsableDpi + 1, 1f, 1020, 740));
+        Assert.True(DpiScaleFactor.IsUsableFactor(DpiScaleFactor.MaxUsableFactor));
+        Assert.False(DpiScaleFactor.IsUsableFactor(DpiScaleFactor.MaxUsableFactor + 0.01f));
+    }
+
+    /// <summary>
+    /// 台账因子可用性只有一条口径：正数、且不超过 <see cref="DpiScaleFactor.MaxUsableFactor"/> 才算可用
+    /// （<see cref="DpiScaleFactor.IsUsableFactor"/>）。
     /// 这一条与上一支分开写，是因为上一支判的是「计划回 null」，而这一支判的是<b>那个判子本身</b>——
     /// 把判子改成 <c>&gt;= 0</c> 时，0 那一档会从「不动布局」变成「除出无穷」，上一支仍绿。
     /// </summary>
@@ -273,8 +371,11 @@ public class DpiScaleTests
     [InlineData(1f, true)]
     [InlineData(0.5f, true)]
     [InlineData(2f, true)]
+    [InlineData(5f, true)]         // 500% 那一档：上界本身可用
     [InlineData(0f, false)]
     [InlineData(-1f, false)]
+    [InlineData(5.01f, false)]     // 越过上界一档
+    [InlineData(100f, false)]      // 简报点名的那个数：会算出 0.02 的步长，把布局压成 2%
     public void UsableFactor_OnlyPositiveValuesDriveARescale(float factor, bool expected) =>
         Assert.Equal(expected, DpiScaleFactor.IsUsableFactor(factor));
 

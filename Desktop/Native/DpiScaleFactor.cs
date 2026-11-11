@@ -38,9 +38,32 @@ internal static class DpiScaleFactor
     public static float FromScreenDpi(int dpi) => dpi <= 0 ? 1f : dpi / DesignDpi;
 
     /// <summary>
-    /// 这个 DPI 读数能不能驱动一次重算：只有正数才算量到了（DPI 变更消息带来的新 DPI 就填在这里）。
+    /// 可用的最高 DPI 读数：Windows 的「自定义缩放」上限是 500%，即 480dpi。
+    /// <para>
+    /// <b>为什么要有上限</b>（第一百八十八轮，简报 P0-1）：<see cref="NewDpiFromWParam"/> 取的是
+    /// <c>wParam</c> 的高位字，而 <c>wParam</c> 是系统给的 <c>long</c>——一个<b>负数</b>进来时
+    /// （<c>-1L</c>、<c>-96L</c> 都一样）高位字是 16 个二进制 1，取出来是 <b>65535</b>。
+    /// 只判「正数」的话这个数会被当成一个合法的 DPI：因子算成 682.7，客户区算成
+    /// 设计宽 × 682.7（1020 → 696 354px），<c>Control.Scale</c> 拿到 682 倍步长。
+    /// 那不是「缩放没生效」，是整棵控件树被撑到窗口管理器拒绝分配、且<b>不会有任何一条既有断言报红</b>
+    /// （真值表此前只喂 96/120/144/192 这几个真实档位）。
+    /// </para>
+    /// <para>
+    /// 480 这个数不是猜的：它是 Windows 缩放档位的上界（500%），也是本仓
+    /// <see cref="MaxUsableFactor"/> 的来源——两者由 <c>DpiScaleTests</c> 的一条断言绑在一起，
+    /// 改一个不改另一个即红。
+    /// </para>
     /// </summary>
-    public static bool IsUsableDpi(int dpi) => dpi > 0;
+    public const int MaxUsableDpi = 480;
+
+    /// <summary>
+    /// 这个 DPI 读数能不能驱动一次重算：正数、且不超过 <see cref="MaxUsableDpi"/>。
+    /// <para>
+    /// 上界挡的是「<c>wParam</c> 高位字被当成 DPI」那一类垃圾读数（负数 <c>wParam</c> → 65535），
+    /// 不是真实档位——真实档位最高 480（500%），落在界内。
+    /// </para>
+    /// </summary>
+    public static bool IsUsableDpi(int dpi) => dpi > 0 && dpi <= MaxUsableDpi;
 
     /// <summary>
     /// 从 DPI 变更消息的 <c>wParam</c> 取<b>新</b> DPI：高位字是窗口进入的那块屏的 DPI，
@@ -79,16 +102,35 @@ internal static class DpiScaleFactor
     public static float ScaleStep(float appliedFactor, float targetFactor) => targetFactor / appliedFactor;
 
     /// <summary>
-    /// 台账上的「已经应用到哪一档」能不能参与比值。只有正数才行。
+    /// 台账因子的上界 = <see cref="MaxUsableDpi"/> ÷ <see cref="DesignDpi"/>（500% 那一档）。
+    /// <para>
+    /// <b>为什么台账也要有上界</b>（第一百八十八轮，简报 P0-1 / P2-1）：台账只由
+    /// <see cref="DpiScale.Apply"/> 用 <see cref="FromScreenDpi"/> 写下，而那个函数的入参已经受
+    /// <see cref="MaxUsableDpi"/> 约束，所以正常路径不可能超过 5。超过 5 只可能来自「有人写了个别的数进来」。
+    /// 那种数<b>不会</b>算出 NaN（比值仍是正数），它算出的是一个极小的步长——例如台账 100、目标 2 时
+    /// 步长 0.02，<c>Control.Scale(0.02)</c> 把整棵控件树压成 2%，而台账随后被推进到 2，
+    /// <b>下一档再也算不回正确尺寸</b>（比值 2/2 = 1，什么都不做）。这比抛异常更难诊断：
+    /// 屏幕上是一屏挤成一条线的布局，日志里一个错都没有。
+    /// </para>
+    /// <para>
+    /// 所以口径与 <see cref="IsUsableDpi"/> 一致：<b>不可信就整次不动</b>（<see cref="PlanRescale"/>
+    /// 回 <c>null</c>），而不是「尽量算一个」。不设上限的那一支（简报 P2-1 的另一选项）被否掉的理由就是上面
+    /// 那一段：<c>Control.Scale</c> 对 0.02 的行为不需要实测也知道是破坏性的，而「不动」在任何情况下都可恢复。
+    /// </para>
+    /// </summary>
+    public const float MaxUsableFactor = 5f;
+
+    /// <summary>
+    /// 台账上的「已经应用到哪一档」能不能参与比值。正数、且不超过 <see cref="MaxUsableFactor"/> 才行。
     /// <para>
     /// <b>为什么这一条也要判</b>：<see cref="ScaleStep"/> 是除法（目标 ÷ 已应用）。台账上若是 0，
     /// 步长算出无穷大，<c>Control.Scale</c> 拿到一个非有限数——那不是「缩放没生效」，是整棵子树的
     /// 边界变成 NaN 之后再也回不来，且<b>不会有任何一条既有断言报红</b>（真值表只喂正数）。
     /// 台账由 <see cref="DpiScale.Apply"/> 写下，正常路径只可能是正数；这一条挡的是「有人写了个 0 进来」
-    /// 那一类，而不是在猜一个真实的档位。
+    /// 那一类，而不是在猜一个真实的档位。上界那一半的理由见 <see cref="MaxUsableFactor"/>。
     /// </para>
     /// </summary>
-    public static bool IsUsableFactor(float factor) => factor > 0f;
+    public static bool IsUsableFactor(float factor) => factor > 0f && factor <= MaxUsableFactor;
 
     /// <summary>
     /// 一次 DPI 变更要落的三种结果：控件树的缩放步长、客户区的绝对尺寸、以及台账要推进到的那一档。
@@ -122,9 +164,11 @@ internal static class DpiScaleFactor
     /// 窗体那一侧只剩三个动作（缩放控件树、设客户区、推进台账），判断只有一份，真值表在 Linux 上跑的就是它。
     /// </para>
     /// <para>
-    /// <b>五类输入都回得出来</b>（真值表见 <c>ApifoxHelper.Tests/DpiScaleTests.cs</c>）：
-    /// 新 DPI 高于当前 / 低于当前 / 等于当前 / DPI 为 0 或负数 / 台账因子为 0 或负数。
-    /// 后两类与「等于当前」一律回 <c>null</c>——<b>不动布局</b>，也不抛异常。这条「不抛」是判据本体：
+    /// <b>七类输入都回得出来</b>（真值表见 <c>ApifoxHelper.Tests/DpiScaleTests.cs</c>）：
+    /// 新 DPI 高于当前 / 低于当前 / 等于当前 / DPI 为 0 或负数 / 台账因子为 0 或负数 /
+    /// <b>DPI 超过 <see cref="MaxUsableDpi"/></b>（负数 <c>wParam</c> 取高位字得 65535 那一类）/
+    /// <b>台账因子超过 <see cref="MaxUsableFactor"/></b>（有人写了个 100 进来那一类）。
+    /// 除前两类外一律回 <c>null</c>——<b>不动布局</b>，也不抛异常。这条「不抛」是判据本体：
     /// 变更消息是系统发过来的，处理里抛出去等于把一次缩放变成一次未处理异常。
     /// </para>
     /// </summary>
