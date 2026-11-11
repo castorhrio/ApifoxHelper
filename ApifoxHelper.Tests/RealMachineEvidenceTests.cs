@@ -1052,4 +1052,92 @@ public class RealMachineEvidenceTests
 
         Assert.True(rows >= 4, $"「真机当天用到的工具」只有 {rows} 行（地板 4）：截图 / 缩放档 / 三个数 / 归档各要一行。");
     }
+
+    // ---------- 第一百九十五轮（简报 P0-2）：机器到手前的第 0 条 ----------
+
+    /// <summary>「第 0 条」那一段的标记（落在 G-D5 动作单那一节之内，排在七条动作之前）。</summary>
+    private const string BeforeArrivalMarker = "第 0 条（机器到手前，本仓可做";
+
+    /// <summary>
+    /// 「第 0 条」那一段的列表行（<c>&gt; - [ ] …</c>），从标记行往下取到动作单表格表头之前。
+    /// <para>
+    /// 只收 <c>&gt; - </c> 开头的行：写成普通段落的那一项当天没人会去勾它，所以「每项都有可勾选框」
+    /// 这条判据必须落在解析器上，而不是靠人读。
+    /// </para>
+    /// </summary>
+    private static List<string> BeforeArrivalLines()
+    {
+        var lines = ActionListLines();
+        var start = Array.FindIndex(lines, l => l.Contains(BeforeArrivalMarker, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的 G-D5 动作单里缺「{BeforeArrivalMarker}…）」这一段：下面七条都是「机器到手后」的动作，"
+            + "机器到手前本仓能做的最后准备一条都没写——机器在到期日当天到，现场就得一边建目录一边找命令。");
+
+        var items = new List<string>();
+        for (var i = start + 1; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (line.TrimStart().StartsWith("|", StringComparison.Ordinal)) break; // 动作单表格开始
+            if (Regex.IsMatch(line, @"^>\s*-\s")) items.Add(line);
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// 机器到手前的「第 0 条」：四项齐、每项都有可勾选框、至少一项点到可复跑命令（第一百九十五轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：动作单七条全是「机器到手后」的动作，<b>没有一条是「机器到手前，本仓能做的最后准备」</b>。
+    /// 若机器在到期日当天到，现场手忙脚乱：一边建归档目录、一边找命令、一边翻文档。四项在机器到手前做完，
+    /// 当天只剩「照单跑」。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 四项齐且编号 ① ② ③ ④ 各一次（少一项就是少一步准备）；② 每项都带可勾选框
+    /// （<c>- [ ]</c> 或 <c>- [x]</c>）——写成普通段落的那一项当天没人会去勾；③ 至少一项点到可复跑命令
+    /// <c>.winecheck/demo.sh</c>（机器到手前唯一能自己跑出读数的东西）；④ 每项都写清「做什么」而不是一句口号
+    /// （至少 12 字）；⑤ 这一段点名本门并写清它<b>不判这四项做过没有</b>——有门不等于做过。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判这四项做过没有</b>（本机没有 Windows 图形子系统，做没做只有人知道），
+    /// 也<b>不判真机跑没跑</b>（G-D5 仍是 <c>[ ]</c>）。它只保证「机器到手前的那一页不是空的」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void BeforeMachineArrives_HasFourCheckableItemsAndNamesTheDemoCommand()
+    {
+        var lines = BeforeArrivalLines();
+
+        // ① 四项齐：少一项就是少一步准备。
+        Assert.True(lines.Count == 4,
+            $"「第 0 条」有 {lines.Count} 项，简报要的是 4 项（复跑三档冒烟 / 复跑构建与用例 / 建好九个归档子目录 / 存好七条动作单）。");
+
+        // ② 每项都带可勾选框，且编号 ① ② ③ ④ 各一次。
+        var markers = new List<string>();
+        foreach (var line in lines)
+        {
+            var m = Regex.Match(line, @"^>\s*-\s*\[(?<box>[ x])\]\s*(?<marker>[①②③④])\s*(?<text>.+)$");
+            Assert.True(m.Success,
+                $"「第 0 条」有一项不是「> - [ ] ① …」的形状：{line.Trim()}。写成普通段落的那一项当天没人会去勾它。");
+            markers.Add(m.Groups["marker"].Value);
+
+            var text = m.Groups["text"].Value.Trim();
+            Assert.True(text.Length >= 12,
+                $"「第 0 条」{m.Groups["marker"].Value} 只写了 {text.Length} 字：一句口号在机器到手前做不了任何事。");
+        }
+
+        Assert.Equal(["①", "②", "③", "④"], markers);
+
+        // ③ 至少一项点到可复跑命令：机器到手前唯一能自己跑出读数的东西。
+        Assert.True(lines.Any(l => l.Contains(".winecheck/demo.sh", StringComparison.Ordinal)),
+            "「第 0 条」没有一项点到 .winecheck/demo.sh：机器到手前唯一能自己跑出三档读数的那条命令，"
+            + "不点名就没人知道先跑什么。");
+
+        // ④ 这一段点名本门，并写清它不判「做过没有」——有门不等于做过。
+        var block = string.Join('\n', ActionListLines()
+            .SkipWhile(l => !l.Contains(BeforeArrivalMarker, StringComparison.Ordinal))
+            .TakeWhile(l => !l.TrimStart().StartsWith("|", StringComparison.Ordinal)));
+        var self = $"{nameof(RealMachineEvidenceTests)}.{nameof(BeforeMachineArrives_HasFourCheckableItemsAndNamesTheDemoCommand)}";
+        Assert.Contains(self, block, StringComparison.Ordinal);
+        Assert.Contains("不判这四项做过没有", block, StringComparison.Ordinal);
+    }
 }

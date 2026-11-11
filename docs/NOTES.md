@@ -57,6 +57,15 @@
 > ④ **当天照哪一页走**：本节末的「到期日当天执行单」三步（跑三档冒烟记读数 → 读归档清单判可勾 → 按 ② 回写两处），由 `RealMachineEvidenceTests.DueDateRunSheet_HasThreeStepsEachAnchoredToARealArtifact` 判三步各被点到一次、每步至少引一条仓内实物（命令 / 文件 / 断言）、第 3 步的两处回写落点与 ② 逐字一致。
 >
 
+> **第 0 条（机器到手前，本仓可做，第一百九十五轮，简报 P0-2）**：下面七条都是「机器到手后」的动作，**机器到手前本仓能做的最后准备此前一条都没写**——若机器在到期日当天到，现场就得一边建目录一边找命令。四项在机器到手前做完，当天只剩「照单跑」：
+>
+> - [ ] ① 复跑 `.winecheck/demo.sh`（`bash` 执行），确认三档仍是当前源码的 208 通过 / 0 失败 ×3；读数变了就先把本文件里被 `ReadingConsistencyTests` 扫的那几处一起改，别让两处读数各说各的。
+> - [ ] ② 复跑 `dotnet build` 与 `dotnet test`，确认 0 警告 0 错误、用例全绿（红的那条先修，别带着红进真机当天）。
+> - [ ] ③ 把 `docs/evidence/real-machine/` 的九个归档子目录建好（空目录即可，目录名以 `docs/evidence/real-machine/README.md` 为准，别自己起名——起错名的目录既不会被判据看见，也不会被下一个人找到）。
+> - [ ] ④ 打印或存好下面这张七条动作单，连同「七条动作的『照抄即可』三列」与「真机当天用到的工具」两节——当天照着念，不现场翻文档。
+>
+> 机械门：`RealMachineEvidenceTests.BeforeMachineArrives_HasFourCheckableItemsAndNamesTheDemoCommand` 判四项齐、每项都有可勾选框、且至少一项点到 `.winecheck/demo.sh`。**它不判这四项做过没有**（本机没有 Windows 图形子系统，做没做只有人知道），只保证「机器到手前的那一页不是空的」。
+
 | 勾选 | 动作 | 量什么 | 归档到哪里 | 判定标准 |
 | --- | --- | --- | --- | --- |
 | [ ] | 1. 单文件发布并走完首程四站：`dotnet publish` 出自包含单文件（发布脚本 `publish.ps1`）→ **双击不带任何参数**打开 → 新建配置 → 新建任务 → 扫描 → 注释缺口（对应「降级答辩脚本」逐屏表第 1–4 屏；默认入口见 `Desktop/DesktopApp.cs`，由 `LaunchOptionsTests.Defaults_SelectNativeShell` 钉住） | 四站是否逐站可达、每站是否只给一个「下一步」，且那个下一步指向界面上**真实存在**的那颗按钮（引导口径 `Desktop/Native/NextStep.cs`） | `docs/evidence/real-machine/journey/`：四站各一张截图 + 该任务的 `task.json` 与 `symbols.json` 副本 | 全程不开浏览器、不敲命令行、不改文件即通过。任一站要靠 `--native`/`--web` 参数或手工编辑任务目录才能继续，就是 G-D1 未达成，写清卡在哪一站并保留现场截图 |
@@ -1927,6 +1936,18 @@
 | 可经营 | 单机个人使用：配置可导出且不含凭据，任务资料按目录归档搬走，报告可直接交接；不做多用户与跨机同步。在 Linux 容器内 wine 模拟器上量到。 | `README.md`「本地资料」；`ProfileAnalysisTests.Export_BytesAreUtf8WithoutBomAndRoundTrip`；`RunFullJourney` | 接：导出与归档在 wine 上跑过（`RunFullJourney`），跨机同步没做，也不打算做。 |
 | 排版归因 | 中文标点不落行首，功劳不在某一条属性上：四种取值排出来逐档相同，是浏览器默认排版与样式表合起来的结果，在 Linux 容器内 Chromium 上量到。 | `docs/NOTES.md`「真浏览器布局门（HTML 折行）」；`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo` | 接：四种取值逐档相同的读数在「真浏览器布局门（HTML 折行）」一节，wine 三档复跑不动那一节的账。 |
 | 产品完整度 | 十站主工作流全在原生窗口里走完，写入前有九条红线挡着，每项能力都能在验收表里勾到证据；真机未验的项一律留空框。在 Linux 容器内 wine 模拟器上量到。 | `README.md`「使用流程」；`AcceptanceChecklistTests.Checklist_EveryItemHasAnEvidenceSourceAndItResolves`；`RunEndToEnd` | 接：验收表每一行都指到一条断言或一个 wine 冒烟段，真机那几行仍是空框。 |
+
+### 被追问真机时的三句答法（第一百九十五轮，简报 P0-1）
+
+> **这一小节解决什么**：上面那张逐屏表管「每一屏的证据在哪」，五块讲稿模板管「凭什么值得做」，下一节的三行管「能不能演示 / 算不算跑过 / 卡在哪」——但**「模拟器与真机到底差多少」这一问没有正面答法**。本文件里此前只有禁令（不许把 wine 说成真机，`WordingHonestyTests.RealMachineClaims_RequireEvidencePaths` 判住），禁令管的是「不许说什么」，不管「该说什么」；被追问时现场只能现编，而现编的那句话最容易把「模拟器量到」说成「跑过了」。三句定稿，每句 ≤60 字（反引号里的命令不计字数），照抄念。
+>
+> **机械门**：`ApifoxHelper.Tests/DefenseNarrativeTests.cs` 的 `DefenseNarrativeTests.DeferredAnswer_WhenPressedForRealMachine_HasThreeSentencesAndPointsAtRunnable`——判三句齐、每句 ≤60 字、不含空话禁词、且至少一句点到可复跑命令或冒烟段名。**它不判真机跑没跑**（真机 0 台，G-D5 仍是 `[ ]`），也不判措辞好不好听——措辞会漂，钉措辞的门最后只会被改措辞绕过。
+
+| 序号 | 照抄念的句子（≤60 字） | 指向的实物（可核对：wine 冒烟段或源码断言） |
+| --- | --- | --- |
+| ① | 本版界面证据全部来自 Linux 容器内 wine 模拟器，真机 0 台，归档目录里只有一份 README。 | `docs/evidence/real-machine/README.md`；`WordingHonestyTests.RealMachineClaims_RequireEvidencePaths` |
+| ② | 缺的不是判定而是机器：G-D5 七条动作每条写明量什么、归档到哪、怎样算过，机器到手第一天照跑。 | `docs/NOTES.md`「G-D5 真机复核清单（可勾选）」；`RealMachineEvidenceTests.ActionRunbook_NamesOnlyPresetControlSlotsAndRealArchiveFiles`（七条动作单与归档清单在源码里逐项对得上） |
+| ③ | `.winecheck/demo.sh` 一条命令复跑三档 208/0 ×3，逐屏对账 0 处不符。 | `docs/NOTES.md`「降级答辩脚本」；`DemoScriptTests.DemoScript_RunsEveryScaleAndWritesAReportAndANarrationPerScale` |
 
 ## 降级答辩现场问答三行（第一百七十八轮，简报 P1-1）
 

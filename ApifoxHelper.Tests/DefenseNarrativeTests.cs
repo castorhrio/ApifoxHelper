@@ -361,4 +361,136 @@ public class DefenseNarrativeTests
             Assert.True(row.FollowUp.Length > 0, $"「{row.Name}」没有写「被追问时接什么」：现场被追问时只能临时组织语言。");
         }
     }
+
+    // ---------- 第一百九十五轮（简报 P0-1）：被追问真机时的三句答法 ----------
+
+    /// <summary>「被追问真机时的三句答法」那一小节的标题前缀（第一百九十五轮，简报 P0-1）。</summary>
+    private const string DeferredAnswerHeading = "### 被追问真机时的三句答法";
+
+    /// <summary>三句答法的字数上限。简报给的数是 60，反引号里的命令不计（命令是给读的人敲的，不是念的）。</summary>
+    private const int DeferredAnswerCeiling = 60;
+
+    /// <summary>三句答法的一行：序号 / 照抄念的句子 / 指向的实物。</summary>
+    private readonly record struct DeferredAnswer(string Marker, string Sentence, string Evidence);
+
+    /// <summary>三句答法那一小节的正文（标题行到下一个二级标题之前）。</summary>
+    private static string DeferredAnswerSection()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var start = notes.IndexOf(DeferredAnswerHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 缺少「{DeferredAnswerHeading}」一小节：本文件里只有「不许把 wine 说成真机」的禁令，"
+            + "没有「模拟器与真机差多少」的正面答法——被追问时现场只能现编。");
+        var rest = notes[(start + DeferredAnswerHeading.Length)..];
+        var end = rest.IndexOf("\n## ", StringComparison.Ordinal);
+        return end < 0 ? rest : rest[..end];
+    }
+
+    private static List<DeferredAnswer> DeferredAnswers()
+    {
+        var rows = DeferredAnswerSection().Split('\n')
+            .Where(l => l.TrimStart().StartsWith("|", StringComparison.Ordinal))
+            .Select(l => l.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList())
+            .Where(c => c.Count == 3)
+            .Where(c => c[0] != "序号" && !c[0].All(ch => ch is '-' or ' ' or ':'))
+            .Select(c => new DeferredAnswer(c[0], c[1], c[2]))
+            .ToList();
+        Assert.True(rows.Count == 3,
+            $"「{DeferredAnswerHeading}」有 {rows.Count} 句，简报要的是 3 句（如实说 / 说清缺什么 / 带回可复跑的）。");
+        return rows;
+    }
+
+    /// <summary>反引号里的引用是否落到实物：仓内文件存在，或 <c>类名.断言名</c> 在测试工程里真有这一条。</summary>
+    private static bool CitationResolves(string citation)
+    {
+        if (citation.EndsWith(".md", StringComparison.Ordinal) || citation.EndsWith(".cs", StringComparison.Ordinal)
+            || citation.EndsWith(".sh", StringComparison.Ordinal) || citation.EndsWith(".ps1", StringComparison.Ordinal))
+        {
+            return File.Exists(Path.Combine(Repo.Root, citation.Replace('\\', '/')));
+        }
+
+        var parts = citation.Split('.');
+        if (parts.Length != 2) return false;
+        var testFile = Path.Combine(Repo.Root, "ApifoxHelper.Tests", parts[0] + ".cs");
+        return File.Exists(testFile)
+            && Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]");
+    }
+
+    /// <summary>冒烟段名是否真能跑到：既有声明，又接进了运行清单（<c>nameof</c> 调用点）。</summary>
+    private static bool SmokeSegmentExists(string name)
+    {
+        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        return smoke.Contains($"private static void {name}(", StringComparison.Ordinal)
+            && smoke.Contains($"nameof({name})", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 被追问「模拟器与真机差多少」时的三句答法：三句齐、每句 ≤60 字、无空话禁词、出处落到实物、
+    /// 且至少一句点到可复跑命令或冒烟段名（第一百九十五轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="ScriptTemplate_EveryBlockHasAPronounceableSentence"/> 判住了
+    /// 「五块讲稿每句都指向能跑的证据」，但五块讲的是<b>凭什么值得做</b>；「模拟器与真机差多少」这一问
+    /// 此前只有禁令（<c>WordingHonestyTests.RealMachineClaims_RequireEvidencePaths</c> 判住「不许把 wine 说成真机」）。
+    /// 禁令管的是「不许说什么」，不管「该说什么」——被追问时现场只能现编，而现编的那句话最容易把
+    /// 「模拟器量到」说成「跑过了」。三句定稿把「如实说 / 说清缺什么 / 带回可复跑的」写成能照抄念的句子。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 三句齐且顺序固定（① 如实说 → ② 说清缺什么 → ③ 带回可复跑的）；
+    /// ② 每句非空、≤<see cref="DeferredAnswerCeiling"/> 字（反引号里的命令不计）、不含
+    /// <see cref="CopyRules.BannedWords"/>；③ 每句的「指向的实物」至少一条引用，且<b>真的 resolve</b>
+    /// （文件存在或断言真有这一条）；④ 至少一句点到可复跑命令（<c>.winecheck/demo.sh</c>）或冒烟段名
+    /// （<c>RunXxx</c>，须真有声明与 <c>nameof</c> 调用点）——三句全是自述、一句都指不出能跑的东西，等于没答。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机跑没跑</b>（真机 0 台，G-D5 仍是 <c>[ ]</c>），也不判措辞好不好听——
+    /// 措辞会漂，钉措辞的门最后只会被改措辞绕过。它只保证「被追问时照抄念的三句，指的东西都在仓里跑得起来」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DeferredAnswer_WhenPressedForRealMachine_HasThreeSentencesAndPointsAtRunnable()
+    {
+        var rows = DeferredAnswers();
+
+        // ① 三句齐、顺序固定：顺序就是答话的顺序（先如实说，再说缺什么，最后把能复跑的递过去）。
+        Assert.Equal(["①", "②", "③"], rows.Select(r => r.Marker));
+
+        // 字数上限必须写在文档里：读的人要知道「念多长」，不是靠数。
+        Assert.Contains($"≤{DeferredAnswerCeiling} 字", DeferredAnswerSection(), StringComparison.Ordinal);
+
+        var runnable = 0;
+        foreach (var row in rows)
+        {
+            var spoken = row.Sentence.Replace("`", string.Empty);
+            Assert.True(spoken.Length > 0, $"第 {row.Marker} 句是空的：空的一句在被追问时念不出任何东西。");
+            Assert.True(spoken.Length <= DeferredAnswerCeiling,
+                $"第 {row.Marker} 句 {spoken.Length} 字，超过 {DeferredAnswerCeiling} 字上限：超过就不是一句能当场念完的答话。");
+
+            foreach (var word in CopyRules.BannedWords)
+            {
+                Assert.DoesNotContain(word, spoken, StringComparison.Ordinal);
+            }
+
+            // ③ 出处必须落到实物：指一个不存在的小节或断言，等于又一次自述。
+            var citations = Regex.Matches(row.Evidence, "`([^`]+)`").Select(m => m.Groups[1].Value).ToList();
+            Assert.True(citations.Count > 0, $"第 {row.Marker} 句没有指向任何实物：念完指不出东西，听的人无法核对。");
+            foreach (var citation in citations)
+            {
+                Assert.True(CitationResolves(citation),
+                    $"第 {row.Marker} 句指向的「{citation}」在仓里找不到（既不是存在的文件，也不是测试工程里真有的断言）。");
+            }
+
+            // ④ 可跑证据：可复跑命令，或真接进运行清单的冒烟段名。
+            if (spoken.Contains(".winecheck/demo.sh", StringComparison.Ordinal))
+            {
+                runnable++;
+                continue;
+            }
+
+            if (Regex.Matches(spoken, @"Run[A-Za-z0-9]+").Any(m => SmokeSegmentExists(m.Value))) runnable++;
+        }
+
+        Assert.True(runnable >= 1,
+            "三句答法里没有一句点到可复跑命令（.winecheck/demo.sh）或冒烟段名（RunXxx）："
+            + "被追问「能不能当场跑一遍」时，三句全是自述，答不出东西。");
+    }
 }
