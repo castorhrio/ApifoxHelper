@@ -270,6 +270,9 @@ internal static class Program
         Section("提示对话框的「复制路径」（按钮在 → 真点 → 剪贴板逐字核对 → 不跳位 → 真点关闭，真实控件）", nameof(RunNoticeCopyClick));
         RunNoticeCopyClick(dataRoot);
 
+        Section("定向构建输出的「复制命令」（按钮在 → 真点 → 剪贴板逐字核对 → 不跳位 → 真点关闭，真实控件）", nameof(RunBuildCommandCopyClick));
+        RunBuildCommandCopyClick(services, dataRoot);
+
         Section("说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）", nameof(RunCaptionFit));
         RunCaptionFit(services, dataRoot);
 
@@ -4854,6 +4857,243 @@ internal static class Program
         _lines.Add($"     提示对话框的「复制路径」：点了之后按钮文字切到「{NoticeCopy.CopiedLabel}」，"
             + $"剪贴板里读回来的与屏幕上那一行逐字相同（{path.Length} 字），按钮宽度 {widthBefore}px 未变。");
     }
+
+    /// <summary>
+    /// 定向构建输出对话框的「复制命令」（第二百轮）：命令行可框选、按钮一键交出、剪贴板逐字核对。
+    /// <para>
+    /// <b>为什么这一段必须真跑</b>：这一屏的说明行指着「粘到本机终端即可重新执行查看完整输出」，
+    /// 而命令行此前是 <c>Label</c>——不可选中、不可复制，那一步在界面上没有落点。静态门
+    /// （<see cref="BuildCommandCopyTests"/>）只能判「口径与接线」，判不了三件事：
+    /// ① 布局完成后等宽行的量宽是不是它实际拿到的宽度（长命令会不会被裁掉半行）；
+    /// ② 点下去剪贴板里到底是不是那条命令本身（不带「命令：」标签）；
+    /// ③ 没有命令时那颗按钮是不是真的不出现。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：按钮在真实字体与真实剪贴板下的观感、Tab 可达的手感随 G-D5 真机复核
+    /// （本环境是 wine 模拟器，不是真机）。
+    /// </para>
+    /// </summary>
+    private static void RunBuildCommandCopyClick(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "构建输出复制命令冒烟" });
+
+        // 命令取产品自己会落盘的那一条（BuildService.Arguments 拼出来的形状），不手拼字符串。
+        var command = "dotnet " + string.Join(" ", BuildService.Arguments(profile.ApiProject));
+
+        // ① 尚未构建：空态指引在、命令行是占位、不出现「复制命令」按钮。
+        RunAction("构建输出：尚未构建时不出现「复制命令」按钮（真实控件）", () =>
+        {
+            using var dialog = new BuildLogDialog(tasks, task);
+            dialog.Show();
+            Application.DoEvents();
+            var stray = FindAll<Button>(dialog).Where(b => b.Text == BuildCommandCopy.Label && b.Visible).ToList();
+            if (stray.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"还没有构建记录却出现了 {stray.Count} 颗「{BuildCommandCopy.Label}」按钮（点它什么也不会发生）。");
+            }
+            var line = CommandBox(dialog);
+            if (line.Text != BuildCommandCopy.Line(null))
+            {
+                throw new InvalidOperationException(
+                    $"还没有构建记录，命令行却是「{line.Text}」，不是占位「{BuildCommandCopy.Line(null)}」。");
+            }
+        });
+
+        // ② 记录里没有 command 字段：同样不给按钮（判定在 BuildCommandCopy.Target，不在界面里就地判）。
+        RunAction("构建输出：记录里没有命令时不出现「复制命令」按钮（真实控件）", () =>
+        {
+            tasks.Write(task.Id, TaskFiles.BuildLog, new
+            {
+                startedAt = DateTimeOffset.Now,
+                exitCode = 0,
+                timedOut = false,
+                seconds = 1.2,
+                outputTail = "Build succeeded.",
+            });
+            using var dialog = new BuildLogDialog(tasks, task);
+            dialog.Show();
+            Application.DoEvents();
+            var stray = FindAll<Button>(dialog).Where(b => b.Text == BuildCommandCopy.Label && b.Visible).ToList();
+            if (stray.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"记录里没有命令却出现了 {stray.Count} 颗「{BuildCommandCopy.Label}」按钮。");
+            }
+            var line = CommandBox(dialog);
+            if (line.Text != BuildCommandCopy.Line(null))
+            {
+                throw new InvalidOperationException($"记录里没有命令，命令行却是「{line.Text}」。");
+            }
+        });
+
+        // 下面六段共用同一屏：点了按钮之后要接着看按钮文字、看剪贴板、看位置有没有跳位，
+        // 最后再点「关闭」——中间不换屏，换屏就量不到「同一颗按钮被点过之后」的那几个数。
+        tasks.Write(task.Id, TaskFiles.BuildLog, new
+        {
+            command,
+            startedAt = DateTimeOffset.Now,
+            exitCode = 0,
+            timedOut = false,
+            seconds = 2.4,
+            outputTail = "Build succeeded.\n    0 Warning(s)\n    0 Error(s)",
+        });
+
+        using var screen = new BuildLogDialog(tasks, task);
+        screen.Show();
+        Application.DoEvents();
+
+        var copyButton = ButtonOf(screen, BuildCommandCopy.Label);
+        var closeButton = ButtonOf(screen, "关闭");
+        var widthBefore = copyButton.Width;
+        var closeLeftBefore = closeButton.Left;
+        var rowHeightBefore = copyButton.Parent?.Height ?? 0;
+
+        RunAction("构建输出：有命令时「复制命令」按钮在且可点（真实控件）", () =>
+        {
+            if (!copyButton.Visible) throw new InvalidOperationException($"「{BuildCommandCopy.Label}」按钮不可见。");
+            if (!copyButton.Enabled) throw new InvalidOperationException($"「{BuildCommandCopy.Label}」按钮是禁用的。");
+            if (!copyButton.CanSelect) throw new InvalidOperationException($"「{BuildCommandCopy.Label}」按钮不可选中（Tab 到不了它）。");
+        });
+
+        // 等宽行的「量宽度」与「实际可用宽度」必须是同一个数：高度是按某个宽度量出来的，
+        // 那个宽度必须就是控件实际拿到的宽度——量宽偏大，长命令被裁掉半行；偏小，这一屏多出一块空白。
+        RunAction("构建输出：命令行的量宽就是它实际拿到的宽度（真实控件）", () =>
+        {
+            var box = CommandBox(screen);
+            if (box.Parent is not TableLayoutPanel head)
+            {
+                throw new InvalidOperationException("命令行不在内容网格里：可用宽度无从算起。");
+            }
+            var available = Ui.ContentWidth(head);
+            if (box.ClientSize.Width != available)
+            {
+                throw new InvalidOperationException(
+                    $"命令行实际宽 {box.ClientSize.Width}px，内容网格的可用宽 {available}px："
+                    + "量宽与可用宽是两笔账，长命令会被裁掉半行或多出一块空白。");
+            }
+            var expected = Ui.MonoBoxHeight(box.Text, available);
+            if (box.Height != expected)
+            {
+                throw new InvalidOperationException(
+                    $"命令行高 {box.Height}px，按可用宽 {available}px 量出来应是 {expected}px："
+                    + "宽度变了高度没跟着重量。");
+            }
+            var right = head.ClientSize.Width - head.Padding.Right;
+            if (box.Right > right)
+            {
+                throw new InvalidOperationException(
+                    $"命令行右边界 {box.Right}px 越出内容网格的可用右边界 {right}px：这一行被裁了。");
+            }
+            _lines.Add($"     命令行量宽 {available}px == 实际宽 {box.ClientSize.Width}px，"
+                + $"高 {box.Height}px（按同一宽度量出），右边界 {box.Right}px ≤ {right}px。");
+        });
+
+        // 命令行可框选：只读文本框，Tab 到得了，Enter 不吃（Enter 冒泡给「关闭」）。
+        RunAction("构建输出：命令行是可框选的只读框，Enter 落点是「关闭」（真实控件）", () =>
+        {
+            var box = CommandBox(screen);
+            if (!box.ReadOnly) throw new InvalidOperationException("命令行不是只读的：命令不该在这里被改。");
+            if (!box.Multiline) throw new InvalidOperationException("命令行不是多行的：长命令折不了行，会被裁掉半行。");
+            if (box.AcceptsReturn)
+            {
+                throw new InvalidOperationException(
+                    "命令行吃 Enter（AcceptsReturn = true）：只读行没有换行可做，Enter 从此什么都不发生。");
+            }
+            if (!box.TabStop) throw new InvalidOperationException("命令行 Tab 到不了：键盘用户没法框选命令。");
+            if (screen.AcceptButton is not Button accept)
+            {
+                throw new InvalidOperationException("构建输出对话框没有 AcceptButton：Enter 没有落点。");
+            }
+            if (!ReferenceEquals(accept, closeButton))
+            {
+                throw new InvalidOperationException(
+                    $"构建输出对话框的 AcceptButton 是「{accept.Text}」，不是「关闭」：Enter 会落到别的动作上。");
+            }
+        });
+
+        RunAction("构建输出：真点「复制命令」，按钮文字切到「复制成功」（真实控件）", () =>
+        {
+            copyButton.PerformClick();
+            Application.DoEvents();
+            if (copyButton.Text == NoticeCopy.FailedLabel)
+            {
+                throw new InvalidOperationException(
+                    "点了「复制命令」之后按钮说的是「复制失败」：剪贴板写不进去（这一屏如实说了没复制成，"
+                    + "但本段量的是成功路径——写不进去不算量到）。");
+            }
+            if (copyButton.Text != NoticeCopy.CopiedLabel)
+            {
+                throw new InvalidOperationException(
+                    $"点了「复制命令」之后按钮上是「{copyButton.Text}」，不是「{NoticeCopy.CopiedLabel}」。");
+            }
+        });
+
+        RunAction("构建输出：剪贴板里读回来的是那条命令本身，不带「命令：」标签（真实控件）", () =>
+        {
+            string pasted;
+            try
+            {
+                pasted = Clipboard.GetText();
+            }
+            catch (ExternalException ex)
+            {
+                throw new InvalidOperationException("读不回剪贴板（被其他进程占用）：" + ex.Message);
+            }
+            if (pasted != command)
+            {
+                throw new InvalidOperationException(
+                    $"剪贴板里是「{pasted}」（{pasted.Length} 字），要交出去的是「{command}」（{command.Length} 字）"
+                    + "——粘进终端的那一段不是屏幕上标签后面那一段。");
+            }
+            if (pasted.Contains(BuildCommandCopy.LinePrefix, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"剪贴板里带着「{BuildCommandCopy.LinePrefix}」标签：粘进终端会被当成命令名。");
+            }
+        });
+
+        RunAction("构建输出：复制成功后按钮宽度与旁边「关闭」的位置都没动（真实控件）", () =>
+        {
+            if (copyButton.Width != widthBefore)
+            {
+                throw new InvalidOperationException(
+                    $"按钮宽度从 {widthBefore}px 变成 {copyButton.Width}px：四个字换四个字，宽度本该不变（防按钮跳位）。");
+            }
+            if (closeButton.Left != closeLeftBefore)
+            {
+                throw new InvalidOperationException(
+                    $"「关闭」按钮从左边 {closeLeftBefore}px 挪到 {closeButton.Left}px：复制按钮宽度一变就把它推走了。");
+            }
+            if ((copyButton.Parent?.Height ?? 0) != rowHeightBefore)
+            {
+                throw new InvalidOperationException(
+                    $"按钮行从 {rowHeightBefore}px 变成 {copyButton.Parent?.Height}px：文字切换不该推动这一行。");
+            }
+        });
+
+        RunAction("构建输出：真点「关闭」把这一屏关掉（真实控件）", () =>
+        {
+            closeButton.PerformClick();
+            Application.DoEvents();
+            if (!screen.IsDisposed && screen.Visible)
+            {
+                throw new InvalidOperationException("点了「关闭」这一屏还开着（窗体既没销毁也没隐藏）。");
+            }
+        });
+
+        _lines.Add($"     构建输出的「复制命令」：点了之后按钮文字切到「{NoticeCopy.CopiedLabel}」，"
+            + $"剪贴板里读回来的与命令原文逐字相同（{command.Length} 字，不带「{BuildCommandCopy.LinePrefix}」标签），"
+            + $"按钮宽度 {widthBefore}px 未变。");
+    }
+
+    /// <summary>构建输出对话框里的命令行（按口径的标签前缀定位，不按控件顺序猜）。</summary>
+    private static TextBox CommandBox(Control root) =>
+        FindAll<TextBox>(root).FirstOrDefault(t => t.Text.StartsWith(BuildCommandCopy.LinePrefix, StringComparison.Ordinal))
+        ?? throw new InvalidOperationException("对话框里找不到命令行（以「" + BuildCommandCopy.LinePrefix + "」开头的只读文本框）。");
 
 
     /// <summary>某个控件所在行里的那个下拉框（按同一行里的按钮文字定位那一行）。</summary>

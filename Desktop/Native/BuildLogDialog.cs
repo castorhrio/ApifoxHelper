@@ -8,13 +8,21 @@ namespace ApifoxHelper.Desktop.Native;
 /// 定向构建输出（只读）：命令、开始时间、退出码、耗时与输出尾部，数据来自任务目录 build.json（BuildService 落盘）。
 /// 构建在任务页发起并经用户确认，本对话框无写入动作；超时与非零退出码如实显示，不显示成完成。
 /// 状态表：尚未构建=空态指引；读取失败=内联错误与下一步；正常=概要行（与任务页构建状态行同一口径）+ 输出尾部。
+/// <para>
+/// <b>命令行可框选、可一键交出</b>（第二百轮）：说明行指着「完整输出可在本机终端重新执行查看」，
+/// 而命令行此前是 <c>Label</c>——不可选中、不可复制，那一步在界面上没有落点。现命令行是
+/// <see cref="Ui.MonoBox"/>（只读文本框，可框选、Ctrl+A、Ctrl+C），按钮行里多一颗「复制命令」
+/// （口径在 <see cref="BuildCommandCopy"/>：交出去的是命令本身，不带「命令：」标签；没有命令时不给按钮）。
+/// 同一屏的输出尾部本来就是可框选的只读框，命令行跟上之后这一屏不再有两种行为。
+/// </para>
 /// </summary>
 internal sealed class BuildLogDialog : DpiAwareForm
 {
     private readonly TaskStore _tasks;
     private readonly string _taskId;
     private readonly Label _summary = Ui.StatusText();
-    private readonly Label _command = Ui.Mono();
+    private readonly TextBox _command;
+    private readonly Button _copyButton;
     private readonly TextBox _output = Ui.Preview(multiline: true, mono: true, wordWrap: false, scrollBars: ScrollBars.Both);
     private readonly Label _hint = new()
     {
@@ -23,6 +31,9 @@ internal sealed class BuildLogDialog : DpiAwareForm
         ForeColor = UiTokens.Muted,
         Font = UiTokens.Body.Value,
     };
+
+    /// <summary>记录里的命令原文（<c>null</c> = 没有可交出去的命令）；复制按钮交出去的就是它。</summary>
+    private string? _commandText;
 
     public BuildLogDialog(TaskStore tasks, CheckTask task)
     {
@@ -41,9 +52,34 @@ internal sealed class BuildLogDialog : DpiAwareForm
 
         var head = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 1, Padding = new Padding(UiTokens.Lg, UiTokens.Lg, UiTokens.Lg, UiTokens.Sm), Margin = new Padding(0) };
         head.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        // 折行宽与量宽取同一处：内容网格的实际可用宽度（算式在 Ui.ContentWidth）。
+        // 构造这一刻 head 还没有客户区（宽 0），先按窗体客户区宽种一次，布局完成后再按实际可用宽度重算
+        // （与 NoticeDialog 同一做法：量宽偏大则长命令被裁掉半行，偏小则这一屏多出一块空白）。
+        head.Width = ClientSize.Width;
+        var wrapWidth = Ui.ContentWidth(head);
+
+        _command = Ui.MonoBox(BuildCommandCopy.Line(null), wrapWidth);
+        _command.Margin = new Padding(0, 0, 0, UiTokens.Xs);
+
         head.Controls.Add(_summary);
         head.Controls.Add(_command);
-        head.Controls.Add(Ui.Caption("输出尾部为最近 60 行，敏感值已脱敏；完整输出可在本机终端重新执行查看。"));
+        head.Controls.Add(Ui.Caption(BuildCommandCopy.Note));
+
+        // 布局完成后按 grid 的实际可用宽度重算一次：量宽与控件实际拿到的宽度必须是同一个数。
+        // 宽度没变就不动——在 Layout 里改尺寸会再触发一次 Layout，不设这道闸会自己绕圈。
+        var applied = wrapWidth;
+        void ApplyWrapWidth()
+        {
+            var width = Ui.ContentWidth(head);
+            if (width == applied) return;
+            applied = width;
+            // 宽度变了高度必须跟着重量：只改宽不重量，长命令会被裁掉半行。
+            _command.Width = width;
+            _command.Height = Ui.MonoBoxHeight(_command.Text, width);
+        }
+
+        head.Layout += (_, _) => ApplyWrapWidth();
 
         var outputHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, UiTokens.Sm) };
         outputHost.Controls.Add(Ui.Hairline(_output));
@@ -57,6 +93,18 @@ internal sealed class BuildLogDialog : DpiAwareForm
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, UiTokens.Lg, UiTokens.Md) };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
+
+        // 复制命令：说明行指着「粘到本机终端即可重新执行」，没有这颗按钮那一步只能照着屏幕敲
+        // （命令行虽已可框选，但「整行一键交出」仍要一颗按钮）。记录里没有命令时隐藏——
+        // 一颗点了什么也不会发生的按钮不该出现（判定在 BuildCommandCopy.Target）。
+        _copyButton = Ui.Ghost(BuildCommandCopy.Label);
+        _copyButton.Visible = false;
+        _copyButton.Click += (_, _) =>
+        {
+            if (BuildCommandCopy.Target(_commandText) is not string target) return;
+            _copyButton.Text = Ui.CopyToClipboard(target) ? NoticeCopy.CopiedLabel : NoticeCopy.FailedLabel;
+        };
+        buttonRow.Controls.Add(_copyButton);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），输出区填满剩余空间，标题行最上。
         Controls.Add(outputHost);
@@ -94,7 +142,11 @@ internal sealed class BuildLogDialog : DpiAwareForm
             "muted" => UiTokens.Muted,
             _ => UiTokens.Text,
         };
-        _command.Text = "命令：" + (record["command"]?.ToString() ?? "—");
+        _commandText = record["command"]?.ToString();
+        _command.Text = BuildCommandCopy.Line(_commandText);
+        // 宽度没变时 Layout 不会触发，高度得在这里按当前宽度重量一次（命令长短不一）。
+        _command.Height = Ui.MonoBoxHeight(_command.Text, Math.Max(_command.Width, 1));
+        _copyButton.Visible = BuildCommandCopy.Target(_commandText) is not null;
         if (DateTimeOffset.TryParse(record["startedAt"]?.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var started))
         {
             Text += "（" + started.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") + "）";
@@ -112,6 +164,8 @@ internal sealed class BuildLogDialog : DpiAwareForm
         _hint.Visible = true;
         _output.Visible = false;
         _summary.Text = "";
+        _commandText = null;
         _command.Text = "";
+        _copyButton.Visible = false;
     }
 }

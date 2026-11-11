@@ -102,6 +102,7 @@
     <Compile Include="..\Desktop\Native\ShellShortcuts.cs" Link="Shared\ShellShortcuts.cs" />
     <Compile Include="..\Desktop\Native\NoticeText.cs" Link="Shared\NoticeText.cs" />
     <Compile Include="..\Desktop\Native\NoticeCopy.cs" Link="Shared\NoticeCopy.cs" />
+    <Compile Include="..\Desktop\Native\BuildCommandCopy.cs" Link="Shared\BuildCommandCopy.cs" />
     <Compile Include="..\Desktop\Native\ConfirmEntries.cs" Link="Shared\ConfirmEntries.cs" />
     <Compile Include="..\Desktop\Native\StatusLineText.cs" Link="Shared\StatusLineText.cs" />
     <Compile Include="..\Tasks\TaskModels.cs" Link="Shared\TaskModels.cs" />
