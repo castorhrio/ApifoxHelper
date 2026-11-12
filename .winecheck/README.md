@@ -42,6 +42,7 @@ xvfb-run -a wine /tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe --report=/tmp/ah-smoke
 | `demo.sh` | **降级答辩的一键复跑演示**：按 wine 三档缩放各跑一次冒烟，并把 `docs/NOTES.md`「降级答辩脚本」逐屏表的每一行与那一档的报告对上一次，逐档产出讲稿（用法见下一节） |
 | `prepare-real-machine.sh` | **真机到手前的第 0 条四项准备，一条命令跑完**：① 复跑三档冒烟（调 `demo.sh`）→ ② 复跑 `dotnet build` 与 `dotnet test` → ③ 建好 `docs/evidence/real-machine/` 的九个归档子目录 → ④ 把 `docs/NOTES.md` 的七条动作单打印出来。任一步不过即非零退出并打出是哪一步（用法见下一节） |
 | `collect-real-machine.sh` | **真机证据归档核对**：从 `docs/evidence/real-machine/README.md` 的产出物清单读目录名与应放文件名，逐个归档目录判「除隐藏占位（`.gitkeep` 这类）之外有没有东西」，还空着的逐条点名「哪一条动作还没归档、该往里放哪些文件」。退出码 `0` = 九个目录都不空、`1` = 还有目录空着（已点名）、`2` = 核对本身跑不动（清单读不到 / 解析不出七条动作 / 清单与磁盘的目录名对不上）。**不判内容对不对**（截图有没有裁切、读数三个数落得对不对要人看），也不替人打勾 |
+| `preflight.sh` | **答辩当天的临场预检，一条命令核四件事**：① `pwsh` 找得到（`~/.dotnet/tools/pwsh` 或 PATH）；② 当前源码指纹 == 读数记录里的 `source=`；③ 三档演示跑过且通过（读数记录每档 `failed=0` 且 `exit=0`、冒烟器旁边有源码指纹）；④ 九个归档目录在位（调 `collect-real-machine.sh`，退出码 `2` 才算不在位）。任一条不过即非零退出并**点名到哪一步**。**不判内容对不对**，也不判真机跑没跑——九个目录都还空着（真机 0 台）不算预检失败 |
 
 ### 已删脚本（由上表取代，不要复活）
 
@@ -132,6 +133,7 @@ bash .winecheck/collect-real-machine.sh # 真机证据归档核对：九个目�
 | `TIERS` | `96 120 192` | 要跑的 `LogPixels` 档（答辩前自查可只给一档） |
 | `PUBLISH` | `0` | 设 `1` 时脚本自己重发冒烟器（`build -t:Rebuild` + `publish` + 写源码指纹），见上一节 |
 | `READING` | `$REPO/.winecheck/reading.txt` | 读数记录的落点。三档跑完（**不论这一场收口与否**）脚本把「哪一支脚本、哪台机器、哪一天、哪一版源码、每档几条、每段几条」写在这里；`README.md` 与 `docs/NOTES.md` 念的那句「当前源码三档读数 N 通过 / 0 失败 ×3」由 `ApifoxHelper.Tests/ReadingConsistencyTests` 拿这份记录逐字对账，不再靠人抄。只想自查、不想动这份记录时设 `READING=/tmp/reading.txt` |
+| `PWSH` | 空（先找 `$HOME/.dotnet/tools/pwsh`，再找 PATH） | `preflight.sh` 第 ① 条要核的 PowerShell 可执行文件。第二百零七轮的教训：`pwsh` 不在 PATH 不等于机器上没有（dotnet 全局工具落在 `~/.dotnet/tools/pwsh`），所以这一支先按那个位置找，再退 PATH |
 
 ## 产物位置
 
