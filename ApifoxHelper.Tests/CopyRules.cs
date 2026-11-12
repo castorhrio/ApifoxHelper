@@ -140,6 +140,49 @@ internal static class CopyRules
     }
 
     /// <summary>
+    /// 「中文与全角标点之间不留空隙」判定的那一侧：<b>括号与引号</b>（成对的闭号与开号）。
+    /// <para>
+    /// <b>为什么不收句读</b>（<c>。，、；：！？</c>）：本仓正文里「； 落」「， 而」这种<b>句读后留一个空格</b>
+    /// 的写法是刻意的（长句并列时读得开），全仓几百处。把它判成违例，等于拿一条排版规矩去判另一种
+    /// 排版选择——那种门的下场是被整条注释掉。而<b>括号与引号两侧的空隙</b>没有这种用法：
+    /// 「第 」读起来像漏了一个字，「（ 说明」像多打了一个空格，两种都是笔误。
+    /// </para>
+    /// <para>
+    /// 破折号「——」与省略号「……」也不收：它们两侧留空隙是另一种正当写法（本仓两种都有）。
+    /// </para>
+    /// </summary>
+    public const string FullWidthPunct = "（）「」『』《》〈〉【】〔〕";
+
+    public static bool IsFullWidthPunct(char c) => FullWidthPunct.Contains(c);
+
+    /// <summary>
+    /// 中文与全角标点之间夹着空隙的位置（-1 表示没有）。
+    /// <para>
+    /// 与 <see cref="IndexOfMissingLatinGap"/> 是同一条排版规矩的两侧：中英文之间<b>要</b>留一个半角空隙，
+    /// 中文与全角标点之间<b>不要</b>留——「第 」这种写法读起来像漏了一个字，而它看起来又不像错。
+    /// 判定只看空隙两侧紧邻的那两个字（空隙可以是一串空格），中间隔着别的字符不算。
+    /// </para>
+    /// </summary>
+    public static int IndexOfSpaceAroundFullWidthPunct(string text)
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] != ' ') continue;
+            var start = i;
+            while (i < text.Length && text[i] == ' ') i++;
+            var end = i; // 空隙是 [start, end)
+            if (start == 0 || end >= text.Length) continue;
+            var (before, after) = (text[start - 1], text[end]);
+            if ((IsChinese(before) && IsFullWidthPunct(after)) || (IsFullWidthPunct(before) && IsChinese(after)))
+            {
+                return start;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
     /// 把源码里的一个字符串字面量还原成<b>用户会读到的那几个字</b>：剥掉插值空洞，再解码转义。
     /// <para>
     /// 两步都省不得。只剥空洞不解转义时，<c>"。\n\n退出时会请求停止"</c> 里源码那两个字母
