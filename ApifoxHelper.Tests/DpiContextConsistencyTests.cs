@@ -319,8 +319,18 @@ public class DpiContextConsistencyTests
                 $"那一段让把读数归档到 {dirs[0]}/，而 docs/evidence/real-machine/ 下没有这个目录：当天没有落点。");
         }
 
-        // 「不归因」这句必须跟着这段一起留着，否则这一节会被读成「已经知道差在哪了」。
-        Assert.Contains("不归因", section, StringComparison.Ordinal);
+        // 第二百一十九轮（简报 P0-1）：把这条从「这一条里」收紧到「这一句里」。
+        // 第二百一十一轮记下的形状：同一条目里另有两处「未归因」（「机制未归因」「仍未归因的只剩一件事」），
+        // 一句 Assert.Contains("不归因", section) 会被它们满足——把段末那句改成「已归因到底」照样绿。
+        // 处置：判**收尾那一句**（这一段自己的结论句，即最后一个加粗引子）里有没有「不归因」，
+        // 不判整条里有没有这三个字；同时不许出现「已归因」——那是把「还没归因」读成「已经归因」的那一个词。
+        var closingClaim = Regex.Matches(section, @"\*\*([^*]+)\*\*").Cast<Match>().Last().Groups[1].Value;
+        Assert.True(closingClaim.Contains("不归因", StringComparison.Ordinal),
+            $"那一段的收尾结论句（现读到「{closingClaim}」）里没有「不归因」：这一节会被读成「已经知道差在哪了」，"
+            + "而实际仍未归因的只剩「同一个活会话里 bash 那一支为什么停在上一档」那一句。");
+        Assert.True(!closingClaim.Contains("已归因", StringComparison.Ordinal),
+            $"那一段的收尾结论句（现读到「{closingClaim}」）写成了「已归因」："
+            + "这一节只把变量收到「换档时重不重启前缀」这一层，剩下的那一句仍未归因，不能读成已经查到底。");
     }
 
     /// <summary>
