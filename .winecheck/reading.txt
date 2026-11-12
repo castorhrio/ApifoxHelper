@@ -6,14 +6,15 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-12
-source=b7a63d2a9c12ffc3e954aba4e2479ad8badbb24e
-tier=96 passed=227 failed=0 exit=0
-tier=120 passed=227 failed=0 exit=0
-tier=192 passed=227 failed=0 exit=0
+source=4aebcf572749f522da8b03c76b1921eea03df560
+tier=96 passed=231 failed=0 exit=0
+tier=120 passed=231 failed=0 exit=0
+tier=192 passed=231 failed=0 exit=0
 section=RunEndToEnd tier=96 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=96 passed=6 failed=0
 section=RunScanResultsInteraction tier=96 passed=5 failed=0
 section=RunFontStackRuntime tier=96 passed=1 failed=0
+section=RunIdentityCellFont tier=96 passed=4 failed=0
 section=RunCandidatesInteraction tier=96 passed=6 failed=0
 section=RunSupplementsInteraction tier=96 passed=6 failed=0
 section=RunDecisionsInteraction tier=96 passed=6 failed=0
@@ -38,6 +39,7 @@ section=RunEndToEnd tier=120 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=120 passed=6 failed=0
 section=RunScanResultsInteraction tier=120 passed=5 failed=0
 section=RunFontStackRuntime tier=120 passed=1 failed=0
+section=RunIdentityCellFont tier=120 passed=4 failed=0
 section=RunCandidatesInteraction tier=120 passed=6 failed=0
 section=RunSupplementsInteraction tier=120 passed=6 failed=0
 section=RunDecisionsInteraction tier=120 passed=6 failed=0
@@ -62,6 +64,7 @@ section=RunEndToEnd tier=192 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=192 passed=6 failed=0
 section=RunScanResultsInteraction tier=192 passed=5 failed=0
 section=RunFontStackRuntime tier=192 passed=1 failed=0
+section=RunIdentityCellFont tier=192 passed=4 failed=0
 section=RunCandidatesInteraction tier=192 passed=6 failed=0
 section=RunSupplementsInteraction tier=192 passed=6 failed=0
 section=RunDecisionsInteraction tier=192 passed=6 failed=0

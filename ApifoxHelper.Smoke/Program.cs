@@ -225,6 +225,9 @@ internal static class Program
         Section("字体栈运行时命中（真实控件）", nameof(RunFontStackRuntime));
         RunFontStackRuntime();
 
+        Section("标识格字体（响应契约首列与项目列表 ID 列的实际渲染字体，真实控件）", nameof(RunIdentityCellFont));
+        RunIdentityCellFont(services, dataRoot);
+
         Section("注释候选对话框（真实控件交互）", nameof(RunCandidatesInteraction));
         RunCandidatesInteraction(services, dataRoot);
 
@@ -1277,6 +1280,162 @@ internal static class Program
                     + "界面控件、进程默认字体与对话框取的是同一份。");
             }
         });
+    }
+
+    /// <summary>
+    /// 标识格的等宽字体在真实控件上成立（第二百三十轮，控制仓简报 P0-1）。
+    /// <para>
+    /// 存在理由：第二百二十八轮把十三处就地设的等宽字体收进 <c>Ui.IdentityCell</c> 一处，并给
+    /// <c>ContractsDialog</c> 首列（接口身份「GET /路径」）与 <c>ProjectsPage</c> 的「Apifox 项目」ID 列
+    /// 补上了此前漏掉的等宽。那一轮的证据只有源码切片（「这一行调了工厂」）——<b>没有一处真的把这两屏
+    /// 构造出来、读那一格的实际字体</b>：工厂改了而读数没跟上、某屏在工厂之后又覆盖了一次字体，
+    /// 两种漂移都照样全绿。
+    /// </para>
+    /// <para>
+    /// 四段：① 夹具（真实落盘：三条响应契约 + 一份带 Apifox 项目 ID 的配置）；
+    /// ② 响应契约首列的实际渲染字体名逐字等于 <c>UiTokens.Mono.Value</c>；
+    /// ③ 项目列表「Apifox 项目」列同一条；④ 非标识列仍是正文字体——等宽没有漫到整行
+    /// （反向漂移：整行都设成等宽同样会让 ②③ 绿）。
+    /// </para>
+    /// </summary>
+    private static void RunIdentityCellFont(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var reviews = services.GetRequiredService<ContractReviewService>();
+        var store = services.GetRequiredService<FileStore>();
+        var compat = services.GetRequiredService<CompatService>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        var jobs = services.GetRequiredService<JobRunner>();
+        var credentials = services.GetRequiredService<CredentialStore>();
+
+        CheckTask? task = null;
+        ProjectProfile? profile = null;
+        ContractsDialog? dialog = null;
+        Form? host = null;
+        ProjectsPage? page = null;
+        try
+        {
+            RunAction("标识格字体：准备契约与配置（真实落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe8.Api");
+                CreateProbeWorkspace(projectDir);
+                profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "标识格字体配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe8.Api/Probe8.Api.csproj",
+                    AllowedSourcePaths = ["Probe8.Api/"],
+                    Apifox = new ApifoxTarget { ProjectId = "123456", ProjectName = "标识格字体项目" },
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "标识格字体任务" });
+                tasks.Write(task.Id, TaskFiles.ResponseContract, ContractsFixture());
+                _lines.Add($"     夹具：配置 {profile.Id}（Apifox 项目 ID 123456）、任务 {task.Id}（3 条契约）");
+            });
+
+            RunAction("标识格字体：响应契约首列（接口身份）实际渲染等宽（真实控件）", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new ContractsDialog(tasks, task, reviews);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = ContractList(dialog);
+                if (list.Items.Count == 0)
+                {
+                    throw new InvalidOperationException("契约清单是空的（对话框停在提示态），没有可量的标识格。");
+                }
+                var mono = UiTokens.Mono.Value;
+                var body = UiTokens.Body.Value;
+                if (mono.Name == body.Name)
+                {
+                    throw new InvalidOperationException(
+                        $"等宽与正文的实际渲染名都是「{mono.Name}」——这一档量不出「等宽」，先修字体栈。");
+                }
+                foreach (ListViewItem item in list.Items)
+                {
+                    var cell = item.SubItems[0];
+                    if (cell.Font.Name != mono.Name)
+                    {
+                        throw new InvalidOperationException(
+                            $"契约「{item.Text}」的接口身份格渲染成「{cell.Font.Name}」，期望等宽「{mono.Name}」（Ui.IdentityCell 出厂）。");
+                    }
+                    if (Math.Abs(cell.Font.Size - mono.Size) > 0.01f)
+                    {
+                        throw new InvalidOperationException(
+                            $"契约「{item.Text}」的接口身份格是 {cell.Font.Size}pt，等宽档是 {mono.Size}pt。");
+                    }
+                }
+                _lines.Add($"     响应契约首列：{list.Items.Count} 行全部渲染「{mono.Name}」{mono.Size}pt（正文「{body.Name}」）");
+            });
+
+            RunAction("标识格字体：项目列表「Apifox 项目」列实际渲染等宽（真实控件）", () =>
+            {
+                if (profile is null) throw new InvalidOperationException("第一段没有产出配置。");
+                host = new Form { Width = 1100, Height = 700, Text = "标识格字体冒烟" };
+                page = new ProjectsPage(profiles, compat, cli, store, jobs, credentials,
+                    new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort.json")));
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                page.RefreshData();
+                Application.DoEvents();
+
+                var list = ProfileList(page);
+                var row = list.Items.Cast<ListViewItem>()
+                    .FirstOrDefault(i => (i.Tag as ProjectProfile)?.Id == profile.Id)
+                    ?? throw new InvalidOperationException(
+                        $"配置清单里找不到刚保存的配置 {profile.Id}（清单 {list.Items.Count} 行）。");
+                var mono = UiTokens.Mono.Value;
+                var cell = row.SubItems[2];
+                if (cell.Text != "123456")
+                {
+                    throw new InvalidOperationException($"「Apifox 项目」格是「{cell.Text}」，期望配置里的项目 ID「123456」。");
+                }
+                if (cell.Font.Name != mono.Name)
+                {
+                    throw new InvalidOperationException(
+                        $"「Apifox 项目」格渲染成「{cell.Font.Name}」，期望等宽「{mono.Name}」（Ui.IdentityCell 出厂）。");
+                }
+                _lines.Add($"     项目列表「Apifox 项目」列：渲染「{cell.Font.Name}」{cell.Font.Size}pt");
+            });
+
+            RunAction("标识格字体：非标识列仍是正文字体（等宽没有漫到整行）", () =>
+            {
+                if (dialog is null || page is null) throw new InvalidOperationException("前两段没有产出对话框与页面。");
+                var mono = UiTokens.Mono.Value;
+                var body = UiTokens.Body.Value;
+                var contractRow = ContractList(dialog).Items[0];
+                // 第 2 列是「封装」（ApiResponse<T>）：它不是标识，走控件默认的正文字体。
+                var wrapper = contractRow.SubItems[1];
+                if (wrapper.Font.Name == mono.Name)
+                {
+                    throw new InvalidOperationException(
+                        $"契约清单的「封装」列也渲染成等宽「{mono.Name}」——等宽漫到了整行，标识格就不再是「标识」的标记。");
+                }
+                if (wrapper.Font.Name != body.Name)
+                {
+                    throw new InvalidOperationException(
+                        $"契约清单的「封装」列渲染成「{wrapper.Font.Name}」，期望正文字体「{body.Name}」。");
+                }
+                var profileRow = ProfileList(page).Items.Cast<ListViewItem>()
+                    .First(i => (i.Tag as ProjectProfile)?.Id == profile!.Id);
+                var apiProject = profileRow.SubItems[1];
+                if (apiProject.Font.Name == mono.Name)
+                {
+                    throw new InvalidOperationException(
+                        $"项目列表的「API 项目」列也渲染成等宽「{mono.Name}」——等宽漫到了整行。");
+                }
+                _lines.Add($"     非标识列：「封装」与「API 项目」仍是正文「{body.Name}」");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+            page?.Dispose();
+            host?.Dispose();
+        }
     }
 
     /// <summary>
