@@ -499,6 +499,70 @@ public class WineCheckScriptsTests
             "demo.ps1 里「列数不对」那一支没有在自己的块内退出——静默跳过的那一屏不会出现在讲稿里，正是第一百六十七轮在 demo.sh 上修掉的同一族缺陷。");
     }
 
+    // ── 第二百三十二轮（简报 P0-1 降级路径）：讲稿必须从空文件写起 ──────────
+
+    /// <summary>
+    /// 两支演示脚本写讲稿之前都必须<b>先把那一份截成空文件</b>。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>demo.sh</c> 写讲稿前有一句 <c>: &gt;"$NARRATION"</c>，<c>demo.ps1</c> 没有——
+    /// 而它的 <c>Write-Lines</c> 是<b>追加</b>写（<c>File.AppendAllText</c>），只清报告、不清讲稿。
+    /// 于是「先跑 <c>demo.sh</c> 再跑 <c>demo.ps1</c>」（正是答辩当天动作单的顺序，两支的 <c>OUT</c> 缺省都是
+    /// <c>/tmp/ah-demo</c>）时，<c>narration-&lt;档位&gt;.txt</c> 里留着上一份讲稿，这一档的讲稿变成两份叠在一起：
+    /// 第二百三十二轮实测 <b>98 行 → 196 行</b>，现场会把每一屏念两遍，而
+    /// <c>.winecheck/README.md</c>「Windows 侧那支」第 3 条那句「100% 档讲稿与 <c>demo.sh</c> 逐字节相同」
+    /// 也当场不成立。修法就是补上同一件事（先截空再追加），本条钉住它不许再掉。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① <c>demo.sh</c> 里截断那一句出现在第一次追加之前；② <c>demo.ps1</c> 里截断那一句
+    /// 出现在第一次 <c>Write-Lines $narration</c> 之前；③ 自测——把两支的截断各删掉一次，判据必须当场报出来
+    /// （否则「它绿着」只说明取法退化，不说明脚本对）。
+    /// </para>
+    /// <para>
+    /// <b>它不做什么</b>：不跑这两支脚本（跑起来要 wine + Xvfb + 已发布的冒烟器），也不判讲稿内容对不对。
+    /// 「修好之后 96 档讲稿与 <c>demo.sh</c> 逐字节相同」是第二百三十二轮当场跑出来的读数，
+    /// 记在 <c>.winecheck/README.md</c>「Windows 侧那支」第 5 条，不是本条判的。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoPs1_TruncatesTheNarrationBeforeWriting()
+    {
+        var sh = Repo.Source(".winecheck", "demo.sh");
+        var ps1 = File.ReadAllText(Path.Combine(Directory, "demo.ps1"));
+
+        // ① demo.sh：`: >"$NARRATION"` 在第一次 `>>"$NARRATION"` 之前。
+        Assert.True(TruncatesBeforeAppending(sh, @":\s*>""\$NARRATION""", @">>""$NARRATION"""),
+            "demo.sh 里「先把讲稿截空」那一句不在第一次追加之前——讲稿会叠在上一份后面。");
+
+        // ② demo.ps1：截断在第一次 Write-Lines $narration 之前。
+        Assert.True(TruncatesBeforeAppending(ps1, @"WriteAllText\(\s*\$narration\s*,\s*''", "Write-Lines $narration"),
+            "demo.ps1 写讲稿前没有先把 narration-<档位>.txt 截成空文件：Write-Lines 是追加写，"
+            + "同一份 OUT 目录里先跑过 demo.sh 时这一档的讲稿会变成两份叠在一起（实测 98 行 → 196 行）。");
+
+        // ③ 自测：两支各删掉截断那一句，判据必须报出来。
+        var shBroken = sh.Replace(": >\"$NARRATION\"", "");
+        Assert.NotEqual(sh, shBroken);
+        Assert.False(TruncatesBeforeAppending(shBroken, @":\s*>""\$NARRATION""", @">>""$NARRATION"""),
+            "自测失败：把 demo.sh 的截断删掉之后判据仍然绿——取法退化了，它判不到它该判的东西。");
+
+        var ps1Broken = ps1.Replace("[System.IO.File]::WriteAllText($narration, '', $Utf8NoBom)", "");
+        Assert.NotEqual(ps1, ps1Broken);
+        Assert.False(TruncatesBeforeAppending(ps1Broken, @"WriteAllText\(\s*\$narration\s*,\s*''", "Write-Lines $narration"),
+            "自测失败：把 demo.ps1 的截断删掉之后判据仍然绿——取法退化了，它判不到它该判的东西。");
+    }
+
+    /// <summary>
+    /// 「先截空、再追加」的形状判据：截断那一句必须出现在第一次追加之前。
+    /// 只判先后，不判写法——两支脚本各用各的写法（bash 的 <c>: &gt;</c> 与 .NET 的 <c>WriteAllText</c>），
+    /// 判的是同一件事：这一份文件是从空的开始写的。
+    /// </summary>
+    private static bool TruncatesBeforeAppending(string text, string truncationPattern, string firstAppendMarker)
+    {
+        var appendAt = text.IndexOf(firstAppendMarker, StringComparison.Ordinal);
+        if (appendAt < 0) return false;
+        var truncation = Regex.Match(text, truncationPattern);
+        return truncation.Success && truncation.Index < appendAt;
+    }
+
     // ── 第二百零七轮（简报 P0-2）：这一支真的跑过、也能被真的解析 ──────────
 
     /// <summary>

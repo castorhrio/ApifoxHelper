@@ -208,6 +208,12 @@ foreach ($tier in @($Tiers -split ' ' | Where-Object { $_ })) {
         Write-Host "== 档位 LogPixels=$tier（≈${percent}%，本机未改缩放，实际那一档看报告里的「屏幕 DPI」）=="
     }
     if (Test-Path -LiteralPath $report) { Remove-Item -LiteralPath $report -Force }
+    # 讲稿必须从空文件写起（第二百三十二轮实测修）：Write-Lines 是**追加**写，而这一支此前只清报告、
+    # 不清讲稿——同一份 OUT 目录里先跑过 demo.sh（或上一次 demo.ps1）时，narration-<档位>.txt 里还留着
+    # 上一份讲稿，这一档的讲稿就成了两份叠在一起（实测 98 行 → 196 行，答辩现场会把每一屏念两遍，
+    # 而「100% 档讲稿与 demo.sh 逐字节相同」那句登记也就当场不成立）。demo.sh 那一支在写之前有
+    # `: >"$NARRATION"`，这里补上同一件事：先截成空文件，再追加。
+    [System.IO.File]::WriteAllText($narration, '', $Utf8NoBom)
     # 改 LogPixels 与跑冒烟必须落在同一个活显示里（第一百八十四轮实测修）：注册表写入与 GUI 进程共用
     # 同一个常驻 wineserver，在死显示里先写注册表会把它的显示状态带坏，之后每一扇窗口都构造不出来。
     # 那不是产品回归，是环境差异：把它读成回归会带偏一整场答辩（同 README 记的前缀误用那一族）。
