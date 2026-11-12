@@ -33,6 +33,15 @@ namespace ApifoxHelper.Desktop.Native;
 /// 由 <c>StatusLineTextTests.Host_FillsItsCell_SoTheStatusLineGetsTheRemainingWidth</c> 按类逐段判住。
 /// </para>
 /// <para>
+/// <b>修复后实测（第二百一十六轮，简报 P0-2）</b>：补上 Dock 之后页面侧状态行这一格的可用宽度
+/// 在 96 / 120 / 192 三档实测为 <b>855 / 840 / 774px</b>（窗口 1280px，即 Xvfb 屏幕工作区宽；
+/// 读数原文见 <c>/tmp/ah-demo/report-{96,120,192}.txt</c> 里 <c>RunStatusFullText</c> 那两行
+/// 「入口不占位时这一行 Npx」）。同一条 94 字真实失败原因的文字宽是 642 / 669 / 817px——
+/// 96 与 120 两档放得下（入口不给），192 档放不下（入口给）。也就是说
+/// 「放得下就不给入口」那一支<b>第一次真的走到了</b>，不再是「194px 永远放不下」。
+/// 这一句只记量到的数，不把它读成真机结论（wine 模拟器，G-D5 仍 <c>[ ]</c>）。
+/// </para>
+/// <para>
 /// <b>高度是固定占位</b>：宿主高度取状态行自身高度（DESIGN.md §6「状态行：固定占位，文案变化不推动布局」）。
 /// 不这么做的话，<c>Panel</c> 的缺省高度（100px）会把工具栏那一行撑高——状态行从一行文字变成一条空带，
 /// 而这是「加一颗入口」不该带来的布局变化（wine 实测：工具栏行高由 30px 变 100px）。
