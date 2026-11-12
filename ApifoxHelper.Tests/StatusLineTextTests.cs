@@ -110,6 +110,44 @@ public class StatusLineTextTests
     }
 
     /// <summary>
+    /// 宿主必须填满它所在的那一格：状态行拿到的宽度是「工具栏剩余宽度」，不是 Panel 的缺省 200px。
+    /// <para>
+    /// 第一百六十五轮：两个主页面的工具栏列样式本来就是「按钮列 <c>AutoSize</c> + 状态行列 <c>Percent 100</c>」，
+    /// 但宿主没设 <c>Dock</c>，于是它停在 <c>Panel</c> 的缺省 200px——wine 三档实测这一格恒 194px
+    /// （194 = 200 − 标签左右留白 6），窗口从 640 拉到 1600 都不变。后果不是难看：一条 94 字的真实失败原因
+    /// 是 643px，于是「放得下就不给入口」那一支在页面这一侧几乎永远走不到，用户每次失败都要多点一次
+    /// 「查看完整错误」。15 处对话框从接入那天起就设了 <c>Dock = DockStyle.Fill</c>，只有两个主页面漏了这一句。
+    /// </para>
+    /// <para>
+    /// 判据按<b>顶格类</b>切段：哪一段里 <c>new StatusLineHost(</c>，那一段里就必须有一句
+    /// <c>Dock = DockStyle.Fill</c>。地板 17 处与 <see cref="EveryStatusLine_OnDisk_IsWrittenThroughTheHost"/>
+    /// 同一口径——扫描失效时这一条不许恒真。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Host_FillsItsCell_SoTheStatusLineGetsTheRemainingWidth()
+    {
+        var sites = 0;
+        var offenders = new List<string>();
+        foreach (var source in Repo.NativeSources())
+        {
+            foreach (var (name, body) in ClassSegments(CodeOnly(source.Text)))
+            {
+                if (!body.Contains("new StatusLineHost(", StringComparison.Ordinal)) continue;
+                sites++;
+                if (!body.Contains("Dock = DockStyle.Fill", StringComparison.Ordinal))
+                {
+                    offenders.Add(source.Name + "." + name);
+                }
+            }
+        }
+        Assert.True(sites >= 17, $"构造状态行宿主的只有 {sites} 处（地板 17）：扫描或切段本身失效了。");
+        Assert.True(offenders.Count == 0,
+            $"这些类建了状态行宿主却没让它填满所在的那一格（不设 Dock 时停在 Panel 缺省 200px，"
+            + $"状态行恒 194px、长失败原因永远放不下）：{string.Join("、", offenders)}。");
+    }
+
+    /// <summary>
     /// 没接「查看完整错误」入口的状态行（封闭清单，逐条登记理由）。
     /// <para>
     /// 第一百六十五轮之前这里等价于「磁盘上除两个主页面以外的 15 处」；第一百六十六轮全部接入，

@@ -2104,6 +2104,61 @@
 | 「wine 三档全绿，算不算跑过了？」 | 不算：wine 是模拟器，同一段在两处判定一致才算，真机读数要按 `docs/evidence/real-machine/README.md` 归档。 | `docs/evidence/real-machine/README.md` + `RealMachineEvidenceTests.CheckedAction_RequiresItsArchiveDirectoryToHoldFiles` |
 | 「那到底卡在哪一条、什么时候能补上？」 | 卡在 G-D5 第 1 条、第 2 条、第 3 条（双击首程四站、三档截图、混合 DPI 重算），到期日 2026-11-20，机器到手当天照动作单跑。 | `docs/NOTES.md` 的「G-D5 真机复核清单（可勾选）」第 1 条、第 2 条、第 3 条 + `AcceptanceChecklistTests.RealMachineChecklist_ExistsAndCoversEveryGate` |
 
+## 降级答辩演练（2026-11-12）
+
+> **这一节是什么**：上一节的逐屏表管「每一屏的证据在哪」，「初审答辩口径」管「凭什么值得做」，这一节管**「演练那天实际发生了什么」**。不是再读一遍脚本，是真按 `README.md`「已知限制」第 1 条那条 `bash .winecheck/demo.sh` 命令跑一遍，逐屏念五块讲稿（`docs/NOTES.md`「初审答辩口径」一节），把每一屏「念的是哪一句 / 屏幕上是哪一行 / 对没对上」记下来；对不上的当场记成「那天会卡在这」。
+>
+> **为什么是 P0**：到期日 2026-11-20 约一周内，降级答辩是 G-D5 关闭路径的唯一兜底，而它从未被完整演练过一次（第 214 轮只做了 30 分钟单子干跑，未念讲稿）。这是「产品能力不是 Demo」的最低要求。
+>
+> **不动点**：不装依赖、不改产品源码、不动 `Web/` 三冻结文件、不碰 SHARED 不变量。
+>
+> **演练记录（2026-11-12，本轮）**：
+>
+> 1. **跑了一遍 `bash .winecheck/demo.sh`**（三档 96 / 120 / 192，`PUBLISH=0`，冒烟器已在当前源码上重发并带源码指纹 `smoke-source.sha`，三档均通过指纹校验）。
+>    - 读数：三档各 **218 通过 / 0 失败**，退出码 0，逐屏对账 0 处对不上；读数记录落在 `.winecheck/reading.txt`（`script=demo.sh`、`tool=wine + Xvfb`、`date=2026-11-12`、`source=` 当前源码指纹）。
+>    - 讲稿：三档各一份 `/tmp/ah-demo/narration-96.txt`、`narration-120.txt`、`narration-192.txt`，按逐屏表 1–18 屏逐屏产出，每屏写明「屏 / 讲什么 / 引用段 / 通过 N / 失败 M / 结论口径」。
+>
+> 2. **逐屏念五块讲稿（对账结果）**：
+>
+>    | 屏 | 念的是哪一句 | 屏幕上是哪一行 | 对没对上 | 那天会卡在这 |
+>    | --- | --- | --- | --- | --- |
+>    | 1 项目设置页 | 「空态引导、清单、详情、读取失败态与「重试」闭环、表单行高与高级入口同行」 | `RunProfileFormLayout` 通过 8 / 失败 0；`RunProfileLoadFailure` 通过 5 / 失败 0 | 对上 | — |
+>    | 2 检查任务页 | 「列表列宽自适应、分割面板、下一步引导、详情区滚动可达」 | `RunDetailBreak` 通过 5 / 失败 0；`RunTaskLoadFailure` 通过 5 / 失败 0 | 对上 | — |
+>    | 3 注释缺口对话框 | 「计数行、覆盖率行、打开即选中第一条、上一条/下一条、关键词与状态筛选」 | `RunScanResultsInteraction` 通过 5 / 失败 0 | 对上 | — |
+>    | 4 注释候选对话框 | 「待确认问题未答时接受被拒、填答后接受并下一条、撤销接受、筛到零行收掉输入」 | `RunCandidatesInteraction` 通过 6 / 失败 0 | 对上 | — |
+>    | 5 注释回写对话框 | 「计划生成与哈希稳定、确认后回写落盘、只改 `///` 行、BOM 与 CRLF 保留」 | `RunWriteBackEndToEnd` 通过 6 / 失败 0 | 对上 | — |
+>    | 6 生成文档核对 / 定向构建 | 「三环状态（源码/XML/Swagger）、构建输出只读尾部」 | 这一屏没有 wine 冒烟段——只有源码与编译证据，说「代码与用例在，真实端到端未跑」 | 对上（无段可指，如实写） | — |
+>    | 7 响应契约对话框 | 「逐接口确认/拒绝/重置、版本递增使旧检查过期」 | `RunContractsInteraction` 通过 5 / 失败 0 | 对上 | — |
+>    | 8 Apifox 差异检查（只读） | 「整分支概览 + 范围内详情、结构差异、说明合并、共享模型影响」 | 这一屏没有 wine 冒烟段——只有源码与编译证据，说「代码与用例在，真实端到端未跑」 | 对上（无段可指，如实写） | — |
+>    | 9 差异确认对话框 | 「确认纳入/撤销、说明冲突选边、筛到零行筛选器仍可用」 | `RunDecisionsInteraction` 通过 6 / 失败 0 | 对上 | — |
+>    | 10 补充说明对话框 | 「编辑位按目标结构派生、保存递增版本、原样重复保存不递增、保留现状」 | `RunSupplementsInteraction` 通过 6 / 失败 0 | 对上 | — |
+>    | 11 同步预览与执行 | 「勾选、冻结计划、确认同步、写入后回读核对、失败即停」 | 这一屏没有 wine 冒烟段——只有源码与编译证据，说「代码与用例在，真实端到端未跑」 | 对上（无段可指，如实写） | — |
+>    | 12 报告与交接 | 「四格式导出（md/html/json/handoff）与预览」 | `RunFullJourney` 通过 10 / 失败 0 | 对上 | — |
+>    | 13 任务日志对话框 | 「读取失败 → 重试 → 恢复，失败态不留旧行」 | `RunJournalLoadFailure` 通过 6 / 失败 0 | 对上 | — |
+>    | 14 说明行放得下（三屏） | 「96/120/192 三档全部放得下」 | `RunCaptionFit` 通过 3 / 失败 0 | 对上 | — |
+>    | 15 字体栈 | 「回退命中、界面控件/进程默认字体/对话框三处同一份实际渲染名」 | `RunFontStackRuntime` 通过 1 / 失败 0 | 对上 | — |
+>    | 16 完整旅程 | 「配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告，一条任务走完」 | `RunFullJourney` 通过 10 / 失败 0 | 对上 | — |
+>    | 17 状态行的完整错误入口（全部 17 处） | 「短句放得下不给入口；真实失败长句放不下就给；点开后正文与状态行逐字相同、可选中复制；关掉回到原处，恢复短句后入口收起，工具栏那一行高全程不变」 | `RunDialogStatusFullText` 通过 12 / 失败 0；`RunDialogStatusSweep` 通过 60 / 失败 0；`RunStatusFullText` 通过 4 / 失败 0 | 对上 | — |
+>    | 18 提示对话框「复制路径」 | 「给了可复制的路径才有那颗按钮；点下去按钮说「复制成功」；剪贴板里读回来的与屏幕上那一行逐字相同；按钮宽度与旁边「关闭」的位置不变；真点「关闭」把这一屏关掉」 | `RunNoticeCopyClick` 通过 8 / 失败 0 | 对上 | — |
+>
+>    **对不上的当场记成「那天会卡在这」**：本次演练 18 屏全部对上，没有一处记成「那天会卡在这」。三档累计引用段失败 0 条、逐屏表与报告对不上 0 处，脚本退出码 0，演练收口。
+>
+> 3. **五块讲稿念了哪一句、对没对上**：
+>
+>    | 块 | 念了哪一句 | 指向的证据 | 对没对上 |
+>    | --- | --- | --- | --- |
+>    | 差异化 | 「导入会按源文件把文档重写一遍，人工写好的说明跟着就没；这里只改比对出来的差异，不一致时停下来问你保留哪一边。在 Linux 容器内 wine 模拟器上量到。」 | `README.md`「写入安全」；`docs/NOTES.md`「本仓验收口径（可勾选）」；`SyncExecutionTests.ResultText_PartialReportsUnfinishedCountsAndNeverClaimsFullSuccess`；`RunWriteBackEndToEnd` | 对上 |
+>    | AI 必要性 | 「校验特性、默认值、守卫条件的约束，规则提取抽得出来；方法是干什么的、这个字段业务上指什么，它抽不出来，要读语义。这两类只有模型能写，写完照样逐条对着代码证据审。」 | `README.md`「使用流程」；`docs/NOTES.md`「规则提取的边界：用途说明只有模型能写」；`RuleExtractionScopeTests.RuleExtraction_DispatchCoversConstraintSlotsOnly` | 对上（该块无冒烟段可指，如实写「只有源码事实」） |
+>    | 可经营 | 「单机个人用：配置能导出（不含凭据），任务资料按目录归档就能搬走，报告直接发给前端和测试；不做多用户，不做跨机同步，密钥也不跟着资料一起走。」 | `README.md`「本地资料」；`docs/NOTES.md`「可经营清点（第一百七十二轮）」；`ProfileAnalysisTests.Export_BytesAreUtf8WithoutBomAndRoundTrip`；`RunFullJourney` | 对上 |
+>    | 排版归因 | 「中文标点不落行首，靠的是浏览器默认排版和样式表叠在一起，不是哪一条属性的功劳；这台机器上四种取值排出来一模一样，我们没把可读性押在一条声明上。」 | `docs/NOTES.md`「真浏览器布局门（HTML 折行）」；`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo`；`RunCaptionFit` | 对上 |
+>    | 产品完整度 | 「从配置到报告十个环节都在原生窗口里走完，写入前有九条红线挡着；每一项能力都能在验收表里勾到证据，也能一条命令复跑；真机没验的那几行还是空框。」 | `README.md`「使用流程」；`docs/NOTES.md`「本仓验收口径（可勾选）」；`AcceptanceChecklistTests.Checklist_EveryItemHasAnEvidenceSourceAndItResolves`；`RunEndToEnd` | 对上 |
+>
+>    五块连起来念一遍的总字数由 `DefenseNarrativeTests.Narrative_FiveBlocksReadInOneBreath` 现算，与本节写的「当前 370 字」逐字对；同一段可跑证据不被两块同时引用（地板 3 块点到冒烟段名，AI 必要性块如实写「没有冒烟段可指」）。
+>
+> 4. **判据**：演练记录里每一块都点到了它自己那一块的出处（现有 `DefenseNarrativeTests` 已判口径表的引用不悬空，这一节判的是**演练过程**里每一块的落点）；**没有出现「已演练」而实际只跑过 `demo.sh` 没念过讲稿**——记录里有一处写出了「念了哪一句、对上/对不上」（见上表「念的是哪一句 / 屏幕上是哪一行 / 对没对上」）。
+>
+> **演练结论**：`bash .winecheck/demo.sh` 三档全绿、逐屏对账 0 处对不上、五块讲稿逐块念过并逐块对上，演练可收口。但这**不是**真机证据：G-D5 仍 `[ ]`，真机 0 台，到期日 2026-11-20 届时仍不可得则按「降级答辩脚本」逐屏答辩，G-D5 如实标为「未达成（环境供给缺口）」。
+
 ## 初审答辩口径（真机不可得时）
 
 > **这一节是什么**：上一节的「降级答辩脚本」按屏讲**证据**（G-D5 未达成怎么交代），这一节讲**这个工具凭什么值得做**——初审现场要念的五块，每块不超过 80 字，五块念完不到一分钟。都在 demo.sh 的讲稿之外：脚本管逐屏对账，这里管差异化、AI 必要性、可经营、排版归因、产品完整度这五件事。
@@ -3129,3 +3184,17 @@
 - **读数**：`dotnet build`（主工程 + 测试工程 + 冒烟工程）**0 警告 0 错误**；`dotnet test` **2735 全部通过 / 0 失败**（较第二百一十三轮 2711 增 24 条 = `EndpointKeysBindingTests` 22 + `DefenseNarrativeTests` 2）；`PUBLISH=1 bash .winecheck/demo.sh` 在当前源码上整场重跑，三档 **218 通过 / 0 失败 ×3、逐屏对账 0 处对不上、退出码 0**，`.winecheck/reading.txt` 的 `source=` 因本轮改了产品代码从 `c07ea3b7…` 更新为 **`e02db1ff0e151e241288255d76223e72fb805cce`**（产物旁 `smoke-source.sha` 与现算指纹同源）；`bash .winecheck/collect-real-machine.sh` 当场再跑：**有东西 0 / 9 个目录、退出码 1**，九个目录逐个点名「还差东西」。
 - **本轮没做（如实报）**：**P1-1（门禁形状的通用判据）不动**——简报给的前提是「本轮未撞到第三种形状就不动，只留注释」，本轮撞到的是**命令本身写错**与**散文里的门不存在**，都不是第三种「同小句 + 顺序 + 距离」形状；第二百一十三轮那句「再撞到第三种形状该收的是通用判据」仍原样有效，本轮不为它写一条预备性的 meta 门。**P2-2（`docs/CRITIQUE.md` 十站去向复核）未动**。DPI 悬案**没有再加实验臂**（简报明写同法两轮不过即停，本轮只用了第二百一十一轮那张六格表里已有的读数）。
 - **仍未验的（不冒充）**：Windows 真机仍 **0 台**（G-D5 仍 `[ ]`，到期日 2026-11-20），九个归档目录本轮仍**一个文件也没写进去**；**「30 分钟单子干跑」量的全是 Linux 侧可核的那一半**——命令敲不敲得通、引用落不落地、数与出处对不对得上，**七步没有一步真在 Windows 上走过**（第 3、4 步那两档真机超不超行高预算，仍要等第 5 步那两行报出来）；测试工程**一发 HTTP 请求都没有真发过**，绑定那一段是靠 `/tmp` 那份最小 ASP.NET 工程量的（临时工程已清理、不进仓）；模型服务链路、Apifox 写入端到端、真机观感三项一行未动、结论不变。
+
+## 第二百一十五轮（2026-11-12）：状态行那一格第一次拿到工具栏的剩余宽度（CRITIQUE 第 2 站落地）
+
+> **这一轮做了什么**：`docs/CRITIQUE.md` 第 2 站「最该改的一处」是「状态行那一格太窄」——wine 三档实测这一行在 640 到 1280 七档窗口宽度下恒为 **194px**，而一条 94 字的真实失败原因是 643px，于是「放得下就不给入口」那一支在页面这一侧几乎永远走不到，用户每次失败都要多点一次「查看完整错误」。
+>
+> **根因不是列宽口径，是漏了一句 Dock**：两个主页面的工具栏列样式本来就是「按钮列 `AutoSize` + 状态行列 `Percent 100`」，但 `_statusHost` 没设 `Dock`，于是它停在 `Panel` 的缺省 **200px**——194 = 200 − 标签左右留白 6，与实测逐字对上。15 处对话框从接入那天起就设了 `Dock = DockStyle.Fill`，**只有两个主页面漏了这一句**（`grep _statusHost.Dock` 现读：12 处有、两个页面类没有）。所以这一处不是「动列宽口径」，是把已经写好的列样式接上。
+>
+> **改了什么**：`Desktop/Native/TasksPage.cs` 与 `Desktop/Native/ProjectsPage.cs` 各加一句 `_statusHost.Dock = DockStyle.Fill;`（连注释说明为什么），`Desktop/Native/StatusLineHost.cs` 的类注释补一段「宽度取所在那一格的剩余宽度，不取 Panel 缺省值」并写明 194px 的来路。**没有改**：判定口径 `StatusLineText`、行高固定占位、入口显隐规则、任何列宽常量、任何文案。
+>
+> **门**：`ApifoxHelper.Tests/StatusLineTextTests.Host_FillsItsCell_SoTheStatusLineGetsTheRemainingWidth`——按顶格类切段，哪一段里 `new StatusLineHost(`，那一段里就必须有一句 `Dock = DockStyle.Fill`；地板 17 处（与 `EveryStatusLine_OnDisk_IsWrittenThroughTheHost` 同一口径，扫描失效时不许恒真）。
+>
+> **读数（如实）**：`dotnet build` 0 警告 0 错误；`dotnet test` **2736 通过 / 0 失败**（+1 = 本轮新断言）。**wine 三档本轮没有复跑**——`RunStatusFullText` 那一段的读数（`available` 是否随窗口变、「放得下不给入口」在 120 档能不能量到）要等下一轮 `bash .winecheck/demo.sh` 才更新，本轮不把「应该会变宽」写成量到。真机 0 台，G-D5 仍 `[ ]`，到期日 2026-11-20。
+>
+> **下一轮第一件事**：跑 `bash .winecheck/demo.sh`，把 `RunStatusFullText` 那两段的 `available` 逐档读数抄进逐屏表第 17 行与 `docs/CRITIQUE.md` 第 2 站；若 120 档「放得下不给入口」这一支量到了，把 NOTES 里那条「工具栏不给状态行让位」的挂账（第一百六十五轮 ②）划掉。

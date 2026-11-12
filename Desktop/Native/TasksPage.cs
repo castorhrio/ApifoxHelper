@@ -332,6 +332,10 @@ internal sealed class TasksPage : UserControl, INativePage
         filterField.Margin = new Padding(UiTokens.Md, 0, 0, 0);
         buttons.Controls.Add(filterField);
         toolbar.Controls.Add(buttons, 0, 0);
+        // 填满工具栏剩余宽度（第一百六十五轮）：不设 Dock 时 Panel 停在缺省 200px，
+        // 状态行这一格在 96/120 两档恒 194px（wine 实测），长失败原因永远放不下、入口永远挂着。
+        // 列样式本来就是「按钮列 AutoSize + 状态行列 Percent 100」，缺的只是这一句。
+        _statusHost.Dock = DockStyle.Fill;
         toolbar.Controls.Add(_statusHost, 1, 0);
 
         _detail = BuildDetail();
