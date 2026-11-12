@@ -2693,8 +2693,9 @@ internal static class Program
     /// 一大段空白，四个高级按钮彼此间距极大，右侧还出滚动条」——用户原话「很抽象、没法用」。
     /// 这一屏是产品主链路的第一步（没有配置就没有任务、没有检查），而它此前只有「构造得起来」这一条证据。
     /// <para>
-    /// 八段，全部量真实控件：① 逐行量字段网格的行高，超过 <see cref="ProfileFormLayout.MaxRowHeight"/>
-    /// 的行即失败（空标签格里的默认尺寸 <c>Panel</c> 会把行撑到 100px）；② 网格不出横向滚动条
+    /// 八段，全部量真实控件：① 逐行量字段网格的行高，超过**这一行自己那一档字号**的预算线的行即失败
+    /// （预算线出自 <see cref="ProfileFormLayout.MaxRowHeight"/> 那一处算式，正文与分区标题各一档，
+    /// 认不出的字号按正文档算——<c>docs/DECISIONS/D2</c>；空标签格里的默认尺寸 <c>Panel</c> 会把行撑到 100px）；② 网格不出横向滚动条
     /// （七十余字的长说明把网格撑宽过）；③ 保存/取消在可视区内、不被滚动区盖住；④ 三个必填字段
     /// 连续且都在首屏；⑤ 四个高级入口在同一行、间距不超过 <see cref="ProfileFormLayout.AdvancedEntryGap"/>；
     /// ⑥ 未保存时「读取项目列表」停用并给出说明（不是点了才报错）；⑦ 编辑对话框字段回显一致、
@@ -2716,7 +2717,10 @@ internal static class Program
         var profiles = services.GetRequiredService<ProfileStore>();
         var cli = services.GetRequiredService<ApifoxCli>();
         var credentials = services.GetRequiredService<CredentialStore>();
+        // 两档字号各自的预算线。limit 是**正文档**那一条：提示行那一段（⑧）与读数记录里的
+        // formbudget / hintbudget 读的都是它，本轮不动那一族的口径（D2 §4 第三条）。
         var limit = ProfileFormLayout.MaxRowHeight(UiTokens.Body.Value.Height);
+        var sectionLimit = ProfileFormLayout.MaxRowHeight(UiTokens.Section.Value.Height);
 
         ProfileDialog? dialog = null;
         try
@@ -2735,18 +2739,24 @@ internal static class Program
                 // 下一次两边再差时，读数本身就能回答「那一次量到的是哪一个上下文」。
                 // 第二百一十一轮按简报 P0-2 量到分岔的变量：换档时**是否重启 wine 前缀**——重启后两支读数相同，
                 // 只有「控件自报与进程相等」那一个上下文会行使行高预算（实测表见 .winecheck/README.md
-                // 「Windows 侧那支」第 4 条；预算本身仍不改，那是另一轮的决定）。
+                // 「Windows 侧那支」第 4 条；预算当时只按正文档一个字号算，第二百三十六轮按 D2 改成按档给）。
                 _lines.Add("     DPI 上下文（新建配置对话框）：" + DpiContext(dialog)
-                    + $"、正文行高 {UiTokens.Body.Value.Height}px、行高预算 {limit}px");
+                    + $"、正文行高 {UiTokens.Body.Value.Height}px、行高预算 {limit}px、分区档预算线 {sectionLimit}px");
                 var tall = new List<string>();
                 for (var row = 0; row < heights.Length; row++)
                 {
-                    if (heights[row] > limit) tall.Add($"{RowLabel(grid, row)}={heights[row]}px（{TallestInRow(grid, row)}）");
+                    // 预算按「这一行用的哪一档字号」给（docs/DECISIONS/D2）：分区标题那一行用的是 Section 档，
+                    // 单行就比正文档高一档（200% 档实测 58px 的字、66px 的行，对只认正文的预算 65px 差 1px）。
+                    // 认不出的字号仍按正文档算——放宽只由 ProfileFormLayout.TierOf 里那次登记驱动。
+                    var measured = TallestControlInRow(grid, row)?.Font.Height ?? 0;
+                    var rowLimit = ProfileFormLayout.MaxRowHeightFor(measured,
+                        UiTokens.Body.Value.Height, UiTokens.Section.Value.Height);
+                    if (heights[row] > rowLimit) tall.Add($"{RowLabel(grid, row)}={heights[row]}px（{TallestInRow(grid, row)}）");
                 }
                 if (tall.Count > 0)
                 {
                     throw new InvalidOperationException(
-                        $"{tall.Count} 行超过 {limit}px（正文行高 {UiTokens.Body.Value.Height} + 行内留白 {ProfileFormLayout.RowPadding}；"
+                        $"{tall.Count} 行超过各自字号档的预算线（正文 {limit}px、分区标题 {sectionLimit}px；"
                         + $"{DpiContext(dialog)}）：{string.Join("，", tall)}");
                 }
             });
@@ -2994,6 +3004,21 @@ internal static class Program
     }
 
     /// <summary>
+    /// 某一行里最高的那个控件本体（按「控件高 + 上下留白」比）：读数那一串由 <see cref="TallestInRow"/> 拼，
+    /// 而「这一行该按哪一档字号取预算线」要的是它的字号（<c>docs/DECISIONS/D2</c>），所以取控件这一步单独是一个出口。
+    /// </summary>
+    private static Control? TallestControlInRow(TableLayoutPanel grid, int row)
+    {
+        Control? tallest = null;
+        foreach (Control control in grid.Controls)
+        {
+            if (grid.GetRow(control) != row) continue;
+            if (tallest is null || control.Height + control.Margin.Vertical > tallest.Height + tallest.Margin.Vertical) tallest = control;
+        }
+        return tallest;
+    }
+
+    /// <summary>
     /// 某一行里最高的那个控件（类型、高、上下留白、字号、可用宽、单行需宽、它那一格写的字）：
     /// 行高超限时把「是谁把这一行撑高的」一并报出来，否则只看到一个像素数，还得再跑一轮才知道该改哪一格。
     /// <para>
@@ -3007,17 +3032,13 @@ internal static class Program
     /// 跨列的控件取它跨的那几列之和——两列之间没有额外的间距属性，间隙来自控件留白）减去控件左右留白；
     /// <b>单行需宽</b>与状态行那一族同一个量法
     /// （<c>TextRenderer.MeasureText</c> 加 <c>SingleLine</c>，不让它折）。两个数都是<b>读数不是判定</b>，
-    /// 这里不设阈值、不判超不超——超预算的判据仍只有 <see cref="ProfileFormLayout.MaxRowHeight"/> 那一处。
+    /// 这里不设阈值、不判超不超——超预算的判据仍只有 <see cref="ProfileFormLayout.MaxRowHeight"/> 那一处算式
+    /// （按行所属的那一档字号取行高，档位登记与为什么不统一提档见 <c>docs/DECISIONS/D2</c>）。
     /// </para>
     /// </summary>
     private static string TallestInRow(TableLayoutPanel grid, int row)
     {
-        Control? tallest = null;
-        foreach (Control control in grid.Controls)
-        {
-            if (grid.GetRow(control) != row) continue;
-            if (tallest is null || control.Height + control.Margin.Vertical > tallest.Height + tallest.Margin.Vertical) tallest = control;
-        }
+        var tallest = TallestControlInRow(grid, row);
         if (tallest is null) return "空行";
         var inner = tallest.Controls.Count > 0
             ? "，内含 " + string.Join("/", tallest.Controls.Cast<Control>().Select(c => c.GetType().Name + " " + c.Height + "px"))

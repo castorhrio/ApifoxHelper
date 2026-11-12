@@ -616,6 +616,137 @@ public class DefenseNarrativeTests
             + "被追问「能不能当场跑一遍」时，三句全是自述，答不出东西。");
     }
 
+    // ---------- 第二百三十六轮（简报 P0-2）：一页纸里念的数与引用的东西都得落到实物 ----------
+
+    /// <summary>「降级答辩脚本」那一节（含逐屏表）的正文。</summary>
+    private static string DegradationSection()
+    {
+        const string heading = "## 降级答辩脚本";
+        var notes = Repo.Source("docs", "NOTES.md");
+        var start = notes.IndexOf(heading, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"docs/NOTES.md 缺少「{heading}」一节：真机不可得时那份逐屏表没有落点。");
+        var rest = notes[start..];
+        var end = rest.IndexOf("\n## ", 1, StringComparison.Ordinal);
+        return end < 0 ? rest : rest[..end];
+    }
+
+    /// <summary>
+    /// 三句答法里念出来的三档冒烟总数，<b>必须等于 <c>.winecheck/reading.txt</c> 跑出来的那两个数</b>
+    /// （第二百三十六轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第 ③ 句此前念的是「218/0 ×3」。那个数属于第二百零七轮那一批段数，
+    /// 而自第二百零六轮起每档已是 231 条——<b>答辩稿上一个过时的总数没有任何门会读</b>：
+    /// <c>ReadingConsistencyTests</c> 对账的是「当前源码…N 通过 / 0 失败 ×3」那一句写在 README 与 NOTES 里的形式，
+    /// 「218/0 ×3」这种写法不在它的取法里；<see cref="DeferredAnswer_WhenPressedForRealMachine_HasThreeSentencesAndPointsAtRunnable"/>
+    /// 判的是那三句指的东西能不能跑到，不指它念的数字。于是<b>能跑的证据 + 一个过时的数</b>会一起被念出去。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 三句里至少有一句带着「N 通过 / M 失败 ×3」这个形状（第 ③ 句的本职工作就是把能复跑的那一条递出去）；
+    /// ② 每一个这样的读数，两个数都逐字等于读数记录里三档的 <c>passed=</c> 与 <c>failed=</c>（三档不是同一个数时，
+    /// 这一句必须改成不说「×3」——那正是两个上下文各念各的数的那一族）。
+    /// <b>它不判</b>真机跑没跑，也不判这一句的措辞；它只保证「答辩现场照抄念的那三个数，是这一版代码跑出来的」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DeferredAnswer_QuotedSmokeTotals_AreTheOnesTheRecordHolds()
+    {
+        var record = Repo.Source(".winecheck", "reading.txt");
+        var runs = Regex.Matches(record, @"^tier=(\d+) passed=(\d+) failed=(\d+)", RegexOptions.Multiline)
+            .Cast<Match>()
+            .Select(m => (Tier: m.Groups[1].Value, Passed: m.Groups[2].Value, Failed: m.Groups[3].Value))
+            .ToList();
+        Assert.True(runs.Count > 0,
+            ".winecheck/reading.txt 里一条 tier= 都没有：三档总数没有出处可对，答辩稿念的那个数就只能靠记忆。");
+        var one = runs.Select(r => (r.Passed, r.Failed)).Distinct().ToList();
+        Assert.True(one.Count == 1,
+            $"读数记录里三档的通过/失败数不是同一组（{string.Join("、", runs.Select(r => $"{r.Tier} 档 {r.Passed}/{r.Failed}"))}）："
+            + "三句答法第 ③ 句那句「×3」的说法此时不成立，先把那一句改成按档念，再来动本门。");
+        var (passed, failed) = one[0];
+
+        var quoted = new List<string>();
+        foreach (var row in DeferredAnswers())
+        {
+            foreach (Match match in Regex.Matches(row.Sentence, @"(\d+) 通过 / (\d+) 失败 ×3"))
+            {
+                quoted.Add(match.Value);
+                Assert.True(match.Groups[1].Value == passed && match.Groups[2].Value == failed,
+                    $"第 {row.Marker} 句念的是「{match.Value}」，而读数记录跑出来的是「{passed} 通过 / {failed} 失败」："
+                    + "答辩现场念出去的数属于上一版代码。要么复跑一次 bash .winecheck/demo.sh，要么把这一句改成记录里的数。");
+            }
+        }
+
+        Assert.True(quoted.Count > 0,
+            $"三句答法里再没有一句带「{passed} 通过 / {failed} 失败 ×3」这个形状的读数："
+            + "第 ③ 句的本职工作是把能当场复跑的那一条连着数递出去，只留命令名就成了「你去跑一遍看看」。");
+    }
+
+    /// <summary>
+    /// 逐屏表「证据出处」那一列里的 <c>类名.断言名</c> 也必须逐条 resolve（第二百三十六轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一页纸的三处引用来源此前判了两处——五块口径表（
+    /// <see cref="Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun"/>）与三句答法（
+    /// <see cref="DeferredAnswer_WhenPressedForRealMachine_HasThreeSentencesAndPointsAtRunnable"/>）。
+    /// <b>逐屏表那一列没有判过</b>，而它是最长的一列、也是被追问时翻得最多的一列；
+    /// 第二百三十六轮新增的那两条门（<c>DemoTierSwitchTests.PostFixOverbudgetReading_…</c> 与
+    /// <c>ProfileFormLayoutBudgetTests.BodyBudget_…</c>）正是挂在这一列上。编一个断言名在这一列里，
+    /// 今天只有 <c>RunXxx</c> 那一部分会被 <c>DemoScriptTests</c> 抓到。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：形如 <c>XxxTests.方法名</c> 的反引号引用，测试工程里必须真有 <c>XxxTests.cs</c> 且里面有那一条方法。
+    /// 文件路径（<c>*.md</c> / <c>*.cs</c> / <c>*.sh</c> / <c>*.ps1</c>）判仓里在不在；<c>RunXxx</c> 段名不在本条管辖
+    /// （<c>DemoScriptTests</c> 已按报告原文判过，两处各判一遍会有一处漂）。<b>它不判</b>那一列写的读数对不对。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ScreenTable_EveryCitedAssertionResolves()
+    {
+        var rows = DegradationSection().Split('\n')
+            .Where(l => l.TrimStart().StartsWith("| ", StringComparison.Ordinal))
+            .Select(l => l.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList())
+            .Where(c => c.Count == 5 && c[0] != "#" && !c[0].All(ch => ch is '-' or ' ' or ':'))
+            .ToList();
+        Assert.True(rows.Count >= 10,
+            $"逐屏表只解析出 {rows.Count} 行：本门与 demo.sh 读的是同一张表，行数掉了说明取法或表本身漂了（应为 18 行上下）。");
+
+        var checkedCitations = 0;
+        var broken = new List<string>();
+        foreach (var cells in rows)
+        {
+            foreach (var citation in Regex.Matches(cells[3], @"`([^`]+)`").Select(m => m.Groups[1].Value))
+            {
+                // 「bash .winecheck/demo.sh」这一族把命令与路径写在同一格里：取最后一个空格之后的那一段当路径。
+                var space = citation.LastIndexOf(' ');
+                var path = space < 0 ? citation : citation[(space + 1)..];
+                if (path.EndsWith(".md", StringComparison.Ordinal) || path.EndsWith(".cs", StringComparison.Ordinal)
+                    || path.EndsWith(".sh", StringComparison.Ordinal) || path.EndsWith(".ps1", StringComparison.Ordinal))
+                {
+                    checkedCitations++;
+                    if (!File.Exists(Path.Combine(Repo.Root, path.Replace('\\', '/'))))
+                    {
+                        broken.Add($"第 {cells[0]} 屏指着「{citation}」，仓里没有这个文件");
+                    }
+
+                    continue;
+                }
+
+                // 只认「测试类.断言名」这一族（首段以 Tests 结尾）；段名 RunXxx 与小节名不在本条管辖。
+                var parts = citation.Split('.');
+                if (parts.Length != 2 || !parts[0].EndsWith("Tests", StringComparison.Ordinal)) continue;
+                checkedCitations++;
+                if (!CitationResolves(citation))
+                {
+                    broken.Add($"第 {cells[0]} 屏指着「{citation}」，而 ApifoxHelper.Tests 里没有这一条断言");
+                }
+            }
+        }
+
+        Assert.True(broken.Count == 0,
+            "逐屏表的证据出处里有引用落不到实物：" + string.Join("；", broken)
+            + "。这一列是答辩现场被追问时翻的那一列，指一个不存在的断言等于当场承认这句话没有出处。");
+        Assert.True(checkedCitations >= 6,
+            $"逐屏表这一列只核到 {checkedCitations} 处引用（应为 6 处以上）：引用被换成裸的散文之后，本门就看不到东西了。");
+    }
+
     // ---------- 第二百零四轮（简报 P0-1）：降级答辩逐屏演示脚本 ----------
 
     /// <summary>「降级答辩逐屏演示脚本」那一节的标题前缀（二级标题，落在「降级答辩脚本」之后）。</summary>

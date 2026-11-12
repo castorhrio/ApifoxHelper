@@ -468,11 +468,12 @@ public class DemoTierSwitchTests
     /// <summary>
     /// 修复后那一行的全部破坏形状（<paramref name="readme"/> 可以是注入过的那份）。
     /// <para>
-    /// <b>为什么 96 与 120 是硬判 0，而 192 判的是「等于那三行分区标题的名字数」</b>：甲组那一族（标签列不随字号
-    /// 放大）在这两档是<b>全部</b>超预算行，改了就该一个不剩；200% 档剩下的三行是第二百三十四轮登记的<b>另一个</b>
-    /// 根因（分区标题用 Section 档，而预算只按正文档算）。把 192 也写成 0 就是拿别的修法没做的事实替这一条修法背书；
-    /// 写成「≤ 3」则变成谁都能把第四行塞进来的免检通道。判成「行数 == 段内点名的那几行」之后，
-    /// 真多出第四行时门会红，逼人先回报告看清是哪一行，而不是顺手把数改大。
+    /// <b>三档现在都硬判 0，而那个 0 是两步换来的</b>：甲组（字段名折行）第二百三十五轮由「标签列随字号放大」归零，
+    /// 乙组（分区标题单行就比正文预算高一档）第二百三十六轮由「预算按行所属字号档给」归零
+    /// （<c>docs/DECISIONS/D2-行高预算按字号档给.md</c>）。破坏消息按档位各指一个根因，多出第四行时门红在
+    /// 「先回报告看清是哪一行」那一句上，而不是让人顺手把数改大（写成「≤ N」就是谁都能塞的免检通道）。
+    /// <b>hint 那一列反过来必须仍是 0 / 0 / 4</b>：那是放大列宽从同一笔可视宽度里扣走的代价，
+    /// 本轮明确不跟着放宽 Caption 档（D2 §4 第三条）——把它一起写成 0 就是替没做的事背书。
     /// </para>
     /// </summary>
     private static List<string> PostFixOverbudgetBreaks(string readme)
@@ -499,34 +500,35 @@ public class DemoTierSwitchTests
                 + "行高预算的账按档位记，少一档就少一个上下文。");
         }
 
-        // 甲组归零的两档：硬判 0。
-        foreach (var tier in new[] { 96, 120 })
+        // 配置表单的超预算行数：两步修完之后三档都必须是 0，各档位的破坏各指回一个根因。
+        foreach (var run in readings)
         {
-            var run = readings.FirstOrDefault(r => r.Tier == tier);
-            if (run is not null && run.Form != 0)
-            {
-                breaks.Add($"{tier} 档 form={run.Form}（应为 0）：标签列随字号放大这条修法没起作用，"
-                    + "先回 Desktop/Native/ProfileGridColumns.cs 的 ScaledLabelWidth 与 Ui.cs 的接线看是不是被改回固定像素。");
-            }
+            if (run.Form == 0) continue;
+            breaks.Add(run.Tier == 192
+                ? $"192 档 form={run.Form}（应为 0）：第二百三十六轮那条「预算按行所属字号档给」的修法（D2）没兑现，"
+                  + "或者超出来的是一族新的行——先回 /tmp/ah-demo-192/report-192.txt 看清是哪一行，"
+                  + "再来定它算哪一档，别把这里的数改大了事。"
+                : $"{run.Tier} 档 form={run.Form}（应为 0）：标签列随字号放大这条修法没起作用，"
+                  + "先回 Desktop/Native/ProfileGridColumns.cs 的 ScaledLabelWidth 与 Ui.cs 的接线看是不是被改回固定像素。");
         }
 
-        // 200% 档：剩下的每一行都必须是段内点名的那一行分区标题。
-        var sectionTitles = new[] { "必填", "可选设置（可保存后再补）", "高级设置（可选）" };
-        var run200 = readings.FirstOrDefault(r => r.Tier == 192);
-        var titled = sectionTitles.Count(title => block.Contains(title, StringComparison.Ordinal));
-        if (run200 is not null && run200.Form != titled)
+        // 提示行那一列：代价必须还在读数里（0 / 0 / 4），谁把它抹平成 0 就红在这里。
+        var expectedHints = new Dictionary<int, int> { [96] = 0, [120] = 0, [192] = 4 };
+        foreach (var run in readings)
         {
-            breaks.Add($"192 档 form={run200.Form}，而这一段点名的分区标题只有 {titled} 行"
-                + $"（{string.Join("、", sectionTitles)}）："
-                + "多出来的行不在这一段说的那个根因里——先回 /tmp/ah-demo-192/report-192.txt 看是哪一行超了，"
-                + "再决定把它登记成第四个决定项，别把这里的数改大了事。");
+            if (!expectedHints.TryGetValue(run.Tier, out var want) || run.Hint == want) continue;
+            breaks.Add($"{run.Tier} 档 hint={run.Hint}（这一段记下的是 {want} 条）：提示行那一族本轮没有放宽"
+                + "（Caption 档不在预算登记的字号档里，见 D2 §4 第三条）。它变成 0 只有两种可能——"
+                + "有人动了提示行的预算，或者这一段不是照那三份报告念的。");
         }
-        foreach (var needle in new[] { "乙组", "决定项", "预算那条算式只按正文档算" })
+
+        foreach (var needle in new[] { "乙组", "决定项", "预算那条算式只按正文档算", "D2-行高预算按字号档给.md", "认不出的字号" })
         {
             if (!block.Contains(needle, StringComparison.Ordinal))
             {
-                breaks.Add($"这一段再没有「{needle}」：192 档剩下的那几行为什么可以不是 0，靠的是这一段把它说清"
-                    + "（另一个根因、已登记为决定项），话没说清就成了替没做的事背书。");
+                breaks.Add($"这一段再没有「{needle}」：192 档那几个数为什么从今天起三档全 0，靠的是这一段说清"
+                    + "两个根因各自是谁收的口、放宽的边界在哪（认不出的字号按更严的那一档算）。"
+                    + "话没说清，下一轮就会有人把两档预算折成一个数。");
             }
         }
 
@@ -651,11 +653,23 @@ public class DemoTierSwitchTests
         Assert.NotEqual(Readme, postFix125);
         Assert.Contains(PostFixOverbudgetBreaks(postFix125), b => b.Contains("120 档 form=4", StringComparison.Ordinal));
 
-        // ⑤ 修复后读数：192 档冒出第四行而段内仍只点名三行分区标题（新根因想混进旧账）。
-        var postFix192 = Readme.Replace("overbudget=tier=192 form=3 hint=4", "overbudget=tier=192 form=4 hint=4",
+        // ⑤ 修复后读数：192 档又冒出超预算的行（第二百三十六轮的 D2 修法没兑现，或是一族新的行）。
+        var postFix192 = Readme.Replace("overbudget=tier=192 form=0 hint=4", "overbudget=tier=192 form=4 hint=4",
             StringComparison.Ordinal);
         Assert.NotEqual(Readme, postFix192);
         Assert.Contains(PostFixOverbudgetBreaks(postFix192), b => b.Contains("192 档 form=4", StringComparison.Ordinal));
+
+        // ⑤ 修复后读数：把 200% 档提示行那 4 条代价抹平成 0（读的人会以为三档都干净了）。
+        var postFixNoHintCost = Readme.Replace("overbudget=tier=192 form=0 hint=4", "overbudget=tier=192 form=0 hint=0",
+            StringComparison.Ordinal);
+        Assert.NotEqual(Readme, postFixNoHintCost);
+        Assert.Contains(PostFixOverbudgetBreaks(postFixNoHintCost), b => b.Contains("192 档 hint=0", StringComparison.Ordinal));
+
+        // ⑤ 修复后读数：段内的定案出处被换掉（192 档凭什么从今天起是 0，那句话没有文件可指了）。
+        var postFixNoDecision = Readme.Replace("docs/DECISIONS/D2-行高预算按字号档给.md", "docs/DECISIONS/D1-桌面技术栈.md",
+            StringComparison.Ordinal);
+        Assert.NotEqual(Readme, postFixNoDecision);
+        Assert.Contains(PostFixOverbudgetBreaks(postFixNoDecision), b => b.Contains("D2-行高预算按字号档给.md", StringComparison.Ordinal));
 
         // ⑤ 修复后读数：把代价那一句删掉（只报好消息，200% 档提示行多折的两行就没人知道了）。
         var postFixNoCost = Readme.Replace("如实记一笔代价", "另有一处", StringComparison.Ordinal);

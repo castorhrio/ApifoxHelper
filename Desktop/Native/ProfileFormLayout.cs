@@ -13,6 +13,15 @@ namespace ApifoxHelper.Desktop.Native;
 /// 这两件事都不是「调一下间距」能解决的，得先把「一行该多高、哪些行属于首用路径」写成可断言的形状。
 /// </para>
 /// <para>
+/// <b>行高预算按「这一行用的哪一档字号」给</b>（第二百三十六轮，简报 P0-1；完整决定项见
+/// <c>docs/DECISIONS/D2-行高预算按字号档给.md</c>）：第二百三十四轮逐行量到的两组超预算行里，甲组是
+/// 「该放大的列没放大」（已于第二百三十五轮修掉），乙组是「预算只认识正文档一个字号」——分区标题用的是
+/// Section 档，200% 档单行就 58px，加 4+4 留白 = 66px，而按正文档算的预算是 41 + 24 = 65px，差 1px。
+/// <b>把正文档预算一提了之会放过甲组那一族真正的长行</b>：125% 档那四行折成两行是 60px，而分区档在
+/// 125% 档的预算线第二百三十六轮量到的是 37 + 24 = 61px，一提档就一行都判不出——那两个数正是量出甲组根因的数。所以改的是
+/// 「喂给算式的行高取哪一档」，算式本身仍只有 <see cref="MaxRowHeight"/> 一处；认档的口径在 <see cref="TierOf"/>。
+/// </para>
+/// <para>
 /// 本文件只放判定与文案，不依赖 WinForms，以共享源码编入测试工程在 Linux 断言；
 /// 真实行高与控件位置由冒烟器在 Windows/wine 下量（<c>RunProfileFormLayout</c>）。
 /// </para>
@@ -80,10 +89,52 @@ public static class ProfileFormLayout
     public static string ProjectListHint(bool saved) => saved ? ProjectListHintSaved : ProjectListHintUnsaved;
 
     /// <summary>
-    /// 单行字段行的行高上限：正文行高 + <see cref="RowPadding"/>。超过它的行说明那一行里
+    /// 单行的行高上限：<b>这一行所属字号档</b>的行高 + <see cref="RowPadding"/>。超过它的行说明那一行里
     /// 混进了不该有的东西（默认尺寸的占位面板、多行说明、被拉高的容器），冒烟器据此判失败。
+    /// 这是行高预算<b>唯一</b>的算式——取哪一档的行高由 <see cref="TierOf"/> 决定，这里不认档。
     /// </summary>
-    public static int MaxRowHeight(int bodyLineHeight) => bodyLineHeight + RowPadding;
+    public static int MaxRowHeight(int lineHeight) => lineHeight + RowPadding;
+
+    /// <summary>
+    /// 配置表单里一行可能落的字号档（<b>封闭</b>：只有这两档登记在册）。
+    /// <para>
+    /// 提示行的 Caption 档<b>故意不在这里</b>：那一条量出的是「句子本身长到折两行」，不是「字号高一档」
+    /// （2 × 35 + 8 = 78px，两行的提示行在任何档位都进不了预算），放宽它等于把第二百三十五轮放大标签列
+    /// 时扣走的那笔宽度（提示行可用宽 1086 → 966px）从读数里抹掉。取舍记在 D2 §4 第三条。
+    /// </para>
+    /// </summary>
+    public enum RowFontTier
+    {
+        /// <summary>正文档：字段行、说明行、按钮行——表单里绝大多数行。</summary>
+        Body,
+
+        /// <summary>分区标题档：<c>Ui.Section</c> 出厂、跨两列的那一行。</summary>
+        Section,
+    }
+
+    /// <summary>
+    /// 量到的字号行高落在哪一档：与登记档的行高<b>相等</b>才算那一档，其余一律算正文档（更严的一档）。
+    /// <para>
+    /// <b>为什么是「相等」而不是「不小于」</b>：按「不小于分区档就给分区预算」写，任何人给某一格
+    /// 换一个更大的字，就顺手把自己那一行的预算放宽一档——预算线就成了行高的函数，永远追得上，
+    /// 这一族判据当场失效（第一百四十八轮立它就是为了拦住「行被撑高」）。认不出来的字号
+    /// 按正文档算，多出的一档会红在报告里，逼人来 D2 这里登记，而不是让它自己过去。
+    /// </para>
+    /// <para>
+    /// <c>sectionLineHeight &gt; bodyLineHeight</c> 那一半判的是「分区档真的比正文档高一档」：
+    /// 两个字号被改成同一个数时，这一档就不再提供放宽，全部退回正文档——放宽必须是一次显式登记，
+    /// 不能是两档行高碰巧相等的后果。
+    /// </para>
+    /// </summary>
+    public static RowFontTier TierOf(int lineHeight, int bodyLineHeight, int sectionLineHeight) =>
+        lineHeight == sectionLineHeight && sectionLineHeight > bodyLineHeight ? RowFontTier.Section : RowFontTier.Body;
+
+    /// <summary>
+    /// 这一行的行高预算线：先按 <see cref="TierOf"/> 认档，再走 <see cref="MaxRowHeight"/> 那一处算式。
+    /// 调用方（冒烟器逐行量字段网格）给的是<b>当前缩放档上</b>的两档字体行高与这一行自己的字号行高。
+    /// </summary>
+    public static int MaxRowHeightFor(int lineHeight, int bodyLineHeight, int sectionLineHeight) =>
+        MaxRowHeight(TierOf(lineHeight, bodyLineHeight, sectionLineHeight) == RowFontTier.Section ? sectionLineHeight : bodyLineHeight);
 
     /// <summary>
     /// 高级入口那一行里相邻两个按钮的最大水平间距（像素）：DESIGN.md §4 的 Sm。
