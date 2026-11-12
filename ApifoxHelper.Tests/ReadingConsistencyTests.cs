@@ -103,6 +103,85 @@ public class ReadingConsistencyTests
             + "。历史读数本来就各不相同，但每一处都得说清自己是谁的读数——否则它会被读成第二个当前读数。");
     }
 
+    /// <summary>上下文注解的三个关键词（第二百二十四轮，简报 P1-2）。</summary>
+    private static readonly string[] ContextWords = ["慢一档", "进程 DPI", "上下文"];
+
+    /// <summary>一处读数之后的下一句（切到下一个句子边界为止）。</summary>
+    private static string NextSentence(string text, Match match)
+    {
+        var end = text.IndexOfAny(SentenceBreaks, match.Index + match.Length);
+        if (end < 0) return string.Empty;
+        var next = text.IndexOfAny(SentenceBreaks, end + 1);
+        return text[(end + 1)..(next < 0 ? text.Length : next)];
+    }
+
+    /// <summary><c>docs/NOTES.md</c> 顶部验收表里 G-D5 那一行（勾与没勾都命中）。</summary>
+    private static string Gd5Row()
+    {
+        var line = Repo.Source("docs", "NOTES.md").Split('\n')
+            .FirstOrDefault(l => Regex.IsMatch(l, @"^\| \[.\] \| G-D5"));
+        Assert.True(line is not null, "docs/NOTES.md 顶部验收表里找不到 G-D5 那一行（`| [ ] | G-D5 …`）。");
+        return line!;
+    }
+
+    /// <summary>
+    /// 三档读数必须与「上下文注解」同屏（第二百二十四轮，简报 P1-2）。
+    /// <para>
+    /// <b>要解决的问题</b>：<c>.winecheck/reading.txt</c> 记的三档读数出自「<b>慢一档</b>」那个上下文
+    /// （<c>demo.sh</c> 那一跑里控件自报 DPI 恒为 96，字体放大而控件行高不放大），<b>不能读成</b>
+    /// 「行高预算在 125% / 200% 也过」。这句话在 <c>.winecheck/README.md</c> 里写清了，但评审读的是
+    /// <c>README.md</c> 与验收表——只看那一句数值，很容易把它当成「三档都过」。
+    /// </para>
+    /// <para>
+    /// <b>判据</b>：<c>README.md</c> 全文与 <c>docs/NOTES.md</c> 的 G-D5 那一行里，每一处数字型三档读数
+    /// （<c>N 通过 / 0 失败 ×3</c>）的<b>同一句或紧邻下一句</b>必须出现「慢一档」「进程 DPI」「上下文」之一。
+    /// 只判这两处：它们是「被当成当前读数念出来」的地方；<c>docs/NOTES.md</c> 里其余几十处是逐轮日志，
+    /// 各自带着自己的上下文，逐处强加这三个词只是文档噪音，不增加信息。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判读数对不对（那是 <see cref="CurrentSourceReading_IsTheSameNumberInReadmeAndNotes"/>
+    /// 与 <c>reading.txt</c> 的账），也不判真机跑没跑。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ThreeTierReading_KeepsItsContextAnnotationOnTheSameScreen()
+    {
+        var scopes = new (string Label, string Text)[]
+        {
+            ("README.md", Repo.Source("README.md")),
+            ("docs/NOTES.md 的 G-D5 行", Gd5Row()),
+        };
+
+        var missing = new List<string>();
+        var seen = 0;
+        foreach (var (label, text) in scopes)
+        {
+            foreach (Match m in ThreeTier.Matches(text))
+            {
+                seen++;
+                var sentence = SentenceAround(text, m);
+                var next = NextSentence(text, m);
+                if (ContextWords.Any(w => sentence.Contains(w, StringComparison.Ordinal)
+                                          || next.Contains(w, StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                missing.Add($"{label}：{sentence.Trim()}");
+            }
+        }
+
+        // 地板：两处都得真有读数——把读数删光，这条门就成了摆设。
+        Assert.True(seen >= 2,
+            $"只找到 {seen} 处三档读数（README.md 与 G-D5 行各至少一处）：读数被删光了，这条门判不到东西。");
+
+        Assert.True(missing.Count == 0,
+            "这些三档读数旁边没有上下文注解（同一句或紧邻下一句里既没有「慢一档」也没有「进程 DPI」「上下文」）："
+            + string.Join(" ／ ", missing)
+            + "。reading.txt 记的数出自「慢一档」那个上下文，不能读成「行高预算在 125% / 200% 也过」——"
+            + "注解与数值必须同屏，否则评审只看数值就会误读。");
+    }
+
     /// <summary>
     /// 读数后面的加法算式必须加得起来（第一百九十三轮，简报 P1-1）。
     /// <para>

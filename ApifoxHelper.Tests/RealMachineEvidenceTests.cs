@@ -49,11 +49,11 @@ public class RealMachineEvidenceTests
     /// 而少一个目录就是少一条动作的落点。加一条动作要同时改这里、动作单与 README，三处都改才算过。
     /// </para>
     /// </summary>
-    private static readonly string[] ExpectedDirectories =
+    internal static readonly string[] ExpectedDirectories =
         ["journey", "100", "125", "200", "mixed-dpi", "scale-change", "fonts", "apifox-write", "smoke"];
 
     /// <summary>动作单的一行：勾选 / 动作 / 量什么 / 归档到哪里 / 判定标准。</summary>
-    private readonly record struct ActionRow(string Check, string Action, string Measure, string Archive, string Standard)
+    internal readonly record struct ActionRow(string Check, string Action, string Measure, string Archive, string Standard)
     {
         /// <summary>动作序号（「1. 单文件发布…」里的 1）。</summary>
         public int Number => int.Parse(Regex.Match(Action, @"^(\d+)\.").Groups[1].Value);
@@ -72,7 +72,7 @@ public class RealMachineEvidenceTests
         return lines[start..(end < 0 ? lines.Length : end)];
     }
 
-    private static List<ActionRow> ActionRows()
+    internal static List<ActionRow> ActionRows()
     {
         var rows = new List<ActionRow>();
         foreach (var line in ActionListLines())
