@@ -200,7 +200,7 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         foreach (var coverage in visible)
         {
             var row = new ListViewItem(coverage.EndpointKey) { Tag = coverage, UseItemStyleForSubItems = false };
-            row.Font = UiTokens.Mono.Value;
+            Ui.IdentityCell(row.SubItems[0]);
             Ui.CountCell(row, EndpointTrace.CountText(coverage.MethodsRead.Count));
             var unresolved = Ui.CountCell(row, EndpointTrace.CountText(coverage.Unresolved.Count));
             if (coverage.Unresolved.Count > 0) unresolved.ForeColor = UiTokens.WarnText;

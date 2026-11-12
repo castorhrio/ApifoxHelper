@@ -241,7 +241,9 @@ internal sealed class ProjectsPage : UserControl, INativePage
             {
                 var item = new ListViewItem(profile.Name) { Tag = profile };
                 item.SubItems.Add(profile.ApiProject);
-                item.SubItems.Add(profile.Apifox.ProjectId ?? "未绑定");
+                // 「Apifox 项目」是 ID 列：标识格经 Ui.IdentityCell 出厂（第二百二十八轮）。
+                // 此前这一列走控件默认的比例字体，而远端 ID 在同步预览与检查结果上是等宽的。
+                Ui.IdentityCell(item, profile.Apifox.ProjectId ?? "未绑定");
                 item.SubItems.Add(profile.Apifox.BranchName ?? "主分支");
                 item.SubItems.Add(SwaggerText(profile.Swagger.Type));
                 item.SubItems.Add(profile.UpdatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm"));

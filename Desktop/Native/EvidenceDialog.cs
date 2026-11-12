@@ -146,7 +146,7 @@ internal sealed class EvidenceDialog : DpiAwareForm
             var row = new ListViewItem(cells[0]) { Tag = item };
             row.SubItems.Add(cells[1]);
             var location = row.SubItems.Add(cells[2]);
-            location.Font = UiTokens.Mono.Value;
+            Ui.IdentityCell(location);
             _list.Items.Add(row);
         }
         // 打开即选中第一条证据（与检查结果、核对传播、接口追踪明细三处只读清单同一口径）：

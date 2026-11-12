@@ -767,6 +767,40 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 标识格（docs/DESIGN.md §3「等宽栈：计数、进度、ID、路径、差异文本必须等宽」）：等宽字体只在这里出厂。
+    /// <para>
+    /// 补的是哪一处缺口（第二百二十八轮，具名 pass：typeset）：计数格在第二百零五轮已收进
+    /// <see cref="CountCell"/>，而<b>标识格</b>（接口身份「GET /路径」、远端 ID、Apifox 项目 ID、源码路径）
+    /// 至今是各屏就地设一次——十三处各写一句 <c>.Font = UiTokens.Mono.Value</c>，而
+    /// <c>ContractsDialog</c> 的首列（接口身份）与 <c>ProjectsPage</c> 的「Apifox 项目」ID 列
+    /// <b>一处都没设</b>：同一类信息在另八张清单上等宽、在这两屏上是比例字体，属同壳不同行为。
+    /// 后果与计数格同一条（§6.2 #5 给的理由是行为不是观感）：比例字体下「9」与「10」宽度不同，
+    /// 两次扫描之间数字一变整列左右抖动，用户没法用余光比较同一列的两个数。
+    /// </para>
+    /// <para>
+    /// <b>形状先定再逐屏接</b>（DESIGN §8 那一格原话是「先定『标识格由谁设』再逐屏接，不要在工厂外再开第五种落法」）：
+    /// 两个重载——<see cref="IdentityCell(ListViewItem, string)"/> 新建一格并交出它（与 <see cref="CountCell"/> 同形），
+    /// <see cref="IdentityCell(ListViewItem.ListViewSubItem)"/> 把已经建好的那一格（含 <c>SubItems[0]</c>，
+    /// 即行自身的文字）交给工厂。界面代码不再就地写 <c>.Font = UiTokens.Mono.Value</c>。
+    /// </para>
+    /// <para>
+    /// <b>不进工厂的两支</b>（不是漏掉，是不该进）：<c>EvidenceDialog</c> 的「位置」那一行是 <c>Label</c>
+    /// 而不是清单格（它讲的是这一屏的证据在哪，不是某一行的标识），走 <see cref="Mono"/> 那一支；
+    /// 计数格仍走 <see cref="CountCell"/>——两件事的占位口径不同（计数有「—」与「N 处」两种写法），
+    /// 合成一处会把两种口径混成一个。
+    /// </para>
+    /// </summary>
+    public static ListViewItem.ListViewSubItem IdentityCell(ListViewItem.ListViewSubItem sub)
+    {
+        sub.Font = UiTokens.Mono.Value;
+        return sub;
+    }
+
+    /// <summary>新建一格标识格并交出它（与 <see cref="CountCell"/> 同形，见上面那个重载的说明）。</summary>
+    public static ListViewItem.ListViewSubItem IdentityCell(ListViewItem row, string text) =>
+        IdentityCell(row.SubItems.Add(text));
+
+    /// <summary>
     /// 读当前选中的那一行（唯一入口）：位次先经 <see cref="ListSelection"/> 量过选中数，量不到就没有这一行——
     /// 索引器因此在无选中时根本不被触发。把「按钮按下去落在哪一行」交给索引器的越界行为是不可交付的：
     /// 它要么是那一次点击变成未处理异常，要么是第四十轮修过的「按钮残留启用、点击无响应」同一族缺陷，

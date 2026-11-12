@@ -184,7 +184,7 @@ internal sealed class PropagationDialog : DpiAwareForm
         {
             var row = new ListViewItem(xml.Project) { Tag = xml };
             var path = row.SubItems.Add(xml.Path ?? "未启用");
-            path.Font = UiTokens.Mono.Value;
+            Ui.IdentityCell(path);
             var state = row.SubItems.Add(xml.Exists ? "存在" : "不存在");
             state.ForeColor = xml.Exists ? UiTokens.OkText : UiTokens.BadText;
             row.SubItems.Add(xml.LastWrite is { } time

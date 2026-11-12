@@ -559,7 +559,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
             foreach (var check in visible)
             {
                 var row = new ListViewItem(SyncSelectSort.EndpointCell(check)) { Tag = check, UseItemStyleForSubItems = false };
-                row.Font = UiTokens.Mono.Value;
+                Ui.IdentityCell(row.SubItems[0]);
                 var name = row.SubItems.Add(SyncSelectSort.NameCell(check));
                 name.Font = UiTokens.Body.Value;
                 if (!SyncSelection.Selectable(_task.OfflineMode, check.Status)) row.ForeColor = UiTokens.Muted;
@@ -975,9 +975,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
                 var kind = row.SubItems.Add(TaskDisplay.PlanActionKindText(action.Kind));
                 kind.Font = UiTokens.Body.Value;
                 var resource = row.SubItems.Add(action.ResourceKey);
-                resource.Font = UiTokens.Mono.Value;
+                Ui.IdentityCell(resource);
                 var remoteId = row.SubItems.Add(action.RemoteId?.ToString() ?? "—");
-                remoteId.Font = UiTokens.Mono.Value;
+                Ui.IdentityCell(remoteId);
                 var changes = row.SubItems.Add(PlanEntries.ChangesText(action.Changes, action.ManagedFields));
                 changes.Font = UiTokens.Body.Value;
                 if (action.Notes.Count > 0) row.ToolTipText = string.Join("\n", action.Notes);
@@ -1072,7 +1072,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
             foreach (var exclusion in visible)
             {
                 var row = new ListViewItem(exclusion.ResourceKey) { Tag = exclusion, UseItemStyleForSubItems = false };
-                row.Font = UiTokens.Mono.Value;
+                Ui.IdentityCell(row.SubItems[0]);
                 row.SubItems.Add(exclusion.Reason).Font = UiTokens.Body.Value;
                 _excludedList.Items.Add(row);
             }

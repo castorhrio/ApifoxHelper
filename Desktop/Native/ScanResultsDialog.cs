@@ -375,7 +375,7 @@ internal sealed class ScanResultsDialog : DpiAwareForm
             status.ForeColor = ToneColor(TaskDisplay.SlotTone(slot.Status));
             item.SubItems.Add(TaskDisplay.SlotRoleText(slot.Role));
             var location = item.SubItems.Add(SlotText.Location(slot));
-            location.Font = UiTokens.Mono.Value;
+            Ui.IdentityCell(location);
             _list.Items.Add(item);
         }
         _list.EndUpdate();

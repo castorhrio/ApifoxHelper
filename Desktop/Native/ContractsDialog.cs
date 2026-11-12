@@ -297,6 +297,9 @@ internal sealed class ContractsDialog : DpiAwareForm
         foreach (var contract in visible)
         {
             var item = new ListViewItem(contract.EndpointKey) { Tag = contract };
+            // 首列是接口身份（「GET /路径」）：标识格经 Ui.IdentityCell 出厂（第二百二十八轮）。
+            // 此前这一列走控件默认的比例字体，而同一串身份在另八张清单上是等宽的——同一类信息两种字。
+            Ui.IdentityCell(item.SubItems[0]);
             var wrapper = item.SubItems.Add(QueueText.ContractWrapper(contract.WrapperType));
             wrapper.ForeColor = UiTokens.Muted;
             item.SubItems.Add(QueueText.ContractDataType(contract.DataType));

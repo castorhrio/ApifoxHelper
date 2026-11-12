@@ -332,7 +332,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         foreach (var check in endpoints)
         {
             var row = new ListViewItem(check.Method + " " + check.Path) { Tag = check, UseItemStyleForSubItems = false };
-            row.Font = UiTokens.Mono.Value;
+            Ui.IdentityCell(row.SubItems[0]);
             row.SubItems.Add(check.RemoteName ?? "—").Font = UiTokens.Body.Value;
             AddState(row, TaskDisplay.CheckStatusText(check.Status), TaskDisplay.CheckStatusTone(check.Status));
             AddCount(row, check.Blockers.Count);
@@ -379,7 +379,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         foreach (var model in visible)
         {
             var row = new ListViewItem(model.Name) { Tag = model, UseItemStyleForSubItems = false };
-            row.Font = UiTokens.Mono.Value;
+            Ui.IdentityCell(row.SubItems[0]);
             AddState(row, TaskDisplay.MappingStateText(model.MappingState), TaskDisplay.MappingStateTone(model.MappingState));
             AddState(row, TaskDisplay.ModelStatusText(model.Status), TaskDisplay.ModelStatusTone(model.Status));
             AddCount(row, model.UsedBy.Count);

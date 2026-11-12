@@ -276,7 +276,7 @@ internal sealed class SupplementsDialog : DpiAwareForm
         foreach (var check in visible)
         {
             var item = new ListViewItem(SupplementEntries.EndpointCell(check)) { Tag = check, UseItemStyleForSubItems = false };
-            item.SubItems[0].Font = UiTokens.Mono.Value;
+            Ui.IdentityCell(item.SubItems[0]);
             item.SubItems.Add(SupplementEntries.NameCell(check));
             item.SubItems.Add(SupplementEntries.EntryCountCell(_supplement!, check.Key));
             _list.Items.Add(item);

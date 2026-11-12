@@ -461,7 +461,7 @@ internal sealed class DecisionsDialog : DpiAwareForm
         foreach (var entry in visible)
         {
             var item = new ListViewItem(KindText(entry.Kind)) { Tag = entry, UseItemStyleForSubItems = false };
-            item.SubItems.Add(entry.Resource).Font = UiTokens.Mono.Value;
+            Ui.IdentityCell(item, entry.Resource);
             item.SubItems.Add(entry.Location);
             var state = item.SubItems.Add(entry.StateText);
             state.ForeColor = ToneColor(entry.StateTone);
