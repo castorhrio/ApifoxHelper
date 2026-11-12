@@ -298,7 +298,8 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         buttonRow.Controls.Add(_clearButton, 2, 0);
         buttonRow.Controls.Add(_viewPlanButton, 3, 0);
         buttonRow.Controls.Add(_backButton, 4, 0);
-        buttonRow.Controls.Add(new Panel { Margin = new Padding(0) }, 5, 0);
+        // 第 5 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
+        // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
         buttonRow.Controls.Add(_generateButton, 6, 0);
         buttonRow.Controls.Add(_closeButton, 7, 0);
 
@@ -371,7 +372,10 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _verifyButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         planActions.Controls.Add(_applyButton, 0, 0);
         planActions.Controls.Add(_verifyButton, 1, 0);
-        planActions.Controls.Add(new Panel { Margin = new Padding(0) }, 2, 0);
+        // 第 2 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
+        // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度
+        // （第二百二十二轮实测：这一行 100px 对按钮 40px，同一屏底部按钮行 60px）。
+        // 这一处是同一族里唯一漏改的一处——底部按钮行改了、预览页这一行没改，冒烟段量出来才看见。
         head.Controls.Add(planActions, 0, 4);
         head.SetColumnSpan(planActions, 2);
         var executionCaption = Ui.Caption("确认后逐动作写入并立即回读核对；首个失败即停止，已写入部分不回滚，可在动作之间停止。");

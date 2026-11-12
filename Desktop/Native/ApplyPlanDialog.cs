@@ -230,7 +230,8 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
         actionRow.Controls.Add(_applyButton, 0, 0);
         actionRow.Controls.Add(_patchButton, 1, 0);
         actionRow.Controls.Add(_regenButton, 2, 0);
-        actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 3, 0);
+        // 第 3 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
+        // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
         actionRow.Controls.Add(closeButton, 4, 0);
 
         // 停靠按集合倒序生效：标题行最先停靠（顶部），其次筛选行、按钮行（最底部）、状态行、差异框、跳过列表，文件列表最后填满剩余空间。

@@ -132,7 +132,8 @@ internal sealed class ContractsDialog : DpiAwareForm
         actionRow.Controls.Add(_confirmButton, 0, 0);
         actionRow.Controls.Add(_rejectButton, 1, 0);
         actionRow.Controls.Add(_resetButton, 2, 0);
-        actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 3, 0);
+        // 第 3 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
+        // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
         actionRow.Controls.Add(_evidenceButton, 4, 0);
         actionRow.Controls.Add(closeButton, 5, 0);
 

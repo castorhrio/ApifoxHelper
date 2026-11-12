@@ -279,6 +279,9 @@ internal static class Program
         Section("写入清单表头放得下（逐列量表头文字与排序方向标记，真实控件）", nameof(RunActionHeaderFit));
         RunActionHeaderFit(services, dataRoot);
 
+        Section("按钮行高度（八屏按钮行量行高与最高按钮，真实控件）", nameof(RunActionRowFit));
+        RunActionRowFit(services, dataRoot);
+
         Section("完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）", nameof(RunFullJourney));
         RunFullJourney(services, dataRoot);
 
@@ -5577,6 +5580,121 @@ internal static class Program
                 throw new InvalidOperationException("写入清单表头在设计档放不下（会被截断成「序…」）：" + string.Join("、", tooWide));
             }
         });
+    }
+
+    /// <summary>
+    /// 按钮行高度实测（第二百二十二轮，CRITIQUE 第 8 站第 8 条）：八个对话框的按钮行里都放过一个
+    /// 默认尺寸的 <c>Panel</c>（200×100）当「把按钮推到右边」的占位——而按钮行是 <c>AutoSize</c>，
+    /// 那一格的高度就成了整行的高度。本段把每一屏的按钮行真的构造出来，量「行高 / 最高的那颗按钮 /
+    /// 多出来的空白」，判据：行高不得超过「最高按钮 + 上下内边距 + 余量」。
+    /// <para>
+    /// 这一族与第二百零六轮那批提示行是同一个根因（默认尺寸 <c>Panel</c> 撑高 <c>AutoSize</c> 行），
+    /// 但那一轮只量了提示行、按钮行「既没改也没量」——本段就是补上那一次量。
+    /// </para>
+    /// <para>
+    /// <b>改前 / 改后的读数</b>（100% 档，同一段）：改前八处 120px（占位 <c>Panel</c> 100px + 上下内边距 20px）
+    /// 对按钮 40px，同步预览预览页那一处 100px（那一行连内边距都没有）；改后八处 60px、预览页那一处 40px，
+    /// 多出 0px。**第一次跑就抓到一处漏改**：<c>SyncPreviewDialog</c> 有两处按钮行，底部那一处改了、
+    /// 预览页动作行那一处漏了——「先量再改」在这一轮兑现的第二次。
+    /// </para>
+    /// </summary>
+    private static void RunActionRowFit(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "按钮行高度冒烟" });
+
+        var screens = new (string Name, Func<Form> Build)[]
+        {
+            ("注释回写", () => new ApplyPlanDialog(services.GetRequiredService<CommentPlanService>(), tasks, task)),
+            ("注释候选", () => new CandidatesDialog(services.GetRequiredService<DraftService>(), tasks, task)),
+            ("响应契约", () => new ContractsDialog(tasks, task, services.GetRequiredService<ContractReviewService>())),
+            ("处理差异确认", () => new DecisionsDialog(tasks, task, services.GetRequiredService<DecisionService>())),
+            ("接口追踪明细", () => new EndpointTraceDialog(tasks, task)),
+            ("报告与交接", () => new ReportsDialog(services.GetRequiredService<ReportExportService>(), task)),
+            ("补充说明", () => new SupplementsDialog(tasks, task, services.GetRequiredService<SupplementService>())),
+            ("同步预览", () => new SyncPreviewDialog(
+                tasks,
+                services.GetRequiredService<SyncPlanService>(),
+                services.GetRequiredService<SyncExecutor>(),
+                services.GetRequiredService<JobRunner>(),
+                task)),
+        };
+
+        foreach (var (screenName, build) in screens)
+        {
+            RunAction($"按钮行高度：{screenName}的按钮行不因占位控件撑高（真实控件量行高）", () =>
+            {
+                using var dialog = build();
+                _ = dialog.Handle;
+                dialog.CreateControl();
+                dialog.PerformLayout();
+                Application.DoEvents();
+
+                // 按钮行 = 含按钮、且没有「填满整行」宿主的 TableLayoutPanel（本仓九处按钮行都是这个形状；
+                // 筛选行里没有按钮）。**含 Fill 宿主的行不算按钮行**：状态行那一行里有一颗「停止」按钮，
+                // 但它的高度由状态行文字决定（文字随 DPI 放大、按钮不放大），拿按钮去判它会在 125% / 200%
+                // 档误报——第二百二十二轮第一次跑就是这么红的（120 档 34px 对按钮 23px、192 档 49px 对 23px）。
+                // 判据只对「高度该由按钮决定」的行成立，这一条把不该它管的行排除掉，不是放宽阈值。
+                var rows = FindAll<TableLayoutPanel>(dialog)
+                    .Where(row => row.Controls.Cast<Control>().Any(control => control is Button))
+                    .Where(row => !RowHeightIsDrivenByAFillHost(row))
+                    .ToList();
+                if (rows.Count == 0)
+                {
+                    throw new InvalidOperationException("这一屏找不到含按钮的按钮行：量测口径可能已失效。");
+                }
+
+                var measured = new List<string>();
+                var tooTall = new List<string>();
+                foreach (var row in rows)
+                {
+                    var tallest = row.Controls.Cast<Control>().OfType<Button>().Max(button => button.Height);
+                    var padding = row.Padding.Top + row.Padding.Bottom;
+                    var slack = row.Height - tallest - padding;
+                    measured.Add($"行高 {row.Height}px、最高按钮 {tallest}px、上下内边距 {padding}px、多出 {slack}px");
+                    if (slack > ActionRowSlack)
+                    {
+                        tooTall.Add($"行高 {row.Height}px 对最高按钮 {tallest}px + 内边距 {padding}px，多出 {slack}px");
+                    }
+                }
+
+                // 先写证据行再判失败：判失败的那一屏也要留下量到的数字（与 RunActionHeaderFit 同一纪律）。
+                _lines.Add($"     {screenName}：{string.Join("；", measured)}");
+                if (tooTall.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "按钮行被撑高了（按钮下方留出一片死空白）：" + string.Join("、", tooTall));
+                }
+            });
+        }
+    }
+
+    /// <summary>
+    /// 按钮行允许的余量（像素）：按钮自身的上下 <c>Margin</c> 最多各 3px（WinForms 缺省值），
+    /// 故 6px 以内算「按钮自己带的留白」，超过就是有别的控件在撑这一行。
+    /// </summary>
+    private const int ActionRowSlack = 6;
+
+    /// <summary>
+    /// 这一行的高度是不是由「填满整行」的宿主决定的（是则不算按钮行，跳过）。
+    /// <para>
+    /// 状态行那一行里有一颗「停止」按钮，但它的高度由状态行文字决定——文字随 DPI 放大、按钮不放大，
+    /// 拿按钮去判它会在 125% / 200% 档误报（第二百二十二轮第一次跑就是这么红的：120 档 34px 对按钮 23px、
+    /// 192 档 49px 对 23px）。判据只对「高度该由按钮决定」的行成立，这一条把不该它管的行排除掉，不是放宽阈值。
+    /// </para>
+    /// <para>
+    /// 判的是「Fill 宿主比最高按钮还高出一截」而不是「有没有 Fill 宿主」：补充说明的按钮行里那格计数标签
+    /// 也是 Fill，但它与按钮同高（40px），那一行仍该由按钮判——按「有没有 Fill」一刀切会把这一屏整屏漏掉
+    /// （第一次改就是这么漏的，冒烟段当场报「这一屏找不到含按钮的按钮行」）。
+    /// </para>
+    /// </summary>
+    private static bool RowHeightIsDrivenByAFillHost(TableLayoutPanel row)
+    {
+        var tallestButton = row.Controls.Cast<Control>().OfType<Button>().Max(button => button.Height);
+        return row.Controls.Cast<Control>()
+            .Any(control => control.Dock == DockStyle.Fill && control.Height > tallestButton + ActionRowSlack);
     }
 
     /// <summary>

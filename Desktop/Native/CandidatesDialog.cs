@@ -174,7 +174,8 @@ internal sealed class CandidatesDialog : DpiAwareForm
         actionRow.Controls.Add(_saveTextButton, 3, 0);
         actionRow.Controls.Add(_undoButton, 4, 0);
         actionRow.Controls.Add(_importButton, 5, 0);
-        actionRow.Controls.Add(new Panel { Margin = new Padding(0) }, 6, 0);
+        // 第 6 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
+        // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
         actionRow.Controls.Add(_evidenceButton, 7, 0);
         actionRow.Controls.Add(closeButton, 8, 0);
 
