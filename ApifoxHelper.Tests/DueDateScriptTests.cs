@@ -101,15 +101,24 @@ public class DueDateScriptTests
     }
 
     /// <summary>跑一次核对；<paramref name="env"/> 里的键值覆盖到子进程环境上。</summary>
-    private static (int Exit, string Output) RunDueDate(params (string Key, string Value)[] env)
+    private static (int Exit, string Output) RunDueDate(params (string Key, string Value)[] env) =>
+        RunDueDateWithArgs([], env);
+
+    /// <summary>跑一次核对并带上脚本参数（如 <c>--writeback-plan</c>）。</summary>
+    private static (int Exit, string Output) RunDueDateWithArgs(string[] args, params (string Key, string Value)[] env)
     {
-        var psi = new ProcessStartInfo(LocateBash()!, ScriptPath)
+        // 只用 ArgumentList：两参数的 ProcessStartInfo 构造会填 Arguments，之后再 Add 就撞
+        // 「Only one of Arguments or ArgumentList may be used」（第二百三十九轮第一跑当场撞上）。
+        var psi = new ProcessStartInfo
         {
+            FileName = LocateBash()!,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
             WorkingDirectory = Repo.Root,
         };
+        psi.ArgumentList.Add(ScriptPath);
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
         psi.Environment["LANG"] = "C.UTF-8";
         foreach (var (key, value) in env) psi.Environment[key] = value;
 
@@ -288,6 +297,71 @@ public class DueDateScriptTests
         var (exitD, outputD) = RunDueDate(tree.Env("明天"));
         Assert.True(exitD == 2, $"TODAY 不是日期时退出码是 {exitD}，不是 2。输出：{outputD}");
         Assert.Contains("不是 YYYY-MM-DD", outputD, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 「已过」那一支<b>不带参数</b>时要点名那条能把清单调到屏幕上的命令（第二百三十九轮，简报 P0-1）。
+    /// <para>
+    /// 补的是哪一个洞：那一天最先跑的一定是不带参数的那一发（<c>defense-day.sh</c> 第 ① 步就是它）。
+    /// 只说「应改判『已过期』」而不把<b>下一步命令</b>递到人手上，那天就得自己想起来还有清单这回事。
+    /// 这一发同时判它<b>只指过去、不抄过来</b>：清单的表头不许出现在不带参数的输出里。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PastDue_PointsAtTheWritebackPlanCommand()
+    {
+        if (LocateBash() is null) return;
+
+        using var tree = new FakeNotes("2026-11-20");
+        var (exit, output) = RunDueDate(tree.Env("2026-11-21"));
+
+        Assert.True(exit == 1, $"已过那一支退出码是 {exit}，不是 1：{output}");
+        Assert.Contains("--writeback-plan", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("| 步 | 改哪一份 |", output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>--writeback-plan</c> 四种跑法各跑活一次（第二百三十九轮，简报 P0-1）。
+    /// <para>
+    /// <b>判什么</b>：① 真仓 + 已过那一天 → 退 `1` 且把 <c>docs/NOTES.md</c> 那一段<b>原样</b>打出来
+    /// （表头在、第 1 步点到的两处落点都在）；② 未到那一天带同样的参数也打得出来——那一页是参考卡，
+    /// 不是只在过期那天才存在，而退出码仍由日期决定（`0`）；③ <b>假树</b>（NOTES 里没有那一段）→
+    /// 打「清单读不到」并<b>一张表都不打</b>：这一发同时证明脚本里没有抄第二份，抄了这里就会漏出表头；
+    /// ④ 参数打错 → 退 `2` 并点名，不许跑出三个分支之一（那会被读成「这一支认这个参数」）。
+    /// </para>
+    /// <para><b>它不判什么</b>：不判清单内容对不对——那是
+    /// <see cref="AcceptanceChecklistTests.Gd5_PastDueWritebackPlan_IsWalkableAndNamesRealDestinations"/> 的事。</para>
+    /// </summary>
+    [Fact]
+    public void WritebackPlan_PrintsThatSectionVerbatimAndKeepsTheDateExitCode()
+    {
+        if (LocateBash() is null) return;
+
+        // ① 真仓真跑（TODAY 注入到到期日之后；只读一个文件、比两个日期，不跑任何界面）。
+        var (exitPast, outPast) = RunDueDateWithArgs(["--writeback-plan"], ("TODAY", "2026-11-21"));
+        Assert.True(exitPast == 1, $"带参数不改变退出码这一条破了：已过那天退出 {exitPast}，应为 1。输出：{outPast}");
+        Assert.Contains("到期日已过", outPast, StringComparison.Ordinal);
+        Assert.Contains("| 步 | 改哪一份 |", outPast, StringComparison.Ordinal);
+        Assert.Contains("到期日判定（细则）", outPast, StringComparison.Ordinal);
+        Assert.Contains("README.md", outPast, StringComparison.Ordinal);
+
+        // ② 未到那一天：清单是参考卡，随时可查；退出码仍走「未到」那一支。
+        var (exitBefore, outBefore) = RunDueDateWithArgs(["--writeback-plan"], ("TODAY", "2026-11-15"));
+        Assert.True(exitBefore == 0, $"还没到改判那天却退 {exitBefore}：退出码判的是日期关系，不是这一页给没给。输出：{outBefore}");
+        Assert.Contains("按现有路径继续", outBefore, StringComparison.Ordinal);
+        Assert.Contains("| 步 | 改哪一份 |", outBefore, StringComparison.Ordinal);
+
+        // ③ 假树：NOTES 里没有那一段 → 点名读不到，且一张表都不打（脚本里没有第二份，这一步就是它的证明）。
+        using var tree = new FakeNotes("2026-11-20");
+        var (exitFake, outFake) = RunDueDateWithArgs(["--writeback-plan"], tree.Env("2026-11-21"));
+        Assert.True(exitFake == 1, $"读不到清单不改变日期判定：假树上退出码是 {exitFake}，应为 1。输出：{outFake}");
+        Assert.Contains("清单读不到", outFake, StringComparison.Ordinal);
+        Assert.DoesNotContain("| 步 | 改哪一份 |", outFake, StringComparison.Ordinal);
+
+        // ④ 参数打错：退 2 并点名，不跑分支。
+        var (exitArg, outArg) = RunDueDateWithArgs(["--write-plan"]);
+        Assert.True(exitArg == 2, $"认不出的参数退出码是 {exitArg}，不是 2：那一发会被读成「这一支认这个参数」。输出：{outArg}");
+        Assert.Contains("认不出参数", outArg, StringComparison.Ordinal);
     }
 
     /// <summary>

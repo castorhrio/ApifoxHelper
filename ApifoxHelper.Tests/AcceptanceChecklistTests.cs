@@ -366,7 +366,8 @@ public class AcceptanceChecklistTests
     private static readonly string[] DataFileExtensions = ["json", "jsonl", "txt", "log", "png", "html", "csv"];
 
     /// <summary>反引号里认定为「实物」的三类引用：仓内文件、测试断言、冒烟段名。命中即核对存在。</summary>
-    private static int ResolvableCitations(string text, List<string> unresolved)
+    /// <param name="assertions">可选：把解析成功的「类名.断言名」收集出来（「由哪条断言核回写」那一族门要知道的是名字，不只是个数）。</param>
+    private static int ResolvableCitations(string text, List<string> unresolved, List<string>? assertions = null)
     {
         var resolved = 0;
         var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
@@ -402,7 +403,11 @@ public class AcceptanceChecklistTests
                     continue;
                 }
 
-                if (Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]")) resolved++;
+                if (Regex.IsMatch(File.ReadAllText(testFile), @"\bvoid\s+" + Regex.Escape(parts[1]) + @"\s*[(:]"))
+                {
+                    resolved++;
+                    assertions?.Add(citation);
+                }
                 else unresolved.Add(citation + "（断言不存在）");
                 continue;
             }
@@ -940,9 +945,24 @@ public class AcceptanceChecklistTests
             + "按这个顺序、中间不跨标点）：兄弟门 Gd5DueDate_IsNotStaleOrFuture 在到期日之后读的就是这两个字，"
             + "这句话悬空，那天红的会是格子，而预登记看起来是齐的。");
 
-        Assert.True(verdict.StartsWith("**未达成（环境供给缺口）**", StringComparison.Ordinal),
-            "G-D5 那一格的「当前」结论不再是「未达成（环境供给缺口）」：到期日还没到就把预登记的那句当现况写，"
-            + "读的人会以为那天已经过完了。");
+        // ③b 「当前结论」的开头那一句按**今天与到期日的关系**认（第二百三十九轮，简报 P0-1 的改判支）。
+        //    此前这一句写死认改判**之前**那一句：到期日之后照清单改完文档，第一件事是让这条门变红——
+        //    那天要改的是两份文档，不是测试代码，而现场改门的压力永远比现场改文档大。
+        //    两句都从上面那段现读（`从「X」改写为「Y」`），本文件不抄第二份措辞：细则改了，这里跟着换。
+        var (openingBefore, openingAfter) = VerdictRewriteSentences(section);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var due = DateOnly.ParseExact(rowDate, "yyyy-MM-dd");
+        var allowedOpenings = AllowedVerdictOpenings(today, due, openingBefore, openingAfter);
+        Assert.True(
+            allowedOpenings.Any(o => verdict.StartsWith("**" + o + "**", StringComparison.Ordinal)),
+            due < today
+                ? $"到期日 {rowDate} 已经过去（今天 {today:yyyy-MM-dd}），G-D5 那一格开头却还是改判**之前**那句「{openingBefore}」："
+                  + $"照「到期日已过 · 改判与回写清单」第 1 步改成「{openingAfter}」——过期了仍按「还没到」讲，等于替那台没到的机器续期。"
+                : due == today
+                    ? $"今天是到期日 {rowDate}，而那一格开头既不是改判前那句「{openingBefore}」也不是改写后那句「{openingAfter}」："
+                      + "当天两种状态都在流程中（判定与回写在 18:00 之后落地），第三句都不该出现在那一格。"
+                    : $"G-D5 那一格的「当前」结论开头不再是「{openingBefore}」，而到期日 {rowDate} 还没到（今天 {today:yyyy-MM-dd}）："
+                      + "到期日还没到就把预登记的那句当现况写，读的人会以为那天已经过完了。");
 
         // ④ 三份讲稿路径 = demo.sh 自己算出的那三份（OUT / TIERS / 文件名三处全部现读）。
         var script = Repo.Source(".winecheck", "demo.sh");
@@ -995,10 +1015,8 @@ public class AcceptanceChecklistTests
             ".winecheck/due-date.sh 的「已过」那一支里读不到改判用词：本门与 Gd5DueDate_IsNotStaleOrFuture ③ 必须共用脚本自己那个词，"
             + "各写一份时到期日第二天红的会是格子而不是这一行（第二百一十一轮踩过）。");
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var dueForCheck = DateOnly.ParseExact(rowDate, "yyyy-MM-dd");
-        var expectedWord = dueForCheck < today ? expiredWord : unavailableWord;
-        var otherWord = dueForCheck < today ? unavailableWord : expiredWord;
+        var expectedWord = due < today ? expiredWord : unavailableWord;
+        var otherWord = due < today ? unavailableWord : expiredWord;
         // 只取「结论：」后面那一段——这一行后面还要解释两个词各自什么时候用，拿整行比会把解释读成结论。
         var conclusion = Regex.Match(checkLine, @"结论：(?<w>[^*—\n]{1,16})").Groups["w"].Value;
         Assert.True(conclusion.Length > 0,
@@ -1022,6 +1040,188 @@ public class AcceptanceChecklistTests
         Assert.True(!Regex.IsMatch(checkLine, @"距到期还有\s*\d+\s*天"),
             "到期日核对那一行把当天的天数抄成了事实：那是脚本那天打出来的读数，第二天就错"
             + "（与第二百零四轮「动态倒计时不写进文档」同一口径），这一行只留分支与退出码。");
+
+        // ⑥ 真机供给行动书（第二百三十九轮，简报 P0-2）：那一行「给调度侧读的一行」登记到本轮是第 60 轮，
+        //    它写的是**缺口**不是**动作**——调度侧读到也不知道「今天该给答复」还是「还可以再等」。
+        //    现在它升级成三档触发，本条判三件事：三档都在、每档都挂着一条**跑得起来**的判据（点到的脚本真在磁盘上）、
+        //    三档不许抄同一发命令（三档若都指同一支脚本，这一页就还是一行）。
+        var book = RealMachineSubsection("真机供给行动书");
+        var bookRows = PlanRows(book);
+        Assert.True(bookRows.Count == 3,
+            $"行动书那一段只有 {bookRows.Count} 行（要的是三档：前 7 天 / 前 3 天 / 当天）。少一档，"
+            + "那天之前就有一个决策点没人负责；多一行，先回去把那一档写进上面那三档的哪一档。");
+        foreach (var tier in new[] { "前 7 天", "前 3 天", "当天" })
+        {
+            Assert.True(bookRows.Any(r => r.Contains(tier, StringComparison.Ordinal)),
+                $"行动书少了「{tier}」那一档：到期日之前只剩这三个决策点，少一个就又回到「只知道缺机器、不知道今天做什么」。");
+        }
+
+        var tierScripts = new List<string>();
+        foreach (var tierRow in bookRows)
+        {
+            var cells = MarkdownCells(tierRow);
+            var tier = cells[0];
+            // 五列齐全：档 / 触发 / 本仓那一步（可跑的判据）/ 调度侧必须给出什么 / 供不上时降级从哪天开始准备。
+            // 判「这一格填了没有」而不是「有没有写『调度』两个字」：③ 档那一格填的是「答辩负责人在 18:00 前判定」，
+            // 那正是调度侧那一步的内容，只是不叫这个名字。
+            Assert.True(cells.Count == 5,
+                $"行动书「{tier}」那一行是 {cells.Count} 列（应为 5 列：档 / 触发 / 本仓 / 调度侧 / 供不上时哪天降级）。");
+            Assert.True(cells[3].Length >= 12,
+                $"行动书「{tier}」那一行没写调度侧这一步必须给出什么：只写本仓做什么，这一页仍是本仓的自言自语。");
+            Assert.True(cells[4].Contains("降级", StringComparison.Ordinal),
+                $"行动书「{tier}」那一行没写「供不上时降级从哪一天开始准备」：等下去的每一天都在到期日那天扣掉。");
+
+            var scripts = Regex.Matches(tierRow, @"`(?<p>\.winecheck/[^`]+\.sh)`").Cast<Match>()
+                .Select(m => m.Groups["p"].Value).Distinct(StringComparer.Ordinal).ToList();
+            Assert.True(scripts.Count >= 1,
+                $"行动书「{tier}」那一行没挂上可跑的判据（第三格要点名 `.winecheck/` 里的某一支脚本）："
+                + $"{cells[2][..Math.Min(40, cells[2].Length)]}…");
+            foreach (var scriptPath in scripts)
+            {
+                Assert.True(File.Exists(Path.Combine(Repo.Root, scriptPath.Replace('/', Path.DirectorySeparatorChar))),
+                    $"行动书点到 {scriptPath}，磁盘上没有这一支：那天照着跑会停在「找不到文件」，而不是停在它要说的那一句。");
+            }
+
+            tierScripts.AddRange(scripts);
+        }
+
+        Assert.True(tierScripts.Distinct(StringComparer.Ordinal).Count() == bookRows.Count,
+            $"三档挂的判据去重后只剩 {tierScripts.Distinct(StringComparer.Ordinal).Count()} 支（应为 {bookRows.Count} 支）："
+            + "三档指同一发命令，这一页就还是一行登记，不是一个行动书。");
+
+        // 这一页不许引入第二个到期日（与 Gd5DueDate_IsNotStaleOrFuture ② 同一条纪律，只是取数范围换成这一段）。
+        foreach (Match m in DueDatePattern.Matches(book))
+        {
+            Assert.True(m.Groups[1].Value == rowDate,
+                $"行动书里写了另一个到期日 {m.Groups[1].Value}，而 G-D5 那一格记的是 {rowDate}：两处各写一个日期，那三天按哪一个算。");
+        }
+    }
+
+    /// <summary>
+    /// 「到期日判定（细则）」那一段里定死的两句结论措辞：改判**之前**那一格开头是哪一句、改判**之后**换成哪一句。
+    /// <para>
+    /// 两句都从那一段现读（写法是 <c>从「X」改写为「Y」</c>），本文件不抄第二份——细则改了措辞，
+    /// <see cref="Gd5_ExpiryVerdict_IsRecordedWithTheDegradationRunPath"/> ③b 跟着换；照清单改完文档而门仍红，
+    /// 红的原因就只剩「没照改」，不会是「门还认旧句子」。取不到那一对时点名，不猜。
+    /// </para>
+    /// </summary>
+    private static (string Before, string After) VerdictRewriteSentences(string section)
+    {
+        var m = Regex.Match(section, @"从「(?<before>[^」]+)」改写为「(?<after>[^」]+)」");
+        Assert.True(m.Success,
+            "「到期日判定（细则）」那一段里读不到 `从「…」改写为「…」` 那一对：改判前后各认哪一句开头没有了出处。"
+            + "本门不抄第二份措辞（抄了就有两份，改一处另一处不会红），也不猜。");
+        return (m.Groups["before"].Value, m.Groups["after"].Value);
+    }
+
+    /// <summary>
+    /// 那一天该以哪一句（或哪两句）开头——纯函数，三档真值表在 <see cref="Gd5_VerdictOpening_FollowsTheDueDate"/> 里跑。
+    /// <para>
+    /// <b>为什么要有这一处</b>：到期日之后那一格本就该换成改写后那句，而这件事在第二百三十九轮之前是
+    /// <b>靠那天有人改测试代码</b>完成的（写死只认改判前那句）。收成这一个出口之后，那天照文档改就行。
+    /// </para>
+    /// <para>
+    /// 当天给两句：<b>改判发生在当天白天之后</b>（判定由答辩负责人在 18:00 前作出，回写在判定之后），
+    /// 所以当天上午仍该是前一句、傍晚之后该是后一句——只认其中一句，都会在当天的一半时间里红得没道理。
+    /// </para>
+    /// </summary>
+    private static string[] AllowedVerdictOpenings(DateOnly today, DateOnly due, string before, string after) =>
+        due < today ? [after] : due == today ? [before, after] : [before];
+
+    /// <summary>
+    /// 三档真值表（第二百三十九轮，简报 P0-1）：未到只认改判前那句，已过只认改写后那句，当天两句都在流程中。
+    /// <para>
+    /// 这里给的两句话是<b>输入占位</b>（「改判前那句」/「改写后那句」），不是从仓里读来的措辞——
+    /// 真措辞只有一份出处（<see cref="VerdictRewriteSentences"/>）。本条判的是<b>日期决定哪一句</b>这件事，
+    /// 与那两句写成什么字无关。把「当天也只认前一句」改回去，本条当场红（第二百三十九轮之前正是那个形状）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Gd5_VerdictOpening_FollowsTheDueDate()
+    {
+        var due = new DateOnly(2026, 11, 20);
+        const string before = "改判前那句";
+        const string after = "改写后那句";
+
+        Assert.Equal([before], AllowedVerdictOpenings(new DateOnly(2026, 11, 13), due, before, after));
+        Assert.Equal([before, after], AllowedVerdictOpenings(due, due, before, after));
+        Assert.Equal([after], AllowedVerdictOpenings(new DateOnly(2026, 11, 21), due, before, after));
+
+        // 真仓那两句读得出来、且互不相同（相同就等于「改判」这件事没有任何可判的变化）。
+        var (realBefore, realAfter) = VerdictRewriteSentences(RealMachineSubsection("到期日判定"));
+        Assert.True(realBefore != realAfter,
+            "「到期日判定（细则）」里改判前后是同一句：那一句都不该被称作「改写」。");
+    }
+
+    /// <summary>
+    /// 行动书 / 改判清单那两张表的正文行（去掉标题行与分隔行）。
+    /// 两张表的第一格都不是勾选框（<c>[ ]</c> / <c>[x]</c>），所以它们不会被真机动作单那个解析器读走——
+    /// 那七行才是「一条都不许在真机到场前勾上」的那批。
+    /// </summary>
+    private static List<string> PlanRows(string section) =>
+        section.Split('\n')
+            .Where(l => l.TrimStart().StartsWith("| ", StringComparison.Ordinal))
+            .Where(l => !l.Contains("---", StringComparison.Ordinal))
+            .Skip(1)
+            .ToList();
+
+    /// <summary>
+    /// 把一行表格切成格：只在**反引号之外**的 <c>|</c> 处切。
+    /// <para>
+    /// 改判清单那一页的「改哪一行」写的正是脚本与门共用的那个 grep 模式（<c>^\| \[.\] \| G-D5</c>），
+    /// 那一格里的转义竖线是**内容**不是列分隔符——按裸 <c>Split('|')</c> 切，那一行会读成 7 列
+    /// （第二百三十九轮第一跑就红在这里）。表格本身是合法的 markdown，渲染器也这么读，
+    /// 所以修的是取法，不是把那一格改写成没有竖线的样子（改写成「G-D5 开头那一行」就把锚点改虚了）。
+    /// </para>
+    /// </summary>
+    private static List<string> MarkdownCells(string row)
+    {
+        var body = row.Trim();
+        if (body.StartsWith('|')) body = body[1..];
+        if (body.EndsWith('|')) body = body[..^1];
+
+        var cells = new List<string>();
+        var inCode = false;
+        var start = 0;
+        for (var i = 0; i < body.Length; i++)
+        {
+            switch (body[i])
+            {
+                case '`':
+                    inCode = !inCode;
+                    break;
+                case '|' when !inCode:
+                    cells.Add(body[start..i].Trim());
+                    start = i + 1;
+                    break;
+            }
+        }
+
+        cells.Add(body[start..].Trim());
+        return cells;
+    }
+
+    /// <summary>那两页自身的标题前缀（锚点必须去它们**之外**的行里找，见 <see cref="HaystackOutsideThePlanPages"/>）。</summary>
+    private static readonly string[] PlanOwnPages = ["到期日已过 · 改判与回写清单", "真机供给行动书"];
+
+    /// <summary>
+    /// 某一行的「靶子文本」：那一份文件的全部内容，<b>去掉清单与行动书这两页自身</b>。
+    /// <para>
+    /// <b>为什么非去掉不可</b>：锚点就写在清单里。拿清单所在的那份文件当靶子，任何字面锚都会因为
+    /// 「这一页自己刚刚引了它一遍」而命中——第二百三十九轮变异自测 M1 实测：把第 1 步的锚点改成
+    /// 仓里根本取不到的 <c>^\| \[z\] \| G-D9</c>，门<b>照样绿</b>。这一族叫 Presence 型假绿
+    /// （同一个字符串被它自己的出处满足），本仓记过不止一次，今天轮到我自己写出来。
+    /// </para>
+    /// </summary>
+    private static string HaystackOutsideThePlanPages(string path)
+    {
+        var text = File.ReadAllText(path);
+        foreach (var heading in PlanOwnPages)
+        {
+            text = text.Replace(RealMachineSubsection(heading), string.Empty, StringComparison.Ordinal);
+        }
+
+        return text;
     }
 
     /// <summary>
@@ -1234,6 +1434,146 @@ public class AcceptanceChecklistTests
                 $"G-D5 那一格里又出现了只属于判定细则的形状「{shape}」：细则的落点是下一节那两个子段，"
                 + "往验收表的一格里再塞一段，这一格就会重新长成读表的人读不下去的样子（上限 "
                 + $"{VerdictCellCharCap} 字就是这么来的）。");
+        }
+    }
+
+    /// <summary>
+    /// 「到期日已过 · 改判与回写清单」（第二百三十九轮，简报 P0-1）：到期日过了那一天要改的地方，
+    /// 必须逐条写明<b>改哪一份 / 改哪一行 / 改成什么 / 由哪条断言核回写</b>，且每一条点到的文件与断言
+    /// 都真的在仓里、每一个定位锚都真的取得到那一行。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>.winecheck/due-date.sh</c> 的「已过」支到第二百三十八轮为止只说得出两句
+    /// ——「应改判『已过期』」与「回写落点见 G-D5 行」。它<b>判停在第几步，没有把改判那一步铺开</b>：那一天要改的
+    /// 不止那一格（判定句有两处要逐字一致、顶部登记的结论词要跟着换、还有一处看着像该改其实一条都不许改），
+    /// 而这些散在本文件三处与 <c>README.md</c>。到期日一过，最容易出事的正是这一步——现场没有人替你把它们拼起来，
+    /// 拼错一处就是两套说法同时留在仓里。
+    /// </para>
+    /// <para>
+    /// <b>判五件事</b>：① 那一段在位、至少 6 步、每步五列齐全；② 每一步点到的文件 / 断言 / 冒烟段名全部解析得开
+    /// （与真机动作单<b>同一把取法</b> <see cref="ResolvableCitations"/>，不在这里写第二套分类规则），
+    /// 且至少点到一条断言——「由哪条断言核回写」缺位，那天改完没人对账；③ 每一步的<b>定位锚真取得到</b>：
+    /// 那一格反引号里的锚点，先按字面找、找不到再按行首正则试，必须命中这一步点到的某一份文件里的一行——
+    /// 只写「改 NOTES」而不写改哪一行，那天还是得自己找，而这一页存在的理由就是「不用再找」；
+    /// ④ 这一页点到的两处回写落点与「到期日当天执行单」② 那两处是<b>同一处</b>（两页各说一套 = 那天按哪一页改都可能错）；
+    /// ⑤ 清单<b>只许长在 <c>docs/NOTES.md</c> 那一段</b>：表头在这几份候选文档里只出现一次，而
+    /// <c>.winecheck/due-date.sh</c> 只按标题现读再打印，源码里不许出现清单的任何一行正文（抄第二份，改了这一段的人不会知道那里还留着一份旧的）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那一天该不该改判（「到期日当天执行单」开头 ① 由人决定）、不判改得对不对
+    /// （改完之后由这一页每一步点名的那条断言判）、也不判 G-D5 算不算过（勾选框只由真机证据关闭）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Gd5_PastDueWritebackPlan_IsWalkableAndNamesRealDestinations()
+    {
+        const int MinRows = 6;
+        const string TableHead = "| 步 | 改哪一份 |";
+        const string PlanTitle = "到期日已过 · 改判与回写清单";
+
+        // ① 那一段在位、行数与列数齐。
+        var section = RealMachineSubsection(PlanTitle);
+        var rows = PlanRows(section);
+        Assert.True(rows.Count >= MinRows,
+            $"「{PlanTitle}」只有 {rows.Count} 步（地板 {MinRows}）：那一天要改的地方比这多，"
+            + "少写一步就是把它悄悄还给「现场自己拼」。");
+
+        var namedFiles = new List<string>();
+        foreach (var row in rows)
+        {
+            var cells = MarkdownCells(row);
+            Assert.True(cells.Count == 5,
+                $"改判清单有一行是 {cells.Count} 列（应为 5 列：步 / 改哪一份 / 改哪一行 / 改成什么 / 由哪条断言核回写）：{cells[0]}");
+            var step = cells[0];
+
+            // ② 实物全部解析得开，且至少一条断言核回写。
+            var unresolved = new List<string>();
+            var assertions = new List<string>();
+            ResolvableCitations(row, unresolved, assertions);
+            Assert.True(unresolved.Count == 0,
+                $"改判清单第 {step} 步引用了不存在的东西：" + string.Join(" ／ ", unresolved)
+                + "。那天照着这一行去改，改到一半发现指着不存在的文件或多出来的措辞，比没有这一行更糟。");
+            Assert.True(assertions.Count >= 1,
+                $"改判清单第 {step} 步没有点到任何断言：改完之后由谁核回写？没有那一条，这一步就只是一句承诺。");
+
+            // ③ 定位锚真取得到（先字面、再按行首正则；靶子不含清单与行动书这两页自身）。
+            var targets = Regex.Matches(row, @"`(?<p>[^`]*\.(?:md|sh|cs|ps1))`").Cast<Match>()
+                .Select(m => m.Groups["p"].Value)
+                .Select(p => Path.Combine(Repo.Root, p.Replace('/', Path.DirectorySeparatorChar)))
+                .Where(File.Exists)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            Assert.True(targets.Count >= 1, $"改判清单第 {step} 步没点到任何存在的文件：那天要改的那一份连名字都没有。");
+            namedFiles.AddRange(targets);
+
+            var anchors = Regex.Matches(cells[2], @"`(?<a>[^`]+)`").Cast<Match>().Select(m => m.Groups["a"].Value).ToList();
+            Assert.True(anchors.Count >= 1,
+                $"改判清单第 {step} 步只说了改哪一份、没说改哪一行（那一格要给出反引号包住的定位锚）："
+                + "一份两千多行的文件里没有锚，那天还是得自己找。");
+            var texts = targets.Select(HaystackOutsideThePlanPages).ToList();
+            foreach (var anchor in anchors)
+            {
+                Assert.True(
+                    texts.Any(t => t.Contains(anchor, StringComparison.Ordinal)
+                                   || t.Split('\n').Any(l => AnchorRegexHits(l, anchor))),
+                    $"改判清单第 {step} 步的定位锚「{anchor}」在这一行点到的文件里取不到任何一行："
+                    + "锚点写空，等于把「改哪一行」这一格退回成一句描述。");
+            }
+        }
+
+        // ④ 两处回写落点与「到期日当天执行单」② 是同一处（两页不许各说一套）。
+        var runSheet = RealMachineSubsection("到期日当天执行单");
+        foreach (var needle in new[] { "当前结论", "已知限制" })
+        {
+            Assert.Contains(needle, section, StringComparison.Ordinal);
+            Assert.Contains(needle, runSheet, StringComparison.Ordinal);
+        }
+
+        Assert.True(
+            namedFiles.Any(f => f.EndsWith("NOTES.md", StringComparison.Ordinal))
+            && namedFiles.Any(f => f.EndsWith("README.md", StringComparison.Ordinal)),
+            "改判清单没有同时点到 `docs/NOTES.md` 与 `README.md` 那两处：执行单 ② 定的是两处同时写，"
+            + "少一处等于那天留下一套旧说法挂在对外文本上。");
+
+        // ⑤ 唯一出处：表头只许出现在 docs/NOTES.md，脚本按标题现读、不许抄任何一行正文。
+        var carriers = new List<string>();
+        foreach (var path in Directory.EnumerateFiles(Repo.Root, "*.md", SearchOption.AllDirectories)
+                     .Concat(Directory.EnumerateFiles(Path.Combine(Repo.Root, ".winecheck")))
+                     .Where(p => !p.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                                 && !p.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
+        {
+            if (File.ReadAllText(path).Contains(TableHead, StringComparison.Ordinal)) carriers.Add(path);
+        }
+
+        Assert.True(carriers.Count == 1 && carriers[0].EndsWith("NOTES.md", StringComparison.Ordinal),
+            "清单的表格出现在 " + string.Join(" ／ ", carriers.Select(Path.GetFileName)) +
+            $"——它只许长在 docs/NOTES.md 的「{PlanTitle}」那一段。两份正文各留一张表，改一份的人不会知道另一份还留着旧的。");
+
+        var script = Repo.Source(".winecheck", "due-date.sh");
+        Assert.Contains(PlanTitle, script, StringComparison.Ordinal);
+        Assert.Contains("--writeback-plan", script, StringComparison.Ordinal);
+        Assert.Contains("--writeback-plan", section, StringComparison.Ordinal);
+        foreach (var row in rows)
+        {
+            Assert.True(!script.Contains(row, StringComparison.Ordinal),
+                $".winecheck/due-date.sh 里抄了清单的一行正文（第 {MarkdownCells(row)[0]} 步）："
+                + "那一段是唯一出处，脚本只许按标题现读再打印；抄进脚本，改了那一段的人不会知道这里还有一份。");
+        }
+    }
+
+    /// <summary>
+    /// 把定位锚当正则试一次（只按<b>整行</b>匹配，与那一页写的「行首匹配」同一读法）。
+    /// 锚点写的是字面文字时它多半不是合法正则（或根本不该当正则），那种情形由调用方先按字面找过；
+    /// 这里解析不了只当「没命中」，不许把一条写得朴素正确的锚判成不存在。
+    /// </summary>
+    private static bool AnchorRegexHits(string line, string anchor)
+    {
+        try
+        {
+            return Regex.IsMatch(line, anchor);
+        }
+        catch (ArgumentException)
+        {
+            return false;
         }
     }
 }
