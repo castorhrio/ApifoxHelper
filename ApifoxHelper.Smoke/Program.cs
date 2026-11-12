@@ -2994,8 +2994,21 @@ internal static class Program
     }
 
     /// <summary>
-    /// 某一行里最高的那个控件（类型、高、上下留白）：行高超限时把「是谁把这一行撑高的」一并报出来，
-    /// 否则只看到一个像素数，还得再跑一轮才知道该改哪一格。
+    /// 某一行里最高的那个控件（类型、高、上下留白、字号、可用宽、单行需宽、它那一格写的字）：
+    /// 行高超限时把「是谁把这一行撑高的」一并报出来，否则只看到一个像素数，还得再跑一轮才知道该改哪一格。
+    /// <para>
+    /// <b>为什么补后面那三个数</b>（第二百三十四轮，简报 P0-2 的「先量准」）：超预算的修法只有三种
+    /// ——收窄文案、调行高预算常数、换字号档，而<b>选哪一种要的就是这三个数</b>：只有行高时报什么都在，
+    /// 报不出「那一格有多少宽」「这句话单行要多少宽」，就分不清是字太多还是格子太窄。
+    /// 第二百一十一轮那次只量到「125% 档 4 行、200% 档 10 行」，逐行的这四个数当时不在报告里。
+    /// </para>
+    /// <para>
+    /// <b>可用宽的取法</b>：控件所在列的列宽（<c>ColumnStyles[col].Width</c>，布局自己用的那一个数；
+    /// 跨列的控件取它跨的那几列之和——两列之间没有额外的间距属性，间隙来自控件留白）减去控件左右留白；
+    /// <b>单行需宽</b>与状态行那一族同一个量法
+    /// （<c>TextRenderer.MeasureText</c> 加 <c>SingleLine</c>，不让它折）。两个数都是<b>读数不是判定</b>，
+    /// 这里不设阈值、不判超不超——超预算的判据仍只有 <see cref="ProfileFormLayout.MaxRowHeight"/> 那一处。
+    /// </para>
     /// </summary>
     private static string TallestInRow(TableLayoutPanel grid, int row)
     {
@@ -3009,7 +3022,26 @@ internal static class Program
         var inner = tallest.Controls.Count > 0
             ? "，内含 " + string.Join("/", tallest.Controls.Cast<Control>().Select(c => c.GetType().Name + " " + c.Height + "px"))
             : "";
-        return $"{tallest.GetType().Name} 高 {tallest.Height}px、上下留白 {tallest.Margin.Top}+{tallest.Margin.Bottom}{inner}";
+        var column = grid.GetColumn(tallest);
+        var span = Math.Max(1, grid.GetColumnSpan(tallest));
+        var styles = grid.ColumnStyles.Count;
+        // 跨列的控件（分区标题跨两列）要把它跨的那几列都算上：只取自己那一列，
+        // 「可用宽 120px」会配着「单行需宽 505px」报出来，而那一行其实放得下——读数说成假话。
+        var available = column < 0 || styles == 0
+            ? tallest.Width
+            : Enumerable.Range(column, Math.Max(1, Math.Min(span, styles - column)))
+                .Sum(index => (int)grid.ColumnStyles[index].Width);
+        available -= tallest.Margin.Horizontal;
+        var needed = tallest.Text.Length > 0
+            ? TextRenderer.MeasureText(tallest.Text, tallest.Font, new Size(10000, 10000), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix).Width
+            : 0;
+        return $"{tallest.GetType().Name} 高 {tallest.Height}px、上下留白 {tallest.Margin.Top}+{tallest.Margin.Bottom}"
+            + $"、字号 {tallest.Font.SizeInPoints:0.##}pt/{tallest.Font.Height}px"
+            + (needed > 0 ? $"、单行需宽 {needed}px" : $"、控件宽 {tallest.Width}px")
+            + $"、可用宽 {available}px"
+            + (span > 1 ? $"、跨 {span} 列" : "")
+            + (tallest.Text.Length > 0 ? $"、文字「{tallest.Text}」" : "")
+            + inner;
     }
 
     /// <summary>

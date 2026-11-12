@@ -37,6 +37,9 @@ public class DemoTierSwitchTests
 
     private static string Readme => Repo.Source(".winecheck", "README.md");
 
+    /// <summary>「重启前缀 + 单档跑」那一节的正文（自测要拿它注入破坏，取法与 <see cref="RunSheet"/> 同一份）。</summary>
+    private static string Sheet => RunSheet();
+
     /// <summary>六格表的三档（<c>LogPixels</c> 值），也是两支脚本的缺省档位。</summary>
     private static readonly string[] Tiers = ["96", "120", "192"];
 
@@ -268,19 +271,179 @@ public class DemoTierSwitchTests
     }
 
     /// <summary>
-    /// 这张表不能只登记在文档里：README 里放表的那一节必须点名本门，
-    /// 否则下一个人读到「实测：两支读数相同」时，没有任何东西告诉他这句话是被钉住的。
+    /// 这张表不能只登记在文档里：README 里放表的那一节必须点名本门，<c>docs/NOTES.md</c> 引用它时也要点名
+    /// （第二百三十四轮按简报 P1-2 补上后一半）。README 是操作面，NOTES 是<b>答辩口径的第一读面</b>——
+    /// 那边写着「实测：两支读数相同」而这边不说是谁钉住的，读到 NOTES 的人无从判断这句话会不会漂。
     /// </summary>
     [Fact]
     public void SixCellTable_NamesTheGateThatPinsIt()
     {
         Assert.Contains("DemoTierSwitchTests", Readme, StringComparison.Ordinal);
+
+        var notes = Repo.Source("docs", "NOTES.md");
+        Assert.True(notes.Contains("六格表", StringComparison.Ordinal),
+            "docs/NOTES.md 里再没有引用「六格表」了：那一句要么被删要么改了名，README 那一节也就没了对外读面。");
+        Assert.Contains("DemoTierSwitchTests", notes, StringComparison.Ordinal);
+    }
+
+    // ── ④ 重启前缀 + 单档跑的步骤单 ───────────────────────────────────
+
+    /// <summary>步骤单那一节的标题（按标题取，不拍平整份 README——README 里别处也出现 <c>wineserver</c>）。</summary>
+    private const string RunSheetHeading = "## 重启前缀 + 单档跑";
+
+    /// <summary>步骤单的步数（第二百三十四轮实测跑通的那一条路，一步不多一步不少）。</summary>
+    private const int RunSheetSteps = 8;
+
+    /// <summary>「命令」那一格里必须认得出的命令起手式——不在名单里的跨度算正文，不算命令。</summary>
+    private static readonly string[] CommandWords =
+        ["export ", "xvfb-run", "wine ", "wineserver", "pwsh", "bash ", "grep ", "dotnet ", "TIERS=", "READING="];
+
+    /// <summary>步骤单正文（从标题到下一个二级标题）。</summary>
+    private static string RunSheet()
+    {
+        var start = Readme.IndexOf(RunSheetHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0,
+            $".winecheck/README.md 里找不到「{RunSheetHeading}」那一节：第二百一十一轮那场手工实验又回到「当场 shell 跑的」，"
+            + "下一轮想复现真 DPI 上下文只能重新猜一遍命令。");
+        var rest = Readme[(start + RunSheetHeading.Length)..];
+        var end = rest.IndexOf("\n## ", StringComparison.Ordinal);
+        return end < 0 ? rest : rest[..end];
+    }
+
+    /// <summary>步骤单表格的一行：序号、做什么、命令、产物、判据。</summary>
+    private sealed record RunStep(int No, string What, string Command, string Output, string Verdict);
+
+    /// <summary>取出步骤单表格的每一行（列数不是 5 的行也报出来，不许静默跳过）。</summary>
+    private static List<RunStep> RunSteps(string sheet, List<string> breaks)
+    {
+        var steps = new List<RunStep>();
+        foreach (var line in sheet.Split('\n'))
+        {
+            if (!line.TrimStart().StartsWith("| ", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (!int.TryParse(cells[0], out var no))
+            {
+                if (cells[0] is "---" or "#") continue;
+                if (cells.Count == 5) breaks.Add($"步骤单有一行第一格不是序号：{cells[1]}");
+                continue;
+            }
+            if (cells.Count != 5)
+            {
+                breaks.Add($"步骤单第 {no} 步不是 5 列（实际 {cells.Count} 列，应为 序号 / 做什么 / 命令 / 产物 / 判据）");
+                continue;
+            }
+            steps.Add(new RunStep(no, cells[1], cells[2], cells[3], cells[4]));
+        }
+
+        return steps;
+    }
+
+    /// <summary>反引号跨度（命令、路径、报告行名都写在这一层里）。</summary>
+    private static List<string> Spans(string cell) =>
+        Regex.Matches(cell, @"`([^`]+)`")
+            .Cast<Match>().Select(m => m.Groups[1].Value).ToList();
+
+    /// <summary>步骤单的破损清单（空 = 每一步都点得名、拿得到产物）。</summary>
+    private static List<string> RunSheetBreaks(string sheet)
+    {
+        var breaks = new List<string>();
+        var steps = RunSteps(sheet, breaks);
+        if (steps.Count != RunSheetSteps)
+        {
+            breaks.Add($"步骤单读到 {steps.Count} 步（应为 {RunSheetSteps} 步）：少一步就复现不出那个上下文，多一步要在这里登记原因。");
+        }
+
+        for (var i = 0; i < steps.Count; i++)
+        {
+            var step = steps[i];
+            if (step.No != i + 1)
+            {
+                breaks.Add($"步骤单第 {i + 1} 行标的是「{step.No}」：序号不连续，照着念的人会跳步或重跑。");
+            }
+
+            var commands = Spans(step.Command);
+            if (commands.Count == 0)
+            {
+                breaks.Add($"步骤单第 {step.No} 步「{step.What}」的命令那一格没有反引号跨度：那是一句描述，不是一条能照抄的命令。");
+            }
+            else if (!commands.Any(c => CommandWords.Any(w => c.Contains(w, StringComparison.Ordinal))))
+            {
+                breaks.Add($"步骤单第 {step.No} 步的命令跨度里没有认得出的起手式（{string.Join('、', CommandWords)}）：{commands[0]}");
+            }
+
+            // 产物要么点名一样东西（一个跨度：文件、变量、注册表值、报告行），要么明写「无」并说清等的是什么。
+            var outputs = Spans(step.Output);
+            if (outputs.Count == 0 && !step.Output.StartsWith("无（", StringComparison.Ordinal))
+            {
+                breaks.Add($"步骤单第 {step.No} 步「{step.What}」的产物那一格没点名的东西：跑完拿不出一个可看的东西，这一步就无法自证跑过。");
+            }
+
+            var verdicts = Spans(step.Verdict);
+            if (step.Verdict.Length < 12 || verdicts.Count == 0)
+            {
+                breaks.Add($"步骤单第 {step.No} 步的判据那一格落不到一个读数（要么太短，要么没引用看得见的东西）：「跑成功了」不算判据。");
+            }
+        }
+
+        // 命令里点到的仓内文件必须在盘上——步骤单漂了最先漂的就是路径。
+        foreach (var path in Regex.Matches(sheet, @"(?<![\w/.-])((?:\.winecheck|docs|ApifoxHelper\.Smoke)/[\w.\-]+)")
+                     .Cast<Match>().Select(m => m.Groups[1].Value).Distinct())
+        {
+            if (!File.Exists(Path.Combine(Repo.Root, path)))
+            {
+                breaks.Add($"步骤单第 …步的命令里点了「{path}」，仓里没有这个文件：照着抄会跑在一条不存在的路上。");
+            }
+        }
+
+        // 四件横跨全文的事：两条旋钮、收尾改回 100%、以及这一节自己的口径。
+        foreach (var needle in new[]
+                 {
+                     "TIERS=", "READING=/tmp", "LogPixels", "wineserver -k", "wineserver -w",
+                     "控件自报 DPI", "不是真机",
+                 })
+        {
+            if (!sheet.Contains(needle, StringComparison.Ordinal))
+            {
+                breaks.Add($"步骤单里再没有「{needle}」：这一条是复现那一个上下文的必要条件，写了命令少了它仍然跑不出同一件事。");
+            }
+        }
+
+        // 收尾那一步必须把档改回来：同一份前缀是共享的开发环境，别把下一个人留在 200% 档。
+        var last = steps.Count == 0 ? string.Empty : steps[^1].Verdict + steps[^1].Command;
+        if (!last.Contains("96", StringComparison.Ordinal))
+        {
+            breaks.Add("步骤单最后一步没把缩放改回 96：下一跑（或下一个人）会留在改过的那一档上量别的事。");
+        }
+
+        return breaks;
+    }
+
+    /// <summary>
+    /// 「重启前缀 + 单档跑」这条路必须在<b>文档</b>里逐行写明，而写明的标准是「每一步都点得出命令与产物」。
+    /// <para>
+    /// <b>为什么这一条值得立门</b>：行高预算那一格只有在「控件自报 DPI 跟着档位走」的上下文里才量得出东西，
+    /// 而那一个上下文<b>不在任何一支脚本里</b>（上一条门不许它进脚本）。第二百一十一轮是当场手工跑的，
+    /// 跑法只活在 <c>.winecheck/README.md</c> 的散文里——散文里少写一句「<c>wineserver -k</c> 退出码 1 也算过」
+    /// 或「<c>READING</c> 要指到 /tmp」，下一轮照着跑出来的就是一跑读不出数的东西，
+    /// 而那次跑废掉的时间没人记账。所以判据按「每一步都能照抄、跑完都有产物」写。
+    /// </para>
+    /// <para>
+    /// <b>它不判</b>：不判照着跑出来的读数是多少（那是报告与 <c>reading.txt</c> 的事），
+    /// 也不判这一节说的上下文是不是真机（这一节自己写着不是）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RestartPrefixRunSheet_EveryStepNamesACommandAndAnOutput()
+    {
+        var breaks = RunSheetBreaks(RunSheet());
+        Assert.True(breaks.Count == 0, "重启前缀 + 单档跑的步骤单不完整：\n  " + string.Join("\n  ", breaks));
     }
 
     // ── 判据自测：注入破坏必须红 ──────────────────────────────────────
 
     /// <summary>
-    /// 这一族的老毛病：判据写错时门看起来是绿的。三条判据各注入一处破坏，都必须报出来。
+    /// 这一族的老毛病：判据写错时门看起来是绿的。四组判据各注入破坏（换档段、取段口径、六格表、步骤单），
+    /// 都必须报出来；最后再判一次<b>真实文件是干净的</b>——否则前面那些「非空」只是因为它一直在报。
     /// </summary>
     [Fact]
     public void Detectors_ReportTheBreaksTheyMustCatch()
@@ -319,9 +482,32 @@ public class DemoTierSwitchTests
         Assert.NotEqual(Readme, readmeShort);
         Assert.NotEmpty(SixCellBreaks(readmeShort));
 
+        // ④ 步骤单：少一步（第 8 步那一条整行删掉——收尾改回 96 就没人做了）。
+        var sheetShort = Regex.Replace(Sheet, @"(?m)^\|\s*8\s*\|.*\n", string.Empty);
+        Assert.NotEqual(Sheet, sheetShort);
+        Assert.Contains(RunSheetBreaks(sheetShort), b => b.Contains("应为 8 步", StringComparison.Ordinal));
+
+        // ④ 步骤单：产物格掏空——那一步跑完拿不出任何东西，等于没做，却照样是一行像样的步骤。
+        var sheetNoOutput = Sheet.Replace("| 无（等的是一个退出状态） |", "|  |", StringComparison.Ordinal);
+        Assert.NotEqual(Sheet, sheetNoOutput);
+        Assert.Contains(RunSheetBreaks(sheetNoOutput), b => b.Contains("产物", StringComparison.Ordinal));
+
+        // ④ 步骤单：命令格退成一句描述（反引号跨度没了——「重启前缀」四个字不是能照抄的命令）。
+        var sheetNoCommand = Sheet.Replace(
+            "`wineserver -k`（本机它不在 PATH，取 `/usr/lib/x86_64-linux-gnu/wine/wineserver -k`，第二百三十四轮实测）",
+            "重启前缀", StringComparison.Ordinal);
+        Assert.NotEqual(Sheet, sheetNoCommand);
+        Assert.Contains(RunSheetBreaks(sheetNoCommand), b => b.Contains("命令那一格", StringComparison.Ordinal));
+
+        // ④ 步骤单：路径漂了（把脚本改成一个仓里不存在的名字，照着抄会跑在一条不存在的路上）。
+        var sheetBadPath = Sheet.Replace("bash .winecheck/demo.sh", "bash .winecheck/demo-v2.sh", StringComparison.Ordinal);
+        Assert.NotEqual(Sheet, sheetBadPath);
+        Assert.Contains(RunSheetBreaks(sheetBadPath), b => b.Contains("demo-v2.sh", StringComparison.Ordinal));
+
         // 判据本身在真实文件上必须是绿的（否则上面那些「非空」只是因为它一直在报）。
         Assert.Empty(TierSwitchBreaks(Sh, Ps1));
         Assert.Empty(SectionStatsBreaks(Sh, Ps1));
         Assert.Empty(SixCellBreaks(Readme));
+        Assert.Empty(RunSheetBreaks(Sheet));
     }
 }

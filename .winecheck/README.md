@@ -266,6 +266,32 @@ pwsh -File .winecheck/demo.ps1 -Publish 1         # 让脚本自己重发冒烟�
 参数合法性与任何运行时行为；**更不判 Windows 真机**——上面那一次是在 Linux 容器里用 wine 跑的，
 G-D5 真机仍是 0 台、到期日 2026-11-20。
 
+## 重启前缀 + 单档跑（真 DPI 上下文的复现步骤单）
+
+第二百一十一轮那张六格表是**当场手工跑出来的**，那三步没进任何一支脚本——也不该进：
+`DemoTierSwitchTests.RestartPrefixStep_StaysAManualStepOutsideBothScripts` 反过来钉住两支演示脚本都不得出现
+`wineserver -k`。这一节把那条路逐行写清，为的是让「控件自报 DPI 跟着档位走」那一个上下文**能被下一轮照着复现**：
+行高预算那一格只有在它里面才量得出东西——「慢一档」那一个上下文里三档全绿（`.winecheck/reading.txt` 记的就是那一跑），
+照着它改文案或改预算，等于拿一个量不到数的上下文做决定。
+
+**每一步都点名命令与产物**，由 `DemoTierSwitchTests.RestartPrefixRunSheet_EveryStepNamesACommandAndAnOutput` 判：
+少一步、某一步的「命令」或「产物」那一格空着、命令里点了仓里没有的文件，都红。
+
+| # | 做什么 | 命令 | 产物 | 这一步过了的判据 |
+| --- | --- | --- | --- | --- |
+| 1 | 指到本项目专用的 wine 前缀（不是默认 `~/.wine`） | `export WINEPREFIX=$HOME/.wine-ah` | 环境变量 `WINEPREFIX` | 后面每一跑的第一行打出 `wine 前缀：` 加那一个路径；落在默认前缀时它额外打一句「通常没有可用的桌面环境」 |
+| 2 | 在**活显示**里把缩放档写进前缀的注册表 | `xvfb-run -a bash -c 'export WINEPREFIX DISPLAY; wine reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d 120 -f'` | 前缀注册表里 `LogPixels` 那一个值 | 退出码 `0`，且打出 `reg: The operation completed successfully`。写档与起界面必须落在同一个活显示（第一百八十四轮那个坑，见上一节第 2 条） |
+| 3 | **重启前缀**：杀掉常驻的 wineserver | `wineserver -k`（本机它不在 PATH，取 `/usr/lib/x86_64-linux-gnu/wine/wineserver -k`，第二百三十四轮实测） | 无（等的是前缀会话不再存活，产物落在下一步起的那一跑里） | 退出码 `0` = 杀掉了一个活会话；**`1` = 本来就没有活会话**，前缀已经是新的，同样算过。**这一条不许接在 `&&` 后面**——那个 `1` 会把整条链截断（第二百三十四轮就是这样第一次跑空了一档） |
+| 4 | 等它退干净再起下一跑 | `wineserver -w` | 无（等的是一个退出状态） | 命令返回 `0`。不等就起下一跑，会撞上还在收尾的会话，那一档整片 `Error creating window handle` |
+| 5 | **单档**跑演示脚本，读数记录指到仓外 | `TIERS=120 READING=/tmp/reading-120.txt OUT=/tmp/ah-demo-120 bash .winecheck/demo.sh`（源码改过加 `PUBLISH=1`）；PowerShell 那一支同名：`pwsh -File .winecheck/demo.ps1 -Tiers 120 -Reading /tmp/reading-120.txt -Out /tmp/ah-demo-120` | `/tmp/ah-demo-120/report-120.txt`、`/tmp/ah-demo-120/narration-120.txt`、`/tmp/reading-120.txt` | 脚本打出「报告：N 通过 / M 失败」且那份报告在盘上。**`READING` 必须指到 `/tmp`**：仓里的 `.winecheck/reading.txt` 记的是缺省那一跑（慢一档、三档全绿），这一支跑出来带失败行，写进去等于把入库读数换成另一件事，`ReadingConsistencyTests` 当场红 |
+| 6 | 核这一跑到底落在哪一个上下文 | `grep "DPI 上下文（新建配置对话框）" /tmp/ah-demo-120/report-120.txt` | `DPI 上下文（新建配置对话框）` 那一行原文（里面两个数） | **两个数相等且等于档位**（`控件自报 DPI 120、进程 DPI 120`）→ 真 DPI 上下文成立，这一跑的超预算行数才算数；自报停在上一档（`96 / 120`）→ 那是慢一档，回第 2 步重来 |
+| 7 | 逐行取出超预算那四个数 | `grep -oE "[^，]+=[0-9]+px（Label[^）]*）" /tmp/ah-demo-120/report-120.txt > /tmp/overbudget-120.txt`，提示行那一族再补一条 `grep -oE "「[^」]+」第 [0-9]+ 行 [0-9]+px（[^）]*）" /tmp/ah-demo-120/report-120.txt >> /tmp/overbudget-120.txt` | `/tmp/overbudget-120.txt`：每一个超预算行一条（行名 = 行高，括号里是控件类型、字号 pt/px、单行需宽、可用宽、那一格写的字） | 条数等于 `/tmp/reading-120.txt` 里那一档 `overbudget=` 的 `form=` 数；提示行那一族另取 `grep -oE "「[^」]+」第 [0-9]+ 行 [0-9]+px（[^）]*）"`。一行都没超时这一格是空的——先回第 6 步确认上下文，别把「没量到」读成「都过」 |
+| 8 | 收尾：把档改回 100%，并复跑入库那一份读数 | `bash .winecheck/demo.sh`（三档缺省、不设 `READING`） | 仓里的 `.winecheck/reading.txt` | 演示脚本自己最后一步就把 `LogPixels` 改回 96；这一跑写回的三档读数与 README / `docs/NOTES.md` 念的那句逐字相同，`ReadingConsistencyTests` 与 `PreflightScriptTests` 都绿 |
+
+**这一节量的是模拟器，不是真机**：八步全部在 Linux 容器内 wine 10.0 + Xvfb 上跑，G-D5 真机仍 0 台、到期日 2026-11-20。
+真机到手时**仍然要照第 6 步那两个数判这一跑落在哪一个上下文**——「真机像哪一跑」不是先天结论，是那天比出来的
+（两个数与两组读数都不对应时往哪一格记，见上一节第 4 条末尾）。
+
 ## 第二百三十二轮复跑记录（到期日前最后一次整支复跑）
 
 **第二百三十二轮 · 2026-11-12：到期日前最后一次整支复跑，第一次跑就撞到一个真缺陷（已修，带门）**。

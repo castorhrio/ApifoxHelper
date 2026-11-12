@@ -18,12 +18,14 @@ namespace ApifoxHelper.Tests;
 /// 判定口径与界面文案<b>同一份</b>（<see cref="CopyRules"/>），不在这里另写一套。
 /// </para>
 /// <para>
-/// <b>为什么是「登记 + 棘轮」而不是「一次改干净」</b>：这两份文件在 HEAD 上本来就有一批违例
-/// （历史记录里的「路径前缀1」「订单2」这类引用、以及「第 」这种漏字写法）。本轮的范围是<b>加门</b>，
-/// 不是改文案——一次改几十处历史记录，等于把当时的证据改坏。所以门按<b>棘轮</b>判：
-/// 下面那张登记表就是 HEAD 上的全部违例（文件 + 片段 + 条数），
-/// <b>新增一处 → 红</b>（新写的字不合规），<b>修好一处却没从登记里删掉 → 也红</b>
-/// （登记与实物漂移，正是本仓反复收掉的那一族）。修的时候顺手把那一行删掉即可。
+/// <b>曾经是「登记 + 棘轮」，第二百三十四轮起是硬判</b>：立门那天（第二百三十三轮）这两份文件在 HEAD 上
+/// 本来就有一批违例，全部是<b>历史记录里对源码字面量的逐字引用</b>（「路径前缀1」这类序号紧贴中文的旧写法、
+/// 「第X轮」这种格式占位、引用常量时那个在「」里看不见的尾随空格）。当时按棘轮判，是因为一次改几十处历史记录
+/// 等于把当时的证据改坏。那 11 条已在第二百三十四轮<b>逐条修完</b>：能改字的改字（「订单 2」「报告 1/2/10/20」），
+/// 改字就会动到证据的改成<b>行内代码逐字引</b>（源码字面量、格式占位、报告行标签）——一条没删、一条没编。
+/// 登记表随之从本文件里删掉，本门改成<b>硬判零违例</b>：<b>此后新增一处即红，且没有「先登记着」这条路</b>，
+/// 新写的字没有历史可挡；也不许再长回一张表（那一条由
+/// <see cref="ScannedDocs_AreTheTwoExternalOnes_AndNoLegacyTableCameBack"/> 反过来判本文件自己的源码）。
 /// </para>
 /// <para>
 /// <b>扫描范围与不判的东西</b>：只扫这两份文件的<b>正文</b>——围栏代码块（``` 之间）与行内代码
@@ -39,34 +41,10 @@ public class DocsSpacingTests
     private static readonly string[] Docs = ["README.md", "docs/NOTES.md"];
 
     /// <summary>
-    /// HEAD 上的全部违例登记（第二百三十三轮实测，逐条来自本门自己的报错输出，不是手抄的估计）。
-    /// <para>
-    /// 键是「文件 + 片段」，值是条数：片段取<b>紧贴的那两个字</b>（中英文空隙）或<b>「字 + 空隙 + 标点」三个字</b>
-    /// （全角标点空隙），不记行号——这两份文件每轮都在长，行号会漂，片段不会。
-    /// </para>
-    /// <para>
-    /// 修掉一处就把那一行删掉（或把条数减一）；<b>不要</b>为了让门变绿而把新违例加进来——
-    /// 这张表是「还没修的历史记录」，不是免检通道。
-    /// </para>
+    /// 当年那张登记表的形状。拆成三段拼出来：<b>判据不许与它判的东西同名</b>——判据里若原样写着那一串，
+    /// 「把表加回来即红」这条门自己就是第一次触发它的那一处（第二百三十四轮实测：写成一个字面量时它当场判红自己）。
     /// </summary>
-    private static readonly (string File, string Snippet, int Count)[] Registered =
-    [
-        // 中英文之间缺空隙（中文紧贴半角字母或数字）。全部在 docs/NOTES.md 的历史记录里，
-        // README.md 这一侧是零——它本来就干净，所以这一份是硬判。
-        ("docs/NOTES.md", "缀1", 5),   // 「路径前缀1」这类引用
-        ("docs/NOTES.md", "缀2", 5),   // 「路径前缀2」同上
-        ("docs/NOTES.md", "第X", 3),   // 「第X轮」占位写法
-        ("docs/NOTES.md", "X轮", 3),   // 同上，同一个词的另一半
-        ("docs/NOTES.md", "单2", 2),   // 「订单2」
-        ("docs/NOTES.md", "单1", 2),   // 「订单10」
-        ("docs/NOTES.md", "第1", 1),   // 「第16行」
-        ("docs/NOTES.md", "6行", 1),   // 同上，同一个词的另一半
-        ("docs/NOTES.md", "告1", 1),   // 「报告1/2/10/20」
-
-        // 中文与全角括号/引号之间多了空隙（句读后的空格不算，见 CopyRules.FullWidthPunct 的注释）。
-        ("docs/NOTES.md", "第 」", 1),
-        ("docs/NOTES.md", "共 」", 1),
-    ];
+    private static string LegacyTableShape => "(" + "string File, string Snippet, int Count)" + "[]";
 
     /// <summary>一份文档的正文行（去掉围栏代码块与行内代码）。</summary>
     private static IEnumerable<string> ProseLines(string text)
@@ -123,67 +101,44 @@ public class DocsSpacingTests
         return found;
     }
 
-    /// <summary>登记表与实测的差集（两个方向都算差）。</summary>
-    private static List<string> Drift(
-        IReadOnlyDictionary<(string File, string Snippet), int> actual,
-        IReadOnlyList<(string File, string Snippet, int Count)> registered)
-    {
-        var drift = new List<string>();
-        var expected = registered.ToDictionary(r => (r.File, r.Snippet), r => r.Count);
-
-        foreach (var ((file, snippet), count) in actual.OrderBy(k => k.Key.File, StringComparer.Ordinal)
-                     .ThenBy(k => k.Key.Snippet, StringComparer.Ordinal))
-        {
-            if (!expected.TryGetValue((file, snippet), out var want))
-            {
-                drift.Add($"{file}：新增违例「{snippet}」×{count}（登记表里没有这一条）。");
-            }
-            else if (count > want)
-            {
-                drift.Add($"{file}：「{snippet}」从 {want} 处涨到 {count} 处。");
-            }
-            else if (count < want)
-            {
-                drift.Add($"{file}：「{snippet}」从 {want} 处减到 {count} 处——修好了就把登记表那一行删掉（或改小条数）。");
-            }
-        }
-
-        foreach (var (file, snippet, count) in registered)
-        {
-            if (!actual.ContainsKey((file, snippet)))
-            {
-                drift.Add($"{file}：登记表里的「{snippet}」×{count} 已经不存在了——修好了就把这一行删掉。");
-            }
-        }
-
-        return drift;
-    }
+    /// <summary>实测违例念成人话（顺序稳定：文件、片段各按字节序，同一份输入两次跑出同一串）。</summary>
+    private static List<string> Violations(IReadOnlyDictionary<(string File, string Snippet), int> actual) =>
+        actual.OrderBy(k => k.Key.File, StringComparer.Ordinal).ThenBy(k => k.Key.Snippet, StringComparer.Ordinal)
+            .Select(k => $"{k.Key.File}：「{k.Key.Snippet}」{k.Value} 处")
+            .ToList();
 
     [Fact]
     public void ExternalDocs_KeepTheSameSpacingRulesAsTheInterface()
     {
-        var drift = Drift(Actual(), Registered);
-        Assert.True(drift.Count == 0,
-            "对外文本（README.md / docs/NOTES.md）的中文排版与登记表对不上：\n  " + string.Join("\n  ", drift)
+        var found = Violations(Actual());
+        Assert.True(found.Count == 0,
+            $"对外文本（README.md / docs/NOTES.md）的中文排版有 {found.Count} 处违例：\n  " + string.Join("\n  ", found)
             + "\n口径：中英文之间留一个半角空隙、中文与全角标点之间不留空隙（DESIGN.md §3、§6「中文排版」第 ⑤ 条）。"
-            + "\n新写的字不合规就改字；修好了历史违例就把 DocsSpacingTests.Registered 里那一行删掉。");
+            + "\n第二百三十四轮已把历史那 11 条清零、登记表删掉——这一条从此是硬判，没有「先登记着」那条路。"
+            + "\n引用源码字面量、报告行标签或格式占位时写成行内代码（反引号）逐字引：那不算正文，字也一个没改。");
     }
 
     /// <summary>
-    /// 登记表不许靠「留着让它绿」活着：每一条都必须在文件里真的还在（<see cref="Drift"/> 的反向已判），
-    /// 这里再钉住「登记表不是空的」——空表意味着这两份文件已经干净，那时这条门该改成硬判（零违例）。
+    /// 名单是封闭的：新增一份对外文本要在这里登记，否则它不会被判。
+    /// <para>
+    /// <b>反向再钉一件（第二百三十四轮）</b>：这条门的绿从此只能靠「文件真的干净」，不能靠「违例被登记住了」。
+    /// 谁把那张「文件 + 片段 + 条数」的表加回来——哪怕空着、哪怕一条都不判——这一条当场红。
+    /// 立门那天用它兜的是<b>已经发生的历史</b>；历史清完之后还留着它，它就变成下一个人的免检通道。
+    /// </para>
     /// </summary>
     [Fact]
-    public void RegisteredBaseline_IsNotEmptyAndStillMatchesTheFiles()
+    public void ScannedDocs_AreTheTwoExternalOnes_AndNoLegacyTableCameBack()
     {
-        Assert.NotEmpty(Registered);
-        Assert.Equal(Registered.Length, Registered.Distinct().Count());
-        foreach (var (file, snippet, count) in Registered)
+        Assert.Equal(["README.md", "docs/NOTES.md"], Docs);
+        foreach (var file in Docs)
         {
-            Assert.True(Docs.Contains(file, StringComparer.Ordinal), $"登记表里的文件「{file}」不在扫描名单里。");
-            Assert.True(count > 0, $"登记表里「{file} / {snippet}」的条数是 {count}——0 条不该留在表里。");
-            Assert.Contains(snippet, Repo.Source(file.Split('/')), StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(Repo.Root, file)), $"扫描名单里的「{file}」不在仓里。");
         }
+
+        var itself = Repo.Source("ApifoxHelper.Tests", "DocsSpacingTests.cs");
+        Assert.True(!itself.Contains(LegacyTableShape, StringComparison.Ordinal),
+            "本文件里又出现了「文件 + 片段 + 条数」那张登记表：违例登记只在立门那天兜历史记录用，"
+            + "第二百三十四轮已清零并改成硬判。要变绿就去改字，不要把表加回来。");
     }
 
     /// <summary>
@@ -216,33 +171,37 @@ public class DocsSpacingTests
         Assert.DoesNotContain(prose, l => l.Contains("任务ID", StringComparison.Ordinal));
         Assert.DoesNotContain(prose, l => l.Contains("代码 前缀1", StringComparison.Ordinal));
 
-        // 整条链：注入一处新违例，差集必须点名它。
-        var actual = Actual();
-        var injected = new Dictionary<(string File, string Snippet), int>(actual)
+        // 整条链：注入一处违例，违例清单必须点名它（真实文件此刻是干净的，注入的是「下一轮可能写出来的那句」）。
+        var injected = new Dictionary<(string File, string Snippet), int>
         {
             [("README.md", "缀9")] = 1,
+            [("docs/NOTES.md", "共 」")] = 2,
         };
-        var drift = Drift(injected, Registered);
-        Assert.Contains(drift, d => d.Contains("缀9", StringComparison.Ordinal));
+        var named = Violations(injected);
+        Assert.Equal(2, named.Count);
+        Assert.Contains(named, v => v.Contains("缀9", StringComparison.Ordinal) && v.Contains("README.md", StringComparison.Ordinal));
+        Assert.Contains(named, v => v.Contains("共 」", StringComparison.Ordinal) && v.EndsWith("2 处", StringComparison.Ordinal));
 
-        // 反向：修好一处却没删登记，同样要红。
-        var fixedOne = new Dictionary<(string File, string Snippet), int>(actual);
-        fixedOne.Remove(("docs/NOTES.md", "缀1"));
-        Assert.Contains(Drift(fixedOne, Registered), d => d.Contains("缀1", StringComparison.Ordinal));
+        // 空表念成「没有违例」，不是「判不动」。
+        Assert.Empty(Violations(new Dictionary<(string File, string Snippet), int>()));
 
-        // 真实文件上必须是绿的（否则上面那些「非空」只是因为它一直在报）。
-        Assert.Empty(Drift(actual, Registered));
+        // 真实文件上必须是零违例（否则上面那些「非空」只是因为它一直在报）。
+        Assert.Empty(Violations(Actual()));
     }
 
     /// <summary>
-    /// 这张登记表不能只活在测试里：<c>docs/NOTES.md</c> 的本轮记录必须点名这条门与它的条数，
-    /// 否则下一个人读到「对外文本已判」时，没有任何东西告诉他判到哪一层、还剩多少没修。
+    /// 这条门不能只活在测试里：<c>docs/NOTES.md</c> 必须点名它，并写出<b>跑出来的</b>违例数——
+    /// 那个数由 <see cref="Actual"/> 现算，不是人抄的（抄的会漂，漂了还绿）。清零之后 NOTES 里那句
+    /// 「对外文本排版登记 0 条」因此不是自述：下一轮谁写出一个新违例，这一条与主判据会一起红。
     /// </summary>
     [Fact]
-    public void Baseline_IsRegisteredInTheNotes()
+    public void Gate_IsRegisteredInTheNotes()
     {
         var notes = Repo.Source("docs", "NOTES.md");
         Assert.Contains("DocsSpacingTests", notes, StringComparison.Ordinal);
-        Assert.Contains($"对外文本排版登记 {Registered.Length} 条", notes, StringComparison.Ordinal);
+        var count = Violations(Actual()).Count;
+        Assert.True(notes.Contains($"对外文本排版登记 {count} 条", StringComparison.Ordinal),
+            $"docs/NOTES.md 里那句登记必须写「对外文本排版登记 {count} 条」（这一跑实测就是 {count} 处）："
+            + "读答辩材料的人要从那一行知道判到哪一层，写着一个跑不出来的数就等于没写。");
     }
 }
