@@ -47,6 +47,18 @@ internal static class Repo
 
     public static string Source(params string[] relative) => File.ReadAllText(Path.Combine([Root, .. relative]));
 
+    /// <summary>
+    /// 仓库相对路径那个文件的 SHA-256（小写十六进制）。
+    /// <para>
+    /// 全仓<b>只此一处</b>取哈希：两族冻结基线（<c>TransitionShellFreezeTests</c> 的 <c>Web/</c> 三个文件、
+    /// <c>WineCheckScriptsTests</c> 的 <c>.winecheck/</c> 那几支脚本）都读它。各写一把的后果不是重复四行字，
+    /// 是「与基线一致」这句话有两个意思——一把改了大小写、另一把不会跟着红。口径取产品侧已有的
+    /// <c>Canonical.Sha256Hex</c>（与指纹、脱敏、回读核对同一个）。
+    /// </para>
+    /// </summary>
+    public static string Sha256Of(string relative)
+        => Canonical.Sha256Hex(File.ReadAllBytes(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar))));
+
     /// <summary>冒烟器源码（读多次不重开文件：段名单、桶数、读数对账都要用它）。</summary>
     public static string SmokeProgram { get; } = Source("ApifoxHelper.Smoke", "Program.cs");
 

@@ -896,15 +896,24 @@ public class AcceptanceChecklistTests
     /// 是到期日当天现场发明一句「基本达成」——所以把那句话与那三份路径提前写进行内，并由本门判它们对得上实物。
     /// </para>
     /// <para>
-    /// <b>判四件事</b>：① 段在位，且段里那个日期与本行既记的到期日是<b>同一个</b>（两个日期就是两套说法，
+    /// <b>判什么</b>（①~④ 第二百一十一轮立的，③b / ⑤ / ⑥ / ⑥b 是第二百三十五、二百三十九、二百四十一轮逐轮补的——
+    /// 补进方法体时没回写这份注释，本轮一起补齐）：
+    /// ① 段在位，且段里那个日期与本行既记的到期日是<b>同一个</b>（两个日期就是两套说法，
     /// 与 <see cref="Gd5DueDate_IsNotStaleOrFuture"/> ② 同一口径）；② 触发条件写在行内（那条可跑的
     /// <c>collect-real-machine.sh</c> 与它的 0 / 9 读数），不是「到时候看情况」；③ 改写后的结论措辞逐字在行内，
     /// 且这一格<b>当天</b>还要留着「已过期」与「降级」两个词——兄弟门 <see cref="Gd5DueDate_IsNotStaleOrFuture"/> ③
     /// 读的就是这两个字，预登记若绕开它，到期日第二天红的会是那一格而不是这段话（那天眼红=现场返工）；
+    /// ③b 「当前结论」的开头那一句<b>由今天与到期日的关系决定</b>认哪一句（未到只认改判前那句、已过只认改写后那句、
+    /// 当天两句都在流程中）——两句都从细则段现读，本文件不抄第二份措辞；
     /// ④ 三份讲稿路径<b>逐个等于</b> <c>demo.sh</c> 自己算出的那三份：目录取自脚本 <c>OUT</c> 的缺省值、
     /// 档位取自 <c>TIERS</c> 的缺省值、文件名取自脚本里那一句 <c>NARRATION=</c>——脚本改了自己产物叫什么，
     /// 本门红，因为行内那三份已经指着不相干的路径了（同一个「不许抄第二份」的纪律见
-    /// <c>WineCheckScriptsTests.CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList</c>）。
+    /// <c>WineCheckScriptsTests.CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList</c>）；
+    /// ⑤ 顶部「到期日核对」那一行在位、结论词与脚本那一支打出的词同一个、核对日期在 90 天内、且不抄当天的天数；
+    /// ⑥ 「真机供给行动书」那一小节三档齐全、每档五列、每档挂的那条判据真的在磁盘上、三档不许指同一发命令、
+    /// 且这一段不许长出第二个到期日；⑥b 顶部那一行自第二百四十一轮起是<b>一次性正式请求</b>：
+    /// 「请求已发出 / 等待答复 / 本仓动作已穷尽」三句缺一即红、发出日期不得写在未来且在 90 天内、
+    /// 而三档那一页的正文行全仓只许出现一份（抄进顶部就是两份，改一档的人不会想起改另一档）。
     /// </para>
     /// <para>
     /// <b>它不判什么</b>：不判当天选「按降级路径执行」还是「延后至某日」（那是下一节 ① 由人决定），
@@ -996,7 +1005,8 @@ public class AcceptanceChecklistTests
         // ⑤ 到期日核对这一行（第二百三十五轮，简报 P0-2 的降级支）：真机不可得时，「今天核过、走的是哪一支」
         //    这件事本身要有落点。此前那条脚本能跑、也打得出一句话，但**跑过的结果没人记账**——
         //    下一轮（或到期日那天）只能再跑一遍，或者干脆凭印象写结论。
-        var notesLines = Repo.Source("docs", "NOTES.md").Split('\n');
+        var notesText = Repo.Source("docs", "NOTES.md");
+        var notesLines = notesText.Split('\n');
         var checkLine = notesLines.FirstOrDefault(l => l.TrimStart().StartsWith("> **到期日核对", StringComparison.Ordinal));
         Assert.True(checkLine is not null,
             "docs/NOTES.md 顶部的登记里没有「到期日核对」那一行：到期日这件事只剩一条脚本，跑过之后结论落在哪里没人说。"
@@ -1095,6 +1105,33 @@ public class AcceptanceChecklistTests
             Assert.True(m.Groups[1].Value == rowDate,
                 $"行动书里写了另一个到期日 {m.Groups[1].Value}，而 G-D5 那一格记的是 {rowDate}：两处各写一个日期，那三天按哪一个算。");
         }
+
+        // ⑥b 顶部那一行自第二百四十一轮起是**一次性正式请求**（简报 P0-2）：它逐轮重述「真机 0 台」重述到第 60 轮，
+        //     而重述本身已经没有边际收益——这一段真正要留给调度侧的是三句话：哪天发出的、还等不等答复、
+        //     本仓还有没有动作。三句缺一即红；发出日期与 DoD 登记同一族时效（已发生、90 天内）。
+        //     判据不收措辞收形状：三档那一页的正文行若被抄进顶部（或抄到第三处），全仓就不止一份了。
+        var requestLine = notesLines.FirstOrDefault(l => l.TrimStart().StartsWith("> **真机供给请求", StringComparison.Ordinal));
+        Assert.True(requestLine is not null,
+            "docs/NOTES.md 顶部登记层缺「真机供给请求」那一行：请求哪天发出的、现在等什么，从本轮起没有任何落点。");
+        foreach (var need in new[] { "请求已发出", "等待答复", "本仓动作已穷尽" })
+        {
+            Assert.True(requestLine.Contains(need, StringComparison.Ordinal),
+                $"那一行少了「{need}」：这三句是「正式请求」与「又重述了一遍缺口」的唯一区别——"
+                + "少了任何一句，读到它的人仍然分不清今天该给答复还是可以继续等。");
+        }
+
+        var issuedText = Regex.Match(requestLine, @"20\d{2}-\d{2}-\d{2}").Value;
+        Assert.True(DateOnly.TryParseExact(issuedText, "yyyy-MM-dd", out var issued),
+            $"那一行读不到发出日期（取到「{issuedText}」）：没有发出日期，「等待答复」等的就是不知道哪一天起算的那一句。");
+        var issuedAge = today.DayNumber - issued.DayNumber;
+        Assert.True(issuedAge is >= 0 and <= 90,
+            $"请求发出日期 {issuedText} 相对今天 {today:yyyy-MM-dd} 是 {issuedAge} 天（须在 0 到 90 天内）："
+            + "写在未来等于还没发出就把答复期起算，太久远则这一段早该被重核而不是继续挂着。");
+
+        var tierCopies = Regex.Matches(notesText, @"(?m)^\|\s*①\s*前 7 天\s*\|").Count;
+        Assert.True(tierCopies == 1,
+            $"全仓把「① 前 7 天」那一行写出过 {tierCopies} 份（应恰好 1 份，就是上面那一小节）："
+            + "三档一旦有两份，改一档的人不会想起来改另一档，而当天按哪一份走没有答案。");
     }
 
     /// <summary>

@@ -153,9 +153,10 @@ bash .winecheck/collect-real-machine.sh # 真机证据归档核对：九个目�
 
 ## Windows 侧那支（`demo.ps1`）
 
-`demo.sh` 是 bash，从未在 Windows（含 Git Bash / WSL / MSYS）跑过。`demo.ps1` 是同一份讲稿的那一支：
-逐段同名、同读数、同一份逐屏表取法、同一份读数记录格式——由 `ApifoxHelper.Tests/WineCheckScriptsTests`
-的两条门钉住（`DemoPs1_NamesTheSameSectionsAsDemoSh`、`BothDemoScripts_WriteTheSameReadingRecord`）。
+**这一节回答的是「Windows 侧到底跑哪一支」，口径只有一句**：Windows 上以 **`bash .winecheck/demo.sh`（用 Git Bash 或 WSL 起 bash）** 为准——两边跑的是同一份脚本、同一份逐屏表、同一份读数记录格式。`demo.ps1` 是它的**历史对照物**，保留在仓里：逐段同名、同读数、同一份逐屏表取法、同一份读数记录格式——由 `ApifoxHelper.Tests/WineCheckScriptsTests`
+的两条门钉住（`DemoPs1_NamesTheSameSectionsAsDemoSh`、`BothDemoScripts_WriteTheSameReadingRecord`）；但它**不作为答辩当天的执行路径**。当天那四步同样只有一条 bash 命令：`bash .winecheck/defense-day.sh`（见「到期日当天一条命令」那一节，本仓不提供 `defense-day.ps1`）。
+
+**要如实说的一面**：`demo.sh` 是 bash，至今从未在 Windows（含 Git Bash / WSL / MSYS）真跑过。「为准」讲的是**口径唯一**——当天不会有第二支要维护的顺序，不是**已在 Windows 验证过**。那一条敞口登记在 `docs/NOTES.md`「降级答辩脚本」一节末尾，随 G-D5 真机那天一起量。从第二百四十一轮起这一周，本节点名的这几支脚本的**本体**都在冻结基线里（`docs/NOTES.md`「答辩前脚本冻结登记（可机械核对）」那一节）：这一节说的与当天要敲的，不会分家。
 
 ```powershell
 pwsh -File .winecheck/demo.ps1                    # 三档

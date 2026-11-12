@@ -1590,6 +1590,276 @@ public class WineCheckScriptsTests
         Assert.Equal(["demo.ps1"], ps1);
     }
 
+    // ── 第二百四十一轮（简报 P0-1）：答辩前一周，脚本本体冻结 ────────────
+
+    /// <summary>
+    /// 冻结登记那一节的标题。
+    /// <para>
+    /// <b>为什么沿用 <see cref="TransitionShellFreezeTests"/> 那一族的形状</b>：本仓已经有过一次「承诺写在散文里、
+    /// 却没有任何东西判它」的修复（第一百九十九轮给 <c>Web/</c> 那三个文件建基线哈希 + 变更登记 + 白名单）。
+    /// 同一件事第二次落地再发明一套，改的人就得先弄清<b>这一处按哪一套放行</b>——那正是本仓一直在收的债
+    /// （同一个判据两份取法、同一份日期两处各写一遍）。所以本节要的还是那四样：基线行、变更登记行、
+    /// 两侧对账、改了基线必须有同轮次的理由。
+    /// </para>
+    /// <para>
+    /// <b>与那一族的唯一差别</b>：窗口与范围写在<b>顶部登记层</b>那一行（<see cref="FreezeWindowLinePrefix"/>），
+    /// 本节只放基线。理由是到期日全仓只有一份出处（验收表 G-D5 那一格），窗口终点若也写进本节就变成两处，
+    /// 改期那天必然只改到其中一处——而没改到的那一处读起来仍然是规则。
+    /// </para>
+    /// </summary>
+    private const string FreezeHeading = "## 答辩前脚本冻结登记（可机械核对）";
+
+    /// <summary>顶部登记层里那一行「答辩前脚本冻结（…）」的前缀（窗口两个日期与范围都在那一行）。</summary>
+    private const string FreezeWindowLinePrefix = "> **答辩前脚本冻结";
+
+    /// <summary>本节正文的行（标题行到下一个 <c>## </c> 之前）。</summary>
+    private static string[] FreezeSectionLines()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == FreezeHeading);
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 缺「{FreezeHeading}」一节：到期日之前这一周「脚本本体只许登记类改动」这句话"
+            + "没有基线就没有门，它会像第一百九十九轮之前的页面层承诺一样静默失效。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    /// <summary>基线行：<c>- `.winecheck/demo.sh` sha256 `&lt;64 位十六进制&gt;` · 第 N 轮</c>（行首允许 <c>&gt;</c>）。</summary>
+    private static readonly Regex FreezeBaselineLine = new(
+        @"^[>\s]*-\s*`(?<file>\.winecheck/[A-Za-z0-9._-]+\.(?:sh|ps1))`\s+sha256\s+`(?<hash>[0-9a-f]{64})`\s*·\s*(?<round>第[^·]+轮)\s*$");
+
+    /// <summary>变更登记行：<c>- `.winecheck/demo.sh` · 第 N 轮 · 理由：…</c>。</summary>
+    private static readonly Regex FreezeChangeLine = new(
+        @"^[>\s]*-\s*`(?<file>\.winecheck/[A-Za-z0-9._-]+\.(?:sh|ps1))`\s*·\s*(?<round>第[^·]+轮)\s*·\s*理由：(?<reason>.+)$");
+
+    private static List<(string File, string Hash, string Round)> FreezeBaselines() => FreezeSectionLines()
+        .Select(l => FreezeBaselineLine.Match(l.Trim()))
+        .Where(m => m.Success)
+        .Select(m => (m.Groups["file"].Value, m.Groups["hash"].Value, m.Groups["round"].Value.Trim()))
+        .ToList();
+
+    private static List<(string File, string Round, string Reason)> FreezeChanges() => FreezeSectionLines()
+        .Select(l => FreezeChangeLine.Match(l.Trim()))
+        .Where(m => m.Success)
+        .Select(m => (m.Groups["file"].Value, m.Groups["round"].Value.Trim(), m.Groups["reason"].Value.Trim()))
+        .ToList();
+
+    /// <summary>
+    /// 冻结范围内的实物：<c>.winecheck/</c> 下<b>全部</b> <c>.sh</c> 与<b>全部</b> <c>.ps1</c>。
+    /// 名单从磁盘现读、不在门里写死：这一族的目的是「没人能悄悄动本体」，而写死的名单正是它防的那种漂——
+    /// 新增一支脚本时，名单外那一支会被 <see cref="BodyDrift"/> 从磁盘这一侧点出来。
+    /// </summary>
+    private static List<string> FrozenFilesOnDisk() =>
+        System.IO.Directory.GetFiles(Directory)
+            .Select(Path.GetFileName)
+            .Where(n => n is not null && (n.EndsWith(".sh", StringComparison.Ordinal) || n.EndsWith(".ps1", StringComparison.Ordinal)))
+            .Select(n => ".winecheck/" + n!)
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>
+    /// <b>本体对账</b>（纯函数：登记的基线 / 实际算出的哈希 / 磁盘上的名单 → 违例句，空 = 一致）。
+    /// 收成一处是为了让 <see cref="ScriptsFreeze_Detector_ReportsTheBreaksItMustCatch"/> 能把四发破坏各喂一遍：
+    /// 只在真仓上判的门，抓不抓得住全靠那天有没有人想到去试。
+    /// </summary>
+    private static List<string> BodyDrift(
+        IReadOnlyList<(string File, string Hash)> baselines,
+        IReadOnlyDictionary<string, string> actual,
+        IReadOnlyList<string> disk)
+    {
+        var bad = new List<string>();
+        if (baselines.Count == 0) bad.Add("本节一行冻结基线都没有——没有基线的冻结等于没有承诺");
+
+        foreach (var (file, hash) in baselines)
+        {
+            if (!actual.TryGetValue(file, out var now))
+            {
+                bad.Add($"{file}：基线指着它，磁盘上却没有这一支（删脚本也是动本体，理由要写进变更登记）");
+                continue;
+            }
+
+            if (now != hash) bad.Add($"{file}：内容与基线不一致（登记 {hash[..12]}…，实际 {now[..12]}…）");
+        }
+
+        foreach (var file in disk.Where(f => !baselines.Any(b => b.File == f)))
+            bad.Add($"{file}：磁盘上有这一支，基线里没登记（新脚本同样当场要敲，不能落在冻结之外）");
+
+        foreach (var dup in baselines.GroupBy(b => b.File).Where(g => g.Count() > 1))
+            bad.Add($"{dup.Key}：基线登记了 {dup.Count()} 行（应恰好 1 行，多行等于「以哪一行为准」交回人的判断）");
+
+        return bad;
+    }
+
+    /// <summary>
+    /// <b>理由对账</b>（纯函数）：每一条基线都要有同文件、同轮次、不少于八个字的变更登记行。
+    /// 哈希能证明「文件没变」，只有理由能证明「变了是为什么」——放行条件因此不能只判哈希。
+    /// </summary>
+    private static List<string> ReasonGaps(
+        IReadOnlyList<(string File, string Hash, string Round)> baselines,
+        IReadOnlyList<(string File, string Round, string Reason)> changes)
+    {
+        var bad = new List<string>();
+        foreach (var (file, _, round) in baselines)
+        {
+            var hits = changes.Where(c => c.File == file && c.Round == round).ToList();
+            if (hits.Count != 1)
+                bad.Add($"{file}（{round}）：变更登记里同文件同轮次的行有 {hits.Count} 条（应恰好 1 条）");
+            else if (hits[0].Reason.Length < 8)
+                bad.Add($"{file}（{round}）：理由「{hits[0].Reason}」少于八个字，判断不了这次动它是不是阻断性缺陷");
+        }
+
+        return bad;
+    }
+
+    /// <summary>
+    /// 窗口那一行在位、两个日期各归各位：起点是<b>已经发生</b>的那一天，终点<b>等于</b>验收表 G-D5 那一格现读的到期日。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：简报给的措辞是「冻结窗口 2026-11-13 至 2026-11-20」，两个日期各写一次就够，
+    /// 但<b>终点那一个已经在 G-D5 那一格里有一份</b>。抄第二份的后果这条仓记过不止一次：改期那天只改到一格，
+    /// 另一处读起来仍然是规则，而它指着的是已经过去了的那一天。所以这里判的是<b>两个日期来自不同的出处</b>：
+    /// 起点没有别处（就是登记那一天，写成就红），终点必须等于现读那一个（改期只改 G-D5，这一行自己红）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判脚本本体（下面两条），也不判窗口过去之后要不要解冻——解冻走白名单，
+    /// 由 <see cref="ScriptsFreeze_EveryBaselineUpdate_HasAChangeEntryWithAReason"/> 逼出那一句理由。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ScriptsFreeze_Window_IsRegisteredAndReconcilesWithTheDueDate()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var line = notes.Split('\n')
+            .FirstOrDefault(l => l.TrimStart().StartsWith(FreezeWindowLinePrefix, StringComparison.Ordinal));
+        Assert.True(line is not null,
+            $"docs/NOTES.md 顶部登记层缺「{FreezeWindowLinePrefix}…」那一行：窗口与范围没有落点，"
+            + "「这一周只许登记类改动」就只剩基线哈希而没人说明它管到哪一天。");
+
+        // ① 起点：必须已发生（写在未来 = 这一天永远到不来），且带着 90 天时效（与 DoD 登记同一口径）。
+        var startText = Regex.Match(line, @"20\d{2}-\d{2}-\d{2}").Value;
+        Assert.True(DateOnly.TryParseExact(startText, "yyyy-MM-dd", out var start),
+            $"窗口起点「{startText}」不是合法的 YYYY-MM-DD：没有起点就不知道从哪一次登记起算冻结。");
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        Assert.True(start <= today,
+            $"窗口起点写的是 {startText}，比今天（{today:yyyy-MM-dd}）还晚：还没开始就宣称在冻结，"
+            + "这一句在任何一天读起来都是「已经不动了」。");
+        Assert.True(today.DayNumber - start.DayNumber <= 90,
+            $"窗口起点是 {startText}，距今 {today.DayNumber - start.DayNumber} 天（上限 90 天）："
+            + "一条写着「这一周」的登记挂了三个月还留在顶部，读的人不会知道它早就过完了。");
+
+        // ② 终点 = G-D5 那一格现读的到期日（出口走 AcceptanceChecklistTests，本门不抄第二个日期字面量）。
+        var endText = Regex.Match(line, @"到期日[^\d\n]{0,8}(?<d>\d{4}-\d{2}-\d{2})").Groups["d"].Value;
+        Assert.True(endText.Length > 0,
+            "窗口那一行没写「至到期日 YYYY-MM-DD」：只有起点没有终点，这句话读起来是永久冻结，"
+            + "而到期日之后修真实缺口是本仓的正常动作。");
+        var dueText = AcceptanceChecklistTests.Gd5DueDateText();
+        Assert.True(endText == dueText,
+            $"窗口终点写 {endText}，而验收表 G-D5 那一格现读的到期日是 {dueText}：两处各写一个日期，"
+            + "改期那天必然只改到一处，另一处还读起来像规则。");
+        Assert.True(DateOnly.TryParseExact(endText, "yyyy-MM-dd", out var end) && end >= start,
+            $"窗口终点 {endText} 早于起点 {startText}：这一周倒着数。");
+
+        // ③ 范围两个后缀都要点名：只写 .sh 会把 demo.ps1 落在冻结之外，而它也是当天可能被敲的那一支。
+        foreach (var suffix in new[] { "`*.sh`", "`*.ps1`" })
+        {
+            Assert.True(line.Contains(suffix, StringComparison.Ordinal),
+                $"窗口那一行的范围没点名 {suffix}：名单写在门里而登记不说，读到登记的人以为自己动得。");
+        }
+
+        Assert.True(line.Contains(FreezeHeading[3..], StringComparison.Ordinal),
+            $"窗口那一行没指向「{FreezeHeading[3..]}」那一节：指针悬空，人得自己找基线在哪。");
+
+        // ④ 本节不许长出第二个窗口（窗口只那一份出处；登记日期可以出现，到期日不行）。
+        var section = string.Join('\n', FreezeSectionLines());
+        var restated = Regex.Matches(section, @"到期日[^\d\n]{0,8}\d{4}-\d{2}-\d{2}").Select(m => m.Value).ToList();
+        Assert.True(restated.Count == 0,
+            "「" + FreezeHeading[3..] + "」那一节里又写了一遍窗口日期：" + string.Join("、", restated)
+            + "——窗口只许顶部那一行一份，改期时这里不会有人想起来跟着改。");
+    }
+
+    /// <summary>
+    /// 磁盘上的脚本本体必须与登记基线<b>逐字节</b>一致（两侧对账：改本体 / 多一支没登记的 / 基线指着一支不存在的，都红）。
+    /// </summary>
+    [Fact]
+    public void ScriptsFreeze_BodiesMatchTheRegisteredBaseline()
+    {
+        var baselines = FreezeBaselines();
+        var disk = FrozenFilesOnDisk();
+        var actual = baselines
+            .Where(b => disk.Contains(b.File, StringComparer.Ordinal))
+            .ToDictionary(b => b.File, b => Repo.Sha256Of(b.File));
+        var drift = BodyDrift(baselines.Select(b => (b.File, b.Hash)).ToList(), actual, disk);
+
+        Assert.True(drift.Count == 0,
+            "到期日之前这一周，`.winecheck/` 的脚本本体动了本体（简报 P0-1：只允许登记类改动）：\n  "
+            + string.Join("\n  ", drift)
+            + "\n确实是阻断性缺陷要动，就同时更新「" + FreezeHeading[3..] + "」那一节里该文件的哈希与轮次，"
+            + "并在变更登记加一行同轮次的理由。");
+    }
+
+    /// <summary>
+    /// 基线的每一次更新都要有同文件同轮次的理由登记（放行条件不能只判哈希）。
+    /// </summary>
+    [Fact]
+    public void ScriptsFreeze_EveryBaselineUpdate_HasAChangeEntryWithAReason()
+    {
+        var gaps = ReasonGaps(FreezeBaselines(), FreezeChanges());
+        Assert.True(gaps.Count == 0,
+            "「" + FreezeHeading[3..] + "」那一节里有基线更新没配理由：\n  " + string.Join("\n  ", gaps)
+            + "\n哈希能证明「文件没变」，只有理由能证明「变了是为什么」。");
+    }
+
+    /// <summary>
+    /// 上面两条抓不抓得住——四发破坏各喂一遍（第二百四十一轮的教训族：只在真仓上判的门，没人试过就等于没判）。
+    /// <para>
+    /// 四发都取自这一族真会遇到的形状：改了本体没改登记、新增一支没人登记的脚本、删掉一支而基线还指着它、
+    /// 换了哈希顺手不写理由。第五发（同名两行基线）判的是「以哪一行为准」不能交回人的判断。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ScriptsFreeze_Detector_ReportsTheBreaksItMustCatch()
+    {
+        var hash = new string('a', 64);
+        var other = new string('b', 64);
+        var demo = ".winecheck/demo.sh";
+        var due = ".winecheck/due-date.sh";
+        var extra = ".winecheck/extra.sh";
+
+        // 干净的一发都不该报：登记的哈希 == 磁盘算出的哈希 == 磁盘名单。
+        var good = new Dictionary<string, string> { [demo] = hash, [due] = other };
+        var registered = new[] { (demo, hash), (due, other) };
+        Assert.Empty(BodyDrift(registered, good, [demo, due]));
+        Assert.Empty(ReasonGaps(registered.Select(x => (x.Item1, x.Item2, "第二百四十一轮")).ToList(),
+            [(demo, "第二百四十一轮", "冻结基线首次登记，哈希即当时内容"),
+             (due, "第二百四十一轮", "冻结基线首次登记，哈希即当时内容")]));
+
+        // 破坏一：改了本体——登记还是旧哈希，磁盘上算出来的是另一个。
+        Assert.True(Assert.Single(BodyDrift([(demo, hash)], new Dictionary<string, string> { [demo] = other }, [demo]))
+            .Contains("不一致", StringComparison.Ordinal));
+
+        // 破坏二：磁盘多出一支没人登记的（新增一支当场要敲的脚本，不能落在冻结之外）。
+        Assert.True(Assert.Single(BodyDrift([(demo, hash)],
+                new Dictionary<string, string> { [demo] = hash, [extra] = other }, [demo, extra]))
+            .Contains("基线里没登记", StringComparison.Ordinal));
+
+        // 破坏三：基线指着一支已经不存在的（删脚本也是动本体）。
+        Assert.True(Assert.Single(BodyDrift(registered, new Dictionary<string, string> { [demo] = hash }, [demo]))
+            .Contains("磁盘上却没有", StringComparison.Ordinal));
+
+        // 破坏四：同一支登记了两行基线（这一发会有两句话，点名「以哪一行为准」那一条）。
+        var dups = BodyDrift([(demo, hash), (demo, other)], new Dictionary<string, string> { [demo] = hash }, [demo]);
+        Assert.Contains(dups, s => s.Contains("应恰好 1 行", StringComparison.Ordinal));
+
+        // 破坏五：换了哈希与轮次却不写理由（以及写了但短到判断不了）。
+        Assert.True(Assert.Single(ReasonGaps([(demo, hash, "第二百四十二轮")], []))
+            .Contains("应恰好 1 条", StringComparison.Ordinal));
+        Assert.True(Assert.Single(ReasonGaps([(demo, hash, "第二百四十二轮")], [(demo, "第二百四十二轮", "修个 bug")]))
+            .Contains("八个字", StringComparison.Ordinal));
+
+        // 基线整段被搬空：本节等于没登记，这条也要报，不能安静地绿。
+        Assert.NotEmpty(BodyDrift([], good, [demo]));
+        Assert.NotEmpty(FreezeBaselines());
+    }
+
     /// <summary>临时树清不掉不影响判据（与 <c>PreflightScriptTests.FakeTree.Dispose</c> 同一取舍）。</summary>
     private static void TryDelete(string root)
     {

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Xunit;
 
@@ -73,12 +72,14 @@ public class TransitionShellFreezeTests
         .Select(m => (m.Groups["file"].Value, m.Groups["round"].Value.Trim(), m.Groups["reason"].Value.Trim()))
         .ToList();
 
-    /// <summary>磁盘上某个文件的 SHA-256（小写十六进制）。</summary>
+    /// <summary>磁盘上某个文件的 SHA-256（小写十六进制）。取法走 <see cref="Repo.Sha256Of"/> 那一处——
+    /// 第 241 轮给 <c>.winecheck/</c> 建第二族冻结基线时，这把哈希在本仓就有了第二个读者；
+    /// 各写一把的后果是「与基线一致」这句话有两个意思。</summary>
     private static string Hash(string relative)
     {
-        var full = Path.Combine(Repo.Root, relative.Replace('/', Path.DirectorySeparatorChar));
-        Assert.True(File.Exists(full), $"冻结基线登记了 {relative}，但仓库里没有这个文件。");
-        return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(full))).ToLowerInvariant();
+        Assert.True(File.Exists(Path.Combine(Repo.Root, relative.Replace('/', Path.DirectorySeparatorChar))),
+            $"冻结基线登记了 {relative}，但仓库里没有这个文件。");
+        return Repo.Sha256Of(relative);
     }
 
     /// <summary>
