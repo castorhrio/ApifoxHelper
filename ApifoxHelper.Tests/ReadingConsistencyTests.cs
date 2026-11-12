@@ -103,8 +103,20 @@ public class ReadingConsistencyTests
             + "。历史读数本来就各不相同，但每一处都得说清自己是谁的读数——否则它会被读成第二个当前读数。");
     }
 
-    /// <summary>上下文注解的三个关键词（第二百二十四轮，简报 P1-2）。</summary>
-    private static readonly string[] ContextWords = ["慢一档", "进程 DPI", "上下文"];
+    /// <summary>
+    /// 上下文注解必须<b>同时</b>出现的两个词（第二百二十四轮新增，第二百二十五轮收紧，简报 P0-2）。
+    /// <para>
+    /// <b>为什么从「三选一」收紧成「两个都要」</b>：第二百二十四轮那一版判的是「『慢一档』『进程 DPI』
+    /// 『上下文』任一出现」——<b>这正是同一轮自己在 NOTES 里记下的假绿形状</b>（Presence 型断言在同一个
+    /// 字符串里被另一处满足）：把注解换成「快一档」照样绿，只写一句「上下文」也照样绿。
+    /// </para>
+    /// <para>
+    /// 这两个词共同表达的是<b>同一个事实</b>：控件自报 DPI 停在上一档、而字体按进程 DPI 放大——
+    /// 于是行高不跟着放大。只写其中一个，读的人会以为「控件自报 DPI 跟着档位走」（那是另一支读数），
+    /// 或者以为「进程 DPI 也停在上一档」（那是把两个数混成一个）。所以两个都得在。
+    /// </para>
+    /// </summary>
+    private static readonly string[] ContextWords = ["慢一档", "进程 DPI"];
 
     /// <summary>一处读数之后的下一句（切到下一个句子边界为止）。</summary>
     private static string NextSentence(string text, Match match)
@@ -134,7 +146,8 @@ public class ReadingConsistencyTests
     /// </para>
     /// <para>
     /// <b>判据</b>：<c>README.md</c> 全文与 <c>docs/NOTES.md</c> 的 G-D5 那一行里，每一处数字型三档读数
-    /// （<c>N 通过 / 0 失败 ×3</c>）的<b>同一句或紧邻下一句</b>必须出现「慢一档」「进程 DPI」「上下文」之一。
+    /// （<c>N 通过 / 0 失败 ×3</c>）的<b>同一句或紧邻下一句</b>必须<b>同时</b>出现「慢一档」与「进程 DPI」
+    /// （第二百二十五轮收紧：原来判的是「三选一」，把注解换成「快一档」照样绿——那是 Presence 型假绿）。
     /// 只判这两处：它们是「被当成当前读数念出来」的地方；<c>docs/NOTES.md</c> 里其余几十处是逐轮日志，
     /// 各自带着自己的上下文，逐处强加这三个词只是文档噪音，不增加信息。
     /// </para>
@@ -161,7 +174,8 @@ public class ReadingConsistencyTests
                 seen++;
                 var sentence = SentenceAround(text, m);
                 var next = NextSentence(text, m);
-                if (ContextWords.Any(w => sentence.Contains(w, StringComparison.Ordinal)
+                // 两个词都要在（同一句或紧邻下一句这个窗口里）：只出现一个不算注解。
+                if (ContextWords.All(w => sentence.Contains(w, StringComparison.Ordinal)
                                           || next.Contains(w, StringComparison.Ordinal)))
                 {
                     continue;
@@ -176,7 +190,8 @@ public class ReadingConsistencyTests
             $"只找到 {seen} 处三档读数（README.md 与 G-D5 行各至少一处）：读数被删光了，这条门判不到东西。");
 
         Assert.True(missing.Count == 0,
-            "这些三档读数旁边没有上下文注解（同一句或紧邻下一句里既没有「慢一档」也没有「进程 DPI」「上下文」）："
+            "这些三档读数旁边没有完整的上下文注解（同一句或紧邻下一句里必须同时有「慢一档」与「进程 DPI」——"
+            + "只出现其中一个不算：这两个词共同表达「控件自报 DPI 停在上一档、字体按进程 DPI 放大而行高不放大」这一件事）："
             + string.Join(" ／ ", missing)
             + "。reading.txt 记的数出自「慢一档」那个上下文，不能读成「行高预算在 125% / 200% 也过」——"
             + "注解与数值必须同屏，否则评审只看数值就会误读。");
