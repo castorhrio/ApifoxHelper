@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-13
-source=023f418eb9f0c120fc35945008401a5366343c55
-tier=96 passed=231 failed=0 exit=0
-tier=120 passed=231 failed=0 exit=0
-tier=192 passed=231 failed=0 exit=0
+source=4b8c87ef4d5b344990c19b384e38dbbcd6f2db13
+tier=96 passed=238 failed=0 exit=0
+tier=120 passed=238 failed=0 exit=0
+tier=192 passed=238 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -38,6 +38,7 @@ section=RunNoticeCopyClick tier=96 passed=8 failed=0
 section=RunBuildCommandCopyClick tier=96 passed=9 failed=0
 section=RunCaptionFit tier=96 passed=3 failed=0
 section=RunActionHeaderFit tier=96 passed=1 failed=0
+section=RunListColumnFit tier=96 passed=7 failed=0
 section=RunActionRowFit tier=96 passed=8 failed=0
 section=RunFullJourney tier=96 passed=10 failed=0
 section=RunEndToEnd tier=120 passed=3 failed=0
@@ -63,6 +64,7 @@ section=RunNoticeCopyClick tier=120 passed=8 failed=0
 section=RunBuildCommandCopyClick tier=120 passed=9 failed=0
 section=RunCaptionFit tier=120 passed=3 failed=0
 section=RunActionHeaderFit tier=120 passed=1 failed=0
+section=RunListColumnFit tier=120 passed=7 failed=0
 section=RunActionRowFit tier=120 passed=8 failed=0
 section=RunFullJourney tier=120 passed=10 failed=0
 section=RunEndToEnd tier=192 passed=3 failed=0
@@ -88,5 +90,6 @@ section=RunNoticeCopyClick tier=192 passed=8 failed=0
 section=RunBuildCommandCopyClick tier=192 passed=9 failed=0
 section=RunCaptionFit tier=192 passed=3 failed=0
 section=RunActionHeaderFit tier=192 passed=1 failed=0
+section=RunListColumnFit tier=192 passed=7 failed=0
 section=RunActionRowFit tier=192 passed=8 failed=0
 section=RunFullJourney tier=192 passed=10 failed=0

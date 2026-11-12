@@ -74,7 +74,8 @@ internal sealed class PropagationDialog : DpiAwareForm
         Font = UiTokens.Body.Value;
 
         _list.Columns.Add("位置", 330);
-        _list.Columns.Add("标注", 110);
+        // 「标注」与注释缺口、注释候选那一格装的是同一族文字，宽度取同一处口径。
+        _list.Columns.Add("标注", ListColumnWidths.SlotTag);
         _list.Columns.Add("源码", 100);
         _list.Columns.Add("XML", 110);
         _list.Columns.Add("Swagger", 130);
@@ -363,6 +364,8 @@ internal sealed class PropagationDialog : DpiAwareForm
         }
         _detail.Lines =
         [
+            // 清单那一格 110px 装不下带长参数名的标注（96 档量到 162px），全文在这一行交出；取法与那一格同一个函数。
+            ..SlotText.TagDetailLines(PropagationEntries.TagText(entry.Tag, entry.ParameterName)),
             "说明文字：" + entry.Text,
             "Swagger 对应位置：" + (entry.SwaggerLocation ?? "—"),
             entry.Notes.Count > 0 ? "备注：" + string.Join("；", entry.Notes) : "备注：（无）",

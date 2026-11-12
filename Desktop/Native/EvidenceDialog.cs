@@ -67,7 +67,8 @@ internal sealed class EvidenceDialog : DpiAwareForm
 
         _list.Columns.Add("分类", 96);
         _list.Columns.Add("证据摘要", 470);
-        _list.Columns.Add("文件:行", 330);
+        // 「文件:行」与注释缺口那一格是同一族内容，宽度取同一处口径。
+        _list.Columns.Add("文件:行", ListColumnWidths.FileLine);
         _list.SelectedIndexChanged += (_, _) => ShowSnippet();
 
         _counts.AutoSize = false;

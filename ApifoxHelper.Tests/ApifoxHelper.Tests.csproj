@@ -68,6 +68,7 @@
     <Compile Include="..\Desktop\Native\LastPage.cs" Link="Shared\LastPage.cs" />
     <Compile Include="..\Desktop\Native\ListRows.cs" Link="Shared\ListRows.cs" />
     <Compile Include="..\Desktop\Native\ListColumns.cs" Link="Shared\ListColumns.cs" />
+    <Compile Include="..\Desktop\Native\ListColumnWidths.cs" Link="Shared\ListColumnWidths.cs" />
     <Compile Include="..\Desktop\Native\ListSort.cs" Link="Shared\ListSort.cs" />
     <Compile Include="..\Desktop\Native\CheckResultSort.cs" Link="Shared\CheckResultSort.cs" />
     <Compile Include="..\Desktop\Native\EndpointTraceSort.cs" Link="Shared\EndpointTraceSort.cs" />

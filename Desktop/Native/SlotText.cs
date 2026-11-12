@@ -15,6 +15,42 @@ internal static class SlotText
     public static string Tag(DocSlot slot) =>
         TaskDisplay.SlotTagText(slot.Tag) + (slot.Tag == "param" && slot.ParameterName is { } name ? " " + name : "");
 
+    /// <summary>
+    /// 详情区里那一行的前缀（全仓唯一落点：三屏不各拼一遍「标注」这两个字与它的冒号）。
+    /// </summary>
+    public const string TagDetailCaption = "标注：";
+
+    /// <summary>
+    /// 把「标注」那一格的<b>全文</b>交给详情区（第二百四十二轮）。那一格本身没有内容时返回空串，
+    /// 由 <see cref="TagDetailLines"/> 决定「一行都不给」。
+    /// <para>
+    /// <b>存在理由</b>：那一格的宽度按内容族给到 <see cref="ListColumnWidths.SlotTag"/>（110px），
+    /// 而带长参数名的标注在 wine 96 档量到 162px（「参数 cancellationToken」）——三屏哪一个数都装不下，
+    /// 加宽到装得下又会把同一屏的列尾挤进横向滚动条。参数名正是「这条注释缺在哪个参数上」的答案，
+    /// 而详情区此前只说符号、现状、覆盖接口与证据，不说它：清单那一格被裁、详情那一行不讲，
+    /// 这一屏就没有第三条读全的路。§6「状态行」那条「放不下就给一个读得全的出口」在这里的落点是详情区。
+    /// </para>
+    /// <para>
+    /// <b>文字由调用方给</b>：注释缺口取 <see cref="Tag"/>、注释候选取
+    /// <c>QueueText.CandidateTag</c>、生成文档核对取 <c>PropagationEntries.TagText</c>——
+    /// 每一屏那一格本来用的就是自己那一份取法，本方法只交出前缀，不另造第二份字段读法
+    /// （否则清单与详情会对同一件事说两种话，与第七十四轮「下拉与状态列不能对同一件事说两种话」同一纪律）。
+    /// </para>
+    /// </summary>
+    public static string TagDetailLine(string tagText) =>
+        string.IsNullOrWhiteSpace(tagText) ? "" : TagDetailCaption + tagText;
+
+    /// <summary>
+    /// 详情区那几行里的「标注」一行：0 行或 1 行，调用方在自己的列表里原位展开。
+    /// 那一格没有内容时<b>一行都不给</b>——写一句「标注：」后面跟着空，是把「这一条没有标注」
+    /// 说成「读到了但读不出」，与第二百三十五轮「只有名称没有前缀的模块只给名称、不给空括号」同一纪律。
+    /// </summary>
+    public static IEnumerable<string> TagDetailLines(string tagText)
+    {
+        var line = TagDetailLine(tagText);
+        if (line.Length > 0) yield return line;
+    }
+
     /// <summary>「文件:行」列。</summary>
     public static string Location(DocSlot slot) => slot.File + ":" + slot.Line;
 

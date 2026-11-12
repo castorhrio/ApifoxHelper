@@ -98,11 +98,12 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
-        _list.Columns.Add("位置（说明点）", 360);
-        _list.Columns.Add("标注", 60);
+        // 四族列的宽度取 ListColumnWidths（同一族在另几屏是同一个数）；「状态」是本屏独有的一族，留在原地。
+        _list.Columns.Add("位置（说明点）", ListColumnWidths.SlotLocation);
+        _list.Columns.Add("标注", ListColumnWidths.SlotTag);
         _list.Columns.Add("状态", 110);
-        _list.Columns.Add("角色", 60);
-        _list.Columns.Add("文件:行", 320);
+        _list.Columns.Add("角色", ListColumnWidths.SlotRole);
+        _list.Columns.Add("文件:行", ListColumnWidths.FileLine);
         _titles = _list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
         // 点击列头排序（ListSort 口径）：同一列再点反向，换一列从升序开始；排序只改呈现顺序。
         _list.ColumnClick += (_, e) => SortBy(e.Column);
@@ -472,13 +473,15 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         // 手工填写对扫描结果中仍存在的位置可用（服务的候选校验按位置执行）；删除失效标签只对失效 param 可用。
         _manualButton.Enabled = true;
         _removeStaleButton.Enabled = slot.Status == "stale";
-        var lines = new List<string>
-        {
+        List<string> lines =
+        [
             "符号：" + slot.Display + "（" + TaskDisplay.SymbolKindText(slot.SymbolKind) + "）",
+            // 清单那一格放不下带长参数名的标注（96 档量到 162px 对列宽 110px），全文在这一行交出；取法与那一格同一个函数。
+            ..SlotText.TagDetailLines(SlotText.Tag(slot)),
             "现状：" + (string.IsNullOrWhiteSpace(slot.ExistingText) ? "（无说明）" : slot.ExistingText),
             "覆盖接口：" + (slot.EndpointKeys.Count > 0 ? string.Join("、", slot.EndpointKeys) : "—"),
             "证据：" + slot.EvidenceIds.Count + " 条",
-        };
+        ];
         if (slot.Issues.Count > 0) lines.Add("问题：" + string.Join("；", slot.Issues));
         if (!slot.Editable && slot.NotEditableReason is { } reason) lines.Add("不可回写原因：" + reason);
         _detail.Text = string.Join(Environment.NewLine, lines);

@@ -282,6 +282,9 @@ internal static class Program
         Section("写入清单表头放得下（逐列量表头文字与排序方向标记，真实控件）", nameof(RunActionHeaderFit));
         RunActionHeaderFit(services, dataRoot);
 
+        Section("同名表头列宽（四族列在各屏的声明宽、列宽合计对清单可视宽、表头与样例单元格文字，真实控件）", nameof(RunListColumnFit));
+        RunListColumnFit(services, dataRoot);
+
         Section("按钮行高度（八屏按钮行量行高与最高按钮，真实控件）", nameof(RunActionRowFit));
         RunActionRowFit(services, dataRoot);
 
@@ -5816,6 +5819,231 @@ internal static class Program
             }
         });
     }
+
+    /// <summary>
+    /// 同名表头列宽实测（第二百四十二轮，<c>docs/CRITIQUE.md</c> 文末第 2 条：第 1、3、5 站那一族）。
+    /// <para>
+    /// <b>存在理由</b>：同一批条目在几张清单上装的是同一族内容，列宽却各写一遍——「标注」在注释缺口
+    /// 是 60px、在注释候选是 70px、在生成文档核对是 110px；「位置（说明点）」360 对 340；「文件:行」
+    /// 320 对 330；「资源」260 对 240。没有一份出处说明这些数为什么不同，于是每加一屏就再发明一个数，
+    /// 而用户读的是同一族文字。第二百零五轮修的是「同一类信息的字体由谁设」，这一处修的是
+    /// 「同一类信息的宽度由谁给」。
+    /// </para>
+    /// <para>
+    /// <b>这一段量三个数，不是评口味</b>：① 每一族列在各屏实际声明的列宽（读真实控件的
+    /// <c>ColumnHeader.Width</c>，不读源码里的字面量）；② 这一屏清单的<b>预算</b>——<c>ClientSize</c>
+    /// 宽再减一条竖向滚动条（<c>SystemInformation.VerticalScrollBarWidth</c>，系统给的数，不写死）：
+    /// 本段构造的是空清单，那一刻滚动条还没出现、<c>ClientSize</c> 是满的，拿满宽当预算会把
+    /// 「有行之后列尾被挤进横向滚动条」读成「放得下」。合计超过预算即列尾被藏，那是第二百一十七轮
+    /// 给写入清单量过的同一件事，只是把基准换成了真实有行的那一刻；③ 表头文字
+    /// （含排序方向标记那一支）与一个样例单元格文字对那一格列宽的比。
+    /// </para>
+    /// <para>
+    /// <b>③ 里的单元格文字是样例，不是夹具</b>：本段的对话框按缺省构造，清单里没有行，所以量的是
+    /// 「这一格将来要装的那句话有多宽」。文字一律由那一屏自己的取法现算
+    /// （<see cref="SlotText.Tag"/> / <see cref="QueueText.CandidateTag"/> /
+    /// <see cref="PropagationEntries.TagText"/>），字体取那一张清单自己的字体，参数名用
+    /// <see cref="SampleParameterName"/> 这一颗真实工程里常见的长名，读数行标「样例」。
+    /// 它证明的是「这一格放不下那一族里最长的那一类内容」，不证明「真机上第 N 行被截成什么样」——
+    /// 后者随 G-D5。
+    /// </para>
+    /// <para>
+    /// <b>同名不等于同族，这一段不折它们</b>（判据因此不写成「同名就必须同宽」）：「审阅状态」在候选
+    /// 那一屏最长是「证据已变化」五字、在契约那一屏最长是三字（两份词表不同）；「分支」在配置侧是
+    /// 分支名、在契约清单里是分支数；「接口」「状态」「名称」「更新时间」都各有两族内容。
+    /// 这些屏上的宽度不同是对的，本段只登记读数，不参与 ① 的判据。
+    /// </para>
+    /// </summary>
+    private static void RunListColumnFit(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var drafts = services.GetRequiredService<DraftService>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "清单列宽实测冒烟" });
+        var slot = new DocSlot
+        {
+            Id = "slot-column-fit",
+            SymbolId = "M:Probe.Api.Controllers.ProbeController.Get",
+            SymbolKind = "method",
+            Display = "GET /api/probe",
+            Tag = "param",
+            ParameterName = SampleParameterName,
+            Status = "missing",
+            File = "Probe.Api/Controllers/ProbeController.cs",
+            Line = 12,
+            Role = "endpoint",
+            Editable = true,
+        };
+        var candidate = new CommentCandidate { Id = "c-column-fit", Tag = "param", ParameterName = SampleParameterName };
+
+        // 屏 → 表头序列：按整个序列认那一张清单（同一个对话框里往往有两三张清单，只数列数会撞车）。
+        var screens = new (string Name, string[] Headers, Func<Form> Build)[]
+        {
+            ("注释缺口", ["位置（说明点）", "标注", "状态", "角色", "文件:行"],
+                () => new ScanResultsDialog(tasks, drafts, task)),
+            ("注释候选", ["位置（说明点）", "标注", "依据", "审阅状态", "来源"],
+                () => new CandidatesDialog(drafts, tasks, task)),
+            ("生成文档核对", ["位置", "标注", "源码", "XML", "Swagger"],
+                () => new PropagationDialog(tasks, task)),
+            ("代码证据", ["分类", "证据摘要", "文件:行"],
+                () => new EvidenceDialog(tasks, task, slot)),
+            ("差异确认", ["类型", "资源", "位置", "状态"],
+                () => new DecisionsDialog(tasks, task, services.GetRequiredService<DecisionService>())),
+            ("同步预览写入清单", ["序号", "动作", "资源", "远端 ID", "改动", "CLI 校验", "状态"],
+                () => new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task)),
+            ("同步预览未纳入清单", ["资源", "未纳入原因"],
+                () => new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task)),
+        };
+
+        // ① 各族列在各屏声明的宽：按族收「哪一屏给的是哪一个数」，最后一族一次比**宽度**是不是同一个数。
+        // 拿「屏名 + 数」这一整串去比是错的（第二百四十二轮第一版就错在这里，六发红全是它自造的）：
+        // 屏名天生不同，同宽也会判成不同宽。
+        var declared = new Dictionary<string, List<(string Screen, int Width)>>(StringComparer.Ordinal);
+
+        foreach (var (screenName, headers, build) in screens)
+        {
+            RunAction($"清单列宽：{screenName}的同族列与另几屏同宽、列宽合计不超过预算（可视宽减一条竖向滚动条）、表头与样例文字放得下（真实控件量）", () =>
+            {
+                using var dialog = build();
+                _ = dialog.Handle;
+                dialog.CreateControl();
+                dialog.PerformLayout();
+                Application.DoEvents();
+
+                var list = FindAll<ListView>(dialog).FirstOrDefault(candidate2 =>
+                    candidate2.Columns.Cast<ColumnHeader>().Select(column => column.Text).SequenceEqual(headers))
+                    ?? throw new InvalidOperationException(
+                        $"{screenName}里找不到表头序列为「{string.Join("、", headers)}」的清单：列增删或改名了，本段量测口径需要重定。");
+
+                var widths = list.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
+                var sum = widths.Sum();
+                // 预算取「有竖向滚动条时」的那一个宽：本段构造的是空清单，那时没有滚动条、ClientSize 是满的；
+                // 一旦有行，滚动条出现就把这一格挤窄一条，列尾在真实那一屏上比空清单这一刻更早被藏。
+                // 滚动条宽取系统给的数（SystemInformation），不在这里写死一个像素值。
+                var scrollbar = SystemInformation.VerticalScrollBarWidth;
+                var visible = list.ClientSize.Width;
+                var budget = visible - scrollbar;
+
+                // 本屏贡献的族读数（哪几族、各多少）：族与族的对账要跨屏，单屏读数先记自己给了什么。
+                var contributed = new List<string>();
+
+                foreach (var family in ColumnFamilies(headers))
+                {
+                    for (var i = 0; i < list.Columns.Count; i++)
+                    {
+                        if (list.Columns[i].Text != family) continue;
+                        if (!declared.TryGetValue(family, out var hits)) declared[family] = hits = [];
+                        hits.Add((screenName, widths[i]));
+                        contributed.Add($"{family}={widths[i]}px");
+                    }
+                }
+
+                // ②③ 读数：可视宽 / 合计 / 表头文字（未排序与排序后两支）/ 那一格要装的样例文字。
+                var readings = new List<string>();
+                var headerTooWide = new List<string>();
+                for (var i = 0; i < list.Columns.Count; i++)
+                {
+                    var title = list.Columns[i].Text;
+                    foreach (var (shape, text) in new[]
+                             {
+                                 ("未排序", title),
+                                 ("排序后", ListSort.Header(title, i, i, descending: false)),
+                             })
+                    {
+                        var headerWidth = MeasureCellText(list, text);
+                        if (headerWidth + HeaderPadding > widths[i])
+                        {
+                            headerTooWide.Add($"第 {i + 1} 列「{text}」（{shape}）{headerWidth}px + 留白 {HeaderPadding}px > 列宽 {widths[i]}px");
+                        }
+                    }
+
+                    var sample = SampleCellText(screenName, list.Columns[i].Text, slot, candidate);
+                    if (sample is null) continue;
+                    readings.Add($"「{title}」装「{sample}」需 {MeasureCellText(list, sample)}px 对 {widths[i]}px");
+                }
+
+                _lines.Add(
+                    $"     {screenName}：{list.Columns.Count} 列、{DpiContext(dialog)}、表头字体 {list.Font.Height}px" +
+                    $"（≈{CaptionScalePercent()}%），列宽合计 {sum}px 对预算 {budget}px" +
+                    $"（清单可视宽 {visible}px 减竖向滚动条 {scrollbar}px）" +
+                    (sum > budget ? $"（超出 {sum - budget}px：出竖向滚动条时列尾在横向滚动条之后）" : "（在预算内）") +
+                    (contributed.Count > 0 ? "；本屏贡献 " + string.Join("，", contributed) : "") +
+                    (readings.Count > 0 ? "；样例 " + string.Join("，", readings) : ""));
+
+                // 判据只在设计档成立（列宽是逻辑像素、表头文字随 DPI 放大，与 RunActionHeaderFit 同一取舍）。
+                var designTier = !DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor());
+                var mismatched = new List<string>();
+                foreach (var (family, hits) in declared)
+                {
+                    if (hits.Select(hit => hit.Width).Distinct().Count() < 2) continue;
+                    mismatched.Add($"{family}：" + string.Join(" 对 ", hits.Select(hit => $"{hit.Screen} {hit.Width}px")));
+                }
+
+                if (designTier && headerTooWide.Count > 0)
+                {
+                    throw new InvalidOperationException("设计档表头文字放不下（会被截断）：" + string.Join("、", headerTooWide));
+                }
+                if (designTier && sum > budget)
+                {
+                    throw new InvalidOperationException(
+                        $"设计档列宽合计 {sum}px 超过预算 {budget}px（清单可视宽 {visible}px 减竖向滚动条 {scrollbar}px）——出滚动条时列尾被藏（{screenName}）。");
+                }
+                if (designTier && mismatched.Count > 0)
+                {
+                    throw new InvalidOperationException("同一族列在不同屏上是两个数（列宽没有单一落点）：" + string.Join("；", mismatched));
+                }
+            });
+        }
+    }
+
+    /// <summary>样例参数名：真实工程里常见的长名（三族取法都会把它附在「参数」之后）。</summary>
+    private const string SampleParameterName = "cancellationToken";
+
+    /// <summary>
+    /// 本段认的四族列（同名的那一格在各屏装的是同一族内容）：认不出的名字一概不算族——
+    /// 同名不同族（「审阅状态」「分支」「接口」「状态」「名称」「更新时间」）宽度不同是对的，
+    /// 把它们折成一个数会把某一屏那一格的真实内容挤掉。
+    /// </summary>
+    private static IEnumerable<string> ColumnFamilies(string[] headers) => headers switch
+    {
+        ["位置（说明点）", "标注", "状态", "角色", "文件:行"] => ["位置（说明点）", "标注", "文件:行"],
+        ["位置（说明点）", "标注", ..] => ["位置（说明点）", "标注"],
+        ["位置", "标注", ..] => ["标注"],
+        ["分类", "证据摘要", "文件:行"] => ["文件:行"],
+        ["类型", "资源", ..] => ["资源"],
+        ["序号", "动作", "资源", ..] => ["资源"],
+        ["资源", "未纳入原因"] => ["资源"],
+        _ => [],
+    };
+
+    /// <summary>那一格要装的那句话：用那一屏自己的取法现算，只作样例、不当夹具。</summary>
+    private static string? SampleCellText(string screenName, string header, DocSlot slot, CommentCandidate candidate) => header switch
+    {
+        "标注" when screenName == "注释候选" => QueueText.CandidateTag(candidate),
+        "标注" when screenName == "生成文档核对" => PropagationEntries.TagText("param", SampleParameterName),
+        "标注" => SlotText.Tag(slot),
+        "文件:行" => SlotText.Location(slot),
+        "位置（说明点）" => SlotText.Name(slot),
+        "位置" when screenName == "生成文档核对" => slot.Display,
+        "资源" => "GET /api/probe/" + SampleParameterName,
+        _ => null,
+    };
+
+    /// <summary>按那一张清单自己的字体量一行文字（单行、不认 &amp; 前缀），与列宽同一单位。</summary>
+    private static int MeasureCellText(ListView list, string text) =>
+        TextRenderer.MeasureText(
+            text, list.Font, new Size(10000, 10000), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix).Width;
 
     /// <summary>
     /// 按钮行高度实测（第二百二十二轮，CRITIQUE 第 8 站第 8 条）：八个对话框的按钮行里都放过一个

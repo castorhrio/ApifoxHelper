@@ -240,7 +240,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         // 逼出横向滚动条，而这一屏的取舍是「不出滚动条、列尾截断」。
         _actionList.Columns.Add("序号", 68);
         _actionList.Columns.Add("动作", 92);
-        _actionList.Columns.Add("资源", 240);
+        _actionList.Columns.Add("资源", ListColumnWidths.ResourceKey);
         _actionList.Columns.Add("远端 ID", 84);
         _actionList.Columns.Add("改动", 280);
         _actionList.Columns.Add("CLI 校验", 110);
@@ -252,7 +252,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _actionKeyword.PlaceholderText = ListFilter.PlanActionSearchPlaceholder;
         _actionKeyword.TextChanged += (_, _) => PopulateActions();
 
-        _excludedList.Columns.Add("资源", 240);
+        _excludedList.Columns.Add("资源", ListColumnWidths.ResourceKey);
         _excludedList.Columns.Add("未纳入原因", 620);
         _excludedTitles = _excludedList.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
         // 点击列头排序（ListSort 口径）：与写入清单同一手势、同一份判定，两张清单各记各的列。

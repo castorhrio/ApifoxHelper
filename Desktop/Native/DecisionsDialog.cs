@@ -115,7 +115,8 @@ internal sealed class DecisionsDialog : DpiAwareForm
         Font = UiTokens.Body.Value;
 
         _list.Columns.Add("类型", 100);
-        _list.Columns.Add("资源", 260);
+        // 「资源」与同步预览那两屏的同一格装的是同一族内容（接口身份 / 模型名），宽度取同一处口径。
+        _list.Columns.Add("资源", ListColumnWidths.ResourceKey);
         _list.Columns.Add("位置", 180);
         _list.Columns.Add("状态", 110);
         _list.SelectedIndexChanged += (_, _) => ShowDetail();

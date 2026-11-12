@@ -93,8 +93,9 @@ internal sealed class CandidatesDialog : DpiAwareForm
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
-        _list.Columns.Add("位置（说明点）", 340);
-        _list.Columns.Add("标注", 70);
+        // 前两列与注释缺口是同一族内容，宽度取同一处口径；其余三列是本屏独有的一族，留在原地。
+        _list.Columns.Add("位置（说明点）", ListColumnWidths.SlotLocation);
+        _list.Columns.Add("标注", ListColumnWidths.SlotTag);
         _list.Columns.Add("依据", 110);
         _list.Columns.Add("审阅状态", 110);
         _list.Columns.Add("来源", 90);
@@ -423,10 +424,13 @@ internal sealed class CandidatesDialog : DpiAwareForm
         var slot = _slotsById.GetValueOrDefault(candidate.SlotId);
         // 候选文字不再重复写进这块只读摘要：它就在下面那一格可编辑的输入框里（改完点「保存修改」），
         // 同一段文字摆在两个相邻的框里，用户不知道该改哪一个。
-        var lines = new List<string>
-        {
+        List<string> lines =
+        [
             "符号：" + QueueText.CandidateTitle(candidate, slot) + (slot is null ? "（该注释位置已不在本次扫描结果中，请重新扫描后再审阅）" : ""),
-        };
+            // 这一屏详情讲符号、讲依据、讲来源，独独不讲清单第二格那一句「哪个参数」——而它正是审阅要看的那一项，
+            // 110px 的那一格装不下带长参数名的标注（96 档量到 162px）。取法与那一格同一个函数。
+            ..SlotText.TagDetailLines(QueueText.CandidateTag(candidate)),
+        ];
         if (candidate.Warnings.Count > 0) lines.Add("提示：" + string.Join("；", candidate.Warnings));
         if (candidate.OpenQuestions.Count > 0)
         {
