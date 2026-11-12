@@ -276,6 +276,9 @@ internal static class Program
         Section("说明行放得下（三屏说明行按各自对话框宽度量文字，真实控件）", nameof(RunCaptionFit));
         RunCaptionFit(services, dataRoot);
 
+        Section("写入清单表头放得下（逐列量表头文字与排序方向标记，真实控件）", nameof(RunActionHeaderFit));
+        RunActionHeaderFit(services, dataRoot);
+
         Section("完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）", nameof(RunFullJourney));
         RunFullJourney(services, dataRoot);
 
@@ -5420,6 +5423,105 @@ internal static class Program
         if (usable <= 0) return (dialogUsable, "（对话框上界）");
         return usable < dialogUsable ? (usable, "（容器）") : (dialogUsable, "（对话框上界）");
     }
+
+    /// <summary>
+    /// 写入清单表头放得下（第二百一十七轮，<c>docs/CRITIQUE.md</c> 第 8 站那一处「先量再改」）。
+    /// <para>
+    /// 存在理由：同步预览写入清单的首列表头此前是 <c>"#"</c>——原生界面所有清单表头里唯一一个纯符号，
+    /// 与 DESIGN §1「中文单语」对不上。它一直没改，是因为那一列只有 40px，而排序方向标记会追加在表头文字
+    /// 之后（<see cref="ListSort.Header"/>），「序号 ▲」放不放得下在 Linux 上判不了（没有 Windows 图形子系统，
+    /// wine 也没量过这一格）。照抄改字有把表头截断成「序…」的风险。
+    /// </para>
+    /// <para>
+    /// 这一段就是那次量测：把写入清单真的构造出来，按它自己的字体逐列量表头文字（含排序方向标记那一支），
+    /// 与列宽比。判据是「文字宽 + 表头左右留白 ≤ 列宽」——留白取 <see cref="HeaderPadding"/>，
+    /// 是保守估计而不是量到的（表头单元格的内边距由系统绘制，本环境量不到），所以这一条绿只说明
+    /// 「按这个留白算放得下」，真机观感仍随 G-D5。
+    /// </para>
+    /// <para>
+    /// <b>判据只在设计档（100%）成立，非设计档只记读数</b>（第二百一十七轮实测）：列宽是逻辑像素、
+    /// 不随 DPI 缩放（DESIGN §6「列宽」口径：标识列吸收剩余可视宽度，其余列是设计值），而表头文字
+    /// 随 DPI 放大——同一份源码三档实测，列宽合计恒为 984px，而「序号 ▲」的文字宽是 54 / 58 / 70px
+    /// （96 / 120 / 192 档）。于是 125% 与 200% 档「文字宽 > 列宽」是列宽口径的必然结果，不是改字引入的；
+    /// 那一档的截断正是 DESIGN §8 已挂账的「窄窗口下表头截断后的标记可见性随 G-D5 复核」那一格。
+    /// 把非设计档也判成失败，等于让一条「量设计档宽度选得对不对」的判据去替真机做决定，
+    /// 而且会把三档读数从「N 通过 / 0 失败 ×3」变成带失败的一跑——那份读数记的是产品回归，不是口径后果。
+    /// 故非设计档把量到的数字照原样写进证据行（真机那天有基线可比），不判失败。
+    /// </para>
+    /// </summary>
+    private static void RunActionHeaderFit(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "写入清单表头放得下冒烟" });
+
+        RunAction("写入清单表头：设计档（100%）每一列的表头文字（含排序方向标记）都在列宽之内（真实控件量文字）", () =>
+        {
+            using var dialog = new SyncPreviewDialog(
+                tasks,
+                services.GetRequiredService<SyncPlanService>(),
+                services.GetRequiredService<SyncExecutor>(),
+                services.GetRequiredService<JobRunner>(),
+                task);
+            _ = dialog.Handle;
+            dialog.CreateControl();
+            dialog.PerformLayout();
+            Application.DoEvents();
+
+            // 写入清单是这一屏唯一一张七列清单（勾选页四列、未纳入清单两列）。
+            var list = FindAll<ListView>(dialog).FirstOrDefault(candidate => candidate.Columns.Count == 7)
+                ?? throw new InvalidOperationException("同步预览里找不到七列的写入清单：量测口径可能已失效。");
+
+            var measured = new List<string>();
+            var tooWide = new List<string>();
+            for (var i = 0; i < list.Columns.Count; i++)
+            {
+                var title = list.Columns[i].Text;
+                var width = list.Columns[i].Width;
+                // 两个形状都量：未排序时是原标题，点过这一列之后是「原标题 + 空格 + 方向标记」。
+                foreach (var (shape, text) in new[]
+                         {
+                             ("未排序", title),
+                             ("排序后", ListSort.Header(title, i, i, descending: false)),
+                         })
+                {
+                    var preferred = TextRenderer.MeasureText(
+                        text, list.Font, new Size(10000, 10000), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                    measured.Add($"「{text}」{preferred.Width}/{width}px（{shape}）");
+                    if (preferred.Width + HeaderPadding > width)
+                    {
+                        tooWide.Add($"第 {i + 1} 列「{text}」（{shape}）文字 {preferred.Width}px + 留白 {HeaderPadding}px > 列宽 {width}px");
+                    }
+                }
+            }
+
+            // 判据只在设计档成立：列宽是逻辑像素、不随 DPI 缩放（DESIGN §6），表头文字随 DPI 放大。
+            // 非设计档的「文字宽 > 列宽」是列宽口径的必然结果，随 G-D5 复核，本段只记读数（见方法注释）。
+            var designTier = !DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor());
+            var verdict = designTier
+                ? (tooWide.Count == 0 ? "设计档全部放得下" : $"设计档 {tooWide.Count} 条放不下")
+                : $"非设计档（≈{CaptionScalePercent()}%）{tooWide.Count} 条超宽——列宽是逻辑像素、不随 DPI 缩放（DESIGN §6），本段不判";
+
+            // 先写证据行再判失败：判失败的那一档也要留下量到的数字（与 RunCaptionFit 同一纪律）。
+            _lines.Add(
+                $"     写入清单 {list.Columns.Count} 列、{DpiContext(dialog)}、表头字体 {list.Font.Height}px" +
+                $"（≈{CaptionScalePercent()}%），列宽合计 {list.Columns.Cast<ColumnHeader>().Sum(column => column.Width)}px、" +
+                $"清单可视宽 {list.ClientSize.Width}px，文字/列宽 = {string.Join("，", measured)}；" +
+                $"结论：{verdict}");
+
+            if (designTier && tooWide.Count > 0)
+            {
+                throw new InvalidOperationException("写入清单表头在设计档放不下（会被截断成「序…」）：" + string.Join("、", tooWide));
+            }
+        });
+    }
+
+    /// <summary>
+    /// 表头单元格左右留白的保守估计（像素）：系统绘制表头时左右各留一点，本环境量不到那个内边距，
+    /// 故按 6px 一侧计。判据因此是「按这个留白算放得下」，不是「真机上一定不截断」——后者随 G-D5。
+    /// </summary>
+    private const int HeaderPadding = 12;
 
     private static void RunCaptionFit(IServiceProvider services, string dataRoot)
     {

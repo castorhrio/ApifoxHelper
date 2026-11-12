@@ -179,7 +179,8 @@ public class ListCopyTests
     {
         var source = Repo.Source("Desktop", "Native", "SyncPreviewDialog.cs");
         // 首列是动作序号（第几步），复制它等于没交出任何东西。
-        Assert.Equal("#", ColumnTitles(source, "_actionList")[0]);
+        // 表头文字第二百一十七轮由「#」改为「序号」（DESIGN §1 中文单语；§6 那一行本来就写作「序号」）。
+        Assert.Equal("序号", ColumnTitles(source, "_actionList")[0]);
         AssertIdentityColumn(source, "ActionResourceColumn", "_actionList", "资源");
     }
 

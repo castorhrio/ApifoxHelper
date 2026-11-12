@@ -6,10 +6,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-12
-source=28eab04237f39eb9e240a770123634e222a9cedc
-tier=96 passed=218 failed=0 exit=0
-tier=120 passed=218 failed=0 exit=0
-tier=192 passed=218 failed=0 exit=0
+source=4d6a29995c5cadb1c04009de4e15279edafdeb6d
+tier=96 passed=219 failed=0 exit=0
+tier=120 passed=219 failed=0 exit=0
+tier=192 passed=219 failed=0 exit=0
 section=RunEndToEnd tier=96 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=96 passed=6 failed=0
 section=RunScanResultsInteraction tier=96 passed=5 failed=0
@@ -31,6 +31,7 @@ section=RunDialogStatusSweep tier=96 passed=60 failed=0
 section=RunNoticeCopyClick tier=96 passed=8 failed=0
 section=RunBuildCommandCopyClick tier=96 passed=9 failed=0
 section=RunCaptionFit tier=96 passed=3 failed=0
+section=RunActionHeaderFit tier=96 passed=1 failed=0
 section=RunFullJourney tier=96 passed=10 failed=0
 section=RunEndToEnd tier=120 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=120 passed=6 failed=0
@@ -53,6 +54,7 @@ section=RunDialogStatusSweep tier=120 passed=60 failed=0
 section=RunNoticeCopyClick tier=120 passed=8 failed=0
 section=RunBuildCommandCopyClick tier=120 passed=9 failed=0
 section=RunCaptionFit tier=120 passed=3 failed=0
+section=RunActionHeaderFit tier=120 passed=1 failed=0
 section=RunFullJourney tier=120 passed=10 failed=0
 section=RunEndToEnd tier=192 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=192 passed=6 failed=0
@@ -75,4 +77,5 @@ section=RunDialogStatusSweep tier=192 passed=60 failed=0
 section=RunNoticeCopyClick tier=192 passed=8 failed=0
 section=RunBuildCommandCopyClick tier=192 passed=9 failed=0
 section=RunCaptionFit tier=192 passed=3 failed=0
+section=RunActionHeaderFit tier=192 passed=1 failed=0
 section=RunFullJourney tier=192 passed=10 failed=0

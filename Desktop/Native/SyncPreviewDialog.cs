@@ -216,10 +216,20 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
 
         _page1 = BuildSelectPage();
 
-        _actionList.Columns.Add("#", 40);
+        // 首列表头是「序号」不是「#」（第二百一十七轮）：原生界面所有清单表头里唯一一个纯符号，
+        // 与 DESIGN §1「中文单语」对不上，而 DESIGN §6 那一行本来就写作「写入清单（序号、动作、…）」——
+        // 代码是漂出去的那一侧。改字之前先量过（冒烟段 RunActionHeaderFit）：排序方向标记会追加在
+        // 表头文字之后，「序号」加方向标记后 54px + 表头留白 12px = 66px，故列宽 40 → 68；同一段量到
+        // 「远端 ID」加方向标记后 71px + 12px = 83px 也超了原来的 72px（点一次列头就截断），一并 72 → 84。
+        // 七列合计 944 → 984px，仍小于这一屏清单的可视宽（96 档实测 1018px），不出横向滚动条。
+        // 125% / 200% 档同一段实测「序号」带方向标记后 58 / 70px、「远端 ID」带方向标记后 75 / 91px——超宽，但那是列宽口径的
+        // 必然结果：列宽是逻辑像素、不随 DPI 缩放（DESIGN §6），表头文字随 DPI 放大。那一档的截断
+        // 随 G-D5 真机复核（DESIGN §8 已挂账），本处不为它把列宽按 DPI 放大——放大会在 200% 档
+        // 逼出横向滚动条，而这一屏的取舍是「不出滚动条、列尾截断」。
+        _actionList.Columns.Add("序号", 68);
         _actionList.Columns.Add("动作", 92);
         _actionList.Columns.Add("资源", 240);
-        _actionList.Columns.Add("远端 ID", 72);
+        _actionList.Columns.Add("远端 ID", 84);
         _actionList.Columns.Add("改动", 280);
         _actionList.Columns.Add("CLI 校验", 110);
         _actionList.Columns.Add("状态", 110);
