@@ -2184,6 +2184,20 @@
 | 排版归因 | 中文标点不落行首，靠的是浏览器默认排版和样式表叠在一起，不是哪一条属性的功劳；这台机器上四种取值排出来一模一样，我们没把可读性押在一条声明上。 | `docs/NOTES.md`「真浏览器布局门（HTML 折行）」；`HtmlWrapTests.ThisBrowser_CannotTellTheDeclarationFromItsAbsence_NotesSaysSo`；`RunCaptionFit` |
 | 产品完整度 | 从配置到报告十个环节都在原生窗口里走完，写入前有九条红线挡着；每一项能力都能在验收表里勾到证据，也能一条命令复跑；真机没验的那几行还是空框。 | `README.md`「使用流程」；`docs/NOTES.md`「本仓验收口径（可勾选）」；`AcceptanceChecklistTests.Checklist_EveryItemHasAnEvidenceSourceAndItResolves`；`RunEndToEnd` |
 
+### 答辩当天执行顺序（第二百二十一轮，简报 P0-1）
+
+> **这一小节解决什么**：上面五块管「凭什么值得做」，「降级答辩逐屏演示脚本」管「每一屏念哪一行读数」，「被追问真机时的三句答法」管「被追问时怎么答」——三份材料都在，但**当天从哪一步开始、按什么顺序走**此前没有一页写死，讲的人得自己把三份材料拼成一条线。这一小节把当天的动作收成 7 步，照编号走，不现场设计。**它不新增任何证据**：每一步指的东西都在仓里，指不到的不写。
+
+1. **在仓根打开终端**：终端的工作目录就是本仓根目录（`ApifoxHelper/` 这一层），当天所有命令都在这一层敲，路径一律按仓根相对写；Windows 侧把 `bash` 换成 `.winecheck/demo.ps1`，其余步骤不变。逐屏表与命令的对应关系见 `docs/NOTES.md`「降级答辩逐屏演示脚本」。
+2. **先预热一次，把冒烟器发成当前源码**：`PUBLISH=1 bash .winecheck/demo.sh`。带 `PUBLISH` 是因为产物旁的 `smoke-source.sha` 记的是上一次发出来的源码指纹，源码动过之后不带它会当场判「冒烟器不是当前源码发出来的」并非零退出（第二百一十八轮真拦过一次）。三档跑完，读数写进 `.winecheck/reading.txt`，讲稿落在 `/tmp/ah-demo/narration-<档位>.txt`。
+3. **念第一块「差异化」**：照 `docs/NOTES.md`「五块讲稿模板」那一行念，念完指 `README.md`「写入安全」与 `RunWriteBackEndToEnd` 那一行读数。
+4. **念第二块「AI 必要性」**：这一块没有冒烟段可指，如实说「只有源码事实」，指 `docs/NOTES.md`「规则提取的边界：用途说明只有模型能写」。
+5. **念第三块「可经营」、第四块「排版归因」、第五块「产品完整度」**：顺序照上面那张口径表（本节，`docs/NOTES.md`），五块连起来一口气念完（总字数由 `DefenseNarrativeTests.Narrative_FiveBlocksReadInOneBreath` 现算）；每块念完指它自己那一行的出处，不重复指同一段证据。
+6. **被问到「真机呢」照第 ① 句答**：`docs/NOTES.md`「被追问真机时的三句答法」第 ① 句——真机 0 台、G-D5 如实标「未达成（环境供给缺口）」、现有界面证据全部来自 wine 模拟器；接着指 `.winecheck/demo.sh` 与「降级答辩脚本」一节，说明当天按逐屏表讲。
+7. **现场演示主链路那一屏**：`RunFullJourney`（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告，一条任务走完），读数在 `/tmp/ah-demo/narration-96.txt` 里那一行；这一屏在 `.winecheck/demo.sh` 的逐屏对账里，跑完就有数，不现场编。
+
+> **走完之后**：`DefenseNarrativeTests.DefenseRunOrder_EveryStepNamesARealPath` 判四件事——① 这一小节在位；② 有序列表 5–10 项、编号从 1 起连续；③ 每一项都点到仓里真实存在的路径（`docs/NOTES.md` 或 `.winecheck/` 下的文件，路径不存在即红）；④ 五块块名按口径表顺序出现、至少一步点到冒烟段名（现场演示那一屏）、且这一小节写着 `PUBLISH=1` 与「G-D5」「未达成」。**它不判真机跑没跑**——G-D5 仍是 `[ ]`，到期日 2026-11-20。
+
 ## 规则提取的边界：用途说明只有模型能写（第一百七十七轮，简报 P0-2）
 
 > **这一节是什么**：上一节答辩口径里「AI 必要性」那一块此前写的是「模型只在生成草稿一处出现，三条替代路径任走一条整条链路照样走完」——这句话在「与 AI 共生」主题下会被追问「那到底哪一处非模型不可」，而当时的答案只有自述。这一节把答案落到源码上：**约束类说明规则提取能写，用途类说明只有模型能写**。口径块引的就是这一节，文案与代码不脱节由 `RuleExtractionScopeTests.AiNecessityBlock_CitesTheRuleExtractionScopeSection` 钉住。

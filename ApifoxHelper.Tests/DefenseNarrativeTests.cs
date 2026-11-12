@@ -773,4 +773,152 @@ public class DefenseNarrativeTests
         var self = $"{nameof(DefenseNarrativeTests)}.{nameof(DemoScript_EveryScreenNamesACommandThatRuns)}";
         Assert.Contains(self, section, StringComparison.Ordinal);
     }
+    // ---------- 第二百二十一轮（简报 P0-1）：答辩当天照这个顺序点 ----------
+
+    /// <summary>「答辩当天执行顺序」那一小节的标题前缀。</summary>
+    private const string RunOrderHeading = "### 答辩当天执行顺序";
+
+    /// <summary>当天动作单的步数区间（简报给的数是 ≥5、≤10）。</summary>
+    private const int RunOrderFloor = 5;
+
+    /// <summary>步数上限：再多就不是「当天照着点」，是又一份文档。</summary>
+    private const int RunOrderCeiling = 10;
+
+    /// <summary>这一小节允许当「路径出处」的两处：NOTES 本身，或 <c>.winecheck/</c> 下的文件。</summary>
+    private const string RunOrderNotesPath = "docs/NOTES.md";
+
+    /// <summary><c>.winecheck/</c> 目录前缀（另一处允许的路径出处）。</summary>
+    private const string RunOrderScriptDir = ".winecheck/";
+
+    /// <summary>
+    /// 「答辩当天执行顺序」那一小节的正文（标题行到下一个二级或三级标题之前）。
+    /// <para>
+    /// 切到下一个 <c>### </c> 也停：这一小节是「初审答辩口径」一节的最后一段，但下一轮若在它后面
+    /// 再加一段，本门不该把别人的字算进这一页（步数会凭空变多，而多出来的那几步没人照着走过）。
+    /// </para>
+    /// </summary>
+    private static string RunOrderSection()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var start = notes.IndexOf(RunOrderHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 缺少「{RunOrderHeading}」一小节：五块口径、逐屏脚本、三句答法三份材料都在，"
+            + "但「当天从哪一步开始、按什么顺序走」没有一页写死——答辩现场只能临时拼。");
+        var rest = notes[(start + RunOrderHeading.Length)..];
+        var end = rest.IndexOf("\n## ", StringComparison.Ordinal);
+        var section = end < 0 ? rest : rest[..end];
+        var sub = section.IndexOf("\n### ", StringComparison.Ordinal);
+        return sub < 0 ? section : section[..sub];
+    }
+
+    /// <summary>当天动作单的每一步：编号 + 正文（只认顶格的 <c>N. </c> 有序列表项）。</summary>
+    private static List<(int Number, string Text)> RunOrderSteps()
+    {
+        var steps = new List<(int, string)>();
+        foreach (var line in RunOrderSection().ReplaceLineEndings("\n").Split('\n'))
+        {
+            var match = Regex.Match(line, @"^(?<n>\d+)\.\s+(?<t>.+)$");
+            if (!match.Success) continue;
+            steps.Add((int.Parse(match.Groups["n"].Value, CultureInfo.InvariantCulture), match.Groups["t"].Value.Trim()));
+        }
+
+        return steps;
+    }
+
+    /// <summary>
+    /// 答辩当天照这个顺序点：动作单在位、5–10 步、每一步都点到仓里真实存在的路径（第二百二十一轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：真机 0 台、到期日 2026-11-20，降级答辩是关闭 G-D5 的唯一路径。仓里为此攒了三份材料
+    /// ——五块口径（凭什么值得做）、逐屏演示脚本（每一屏念哪一行读数）、三句答法（被追问时怎么答）——
+    /// 但<b>当天从哪一步开始、按什么顺序走</b>此前只活在人的记忆里：讲的人得自己把三份材料拼成一条线，
+    /// 而现场拼出来的顺序最容易漏掉「先预热一次」那一步（不带 <c>PUBLISH</c> 时脚本会当场判
+    /// 「冒烟器不是当前源码发出来的」并非零退出，第二百一十八轮真拦过一次），也最容易把「真机呢」答成
+    /// 「跑过了」。这一条把「当天照这个顺序点」落成材料并加门。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 这一小节在位；② 有序列表 <see cref="RunOrderFloor"/>–<see cref="RunOrderCeiling"/> 项、
+    /// 编号从 1 起连续（多一步是没人走过的动作，少一步是断链）；③ <b>每一步</b>都点到仓里真实存在的路径，
+    /// 且那处路径只能是 <c>docs/NOTES.md</c> 或 <c>.winecheck/</c> 下的文件——写错一个路径即红
+    /// （当天照着敲就是一条空命令）；④ 五块块名按口径表顺序出现（念稿顺序就是那张表的顺序）、
+    /// 至少一步点到冒烟段名（现场演示那一屏，段名须真有声明与 <c>nameof</c> 调用点）、
+    /// 且这一小节写着 <c>PUBLISH=1</c> 与「G-D5」「未达成」（预热命令与真机口径是这一页的两处硬事实）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机跑没跑</b>（真机 0 台，G-D5 仍是 <c>[ ]</c>），
+    /// 也不判每一步的措辞好不好听——措辞会漂，钉措辞的门最后只会被改措辞绕过。
+    /// 它只保证「当天照着点的每一步，指的东西都在仓里，且顺序与念稿顺序一致」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DefenseRunOrder_EveryStepNamesARealPath()
+    {
+        var section = RunOrderSection();
+        var steps = RunOrderSteps();
+
+        // ① 步数区间 + 编号从 1 起连续。
+        Assert.True(steps.Count >= RunOrderFloor && steps.Count <= RunOrderCeiling,
+            $"「{RunOrderHeading}」有 {steps.Count} 步，简报要的是 {RunOrderFloor}–{RunOrderCeiling} 步："
+            + "少于下限当天走不完主链路，多于上限就不是「照着点」，是又一份文档。");
+        Assert.Equal(Enumerable.Range(1, steps.Count), steps.Select(s => s.Number));
+
+        // ② 每一步都点到仓里真实存在的路径（只认 docs/NOTES.md 与 .winecheck/ 下的文件）。
+        foreach (var (number, text) in steps)
+        {
+            var paths = Regex.Matches(text, @"(?:docs/NOTES\.md|\.winecheck/[A-Za-z0-9._/-]+)")
+                .Select(m => m.Value.TrimEnd('.'))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            Assert.True(paths.Count > 0,
+                $"当天动作单第 {number} 步没有点到任何仓内路径（docs/NOTES.md 或 .winecheck/ 下的文件）："
+                + "当天照着这一步做时，指不出该翻哪一页、该跑哪一支脚本。");
+            foreach (var path in paths)
+            {
+                Assert.True(File.Exists(Path.Combine(Repo.Root, path.Replace('/', Path.DirectorySeparatorChar))),
+                    $"当天动作单第 {number} 步点的路径「{path}」在仓里不存在："
+                    + "当天照着敲就是一条空命令，而这一页正是「不现场设计」的那一页。");
+            }
+        }
+
+        // ③ 五块按口径表顺序出现：念稿顺序就是那张表的顺序，顺序漂了现场会念成另一套。
+        var cursor = 0;
+        foreach (var block in ExpectedBlocks)
+        {
+            var at = section.IndexOf(block, cursor, StringComparison.Ordinal);
+            Assert.True(at >= 0,
+                $"当天动作单里「{block}」没有按口径表顺序出现（上一块之后找不到它）："
+                + "五块的顺序在口径表里定，动作单照那个顺序念，现场不重排。");
+            cursor = at + block.Length;
+        }
+
+        // ④ 预热命令、真机口径、现场演示那一屏——**只在这一页的步骤里判**，不判整节。
+        //    判整节会自证：这一页末尾那段「走完之后」本来就写着「这一小节写着 PUBLISH=1 与「G-D5」「未达成」」，
+        //    于是把第 2 步（预热命令）与第 6 步（真机口径）整条删掉，门照样绿——那正是本仓反复收口的
+        //    「同一条目内两处措辞互相满足」的假绿形状。步骤才是当天照着点的东西，事实必须在步骤里。
+        var stepText = string.Join('\n', steps.Select(s => s.Text));
+        Assert.Contains("PUBLISH=1", stepText, StringComparison.Ordinal);
+        Assert.Contains("G-D5", stepText, StringComparison.Ordinal);
+        Assert.Contains("未达成", stepText, StringComparison.Ordinal);
+
+        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        // 段名前面不许紧贴字母：本门自己的名字（DefenseRunOrder_…）里也有「Run」，那不是冒烟段。
+        var segments = Regex.Matches(stepText, @"(?<![A-Za-z0-9_])Run[A-Za-z0-9]+")
+            .Select(m => m.Value).Distinct(StringComparer.Ordinal).ToList();
+        Assert.True(segments.Count > 0,
+            $"「{RunOrderHeading}」一个冒烟段名（RunXxx）都没点到：现场演示那一屏指不出来，"
+            + "而这一页要回答的正是「现场演示哪一屏」。");
+        foreach (var segment in segments)
+        {
+            Assert.True(smoke.Contains($"private static void {segment}(", StringComparison.Ordinal),
+                $"当天动作单引的冒烟段「{segment}」在 ApifoxHelper.Smoke/Program.cs 里没有声明："
+                + "现场照着念的段名必须真的存在。");
+            Assert.True(smoke.Contains($"nameof({segment})", StringComparison.Ordinal),
+                $"当天动作单引的冒烟段「{segment}」没有接进运行清单（找不到 nameof({segment})）："
+                + "只声明不调用的段在报告里不会出现，照着念就是空手。");
+        }
+
+        // ⑤ 这一节点名本门：门被删掉时，读这一页的人还知道该去核哪一条。
+        Assert.Contains($"{nameof(DefenseNarrativeTests)}.{nameof(DefenseRunOrder_EveryStepNamesARealPath)}",
+            section, StringComparison.Ordinal);
+    }
+
 }
