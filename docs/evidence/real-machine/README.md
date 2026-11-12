@@ -48,6 +48,34 @@
 | 6 | `docs/evidence/real-machine/apifox-write/` | `plan.json`、`journal.jsonl`、`remote-before.json`、`remote-after.json`、`partial-failure.txt` | 计划内资源条数与远端资源条数、每个动作的指纹与最终状态、部分失败后停在第几个动作（示例：计划内 2 条、远端 2 条、停在第 2 个动作） | 只写了计划内资源、执行前重读并核对指纹、创建防重与 ID 回绑、未确认的高风险项不进计划且没有任何删除动作；部分失败那一支是硬门 | 计划内资源、指纹、创建防重、删除动作 |
 | 7 | `docs/evidence/real-machine/smoke/` | `smoke-report.txt` | 报告总通过 / 失败数、每一段的段名（段标题带 `[RunXxx]`）、进程退出码（示例：退出码 0、失败数 0、段数 7 段） | 退出码 0 且 0 失败；同一段在真机与 wine 两处判定一致（段数与通过数不要求等于 wine 那一档的数） | 通过/失败数、段名、同一段的判断不同 |
 
+## 第 3、4 条三个数的具名落点（真机当天照抄，不现场编）
+
+> **这一节解决什么**（第二百一十八轮，简报 P1-1）：产出物清单第 3、4 行说「一行三个数：因子 / 客户区宽 /
+> 说明行可用宽」，`docs/NOTES.md` 的「DPI 变更『结果三个数』的照抄三列」说「从哪读」——但**这三个数各自落进
+> 哪个文件的哪一行、写成什么格式**仍要现场想。现场想 = 现场发明：同一份读数文件里 `factor=2.0` 与
+> `因子：2.0` 两种写法并存，下一个人（或答辩现场的自己）读不出哪个是哪个，而归档核对只判「有没有东西」，
+> 判不出「写没写对行」。
+>
+> **口径与仓内算式同一份**：因子 = 该屏 DPI ÷ 96（`Desktop/Native/DpiScaleFactor.cs` 的 `FromScreenDpi`），
+> 保留两位小数；客户区宽 = 设计宽 × 因子、远离零取整（同一文件 `PlanRescale` 回的那个 `ClientWidth`，
+> 即 `ScaledExtent` 的口径）；说明行可用宽记逻辑像素，不换算物理像素。**三个数各自只有一个行名**：
+> 同一个数在第 3、4 条里用同一个行名，不许一处 `factor=`、另一处 `缩放因子=`。
+>
+> **机械门**：`ApifoxHelper.Tests/RealMachineEvidenceTests.cs` 的
+> `RealMachineEvidenceTests.DpiChangeNumbers_HaveOneNamedLandingLineEach` 判四件事——① 第 3、4 条各三个数
+> 一行不缺（顺序也判）；② 每个数只有一个落点行名，三个数的行名互不相同；③ 落点文件必须是产出物清单该行
+> 点到的那个 `.txt` 读数文件；④ 格式列必须点到仓内算式（因子点 `DpiScaleFactor.FromScreenDpi`、客户区宽点
+> `PlanRescale`、说明行可用宽点「逻辑像素」）。**它不判真机有没有跑**，也不判抄回来的数对不对。
+
+| 动作 | 数 | 落点文件 | 落点行名 | 写什么格式 |
+| --- | --- | --- | --- | --- |
+| 第 3 条 | 因子 | `docs/evidence/real-machine/mixed-dpi/mixed-dpi-读数.txt` | `factor=` | `factor=2.00`——该屏 DPI ÷ 96、两位小数（与 `DpiScaleFactor.FromScreenDpi` 同一算式）；被屏幕可用区截断时截断前后各一行 |
+| 第 3 条 | 客户区宽 | `docs/evidence/real-machine/mixed-dpi/mixed-dpi-读数.txt` | `client-width=` | `client-width=2800`——逻辑像素，与 `DpiScaleFactor.PlanRescale` 回的 `ClientWidth` 同一口径（设计宽 × 因子、远离零取整） |
+| 第 3 条 | 说明行可用宽 | `docs/evidence/real-machine/mixed-dpi/mixed-dpi-读数.txt` | `caption-available=` | `caption-available=2760`——逻辑像素，取说明行控件的可用宽（文字宽写在同一个值的括号里，不另起行名） |
+| 第 4 条 | 因子 | `docs/evidence/real-machine/scale-change/scale-change-读数.txt` | `factor=` | 改档前后各一行、行名相同：`factor=1.00`（改档前）、`factor=2.00`（改档后），按出现顺序读；算式同 `DpiScaleFactor.FromScreenDpi`（该屏 DPI ÷ 96、两位小数） |
+| 第 4 条 | 客户区宽 | `docs/evidence/real-machine/scale-change/scale-change-读数.txt` | `client-width=` | 两屏各一行：`client-width=1020`、`client-width=2040`（与 `DpiScaleFactor.PlanRescale` 的 `ClientWidth` 同一口径） |
+| 第 4 条 | 说明行可用宽 | `docs/evidence/real-machine/scale-change/scale-change-读数.txt` | `caption-available=` | 两屏各一行：`caption-available=988`、`caption-available=1976`（逻辑像素） |
+
 ## 首程四站逐站预期（真机到位当天照着核对，不现场设计）
 
 > **这一节解决什么**：产出物清单第 1 行说「四站各一张截图 + `task.json` 与 `symbols.json` 副本」，但真机到位当天

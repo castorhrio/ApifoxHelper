@@ -33,13 +33,13 @@ namespace ApifoxHelper.Desktop.Native;
 /// 由 <c>StatusLineTextTests.Host_FillsItsCell_SoTheStatusLineGetsTheRemainingWidth</c> 按类逐段判住。
 /// </para>
 /// <para>
-/// <b>修复后实测（第二百一十六轮，简报 P0-2）</b>：补上 Dock 之后页面侧状态行这一格的可用宽度
-/// 在 96 / 120 / 192 三档实测为 <b>855 / 840 / 774px</b>（窗口 1280px，即 Xvfb 屏幕工作区宽；
-/// 读数原文见 <c>/tmp/ah-demo/report-{96,120,192}.txt</c> 里 <c>RunStatusFullText</c> 那两行
-/// 「入口不占位时这一行 Npx」）。同一条 94 字真实失败原因的文字宽是 642 / 669 / 817px——
-/// 96 与 120 两档放得下（入口不给），192 档放不下（入口给）。也就是说
-/// 「放得下就不给入口」那一支<b>第一次真的走到了</b>，不再是「194px 永远放不下」。
-/// 这一句只记量到的数，不把它读成真机结论（wine 模拟器，G-D5 仍 <c>[ ]</c>）。
+/// <b>补上 Dock 之后量到的是什么</b>（第二百一十六轮，简报 P0-2；第二百一十八轮按 P1-2 去掉无出处的读数）：
+/// 页面侧状态行这一格从此拿到工具栏那一行的剩余宽度，「放得下就不给入口」那一支<b>第一次真的走到了</b>
+/// （补 Dock 之前它恒为 194px，一条真实失败原因永远放不下）。三档的具体读数不写在这里——它们随窗口宽度
+/// 与缩放档变化，抄进注释就成了没有出处的数；要念就读当场跑出来的那一份：<c>.winecheck/reading.txt</c>
+/// 的 <c>RunStatusFullText</c> 段（三档各 4 段全绿，由 <c>ReadingConsistencyTests</c> 与文档对账），
+/// 原文行在 <c>/tmp/ah-demo/report-&lt;档位&gt;.txt</c> 的「入口不占位时这一行 Npx」那一句里，
+/// 复跑 <c>bash .winecheck/demo.sh</c> 即得。这一句只记机制，不把它读成真机结论（wine 模拟器，G-D5 仍 <c>[ ]</c>）。
 /// </para>
 /// <para>
 /// <b>高度是固定占位</b>：宿主高度取状态行自身高度（DESIGN.md §6「状态行：固定占位，文案变化不推动布局」）。

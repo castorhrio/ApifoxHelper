@@ -993,6 +993,139 @@ public class RealMachineEvidenceTests
         }
     }
 
+    // ---------- 第二百一十八轮（简报 P1-1）：三个数各自的具名落点行 ----------
+
+    /// <summary>「第 3、4 条三个数的具名落点」那一节的标题前缀（二级标题，落在归档 README 里）。</summary>
+    private const string DpiLandingHeading = "## 第 3、4 条三个数的具名落点";
+
+    /// <summary>这一节的一行：动作 / 数 / 落点文件 / 落点行名 / 写什么格式。</summary>
+    private readonly record struct DpiLandingRow(int Action, string Number, string File, string Line, string Format);
+
+    private static string[] DpiLandingLines()
+    {
+        var lines = ReadmeText().Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(DpiLandingHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"缺「{DpiLandingHeading}」一节：动作单第 3、4 条要量的三个数（因子 / 客户区宽 / 说明行可用宽）"
+            + "各自落进哪个文件的哪一行、写成什么格式，又得真机当天现场发明。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    private static List<DpiLandingRow> DpiLandingRows()
+    {
+        var rows = new List<DpiLandingRow>();
+        foreach (var line in DpiLandingLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            var action = Regex.Match(cells[0], @"^第\s*(\d+)\s*条$");
+            if (!action.Success) continue;
+            Assert.True(cells.Count == 5,
+                $"「第 3、4 条三个数的具名落点」有一行不是 5 列（实际 {cells.Count} 列，应为 动作 / 数 / 落点文件 / 落点行名 / 写什么格式）：{cells[0]}。");
+            rows.Add(new DpiLandingRow(int.Parse(action.Groups[1].Value), cells[1], cells[2], cells[3], cells[4]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>「落点行名」格里那个反引号里的行名（形如 <c>factor=</c>）。</summary>
+    private static string LandingName(string cell)
+    {
+        var match = Regex.Match(cell, @"`([a-z][a-z-]*=)`");
+        Assert.True(match.Success,
+            $"「落点行名」格没写成一个反引号里的行名（形如 `factor=`）：{cell}。"
+            + "只写「因子那一行」这种说法，真机当天仍要自己决定行名，而归档核对判不出写没写对行。");
+        return match.Groups[1].Value;
+    }
+
+    /// <summary>
+    /// 第 3、4 条三个数各自的<b>具名落点行</b>（第二百一十八轮，简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="DpiChangeNumbers_HaveThreeColumnsAndArchiveToTheSameDirectory"/> 判的是
+    /// <c>docs/NOTES.md</c> 那张「照抄三列」——三个数从哪读、落进哪个文件、字段名是什么。但真机当天手里拿的是
+    /// <b>归档目录那份 README</b>（动作单第 1 步就让人先读它），而它此前只说「一行三个数」：<b>哪一行、行名叫什么、
+    /// 写成什么形状</b>仍要现场想。现场想 = 现场发明，发明出来的行名没人能复核——同一份读数文件里
+    /// <c>factor=2.0</c> 与 <c>因子：2.0</c> 并存时，下一个人读不出哪个是哪个。
+    /// </para>
+    /// <para>
+    /// <b>判四件事</b>：① 第 3、4 条各三个数（<see cref="DpiChangeNumbers"/>，顺序也判）一行不缺；
+    /// ② 每个数<b>只有一个</b>落点行名（同一个数在两处写成两个名字即红），三个数的行名<b>互不相同</b>
+    /// （两个数共用一个行名，读数文件里就分不出谁是谁）；③ 落点文件必须是产出物清单该行点到的那个
+    /// <c>.txt</c> 读数文件（另起一个文件名即红）；④ 格式列必须点到仓内算式——因子点
+    /// <c>DpiScaleFactor.FromScreenDpi</c>、客户区宽点 <c>PlanRescale</c>、说明行可用宽点「逻辑像素」，
+    /// 且那两个符号真的在 <c>Desktop/Native/DpiScaleFactor.cs</c> 里（口径不许另起一套）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机有没有跑</b>（本机没有 Windows 图形子系统），也不判抄回来的数对不对——
+    /// 它只保证「当天照着写的那一行，是仓里已经定好的那一行」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DpiChangeNumbers_HaveOneNamedLandingLineEach()
+    {
+        var rows = DpiLandingRows();
+        var artifacts = ArtifactRows().ToDictionary(r => r.Action);
+
+        // ① 第 3、4 条各三个数，一行不缺、顺序也判。
+        Assert.Equal([3, 4], rows.Select(r => r.Action).Distinct().OrderBy(n => n));
+        foreach (var action in new[] { 3, 4 })
+        {
+            var numbers = rows.Where(r => r.Action == action).Select(r => r.Number).ToList();
+            Assert.Equal(DpiChangeNumbers, numbers);
+        }
+
+        // ② 每个数只有一个落点行名，三个数的行名互不相同。
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var number in DpiChangeNumbers)
+        {
+            var distinct = rows.Where(r => r.Number == number)
+                .Select(r => LandingName(r.Line))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            Assert.True(distinct.Count == 1,
+                $"「{number}」在第 3、4 条里用了 {distinct.Count} 个落点行名（" + string.Join(" ／ ", distinct)
+                + "）：同一个数只能有一个行名，否则读数文件里分不出哪一行是它。");
+            names[number] = distinct[0];
+        }
+
+        Assert.True(names.Values.Distinct(StringComparer.Ordinal).Count() == DpiChangeNumbers.Length,
+            "三个数共用了同一个落点行名（" + string.Join(" ／ ", names.Select(p => p.Key + " → " + p.Value))
+            + "）：两个数写进同一行，下一个人读不出哪个是哪个。");
+
+        foreach (var row in rows)
+        {
+            // ③ 落点文件必须是产出物清单该行点到的那个 .txt 读数文件。
+            var files = Backticked(row.File).Where(f => f.EndsWith(".txt", StringComparison.Ordinal)).ToList();
+            Assert.True(files.Count == 1,
+                $"第 {row.Action} 条「{row.Number}」的「落点文件」必须点到一个 .txt 读数文件（实际 {files.Count} 个）："
+                + "三个数落在同一个读数文件里，不另起一套命名。");
+            var fileName = Path.GetFileName(files[0]);
+            Assert.True(Backticked(artifacts[row.Action].Files).Contains(fileName, StringComparer.Ordinal),
+                $"第 {row.Action} 条「{row.Number}」的落点文件「{fileName}」在产出物清单该行的产出物里找不到："
+                + "两边各写一套名字，真机当天就会写进没人判的文件。");
+
+            // ④ 格式列点到仓内算式，口径不另起一套。
+            var expected = row.Number switch
+            {
+                "因子" => "DpiScaleFactor.FromScreenDpi",
+                "客户区宽" => "PlanRescale",
+                _ => "逻辑像素",
+            };
+            Assert.True(row.Format.Contains(expected, StringComparison.Ordinal),
+                $"第 {row.Action} 条「{row.Number}」的「写什么格式」没点到「{expected}」："
+                + "口径必须与仓内算式同一份（因子 = 该屏 DPI ÷ 96、客户区宽 = 设计宽 × 因子远离零取整），"
+                + "另起一套口径时真机抄回来的数与本仓真值表对不上。");
+        }
+
+        foreach (var symbol in new[] { "DpiScaleFactor.FromScreenDpi", "DpiScaleFactor.PlanRescale" })
+        {
+            Assert.True(SymbolExists(symbol),
+                $"这一节点到的「{symbol}」在 Desktop/Native/DpiScaleFactor.cs 里找不到："
+                + "指着一个不存在的算式，等于让真机当天按一句没有落点的话抄数。");
+        }
+    }
+
     /// <summary>「首程四站逐站预期」那一节的标题前缀（二级标题，落在归档 README 里）。</summary>
     private const string JourneyHeading = "## 首程四站逐站预期";
 
