@@ -8,6 +8,8 @@
 >
 > **这一行怎么被钉住（说明）**：由 `AcceptanceChecklistTests.DodExemption_IsRegisteredWithSourceAndDate` 与 `AcceptanceChecklistTests.DodExemption_IndexVersionIsCurrent` 钉住——删掉它、或把「来源 / 日期 / 结论」任一项写丢即红；「没有 DoD」这件事本身也要有出处，否则下一轮又会有人去翻一遍、或者干脆自己发明一份。**时效门（第二百零二轮，简报 P0-1）**：登记里的 **INDEX 版本日期**必须等于仓内记录的最新 INDEX 版本（`DodExemption_IndexVersionIsCurrent` 里那个常量，INDEX 更新后要跟着改），且核对日期不得早于版本日期——INDEX 更新后只改一处即红，把「本仓静默过期」变成「必须有人看一眼」。它仍**不判**调度仓里那份 INDEX 现在写了什么（跨主机、只读、本仓不该依赖它）。
 >
+> **复核记录（第二百三十八轮 · 2026-11-13，简报 P1-2）**：上面那行登记自第一百九十七轮写下之后，**本轮是第 2 次复核**（第一次是第二百零二轮，时效门正是那一轮加的）。这一次真的重读了 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（只读，调度仓一个字节未改）：**版本日期仍是 2026-10-31**、正文仍是那 9 份、豁免名单仍列 WeComKit / ZCode / agent-scheduler / agent-control / agent-pointer / PNOS 与各类 caches，**ApifoxHelper 两处都不在**——登记结论不变，`AcceptanceChecklistTests.DodExemption_IndexVersionIsCurrent` 里那个 `LatestIndexVersion` 常量本轮不需要动。**为什么要写「第几次」**：那条门判的是「核的确实是仓内记录的那一版」与「核对日期在 90 天内」，**它判不出这一版 INDEX 到底有没有被人真的重读过**——90 天内把日期抄新一次不需要打开那份文件。次数与这次读到的形状留在这里，下一轮要动那个常量之前得先解释这一段。**这一行是读数不是判据**：本轮不为它加门（加了也只判「这行字在不在」，判不到有没有真去读）。
+>
 > **到期日核对（第二百三十五轮 · 2026-11-13 跑 `bash .winecheck/due-date.sh`，退出码 0）**：脚本走的是**未到**那一支（它现读 `G-D5` 行里那一个到期日与系统日期比，本仓不抄第二份日期）。**结论：真机仍不可得**——九个归档目录本轮仍全空，`G-D5` 那一格**不动**（勾选框只由真机证据关闭），按到期日走降级路径（下面「降级答辩脚本」逐屏 + `.winecheck/README.md` 的答辩口径）。**天数不在这里归档**：那一支打出的「距到期还有 N 天」是当天的读数，写进文档第二天就成了一个错的「事实」，与第二百零四轮「动态倒计时不写进文档」同一口径。这一行由 `AcceptanceChecklistTests.Gd5_ExpiryVerdict_IsRecordedWithTheDegradationRunPath` 的第 ⑤ 条判住：结论词从本行现读，并与今天与该到期日的关系对账——过期之后还写「仍不可得」即红，未到就写「已过期」同样红。
 >
 > **真机供给请求（第二百三十六轮 · 给调度侧读的一行）**：本仓自**第一百八十轮**（记到期日那一轮）起逐轮登记「真机 0 台」，到本轮第二百三十六轮是**第 57 轮**。这段时间里能自己做的都做完了：三档复跑一条命令（`.winecheck/demo.sh`）、真 DPI 上下文的八步复现步骤单、九个归档目录连同核对脚本、7 条动作单、真机到手 30 分钟执行单、答辩当天临场预检四条。**剩下的缺口不在本仓**——缺的是一台 Windows 10/11（能装 .NET 8 桌面运行时、能改显示缩放、能截图归档）。调度侧若能在到期日那天之前供给一台，接手的人按下一节「G-D5 真机复核清单（可勾选）」**7 条动作逐条执行**、产物落 `docs/evidence/real-machine/` 那九个目录，即可同时关闭 **G-D5 与 SHARED-3 / 4 / 7 / 8** 那四个空框——**这是唯一能真正关闭它们的路径，本仓再写多少轮代码都关不上**。供给不到位，则按上面「到期日核对」那一行走降级答辩，G-D5 的结论**如实留在「未达成（环境供给缺口）」**。**这一行是给调度侧读的，不是给门读的**，本轮不为它加新门：它引用的三样东西各有各的门——到期日与「不许写动态倒计时」由 `AcceptanceChecklistTests.Gd5DueDate_IsNotStaleOrFuture` 判，九个归档目录在位由 `RealMachineEvidenceTests.EveryArchiveDirectory_ExistsOnDisk` 判，7 条动作单与归档名由 `RealMachineEvidenceTests.ActionRunbook_NamesOnlyPresetControlSlotsAndRealArchiveFiles` 判。
@@ -3458,3 +3460,54 @@
 - **登记与接线（四处，全部沿用既有那族门，不新增机制）**：`.winecheck/README.md`「脚本」表新增一行（`Scripts_OnDiskMatchTheReadmeRegistry` 两侧对齐）、那节命令块把这一支排在第一位、新增「到期日当天一条命令（`defense-day.sh`）」一节（四步表 / 四个退出码 / 四样现读各配「抄了会怎样」/ 整支跑穿的读数 / 它不判什么 / 为什么不直接调 `collect-real-machine.sh`）；`README.md`「已知限制」第 1 条补一句当天入口；`docs/NOTES.md`「降级答辩脚本」一节新增一段「当天先跑哪一支」。**本轮没有新增环境变量**（本脚本只取 `REPO`，`OUT` / `TIERS` 是把 `demo.sh` 的缺省现读后透传，其余一律原样继承），`EnvironmentVariables_AreDocumentedExactlyAndStillUsed` 与 `Scripts_TakeTheirPathsFromEnvironmentVariables` 照绿——这一支不在 wine 驱动名单里，它自己一个进程都不起。
 
 - **读数**：`dotnet build`（主工程 + 测试工程 + 冒烟工程）**0 警告 0 错误**；`dotnet test` **2836 全部通过 / 0 失败**（较第二百三十六轮的 2832 增 4 条 = 上面那四条门）。`.winecheck/defense-day.sh` **整支跑穿过**：本轮当日三档全跑那一趟（`READING` 指到仓外的一份副本，为的是不把仓里那份对账材料写脏）整支退出码 `0`——第 ① 步走「未到」、第 ② 步四条全过、第 ③ 步 `96 / 120 / 192` 三档各 231 通过 / 0 失败（与入库那份 `reading.txt` 是同一个数）、逐屏对账 0 处对不上、第 ④ 步念序 18 屏 + 结尾那一句完整打出；修完第 ① 步后又按 `TIERS=96` 单档复跑一次，同一形状、退出码 `0`。**两个停链方向都是真跑**：门里那两条在假树上跑；本轮另有一次意外在真仓上撞到第 ② 步停链（`READING` 指向一份不存在的记录 → 预检 ②③ 红 → 停在第 ② 步，`demo.sh` 一次都没被调起来），那次不是设计好的，但它量到的正是同一条路径。**入库 `.winecheck/reading.txt` 本轮未改动一个字节**（非测试 `.cs` 一行未改，`source=` 仍等于当前源码指纹；两次跑穿都把 `READING` 指到仓外）。**这一支量到的仍是 wine 10.0 + Xvfb 模拟器读数，不是 Windows 真机结果**：真机 **0 台**、`G-D5` 仍 `[ ]`、到期日 2026-11-20；当天该走「降级答辩」还是「延后」由答辩负责人判定，两处回写仍由人做——这一支只在末尾把这两件事点名指回本文件，不代做、不替人打勾。**Windows 侧没有对应的 PowerShell 版**：这一支是 bash，真机上要有 Git Bash / WSL 才跑得动（与 `collect-real-machine.sh` 同一族挂账，随 G-D5 一起到真机那天分）。
+
+## 第二百三十八轮（2026-11-13）：到期日当天那一条命令的三支分支第一次在真进程里各跑一遍（简报 P0-1 / P1-2，具名 pass：harden + clarify）
+
+- **本轮范围**：先确认基线（工作树干净、HEAD `0fd24fc`、`dotnet build` 0 警告 0 错误、`dotnet test` 2836 全部通过 / 0 失败、源指纹 `023f418e…` 与入库 `.winecheck/reading.txt` 里的 `source=` 逐字相同）再推进。**原生桌面切片本轮只读确认、一行未动**：`Desktop/Native/` 98 个文件，最后一次改动是第二百三十六轮 `6c3ef26`；`Sync/`、`Apifox/`、`Web/`（`TransitionShellFreezeTests` 的哈希门照绿）未动，`.winecheck/` 里那五支（`defense-day.sh` / `demo.sh` / `preflight.sh` / `due-date.sh` / `collect-real-machine.sh`）**本体一字未改**。**只做简报建议的那两件**：P0-1 三支真跑 + 顺手 P1-2 复核登记。P1-1（`hint=4` 的成因句）按简报继续留待真机；P2-1（G-D6 退场清单）与 P2-2（`--web` 回退壳）未动。**不新增判定、不新增依赖、不连 Apifox、不调模型服务、不替人打勾**（`G-D5` / `G-D6` 两格不动）。
+
+- **已交付 ①（P0-1：三支各真跑一遍，都是真进程、真退出码）**：
+
+| 支 | 本轮真跑的命令 | 真实退出码 | 走到 / 停在哪一步 | 耗时（`time` 的 real） |
+| --- | --- | --- | --- | --- |
+| 未到 | `TODAY=2026-11-19 READING=/tmp/ah-defense/reading.txt bash .winecheck/defense-day.sh` | `0` | 四步走完：① 未到 → ② 四条全过 → ③ 三档跑完并出三份讲稿 → ④ 念序 18 屏 + 结尾固定一句 | `1m23.951s` |
+| 当天 | `TODAY=2026-11-20 READING=/tmp/ah-defense/reading.txt bash .winecheck/defense-day.sh` | `0` | 四步走完，且第 ① 步认出的正是「当天」那一支（第二百三十七轮修掉的那一发就在这一步） | `1m23.967s` |
+| 已过 | `TODAY=2026-11-21 bash .winecheck/defense-day.sh` | `1` | **停在第 ① 步**：第 ②③④ 步连段头都没打出来，`demo.sh` 一次都没被调起来 | `0.083s` |
+
+  三支各自的**真实终端输出**（下面贴的是判定点那几行，逐字照抄；同一段里被略过的行用 `…` 标出。本轮不在仓里留任何临时输出文件——第二百三十七轮定下的口径）：
+
+  未到那一支的第 ① 步（`due-date.sh` 那句在前，`defense-day.sh` 的点名在后）：
+
+  ```
+     未到：到期日 2026-11-20，今天 2026-11-19，距到期还有 1 天——按现有路径继续。
+     ① 过：due-date.sh 退出码 0（未到 / 当天都该继续干活），上面那一句已写明是哪一种，本脚本不重说。
+  ```
+
+  当天那一支的第 ① 步（屏幕上打出的是「今天就是到期日」那一句，不是上面那句「不重说」）：
+
+  ```
+     今天是到期日 2026-11-20：走降级答辩——
+     …
+     ① 过：今天就是到期日——第 ③ 步出的那几份讲稿（档位 96 120 192）就是当天要念的那几份。
+  ```
+
+  已过那一支的收尾（退出码 `1` 由第 ① 步转发，后面再无任何一步）：
+
+  ```
+     到期日已过：到期日 2026-11-20，今天 2026-11-21（已过 1 天）——G-D5 应改判「已过期」，并按「降级」路径回写。
+  停在第 ① 步：due-date.sh 退出码 1——上面那几句就是它点名的原因。
+  ```
+
+- **已交付 ②（harden：把三支真跑的数钉进读数）**：两支跑穿的第 ③ 步，档位 `96 / 120 / 192` 各 231 通过 / 0 失败、冒烟器退出码各 `0`，收口那句都是「三档逐屏对账完成：每一屏引用的段都在报告里、累计 0 失败」（第二百三十八轮这两跑，与入库 `.winecheck/reading.txt` 记的当前源码读数是同一个数）；第 ④ 步两份都是 18 屏念序 + 结尾固定一句完整打出。**逐步耗时实测**：第 ① 步单独跑 `TODAY=2026-11-20 bash .winecheck/due-date.sh` 是 `0.030s`，第 ② 步单独跑 `bash .winecheck/preflight.sh` 是 `0.125s`（退出码 `0`），两者合计不到 0.16 秒——**那一分二十四秒几乎全在第 ③ 步**（第二百三十七轮记在本文件里的那句「这一支不在 wine 驱动名单里，它自己一个进程都不起」，加上一句第 ④ 步只是读三份讲稿现打）。**入库那份对账材料本轮逐字节未动**：`READING=` 指到仓外副本，`.winecheck/reading.txt` 的 sha1 跑前跑后都是 `6501fecc…`、`git status` 干净；而仓外那一份被 `demo.sh` 写回之后与入库那一份 `diff` 无输出（含 `date=`、`source=`、三档 `tier=` 全部）——**同一版源码上可复跑，不是手抄的**。
+
+- **已交付 ③（clarify：三支的差异写给当天的人读，三条）**：
+  1. **当天那一支换掉的是第 ① 步的整块输出，不是多打一句话**。`due-date.sh` 在当天会打出它自己那三步（`PUBLISH=1 bash .winecheck/demo.sh` / 念哪三份讲稿 / 先跑 `collect-real-machine.sh` 看是否仍报 有东西 0 / 9），紧接着这一支念「今天就是到期日——第 ③ 步出的那几份讲稿就是当天要念的那几份」。当天屏幕上因此**同时存在三套 ①②③ 编号**：`due-date.sh` 那三步、`preflight.sh` 那四条、这一支自己的四步。第 ② 步的停链消息早把「preflight 那套编号不是这一支的第几步」写清了，**`due-date.sh` 当天那三步没有被同样点名**——**念的时候按段头读**（每段开头是 `-- ① 到期日核对（due-date.sh）--` 这样带脚本名的那一行），别按编号读，编号会撞。
+  2. **当天第 ① 步仍在指 `demo.sh` 那一条老命令**（`PUBLISH=1 bash .winecheck/demo.sh`，第二百三十七轮之前的入口），而这一支的第 ③ 步已经把它跑掉了（不带 `PUBLISH`）。照这一条走完四步的人**不要再补那一发**：补了就是把三档再烧一遍（本轮实测三档那一跑约 84 秒，`PUBLISH=1` 还要在它前面加一次重建 + 发布）并覆盖一次读数记录。真正需要 `PUBLISH=1` 的场合只有一种——第 ③ 步自己报「冒烟器不属于当前源码」，而那句的解法这一支已经打在停链消息里。
+  3. **已过那一支挡在第 ① 步省下的不只是 84 秒**。`demo.sh` 会把读数写回**入库那份** `reading.txt`：那一天再跑一遍三档，等于用一场不该跑的跑去覆盖临场对账材料。实测 `0.083s`、第 ② 步段头都不出现，这条挡住的路径是真的。
+
+- **与注入自测的对账（本轮不改脚本本体的依据）**：三支真跑出来的形状与 `ApifoxHelper.Tests/WineCheckScriptsTests` 那四条门（`DefenseDayScript_ChainsTheFourStepsInOrderAndStopsOnAnyNonZero`、`DefenseDayScript_KeepsOneSourceOfTheDateThePathsAndTheClosingSentence`、`DefenseDayScript_StopsAtStepOneWhenTheDueDateHasPassed`、`DefenseDayScript_StopsAtStepTwoWhenThePreflightFails`）判的一致：退出码分工（`0` / `1` / `2` / `3`）、停在第几步的点名那句、以及「停在第 ① 步就不进第 ② 步」这条，**在真仓真进程上重现，与假树注入跑出的完全一致**。**简报划的那个唯一允许改代码的场景没有触发**。上面第 ② 条那两格（当天三套编号、第 ① 步仍指老命令）是**措辞与入口的漂移风险，不是这一支的行为与自测不符**——按简报划的不动点，本轮只登记、不动 `due-date.sh`，留到期日之后由读到的人决定要不要在那三步里补一句点名。
+
+- **已交付 ④（P1-2，随手做完）**：本文件顶部「DoD 豁免登记」下面新增一行**复核记录**——本轮是登记以来第 2 次复核（第一次是第二百零二轮），这次真的重读了 `/opt/agent-scheduler/docs/product-dod/INDEX.md`：版本日期仍是 2026-10-31、正文仍 9 份、豁免名单不含本仓，**`ApifoxHelper` 两处都不在**，登记结论不变，`AcceptanceChecklistTests.DodExemption_IndexVersionIsCurrent` 里那个 `LatestIndexVersion` 常量本轮未动。那一行同时写清「为什么那条门判不出有没有真去读」——**它自己是读数，不进门**。
+
+- **读数**：`dotnet build`（主工程 + 测试工程 + 冒烟工程）**0 警告 0 错误**；`dotnet test` **2836 全部通过 / 0 失败**——本轮**不新增门、不新增判定**（简报划的是验证与登记），改完 NOTES 复跑一次仍 2836，对账的几族门（`ReadingConsistencyTests`、`WordingHonestyTests`、`AcceptanceChecklistTests`、`TransitionShellFreezeTests`）照绿。`.winecheck/README.md`「到期日当天一条命令」那一节的跑穿读数本轮未改：它记的是第二百三十七轮那一跑（走的也是「未到」），仍然成立；本轮这三支的读数以这一段为准。
+
+- **仍未验的（不冒充）**：以上全部是 **Linux 容器内 wine 10.0 + Xvfb 模拟器**读数，**不是 Windows 真机结果**——第 ③ 步那一跑仍是**慢一档**上下文（控件自报 DPI 恒为 96、**进程 DPI** 跟着档位走，字体放大而行高不放大）。真机 **0 台**、`docs/evidence/real-machine/` 九个归档目录本轮仍全空、`G-D5` / `G-D6` 两格不动。**`TODAY=` 注入的是这一支看到的日期，不是系统日期**：它能让三支各跑一次，但**到期日当天那一发仍要在真的那一天再跑一次**——那天 `due-date.sh` 读的是同一格日期、`preflight.sh` 比的是当天的源码指纹，本轮量到的是 2026-11-13 这一版源码的形状。P1-1（`hint=4` 的成因句）继续留待真机；`.winecheck/defense-day.sh` 在 Windows 侧没有对应的 PowerShell 版这一族挂账不变。
