@@ -435,9 +435,20 @@ public class ReadingConsistencyTests
     /// <summary>一次跑出来的一段：段名 + 档位 + 通过 / 失败。</summary>
     private sealed record SectionRun(string Section, int Tier, int Passed, int Failed);
 
-    /// <summary>一份读数记录（来历四行 + 每档总计 + 每段计数）。</summary>
+    /// <summary>
+    /// 一档的行高预算读数（第二百三十一轮）：配置表单过预算的行数、提示行过预算的条数，
+    /// 以及<b>同一行报出来的那两个预算</b>（<c>行高预算 Npx</c> / <c>阈值 Npx</c>）。
+    /// <para>
+    /// 为什么把预算本身也记进来：答辩口径「行高预算判定（细则）」里念的那两个数
+    /// （125% 档 50px、200% 档 65px）此前只有报告原文可查，报告落在 <c>/tmp</c>、跑完就没了；
+    /// 记进这份入库的读数记录之后，文档念的数与跑出来的数才第一次能逐字对上。
+    /// </para>
+    /// </summary>
+    private sealed record OverBudgetRun(int Tier, int Form, int FormBudget, int Hint, int HintBudget);
+
+    /// <summary>一份读数记录（来历四行 + 每档总计 + 每档行高预算 + 每段计数）。</summary>
     private sealed record Reading(string Script, string Tool, string Date, string Source,
-        List<TierRun> Tiers, List<SectionRun> Sections);
+        List<TierRun> Tiers, List<OverBudgetRun> OverBudget, List<SectionRun> Sections);
 
     /// <summary>
     /// 读那份记录。缺文件即红并给出「怎么补出来」的一条命令——这份记录是跑出来的，
@@ -452,6 +463,7 @@ public class ReadingConsistencyTests
 
         var script = ""; var tool = ""; var date = ""; var source = "";
         var tiers = new List<TierRun>();
+        var overBudget = new List<OverBudgetRun>();
         var sections = new List<SectionRun>();
         foreach (var raw in File.ReadAllLines(path))
         {
@@ -473,6 +485,14 @@ public class ReadingConsistencyTests
                     tiers.Add(new TierRun(int.Parse(t.Groups[1].Value), int.Parse(t.Groups[2].Value),
                         int.Parse(t.Groups[3].Value), int.Parse(t.Groups[4].Value)));
                     break;
+                case "overbudget":
+                    var o = Regex.Match(line,
+                        @"^overbudget=tier=(\d+) form=(\d+) formbudget=(\d+)px hint=(\d+) hintbudget=(\d+)px$");
+                    Assert.True(o.Success,
+                        $"{ReadingPath} 有一行 overbudget= 不是「overbudget=tier=N form=N formbudget=Npx hint=N hintbudget=Npx」：{line}");
+                    overBudget.Add(new OverBudgetRun(int.Parse(o.Groups[1].Value), int.Parse(o.Groups[2].Value),
+                        int.Parse(o.Groups[3].Value), int.Parse(o.Groups[4].Value), int.Parse(o.Groups[5].Value)));
+                    break;
                 case "section":
                     var s = Regex.Match(line, @"^section=(Run[A-Za-z0-9_]+) tier=(\d+) passed=(\d+) failed=(\d+)$");
                     Assert.True(s.Success, $"{ReadingPath} 有一行 section= 不是「section=RunXxx tier=N passed=N failed=N」：{line}");
@@ -485,7 +505,7 @@ public class ReadingConsistencyTests
             }
         }
 
-        return new Reading(script, tool, date, source, tiers, sections);
+        return new Reading(script, tool, date, source, tiers, overBudget, sections);
     }
 
     /// <summary>
@@ -683,5 +703,97 @@ public class ReadingConsistencyTests
             "读数记录加不到冒烟器的结构上：" + string.Join("；", wrong)
             + $"。两种原因：冒烟器的结构变了而记录还是上一次那一次跑的（重跑 bash .winecheck/demo.sh），"
             + $"或者记录被手改过（{ReadingPath} 只能由两支演示脚本写出）。");
+    }
+
+    // ---------- 第二百三十一轮（简报 P0-1）：行高预算那一格的两个数第一次有机器产出的出处 ----------
+
+    /// <summary>「行高预算判定（细则）」那一节——答辩当天照它判「超了算不算过」。</summary>
+    private const string OverBudgetDetailHeading = "### 行高预算判定（细则";
+
+    /// <summary>那一节的正文（从标题到下一个同级标题）。</summary>
+    private static string OverBudgetDetailSection()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var start = notes.IndexOf(OverBudgetDetailHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 里找不到「{OverBudgetDetailHeading}」这一节：行高预算的判定细则没有落点，"
+            + "答辩当天「超了算不算过」只能现编。");
+        var rest = notes[(start + OverBudgetDetailHeading.Length)..];
+        var end = rest.IndexOf("\n### ", StringComparison.Ordinal);
+        return end < 0 ? rest : rest[..end];
+    }
+
+    /// <summary>
+    /// 细则里念的那两个预算数必须等于读数记录里跑出来的那两个（第二百三十一轮，简报 P0-1）。
+    /// <para>
+    /// <b>要解决的问题</b>：细则写着「要比的那个数就取同一行报出来的那一个（模拟器那一跑是
+    /// 125% 档 50px、200% 档 65px）」——这句话是答辩当天唯一能照着念的预算数，而它此前<b>只有报告原文可查</b>：
+    /// 报告落在 <c>/tmp/ah-demo/report-&lt;档位&gt;.txt</c>，跑完就没了，下一轮谁也没法回头核这两个数还是不是那两个。
+    /// 第二百三十一轮让两支演示脚本把这两个数（连同过预算的行数 / 条数）写进入库的读数记录，
+    /// 于是「文档念的数」与「跑出来的数」第一次能逐字对上。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 每一档都有一行 <c>overbudget=</c>，档位集合与 <c>tier=</c> 那批逐档相同（缺一档即红）；
+    /// ② 同一档的 <c>formbudget</c> 与 <c>hintbudget</c> 必须相等——预算只有
+    /// <c>ProfileFormLayout.MaxRowHeight</c> 一处算式，两个数不等说明有人抄了第二份；
+    /// ③ 细则里那两个数（<c>125% 档 Npx、200% 档 Mpx</c>）必须逐字等于记录里 120 / 192 两档的预算；
+    /// ④ 两支演示脚本都得写这个键（只改一支，另一支跑出来的记录会被这条门判成缺档）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判过预算的行数是不是 0</b>——那是跑出来的事实，不是判据；
+    /// 也不判真机跑没跑（真机 0 台，G-D5 仍是 <c>[ ]</c>）。它只保证「细则念的那两个数」有出处、且与出处一致。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void OverBudgetReading_MatchesTheNumbersTheDefenseNarrativeReads()
+    {
+        var record = ReadingRecord();
+
+        // ① 每档一行，档位集合与 tier= 那批相同。
+        var tierSet = record.Tiers.Select(t => t.Tier).OrderBy(n => n).ToList();
+        var overSet = record.OverBudget.Select(o => o.Tier).OrderBy(n => n).ToList();
+        Assert.True(overSet.Count == tierSet.Count && overSet.SequenceEqual(tierSet),
+            $"{ReadingPath} 的 overbudget= 档位（{string.Join(" / ", overSet)}）与 tier= 那批"
+            + $"（{string.Join(" / ", tierSet)}）不是同一批：行高预算那一格缺档时，细则里念的数就没有出处。"
+            + "补一次：bash .winecheck/demo.sh");
+
+        // ② 同一档两个预算必须相等（算式只有一处）。
+        foreach (var run in record.OverBudget)
+        {
+            Assert.True(run.FormBudget == run.HintBudget,
+                $"{run.Tier} 档的配置表单预算 {run.FormBudget}px 与提示行预算 {run.HintBudget}px 不相等："
+                + "预算只有 Desktop/Native/ProfileFormLayout.cs 的 MaxRowHeight 一处算式，"
+                + "两个数不等说明有人抄了第二份预算。");
+        }
+
+        // ③ 细则里念的那两个数 == 记录里 120 / 192 两档的预算。
+        var detail = OverBudgetDetailSection();
+        var stated = Regex.Match(detail, @"125% 档 (?<a>\d+)px、200% 档 (?<b>\d+)px");
+        Assert.True(stated.Success,
+            "「行高预算判定（细则）」里找不到「125% 档 Npx、200% 档 Mpx」这两个数："
+            + "答辩当天要比的那个数没有落点（这一段是唯一能照着念的预算数）。");
+        var stated125 = int.Parse(stated.Groups["a"].Value);
+        var stated200 = int.Parse(stated.Groups["b"].Value);
+
+        var run125 = record.OverBudget.FirstOrDefault(o => o.Tier == 120);
+        var run200 = record.OverBudget.FirstOrDefault(o => o.Tier == 192);
+        Assert.True(run125 is not null && run200 is not null,
+            $"{ReadingPath} 里没有 120 / 192 两档的 overbudget= 行（现有 {string.Join(" / ", overSet)}）："
+            + "细则念的正是这两档的预算。");
+        Assert.True(run125!.FormBudget == stated125,
+            $"细则写「125% 档 {stated125}px」，读数记录里 120 档跑出来的是 {run125.FormBudget}px："
+            + "文档念的数与跑出来的数不是同一个——改文档，或者重跑 bash .winecheck/demo.sh。");
+        Assert.True(run200!.FormBudget == stated200,
+            $"细则写「200% 档 {stated200}px」，读数记录里 192 档跑出来的是 {run200.FormBudget}px："
+            + "文档念的数与跑出来的数不是同一个——改文档，或者重跑 bash .winecheck/demo.sh。");
+
+        // ④ 两支演示脚本都得写这个键（只改一支 = 另一支跑出来的记录缺档）。
+        foreach (var script in new[] { ".winecheck/demo.sh", ".winecheck/demo.ps1" })
+        {
+            var text = Repo.Source(script.Replace('/', Path.DirectorySeparatorChar));
+            Assert.True(text.Contains("overbudget=tier=", StringComparison.Ordinal),
+                $"{script} 不写 overbudget= 这一行：用它跑出来的读数记录会缺行高预算那一格，"
+                + "而细则念的那两个数就只剩一支脚本能产出。");
+        }
     }
 }

@@ -2,6 +2,8 @@
 # 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs——README.md 与 docs/NOTES.md 里
 #   「当前源码…N 通过 / 0 失败 ×3」必须逐字等于下面 tier= 记的数；section= 的段集合必须
 #   等于冒烟器源码里注册的段集合；每档的总数必须等于「第一段之前的构造清单类条数」+ 该档各段之和。
+#   overbudget= 是行高预算那一格的两个数（配置表单过预算行数 / 提示行过预算条数 + 同一行报出的预算），
+#   由报告原文取出；docs/NOTES.md「行高预算判定（细则）」里念的那两个数必须等于它。
 # 这份记的是 wine + Xvfb 模拟器的读数，不是 Windows 真机结果（G-D5 仍 [ ]，到期日 2026-11-20）。
 script=demo.sh
 tool=wine + Xvfb
@@ -10,6 +12,9 @@ source=7a5191d99f8999a85e6a2b9cfe8115c12e475943
 tier=96 passed=231 failed=0 exit=0
 tier=120 passed=231 failed=0 exit=0
 tier=192 passed=231 failed=0 exit=0
+overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
+overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
+overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
 section=RunEndToEnd tier=96 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=96 passed=6 failed=0
 section=RunScanResultsInteraction tier=96 passed=5 failed=0

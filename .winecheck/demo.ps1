@@ -193,6 +193,7 @@ function Get-SectionStats([string]$reportPath, [string]$tier) {
 # 读数记录的正文（tier= 与 section= 两类行），三档跑完整份写出。
 $readingTiers = ''
 $readingSections = ''
+$readingOverbudget = ''
 $totalFail = 0
 $totalMissing = 0
 foreach ($tier in @($Tiers -split ' ' | Where-Object { $_ })) {
@@ -238,6 +239,35 @@ foreach ($tier in @($Tiers -split ' ' | Where-Object { $_ })) {
     # 脚本这里先加好，等于让同一份自述既当证据又当结论。
     $readingTiers += "tier=$tier passed=$passLines failed=$failLines exit=$runRc`n"
     $readingSections += (((Get-SectionStats $report $tier) -join "`n") + "`n")
+
+    # 行高预算那一格的两个数（第二百三十一轮，简报 P0-1）：从报告原文里取，不在这里算第二份预算。
+    # ① 配置表单行高段：失败行「N 行超过 Mpx」；② 提示行段：「N 条提示行超过 Mpx」。
+    # 预算本身取同一份报告里那两行「行高预算 Npx」「阈值 Npx」——算式只有 ProfileFormLayout.MaxRowHeight 一处。
+    # 没有失败行时记 0：这一档就是「一行都没超」，与「没量到」是两件事（后者记 ?，门会红）。
+    # 取法只用不带冒号的片段：带冒号的字面量会被 WineCheckScriptsTests 的段名取法读成一个「段名」。
+    $formRows = 0
+    $hintRows = 0
+    $formBudget = '?'
+    $hintBudget = '?'
+    foreach ($line in $reportLines) {
+        if ($line -match '行高没有死空白') {
+            $m = [regex]::Match($line, '([0-9]+) 行超过')
+            if ($m.Success) { $formRows = [int]$m.Groups[1].Value }
+        }
+        elseif ($line -match '提示行没有死空白') {
+            $m = [regex]::Match($line, '([0-9]+) 条提示行超过')
+            if ($m.Success) { $hintRows = [int]$m.Groups[1].Value }
+        }
+        elseif ($line -match '行高预算') {
+            $m = [regex]::Match($line, '行高预算 ([0-9]+)px')
+            if ($m.Success) { $formBudget = $m.Groups[1].Value }
+        }
+        elseif ($line -match '提示行行高') {
+            $m = [regex]::Match($line, '阈值 ([0-9]+)px')
+            if ($m.Success) { $hintBudget = $m.Groups[1].Value }
+        }
+    }
+    $readingOverbudget += "overbudget=tier=$tier form=$formRows formbudget=${formBudget}px hint=$hintRows hintbudget=${hintBudget}px`n"
 
     if ($useWine) {
         $caliber = '以上全部是 Linux 容器内 wine 10.0 + Xvfb 模拟器证据，不是 Windows 真机结果。'
@@ -299,6 +329,8 @@ $readingLines = @(
     '# 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs——README.md 与 docs/NOTES.md 里',
     '#   「当前源码…N 通过 / 0 失败 ×3」必须逐字等于下面 tier= 记的数；section= 的段集合必须',
     '#   等于冒烟器源码里注册的段集合；每档的总数必须等于「第一段之前的构造清单类条数」+ 该档各段之和。',
+    '#   overbudget= 是行高预算那一格的两个数（配置表单过预算行数 / 提示行过预算条数 + 同一行报出的预算），',
+    '#   由报告原文取出；docs/NOTES.md「行高预算判定（细则）」里念的那两个数必须等于它。',
     '# 这份记的是模拟器/本机跑出来的读数，不是 Windows 真机复核结果（G-D5 仍 [ ]，到期日 2026-11-20）。',
     'script=demo.ps1',
     ("tool=" + $(if ($useWine) { 'pwsh + wine' } else { 'pwsh 本机' })),
@@ -306,6 +338,7 @@ $readingLines = @(
     ('source=' + (Get-SourceFingerprint))
 )
 $readingLines += @($readingTiers -split "`n" | Where-Object { $_ })
+$readingLines += @($readingOverbudget -split "`n" | Where-Object { $_ })
 $readingLines += @($readingSections -split "`n" | Where-Object { $_ })
 try {
     [System.IO.File]::WriteAllText($Reading, (($readingLines -join "`n") + "`n"), $Utf8NoBom)

@@ -122,6 +122,7 @@ section_stats() {
 # 读数记录的正文（tier= 与 section= 两类行），三档跑完整份写出。
 READING_TIERS=""
 READING_SECTIONS=""
+READING_OVERBUDGET=""
 TOTAL_FAIL=0
 TOTAL_MISSING=0
 for TIER in $TIERS; do
@@ -161,6 +162,21 @@ for TIER in $TIERS; do
   # 脚本这里先加好，等于让同一份自述既当证据又当结论。
   READING_TIERS="${READING_TIERS}tier=$TIER passed=$PASS_LINES failed=$FAIL_LINES exit=$RUN_RC"$'\n'
   READING_SECTIONS="$READING_SECTIONS$(section_stats "$REPORT")"$'\n'
+
+  # 行高预算那一格的两个数（第二百三十一轮，简报 P0-1）：从报告原文里取，不在这里算第二份预算。
+  # ① 配置表单行高段：失败行「N 行超过 Mpx」；② 提示行段：「N 条提示行超过 Mpx」。
+  # 预算本身取同一份报告里那两行「行高预算 Npx」「阈值 Npx」——算式只有 ProfileFormLayout.MaxRowHeight 一处。
+  # 没有失败行时记 0：这一档就是「一行都没超」，与「没量到」是两件事（后者记 ?，门会红）。
+  # 取法只用不带冒号的片段：带冒号的字面量会被 WineCheckScriptsTests 的段名取法读成一个「段名」。
+  form_rows=$(grep -m1 '行高没有死空白' "$REPORT" | grep -oE '[0-9]+ 行超过' | grep -oE '^[0-9]+' || true)
+  hint_rows=$(grep -m1 '提示行没有死空白' "$REPORT" | grep -oE '[0-9]+ 条提示行超过' | grep -oE '^[0-9]+' || true)
+  form_budget=$(grep -m1 '行高预算' "$REPORT" | grep -oE '行高预算 [0-9]+px' | grep -oE '[0-9]+' || true)
+  hint_budget=$(grep -m1 '提示行行高' "$REPORT" | grep -oE '阈值 [0-9]+px' | grep -oE '[0-9]+' || true)
+  [ -n "$form_rows" ] || form_rows=0
+  [ -n "$hint_rows" ] || hint_rows=0
+  [ -n "$form_budget" ] || form_budget='?'
+  [ -n "$hint_budget" ] || hint_budget='?'
+  READING_OVERBUDGET="${READING_OVERBUDGET}overbudget=tier=$TIER form=$form_rows formbudget=${form_budget}px hint=$hint_rows hintbudget=${hint_budget}px"$'\n'
 
   : >"$NARRATION"
   {
@@ -216,12 +232,15 @@ xvfb-run -a bash -c '
   echo "# 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs——README.md 与 docs/NOTES.md 里"
   echo "#   「当前源码…N 通过 / 0 失败 ×3」必须逐字等于下面 tier= 记的数；section= 的段集合必须"
   echo "#   等于冒烟器源码里注册的段集合；每档的总数必须等于「第一段之前的构造清单类条数」+ 该档各段之和。"
+  echo "#   overbudget= 是行高预算那一格的两个数（配置表单过预算行数 / 提示行过预算条数 + 同一行报出的预算），"
+  echo "#   由报告原文取出；docs/NOTES.md「行高预算判定（细则）」里念的那两个数必须等于它。"
   echo "# 这份记的是 wine + Xvfb 模拟器的读数，不是 Windows 真机结果（G-D5 仍 [ ]，到期日 2026-11-20）。"
   echo "script=demo.sh"
   echo "tool=wine + Xvfb"
   echo "date=$(date +%F)"
   echo "source=$(source_fingerprint)"
   printf '%s' "$READING_TIERS"
+  printf '%s' "$READING_OVERBUDGET"
   printf '%s' "$READING_SECTIONS"
 } >"$READING" 2>/dev/null || echo "  读数记录写不进 $READING（设 READING= 指到可写的路径）——文档里那个数这一次没有可对账的出处。"
 echo "  读数记录：$READING"
