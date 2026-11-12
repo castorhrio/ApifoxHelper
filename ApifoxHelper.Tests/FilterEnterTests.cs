@@ -68,16 +68,15 @@ public class FilterEnterTests
         {
             var source = Repo.Source("Desktop", "Native", file);
             var body = Slice(source, "protected override bool ProcessDialogKey(Keys keyData)", "return base.ProcessDialogKey(keyData);");
-            // 只经 Ui.TryEnterFilter 一处接线：对话框不就地写 Keys.Enter、不就地拆修饰键、不自己选中或滚动。
-            Assert.Matches($@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, {ListField(file)}\)\) return true;$", body);
+            // 第二百二十六轮起：Enter 的落点由登记表判定（FilterGesturePlan），对话框只留一行分发——
+            // 不就地写 Keys.Enter、不就地拆修饰键、不自己选中或滚动。
+            Assert.Matches(@"(?m)^\s*if \(_\w*[Gg]estures\.Dispatch\(keyData\)\) return true;$", body);
+            Assert.Contains($"new FilterGestures(_keyword, {ListField(file)})", CodeLines(source), StringComparison.Ordinal);
+            Assert.DoesNotContain("Ui.TryEnterFilter", CodeLines(source), StringComparison.Ordinal);
             Assert.DoesNotContain("Keys.Enter", CodeLines(source), StringComparison.Ordinal);
             Assert.DoesNotContain("ListKeys.IsEnterGesture", CodeLines(source), StringComparison.Ordinal);
             Assert.DoesNotContain("FocusFirstResult", CodeLines(source), StringComparison.Ordinal);
             Assert.DoesNotContain("EnsureVisible", CodeLines(source), StringComparison.Ordinal);
-            // 两条判定并存、顺序固定：Ctrl+F 在前（先到框），Enter 在后（再到行）。
-            var find = body.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
-            var enter = body.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
-            Assert.True(find >= 0 && enter > find, $"{file}:Ctrl+F 判定应排在 Enter 判定之前。");
         }
     }
 

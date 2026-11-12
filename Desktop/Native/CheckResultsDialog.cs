@@ -76,11 +76,19 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         Font = UiTokens.Body.Value,
     };
 
+    /// <summary>
+    /// 本屏两个关键词框的登记表（<see cref="FilterGestures"/>）：主框是接口清单那个（Ctrl+F 的落点），
+    /// 模型清单那个随后登记——Enter 与 Esc 看焦点各接一次，一次按键只有一个含义
+    /// （模型清单的 Esc 不会去清接口清单的关键词，反之亦然）。判定在 <see cref="FilterGesturePlan"/> 一份。
+    /// </summary>
+    private readonly FilterGestures _gestures;
+
     public CheckResultsDialog(TaskStore tasks, CheckTask task)
     {
         _tasks = tasks;
         _taskId = task.Id;
         _task = task;
+        _gestures = new FilterGestures(_keyword, _list).Then(_modelKeyword, _modelList);
 
         Text = "Apifox 差异检查结果 — " + task.Name;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -300,11 +308,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
     {
-        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
-        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
-        if (Ui.TryEnterFilter(keyData, _modelKeyword, _modelList)) return true;
-        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
-        if (Ui.TryEscapeFilter(keyData, _modelKeyword)) return true;
+        if (_gestures.Dispatch(keyData)) return true;
         return base.ProcessDialogKey(keyData);
     }
 

@@ -149,6 +149,16 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     private readonly StatusLineHost _statusHost;
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 500 };
 
+    /// <summary>
+    /// 两页各一张关键词框登记表（<see cref="FilterGestures"/>）：勾选页一个框（筛接口），
+    /// 预览页两个框（写入清单是主框、未纳入清单随后登记）。门控按当前可见页走，
+    /// 判定在 <see cref="FilterGesturePlan"/> 一份——本对话框不就地认键、不自己选中或滚动、不自己清空关键词。
+    /// </summary>
+    private readonly FilterGestures _page1Gestures;
+
+    /// <summary>预览页的登记表（写入清单是主框，未纳入清单随后登记）。</summary>
+    private readonly FilterGestures _page2Gestures;
+
     public SyncPreviewDialog(TaskStore tasks, SyncPlanService plans, SyncExecutor executor, JobRunner jobs, CheckTask task)
     {
         _tasks = tasks;
@@ -157,6 +167,8 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _jobs = jobs;
         _task = task;
         _taskId = task.Id;
+        _page1Gestures = new FilterGestures(_keyword, _selectList);
+        _page2Gestures = new FilterGestures(_actionKeyword, _actionList).Then(_excludedKeyword, _excludedList);
 
         Text = "同步预览 — " + task.Name;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -472,19 +484,15 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
     {
+        // 两页各一张登记表：门控按当前可见页走，一次按键只有一个含义——预览页的 Esc 不会去清勾选页的关键词
+        // （反之亦然）；两页都不在时（构造期）一概不接，Ctrl+F 不吞键、Esc 仍是取消对话框。
         if (_page1.Visible)
         {
-            if (Ui.TryFocusFilter(keyData, _keyword)) return true;
-            if (Ui.TryEnterFilter(keyData, _keyword, _selectList)) return true;
-            if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+            if (_page1Gestures.Dispatch(keyData)) return true;
         }
         else if (_page2.Visible)
         {
-            if (Ui.TryFocusFilter(keyData, _actionKeyword)) return true;
-            if (Ui.TryEnterFilter(keyData, _actionKeyword, _actionList)) return true;
-            if (Ui.TryEnterFilter(keyData, _excludedKeyword, _excludedList)) return true;
-            if (Ui.TryEscapeFilter(keyData, _actionKeyword)) return true;
-            if (Ui.TryEscapeFilter(keyData, _excludedKeyword)) return true;
+            if (_page2Gestures.Dispatch(keyData)) return true;
         }
         return base.ProcessDialogKey(keyData);
     }

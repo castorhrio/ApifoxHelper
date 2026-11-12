@@ -163,7 +163,9 @@ public class SlotKeywordFilterTests
         // 不挡一下按 Enter 会把刚筛出来的结果连同对话框一起关掉。第七十轮起这一次按键不再什么都不做：
         // 与两个主页面同一手势，把焦点与选中交给筛选结果第一行（共享入口 Ui.TryEnterFilter，见 FilterEnterTests）。
         Assert.Matches(@"(?m)^\s*protected override bool ProcessDialogKey\(Keys keyData\)$", source);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, _list\)\) return true;$", source);
+        // 第二百二十六轮起：这一次按键的落点由登记表判定（FilterGesturePlan），对话框只留一行分发。
+        Assert.Matches(@"(?m)^\s*if \(_gestures\.Dispatch\(keyData\)\) return true;$", source);
+        Assert.Contains("new FilterGestures(_keyword, _list)", CodeScan.Text(source), StringComparison.Ordinal);
         Assert.Matches(@"(?m)^\s*return base\.ProcessDialogKey\(keyData\);$", source);
         // 只挡裸 Enter：带修饰键的组合照旧交给基类，不吞键；判定只有共享入口一份，不就地再写一条。
         Assert.DoesNotContain("Keys.Enter |", source, StringComparison.Ordinal);

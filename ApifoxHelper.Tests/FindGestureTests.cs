@@ -70,15 +70,13 @@ public class FindGestureTests
         {
             var source = Repo.Source("Desktop", "Native", file);
             var body = Slice(source, "protected override bool ProcessDialogKey(Keys keyData)", "return base.ProcessDialogKey(keyData);");
-            // 手势判定只经 Ui.TryFocusFilter 一处（字母与修饰键都在共享口径里），对话框不就地写 Keys.F。
-            Assert.Matches(@"(?m)^\s*if \(Ui\.TryFocusFilter\(keyData, _keyword\)\) return true;$", body);
+            // 第二百二十六轮起：Ctrl+F 的落点由登记表判定（FilterGesturePlan 第 ① 条：只交给主框），
+            // 对话框只留一行分发——不就地写 Keys.F、不就地拆修饰键。
+            Assert.Matches(@"(?m)^\s*if \(_\w*[Gg]estures\.Dispatch\(keyData\)\) return true;$", body);
+            Assert.Contains($"new FilterGestures(_keyword, {ListField(file)})", CodeLines(source), StringComparison.Ordinal);
+            Assert.DoesNotContain("Ui.TryFocusFilter", CodeLines(source), StringComparison.Ordinal);
             Assert.DoesNotContain("Keys.F", CodeLines(source), StringComparison.Ordinal);
             Assert.DoesNotContain("ShellShortcuts.IsFindGesture", CodeLines(source), StringComparison.Ordinal);
-            // 裸 Enter 走「到结果第一行」的共享入口（第七十轮接线，见 FilterEnterTests），两条判定并存、顺序固定。
-            Assert.Matches($@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, {ListField(file)}\)\) return true;$", body);
-            var find = body.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
-            var enter = body.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
-            Assert.True(find >= 0 && enter > find, $"{file}:Ctrl+F 判定应排在 Enter 判定之前。");
         }
     }
 

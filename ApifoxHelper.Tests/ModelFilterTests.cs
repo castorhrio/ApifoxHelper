@@ -148,11 +148,13 @@ public class ModelFilterTests
     {
         var source = Repo.Source("Desktop", "Native", "CheckResultsDialog.cs");
         var body = MethodSlice(source, "protected override bool ProcessDialogKey(Keys keyData)");
-        // 两个框各接 Enter 与 Esc（判定看焦点，一次按键只有一个含义），Ctrl+F 只交给本屏主清单的那个框。
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _modelKeyword, _modelList\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _modelKeyword\)\) return true;$", body);
-        Assert.Single(Regex.Matches(body, @"Ui\.TryFocusFilter\(").Cast<Match>());
-        Assert.DoesNotContain("TryFocusFilter(keyData, _modelKeyword)", body, StringComparison.Ordinal);
+        // 第二百二十六轮起：两个框登记在同一张表里（主框是接口清单那个），落点由 FilterGesturePlan 判定——
+        // Enter 与 Esc 看焦点（一次按键只有一个含义），Ctrl+F 只交给主框。
+        Assert.Matches(@"(?m)^\s*if \(_gestures\.Dispatch\(keyData\)\) return true;$", body);
+        Assert.Contains("new FilterGestures(_keyword, _list).Then(_modelKeyword, _modelList)", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryFocusFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEnterFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEscapeFilter", CodeLines(source), StringComparison.Ordinal);
         // 对话框不就地认键、不自己清空关键词。
         Assert.DoesNotContain("Keys.F", CodeLines(source), StringComparison.Ordinal);
         Assert.DoesNotContain("Keys.Enter", CodeLines(source), StringComparison.Ordinal);

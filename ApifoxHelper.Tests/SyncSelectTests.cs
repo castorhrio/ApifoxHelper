@@ -389,9 +389,13 @@ public class SyncSelectTests
         // 七十一轮各接一次）：三个手势只经 Ui 的三处共享入口，本对话框不就地认键、不就地拆修饰键。
         var source = Repo.Source("Desktop", "Native", File);
         Assert.Contains("protected override bool ProcessDialogKey(Keys keyData)", source, StringComparison.Ordinal);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryFocusFilter\(keyData, _keyword\)\) return true;$", source);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, _selectList\)\) return true;$", source);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _keyword\)\) return true;$", source);
+        // 第二百二十六轮起：三个手势的落点由登记表判定（FilterGesturePlan），对话框只留一行分发。
+        Assert.Matches(@"(?m)^\s*if \(_page1Gestures\.Dispatch\(keyData\)\) return true;$", source);
+        var code = CodeScan.Text(source);
+        Assert.Contains("new FilterGestures(_keyword, _selectList)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryFocusFilter", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEnterFilter", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEscapeFilter", code, StringComparison.Ordinal);
         // 不就地认键：代码行里没有 Keys.*（注释里写手势名是说明理由，不算第二套判定）。
         Assert.Empty(CodeLines(source, "Keys."));
     }

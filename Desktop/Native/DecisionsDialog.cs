@@ -90,11 +90,19 @@ internal sealed class DecisionsDialog : DpiAwareForm
         Font = UiTokens.Body.Value,
     };
 
+    /// <summary>
+    /// 本屏关键词框的登记表（<see cref="FilterGestures"/>）：Ctrl+F 交给主框、框里的裸 Enter 交给筛选结果第一行、
+    /// 框里的 Esc 清空关键词——判定在 <see cref="FilterGesturePlan"/> 一份、动作在 <see cref="FilterGestures"/> 一份，
+    /// 本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+    /// </summary>
+    private readonly FilterGestures _gestures;
+
     public DecisionsDialog(TaskStore tasks, CheckTask task, DecisionService decisionSaves)
     {
         _tasks = tasks;
         _task = task;
         _decisionSaves = decisionSaves;
+        _gestures = new FilterGestures(_keyword, _list);
 
         Text = "处理差异确认 — " + task.Name;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -290,9 +298,7 @@ internal sealed class DecisionsDialog : DpiAwareForm
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
     {
-        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
-        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
-        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        if (_gestures.Dispatch(keyData)) return true;
         return base.ProcessDialogKey(keyData);
     }
 

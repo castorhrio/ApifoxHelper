@@ -84,6 +84,7 @@
     <Compile Include="..\Desktop\Native\SyncSelectSort.cs" Link="Shared\SyncSelectSort.cs" />
     <Compile Include="..\Desktop\Native\ListSortMemory.cs" Link="Shared\ListSortMemory.cs" />
     <Compile Include="..\Desktop\Native\ListFilter.cs" Link="Shared\ListFilter.cs" />
+    <Compile Include="..\Desktop\Native\FilterGesturePlan.cs" Link="Shared\FilterGesturePlan.cs" />
     <Compile Include="..\Desktop\Native\QueueText.cs" Link="Shared\QueueText.cs" />
     <Compile Include="..\Desktop\Native\SlotText.cs" Link="Shared\SlotText.cs" />
     <Compile Include="..\Desktop\Native\ListKeys.cs" Link="Shared\ListKeys.cs" />

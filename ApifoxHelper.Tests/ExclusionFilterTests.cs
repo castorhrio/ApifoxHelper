@@ -156,12 +156,13 @@ public class ExclusionFilterTests
     {
         var source = Repo.Source("Desktop", "Native", File);
         var body = MethodSlice(source, "protected override bool ProcessDialogKey(Keys keyData)");
-        // 同一页两个框各接 Enter 与 Esc（判定看焦点，一次按键只有一个含义），Ctrl+F 只交给写入清单那个框。
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _excludedKeyword, _excludedList\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _excludedKeyword\)\) return true;$", body);
-        // Ctrl+F 两页各一次（勾选页的接口框、预览页的写入清单框），未纳入清单的框不接查找手势。
-        Assert.Equal(2, Regex.Matches(body, @"Ui\.TryFocusFilter\(").Count);
-        Assert.DoesNotContain("TryFocusFilter(keyData, _excludedKeyword)", body, StringComparison.Ordinal);
+        // 第二百二十六轮起：预览页两个框登记在同一张表里（主框是写入清单那个），落点由 FilterGesturePlan 判定——
+        // Enter 与 Esc 看焦点（一次按键只有一个含义），Ctrl+F 只交给主框（未纳入清单的框不接查找手势）。
+        Assert.Matches(@"(?m)^\s*if \(_page2Gestures\.Dispatch\(keyData\)\) return true;$", body);
+        Assert.Contains("new FilterGestures(_actionKeyword, _actionList).Then(_excludedKeyword, _excludedList)", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryFocusFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEnterFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEscapeFilter", CodeLines(source), StringComparison.Ordinal);
         // 对话框不就地认键、不自己清空关键词。
         Assert.DoesNotContain("Keys.F", CodeLines(source), StringComparison.Ordinal);
         Assert.DoesNotContain("Keys.Enter", CodeLines(source), StringComparison.Ordinal);

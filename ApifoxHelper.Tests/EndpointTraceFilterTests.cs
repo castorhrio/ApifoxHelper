@@ -153,10 +153,13 @@ public class EndpointTraceFilterTests
     {
         var source = Repo.Source("Desktop", "Native", "EndpointTraceDialog.cs");
         var body = MethodSlice(source, "protected override bool ProcessDialogKey(Keys keyData)");
-        // 三个手势只经共享入口（另七张长清单同一处接线），对话框不就地认键、不自己清空关键词。
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryFocusFilter\(keyData, _keyword\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, _list\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _keyword\)\) return true;$", body);
+        // 第二百二十六轮起：三个手势的落点由登记表判定（FilterGesturePlan），对话框只留一行分发——
+        // 不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+        Assert.Matches(@"(?m)^\s*if \(_gestures\.Dispatch\(keyData\)\) return true;$", body);
+        Assert.Contains("new FilterGestures(_keyword, _list)", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryFocusFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEnterFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEscapeFilter", CodeLines(source), StringComparison.Ordinal);
         Assert.DoesNotContain("Keys.F", CodeLines(source), StringComparison.Ordinal);
         Assert.DoesNotContain("Keys.Enter", CodeLines(source), StringComparison.Ordinal);
         Assert.DoesNotContain("Keys.Escape", CodeLines(source), StringComparison.Ordinal);

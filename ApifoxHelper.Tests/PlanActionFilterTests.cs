@@ -208,14 +208,14 @@ public class PlanActionFilterTests
     {
         var source = Repo.Source("Desktop", "Native", File);
         var body = Slice(source, "protected override bool ProcessDialogKey(Keys keyData)", "return base.ProcessDialogKey(keyData);");
-        // 勾选页那一支（第七十三轮）逐字不变。
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryFocusFilter\(keyData, _keyword\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, _selectList\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _keyword\)\) return true;$", body);
-        // 预览页那一支（本轮）：同一个框、同一张清单，仍只经三处共享入口。
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryFocusFilter\(keyData, _actionKeyword\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _actionKeyword, _actionList\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _actionKeyword\)\) return true;$", body);
+        // 第二百二十六轮起：两页各一张登记表，落点由 FilterGesturePlan 判定，对话框只留两行分发。
+        Assert.Matches(@"(?m)^\s*if \(_page1Gestures\.Dispatch\(keyData\)\) return true;$", body);
+        Assert.Matches(@"(?m)^\s*if \(_page2Gestures\.Dispatch\(keyData\)\) return true;$", body);
+        Assert.Contains("new FilterGestures(_keyword, _selectList)", CodeLines(source), StringComparison.Ordinal);
+        Assert.Contains("new FilterGestures(_actionKeyword, _actionList).Then(_excludedKeyword, _excludedList)", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryFocusFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEnterFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEscapeFilter", CodeLines(source), StringComparison.Ordinal);
         // 本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
         var code = CodeLines(source);
         Assert.DoesNotContain("Keys.F", code, StringComparison.Ordinal);
@@ -236,22 +236,21 @@ public class PlanActionFilterTests
     {
         var source = Repo.Source("Desktop", "Native", File);
         var body = Slice(source, "protected override bool ProcessDialogKey(Keys keyData)", "return base.ProcessDialogKey(keyData);");
-        // 门控按当前可见页走：勾选页那一支只认 _keyword，预览页那一支只认 _actionKeyword。
+        // 门控按当前可见页走：勾选页那一支只分发勾选页的登记表，预览页那一支只分发预览页的登记表。
         var page1 = body[..body.IndexOf("else if (_page2.Visible)", StringComparison.Ordinal)];
         var page2 = body[body.IndexOf("else if (_page2.Visible)", StringComparison.Ordinal)..];
-        Assert.DoesNotContain("_actionKeyword", page1, StringComparison.Ordinal);
-        Assert.DoesNotContain("_actionList", page1, StringComparison.Ordinal);
-        Assert.DoesNotContain("_keyword", page2, StringComparison.Ordinal);
-        Assert.DoesNotContain("_selectList", page2, StringComparison.Ordinal);
-        // 两页各一个门控：一次按键只有一个含义。Ctrl+F 两页各一次（一个手势一个落点），
-        // Enter 与 Esc 在预览页各两次——第八十六轮给未纳入清单补了第二个框，两个框各接一次。
+        Assert.DoesNotContain("_page2Gestures", page1, StringComparison.Ordinal);
+        Assert.DoesNotContain("_page1Gestures", page2, StringComparison.Ordinal);
+        // 两页各一个门控、各一行分发：一次按键只有一个含义。
         Assert.Single(Regex.Matches(body, @"_page1\.Visible"));
         Assert.Single(Regex.Matches(body, @"_page2\.Visible"));
-        Assert.Equal(2, Regex.Matches(body, @"Ui\.TryFocusFilter\(").Count);
-        Assert.Equal(3, Regex.Matches(body, @"Ui\.TryEnterFilter\(").Count);
-        Assert.Equal(3, Regex.Matches(body, @"Ui\.TryEscapeFilter\(").Count);
-        // Ctrl+F 只交给写入清单那个框：未纳入清单的框经 Tab 或点击进入，不为它发明第二个查找手势。
-        Assert.DoesNotContain("TryFocusFilter(keyData, _excludedKeyword)", body, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(body, @"_page1Gestures\.Dispatch\("));
+        Assert.Single(Regex.Matches(body, @"_page2Gestures\.Dispatch\("));
+        // 登记表本身：勾选页一个框，预览页两个框（写入清单是主框，未纳入清单随后登记）——
+        // Ctrl+F 只交给主框（FilterGesturePlan 第 ① 条），未纳入清单的框经 Tab 或点击进入。
+        var code = CodeLines(source);
+        Assert.Contains("new FilterGestures(_keyword, _selectList)", code, StringComparison.Ordinal);
+        Assert.Contains("new FilterGestures(_actionKeyword, _actionList).Then(_excludedKeyword, _excludedList)", code, StringComparison.Ordinal);
     }
 
     // ---------- 接线：整份数据不可得时框停用 ----------

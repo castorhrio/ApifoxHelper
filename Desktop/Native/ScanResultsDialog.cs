@@ -74,11 +74,19 @@ internal sealed class ScanResultsDialog : DpiAwareForm
     private bool _sortDescending;
     private readonly string[] _titles;
 
+    /// <summary>
+    /// 本屏关键词框的登记表（<see cref="FilterGestures"/>）：Ctrl+F 交给主框、框里的裸 Enter 交给筛选结果第一行、
+    /// 框里的 Esc 清空关键词——判定在 <see cref="FilterGesturePlan"/> 一份、动作在 <see cref="FilterGestures"/> 一份，
+    /// 本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+    /// </summary>
+    private readonly FilterGestures _gestures;
+
     public ScanResultsDialog(TaskStore tasks, DraftService drafts, CheckTask task)
     {
         _tasks = tasks;
         _drafts = drafts;
         _task = task;
+        _gestures = new FilterGestures(_keyword, _list);
 
         Text = "注释缺口 — " + task.Name;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -319,9 +327,7 @@ internal sealed class ScanResultsDialog : DpiAwareForm
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
     {
-        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
-        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
-        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
+        if (_gestures.Dispatch(keyData)) return true;
         return base.ProcessDialogKey(keyData);
     }
 

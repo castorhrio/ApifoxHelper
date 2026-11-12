@@ -527,6 +527,26 @@ internal static class Ui
     public static TableLayoutPanel FilterRow(TextBox keyword, Label? counts) => FilterRow(null, keyword, counts);
 
     /// <summary>
+    /// 这一次按键是不是本屏关键词框接的三个手势之一（DESIGN.md §6「列表筛选」与「菜单/快捷键」）：
+    /// 认键只在 Ui 这一处——Ctrl+F 的字母与修饰键取 <see cref="ShellShortcuts.FindKey"/> 与
+    /// <see cref="ShellShortcuts.IsFindGesture"/>，Enter 的修饰键取 <see cref="ListKeys.IsEnterGesture"/>，
+    /// Esc 只认裸键。判定落在哪一个框在 <see cref="FilterGesturePlan"/>，动作仍走下面三个 Try*Filter 入口；
+    /// 本函数只看键、不碰控件（第二百二十六轮把「认键」从各对话框的 ProcessDialogKey 里收上来）。
+    /// </summary>
+    public static (bool Find, bool Enter, bool Escape) FilterGestureFacts(Keys keyData)
+    {
+        var keyCode = keyData & Keys.KeyCode;
+        var shift = (keyData & Keys.Shift) != 0;
+        var control = (keyData & Keys.Control) != 0;
+        var alt = (keyData & Keys.Alt) != 0;
+        var find = string.Equals(keyCode.ToString(), ShellShortcuts.FindKey, StringComparison.Ordinal)
+            && ShellShortcuts.IsFindGesture(shift, control, alt);
+        var enter = keyCode == Keys.Enter && ListKeys.IsEnterGesture(shift, control, alt);
+        var escape = keyCode == Keys.Escape;
+        return (find, enter, escape);
+    }
+
+    /// <summary>
     /// 对话框里的「在列表中查找」（DESIGN.md §6「菜单/快捷键」）：Ctrl+F 把焦点交给本屏关键词框并选中已有关键词，
     /// 与两个主页面同一手势——手势只有一份登记（<see cref="ShellShortcuts.FindKey"/> 与
     /// <see cref="ShellShortcuts.IsFindGesture"/>），菜单显示、壳绑定与对话框判定同源，这里不再写一个 Keys.F。

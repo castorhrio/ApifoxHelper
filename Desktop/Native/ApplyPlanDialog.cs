@@ -92,12 +92,20 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
     private bool _skippedSortDescending;
     private readonly string[] _skippedTitles;
 
+    /// <summary>
+    /// 本屏两个关键词框的登记表（<see cref="FilterGestures"/>）：主框是文件清单那个（Ctrl+F 的落点），
+    /// 跳过清单那个随后登记——Enter 与 Esc 看焦点各接一次，一次按键只有一个含义
+    /// （跳过清单的 Esc 不会去清文件清单的关键词，反之亦然）。判定在 <see cref="FilterGesturePlan"/> 一份。
+    /// </summary>
+    private readonly FilterGestures _gestures;
+
     public ApplyPlanDialog(CommentPlanService plans, TaskStore tasks, CheckTask task)
     {
         _plans = plans;
         _tasks = tasks;
         _task = task;
         _taskId = task.Id;
+        _gestures = new FilterGestures(_keyword, _list).Then(_skippedKeyword, _skippedList);
 
         Text = "注释回写 — " + task.Name;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -512,11 +520,7 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
     /// </summary>
     protected override bool ProcessDialogKey(Keys keyData)
     {
-        if (Ui.TryFocusFilter(keyData, _keyword)) return true;
-        if (Ui.TryEnterFilter(keyData, _keyword, _list)) return true;
-        if (Ui.TryEnterFilter(keyData, _skippedKeyword, _skippedList)) return true;
-        if (Ui.TryEscapeFilter(keyData, _keyword)) return true;
-        if (Ui.TryEscapeFilter(keyData, _skippedKeyword)) return true;
+        if (_gestures.Dispatch(keyData)) return true;
         return base.ProcessDialogKey(keyData);
     }
 

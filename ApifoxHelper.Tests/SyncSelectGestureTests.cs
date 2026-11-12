@@ -102,10 +102,13 @@ public class SyncSelectGestureTests
         var source = Repo.Source("Desktop", "Native", File);
         var body = Slice(source, "protected override bool ProcessDialogKey(Keys keyData)", "return base.ProcessDialogKey(keyData);");
 
-        // 只经 Ui 的三处共享入口接线：本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryFocusFilter\(keyData, _keyword\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, _selectList\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _keyword\)\) return true;$", body);
+        // 第二百二十六轮起：三个手势的落点由登记表判定（FilterGesturePlan），对话框只留一行分发——
+        // 本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
+        Assert.Matches(@"(?m)^\s*if \(_page1Gestures\.Dispatch\(keyData\)\) return true;$", body);
+        Assert.Contains("new FilterGestures(_keyword, _selectList)", CodeScan.Text(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryFocusFilter", CodeScan.Text(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEnterFilter", CodeScan.Text(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEscapeFilter", CodeScan.Text(source), StringComparison.Ordinal);
         Assert.DoesNotContain("SelectItem", body, StringComparison.Ordinal);
         Assert.DoesNotContain("EnsureVisible", body, StringComparison.Ordinal);
         Assert.DoesNotContain("FocusFirstResult", body, StringComparison.Ordinal);
@@ -134,19 +137,15 @@ public class SyncSelectGestureTests
         [
             "    protected override bool ProcessDialogKey(Keys keyData)",
             "    {",
+            "        // 两页各一张登记表：门控按当前可见页走，一次按键只有一个含义——预览页的 Esc 不会去清勾选页的关键词",
+            "        // （反之亦然）；两页都不在时（构造期）一概不接，Ctrl+F 不吞键、Esc 仍是取消对话框。",
             "        if (_page1.Visible)",
             "        {",
-            "            if (Ui.TryFocusFilter(keyData, _keyword)) return true;",
-            "            if (Ui.TryEnterFilter(keyData, _keyword, _selectList)) return true;",
-            "            if (Ui.TryEscapeFilter(keyData, _keyword)) return true;",
+            "            if (_page1Gestures.Dispatch(keyData)) return true;",
             "        }",
             "        else if (_page2.Visible)",
             "        {",
-            "            if (Ui.TryFocusFilter(keyData, _actionKeyword)) return true;",
-            "            if (Ui.TryEnterFilter(keyData, _actionKeyword, _actionList)) return true;",
-            "            if (Ui.TryEnterFilter(keyData, _excludedKeyword, _excludedList)) return true;",
-            "            if (Ui.TryEscapeFilter(keyData, _actionKeyword)) return true;",
-            "            if (Ui.TryEscapeFilter(keyData, _excludedKeyword)) return true;",
+            "            if (_page2Gestures.Dispatch(keyData)) return true;",
             "        }",
             "        return base.ProcessDialogKey(keyData);",
             "    }",
@@ -167,16 +166,12 @@ public class SyncSelectGestureTests
         Assert.True(gate1 >= 0 && gate2 > gate1, "两处门控要按「勾选页 → 预览页」排，且预览页那一支是 else if（一次按键只有一个含义）。");
         var page1 = body[..gate2];
         var page2 = body[gate2..];
-        var find1 = page1.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
-        var enter1 = page1.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
-        var escape1 = page1.IndexOf("Ui.TryEscapeFilter", StringComparison.Ordinal);
-        Assert.True(find1 > gate1 && enter1 > find1 && escape1 > enter1,
-            "顺序应为「勾选页可见 → Ctrl+F → Enter → Esc」。");
-        var find2 = page2.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
-        var enter2 = page2.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
-        var escape2 = page2.IndexOf("Ui.TryEscapeFilter", StringComparison.Ordinal);
-        Assert.True(find2 > 0 && enter2 > find2 && escape2 > enter2,
-            "顺序应为「预览页可见 → Ctrl+F → Enter → Esc」。");
+        // 每一页的门控之内只有一行分发（Ctrl+F → Enter → Esc 的先后在 FilterGesturePlan 一处判定，
+        // 见 FilterGesturePlanTests），且只分发自己那一页的登记表。
+        Assert.Single(Regex.Matches(page1, @"_page1Gestures\.Dispatch\("));
+        Assert.DoesNotContain("_page2Gestures", page1, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(page2, @"_page2Gestures\.Dispatch\("));
+        Assert.DoesNotContain("_page1Gestures", page2, StringComparison.Ordinal);
         // 不另写反向判定（「预览页不可见时……」）：一次按键只有一个含义，门控只有这两处。
         Assert.DoesNotContain("!_page1.Visible", body, StringComparison.Ordinal);
         Assert.DoesNotContain("!_page2.Visible", body, StringComparison.Ordinal);

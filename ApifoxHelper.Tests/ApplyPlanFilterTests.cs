@@ -184,14 +184,13 @@ public class ApplyPlanFilterTests
     {
         var source = Repo.Source("Desktop", "Native", "ApplyPlanDialog.cs");
         var body = Slice(source, "protected override bool ProcessDialogKey(Keys keyData)", "return base.ProcessDialogKey(keyData);");
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryFocusFilter\(keyData, _keyword\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEnterFilter\(keyData, _keyword, _list\)\) return true;$", body);
-        Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _keyword\)\) return true;$", body);
-        // 顺序固定：先到框、再到行、最后退出筛选。
-        var find = body.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
-        var enter = body.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
-        var escape = body.IndexOf("Ui.TryEscapeFilter", StringComparison.Ordinal);
-        Assert.True(find >= 0 && enter > find && escape > enter, "三条判定的顺序应为 Ctrl+F → Enter → Esc。");
+        // 第二百二十六轮起：两个框登记在同一张表里（主框是文件清单那个），落点由 FilterGesturePlan 判定
+        // （Ctrl+F → Enter → Esc 的先后也在那里），对话框只留一行分发。
+        Assert.Matches(@"(?m)^\s*if \(_gestures\.Dispatch\(keyData\)\) return true;$", body);
+        Assert.Contains("new FilterGestures(_keyword, _list).Then(_skippedKeyword, _skippedList)", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryFocusFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEnterFilter", CodeLines(source), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ui.TryEscapeFilter", CodeLines(source), StringComparison.Ordinal);
         // 本对话框不就地认键、不就地拆修饰键、不自己选中或滚动、不自己清空关键词。
         var code = CodeLines(source);
         Assert.DoesNotContain("Keys.F", code, StringComparison.Ordinal);

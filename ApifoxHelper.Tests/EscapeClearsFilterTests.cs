@@ -177,7 +177,10 @@ public class EscapeClearsFilterTests
             .Where(o => o.lines.Count > 0)
             .ToList();
         Assert.Equal(["CapabilitiesDialog.cs", "NativeShellForm.cs", "Ui.cs"], owners.Select(o => o.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray());
-        Assert.All(owners, o => Assert.Single(o.lines));
+        // Ui.cs 两行：FilterGestureFacts 认键一处、TryEscapeFilter 入口一处（第二百二十六轮把认键收上来）；
+        // 另两个文件各一行。
+        Assert.Equal(2, owners.Single(o => o.Name == "Ui.cs").lines.Count);
+        Assert.All(owners.Where(o => o.Name != "Ui.cs"), o => Assert.Single(o.lines));
         // 三种语义各走各的通路：壳不用对话框的 ProcessDialogKey，对话框不抢壳的 ProcessCmdKey。
         Assert.DoesNotContain("ProcessCmdKey", Repo.Source("Desktop", "Native", "CapabilitiesDialog.cs"), StringComparison.Ordinal);
         Assert.DoesNotContain("ProcessDialogKey", Repo.Source("Desktop", "Native", "NativeShellForm.cs"), StringComparison.Ordinal);

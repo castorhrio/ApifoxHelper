@@ -113,18 +113,15 @@ public class FilterEscapeTests
         {
             var source = Repo.Source("Desktop", "Native", file);
             var body = Slice(source, "protected override bool ProcessDialogKey(Keys keyData)", "return base.ProcessDialogKey(keyData);");
-            // 只经 Ui.TryEscapeFilter 一处接线：对话框不就地认 Esc、不就地拆修饰键、不自己清空关键词。
-            Assert.Matches(@"(?m)^\s*if \(Ui\.TryEscapeFilter\(keyData, _keyword\)\) return true;$", body);
+            // 第二百二十六轮起：Esc 的落点由登记表判定（FilterGesturePlan），对话框只留一行分发——
+            // 不就地认 Esc、不就地拆修饰键、不自己清空关键词。
+            Assert.Matches(@"(?m)^\s*if \(_\w*[Gg]estures\.Dispatch\(keyData\)\) return true;$", body);
+            Assert.Contains($"new FilterGestures(_keyword, {ListField(file)})", CodeScan.Text(source), StringComparison.Ordinal);
+            Assert.DoesNotContain("Ui.TryEscapeFilter", CodeScan.Text(source), StringComparison.Ordinal);
             Assert.Empty(CodeLines(source, "Keys.Escape"));
             Assert.Empty(CodeLines(source, "ListFilter.EscClearsInDialog"));
             Assert.Empty(CodeLines(source, "_keyword.Clear()"));
             Assert.Empty(CodeLines(source, "_keyword.Text = \"\""));
-            // 三条判定并存、顺序固定：Ctrl+F 在前（先到框）、Enter 居中（再到行）、Esc 在后（退出筛选）。
-            var find = body.IndexOf("Ui.TryFocusFilter", StringComparison.Ordinal);
-            var enter = body.IndexOf("Ui.TryEnterFilter", StringComparison.Ordinal);
-            var escape = body.IndexOf("Ui.TryEscapeFilter", StringComparison.Ordinal);
-            Assert.True(find >= 0 && enter > find, $"{file}:Ctrl+F 判定应排在 Enter 判定之前。");
-            Assert.True(escape > enter, $"{file}:Esc 判定应排在 Enter 判定之后（先到行、再退出筛选）。");
         }
     }
 
@@ -166,17 +163,20 @@ public class FilterEscapeTests
     [Fact]
     public void EscapeEntry_IsReachedFromExactlyTheElevenLongLists()
     {
-        // 触达点清单：恰为十一张长清单对话框的接线（定义在 Ui.cs，调用形式只在这十一处；第六处是第七十三轮接上的
-        // 同步预览勾选页，第七处是第七十五轮接上的接口追踪明细，第八处是第七十六轮接上的补充说明，
-        // 第九处是第七十七轮接上的生成文档核对条目，第十处是第七十九轮接上的注释回写文件清单，
-        // 第十一处是第八十四轮接上的任务日志记录清单）；
-        // 其余界面（含两个主页面）不接这一条。
+        // 触达点清单（第二百二十六轮收口后）：Ui.TryEscapeFilter 的调用形式只剩一处——分发器
+        // FilterGestures 按 FilterGesturePlan 的判定把这一次按键交给它。十一张长清单不再各写一行，
+        // 它们登记的是「本屏有哪几个框」（见 FilterGesturePlanTests 的登记表核对）。
         var callers = Repo.NativeSources()
             .Where(source => CodeLines(source.Text, "Ui.TryEscapeFilter(").Count > 0)
             .Select(source => source.Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
-        Assert.Equal(Dialogs.OrderBy(name => name, StringComparer.Ordinal).ToArray(), callers);
+        Assert.Equal(["FilterGestures.cs"], callers);
+        // 十一张长清单仍全部接上：每一屏都登记了至少一个框（登记表是它们与分发器之间唯一的接线）。
+        foreach (var file in Dialogs)
+        {
+            Assert.Contains("new FilterGestures(", CodeScan.Text(Repo.Source("Desktop", "Native", file)), StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -220,6 +220,9 @@ public class FilterEscapeTests
         Assert.True(row is not null, $"DESIGN.md §{section} 缺少「{clause}」这一行。");
         return row;
     }
+
+    /// <summary>各对话框里「本屏清单」的字段名（同步预览勾选页的清单叫 _selectList）。</summary>
+    private static string ListField(string file) => file == "SyncPreviewDialog.cs" ? "_selectList" : "_list";
 
     private static List<string> CodeLines(string text, string fragment) => CodeScan.LinesContaining(text, fragment);
 
