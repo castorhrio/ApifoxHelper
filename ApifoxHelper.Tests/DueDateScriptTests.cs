@@ -365,6 +365,72 @@ public class DueDateScriptTests
     }
 
     /// <summary>
+    /// <c>--writeback-plan</c> 在<b>真仓 NOTES</b> 上实跑一次（第二百四十轮，简报 P0-2）：
+    /// 清单<b>起于那一段的标题、止于下一个二级 / 三级标题之前</b>。
+    /// <para>
+    /// <b>补的是哪一个洞</b>：上面 <see cref="WritebackPlan_PrintsThatSectionVerbatimAndKeepsTheDateExitCode"/>
+    /// 走的是 <see cref="FakeNotes"/>——假树里那一段<b>后面没有任何别的节</b>，所以「切在下一节之前」
+    /// 这一条从来没有在真仓形状上跑过。真仓那一段紧跟着的是另一整节（带自己的标题与正文），
+    /// 一旦 <c>awk</c> 那两个 <c>exit</c> 条件被改坏，屏幕上就会连着打出下一节，而当天照着念的人
+    /// 会把「退场那天要删哪几行」读成「过期那天要改的其中一步」——**多打出来的那一节比少打更贵**，
+    /// 因为它是完整可读的、看不出出了界。
+    /// </para>
+    /// <para>
+    /// <b>边界全部从 NOTES 现读</b>：下一个标题（是哪一节、叫什么名）由本条当场从文件里取，
+    /// <b>不写死</b> <c>G-D6</c>——那一节改名或前面插进新的一节，这一条跟着走，而不是先红在措辞上。
+    /// </para>
+    /// <para><b>它不判什么</b>：不判清单内容对不对（那是
+    /// <see cref="AcceptanceChecklistTests.Gd5_PastDueWritebackPlan_IsWalkableAndNamesRealDestinations"/> 的事）、
+    /// 不判那一天该不该改判（<c>TODAY</c> 由这一发注入，为的是让它在任何一天都可跑）。</para>
+    /// </summary>
+    [Fact]
+    public void WritebackPlan_OnTheRealRepoNotes_CutsAtTheNextSectionHeading()
+    {
+        if (LocateBash() is null) return;
+
+        const string Title = "### 到期日已过 · 改判与回写清单";
+        var lines = Repo.Source("docs", "NOTES.md").ReplaceLineEndings("\n").Split('\n');
+        // 与脚本的 awk 同一个取法：`index($0, head) == 1` 命中的是**整行**，命中后 `next` 从下一行才开始打。
+        // 所以这里也必须整行跳过标题——按字符偏移切会把标题行尾部的「（可照走，…）」当成正文第一句。
+        var head = Array.FindIndex(lines, l => l.StartsWith(Title, StringComparison.Ordinal));
+        Assert.True(head >= 0,
+            $"docs/NOTES.md 里找不到以「{Title}」开头的那一行：脚本按标题现读，标题不在了这一发就没有靶子。");
+
+        var body = lines[(head + 1)..];
+        var stop = Array.FindIndex(body, l => l.StartsWith("## ", StringComparison.Ordinal)
+                                           || l.StartsWith("### ", StringComparison.Ordinal));
+        Assert.True(stop > 0,
+            "「到期日已过 · 改判与回写清单」那一段之后找不到下一个二级 / 三级标题："
+            + "没有边界就没法判「切在下一节之前」，这一条会退化成只看第一段。");
+
+        var nextHeading = body[stop].Trim();
+        var firstBody = body.First(l => l.Trim() != "").Trim();
+        var lastBody = body[..stop].Reverse().First(l => l.Trim() != "").Trim();
+        var nextBody = body[(stop + 1)..].FirstOrDefault(l => l.Trim() != "")?.Trim();
+        Assert.True(nextBody is null || !nextBody.StartsWith('#'),
+            $"取法退化：{nextHeading} 之后紧跟的还是一行标题，下一节正文没取到。");
+
+        // 真仓真跑：只读两份文件、比两个日期，不跑任何界面；TODAY 注入到到期日之后走「已过」那一支。
+        var (exit, output) = RunDueDateWithArgs(["--writeback-plan"], ("TODAY", "2026-11-21"));
+        Assert.True(exit == 1, $"真仓 NOTES 上过那一天退出码是 {exit}，不是 1：{output}");
+
+        Assert.Contains("到期日已过 · 改判与回写清单", output, StringComparison.Ordinal);
+        Assert.Contains("| 步 | 改哪一份 |", output, StringComparison.Ordinal);
+        Assert.Contains(firstBody, output, StringComparison.Ordinal);
+        Assert.Contains(lastBody, output, StringComparison.Ordinal);
+
+        // 收口：下一节的标题行与它下面那一句正文都不许出现在屏幕上（少打一段是缺页，多打一段是假页）。
+        Assert.DoesNotContain(nextHeading, output, StringComparison.Ordinal);
+        if (nextBody is not null) Assert.DoesNotContain(nextBody, output, StringComparison.Ordinal);
+
+        // 屏幕上不许出现任何 markdown 标题行——那一段的正文只有引用块与表格，标题一律是「越界」的形状。
+        var headings = output.ReplaceLineEndings("\n").Split('\n')
+            .Where(l => l.StartsWith('#')).ToList();
+        Assert.True(headings.Count == 0,
+            $"输出里出现了标题行（{string.Join("、", headings)}）：清单应当切在下一节之前，越界了。");
+    }
+
+    /// <summary>
     /// 兄弟门 <c>Gd5DueDate_IsNotStaleOrFuture</c> ③ 在到期日过去之后要求 G-D5 那一格同时含有的词，
     /// <b>从它的源码里现读</b>（<c>row.Verdict.Contains("…")</c> 的字面量）。
     /// <para>

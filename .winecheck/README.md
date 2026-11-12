@@ -517,10 +517,25 @@ TIERS=96 bash .winecheck/defense-day.sh         # 只跑一档（答辩前自查
 （核对本身跑不动）算失败——真机 0 台时那九个归档目录本来就该是空的（退出码 `1`）。这一支若再调它一次
 并按「任一步非零即停」处理，就会把「归档还空着」这个**当天的正常状态**读成停链理由。
 
-**门**：`ApifoxHelper.Tests/WineCheckScriptsTests` 的 `DefenseDayScript_*` 四条——链形状（顺序、每步调用紧跟
-`RC=$?`、点名与 `exit "$RC"` 同块、第 ④ 步两处退场，附三处注入破坏的自测）、四样不抄第二份（含从
-`demo.sh` / `due-date.sh` **现读**再对）、停在第 ① 步与停在第 ② 步两个方向**真的跑**。
+**门**：`ApifoxHelper.Tests/WineCheckScriptsTests` 的 `DefenseDayScript_*` 五条——链形状（顺序、每步调用紧跟
+`RC=$?`、点名与 `exit "$RC"` 同块、第 ④ 步两处退场，附四处注入破坏的自测）、四样不抄第二份（含从
+`demo.sh` / `due-date.sh` **现读**再对）、停在第 ① 步与停在第 ② 步两个方向**真的跑**、下面那处 Windows 侧登记
+在两处都在位并与磁盘上的 `.ps1` 实物对账（`DefenseDayScript_WindowsSideRunbook_IsRegisteredInBothPlaces`）。
 **它仍然不是真机证据**：那条机器仍 0 台、到期日 2026-11-20。
+
+**Windows 侧当天跑哪一支（第二百四十轮登记，简报 P0-1 的 B 案）**：这一支**没有 PowerShell 对照物**——
+`.winecheck/` 下唯一的 `.ps1` 是 `demo.ps1`，它对照的只是上面**第 ③ 步**那一支 `demo.sh`（段名逐字同名，
+见「Windows 侧那支」一节），第 ①②④ 步（`due-date.sh` / `preflight.sh` / 读三份讲稿现打）没有对应的 ps1。
+所以**在 Windows 机器上当天仍跑同一条命令** `bash .winecheck/defense-day.sh`，用 **Git Bash** 或 **WSL** 起 bash；
+**本仓不提供 `defense-day.ps1`**，也不要现场照本节手抄那四步——手抄丢掉的是「任一步非零即停并点名停在第几步」，
+而那正是当天最需要的一条行为（第 ① 步挡住「已过」、第 ② 步挡住「读数属于上一版源码」，两道都是抄不出来的）。
+
+**为什么不补一支 ps1**：这一支的四步全是只读文件、比日期、跑 wine，现场就在容器里；补一份长期无人真跑的
+PowerShell 副本，只会多出第二处要维护的顺序（顺序一旦分家，两份脚本各停在不同的那一步，谁都对不上）。
+**这一句登记在位由 `WineCheckScriptsTests.DefenseDayScript_WindowsSideRunbook_IsRegisteredInBothPlaces` 判**：
+本节与 `docs/NOTES.md`「当天先跑哪一支」那一段任一处删掉这一句、少了 `Git Bash` / `WSL` 或那条命令、
+或 `.winecheck/` 下真长出 `defense-day.ps1`（乃至第二份 `.ps1`）而登记没跟着改，即红。
+**它不判这几支 bash 在真 Windows 的 Git Bash 里跑不跑得动**——那一条随 G-D5 一起到真机那天量。
 
 ## 已知限制（不要拿它当 Windows 真机证据）
 

@@ -1519,6 +1519,77 @@ public class WineCheckScriptsTests
         }
     }
 
+    /// <summary>
+    /// Windows 侧当天跑哪一支：<b>这一句登记在两处都在位，且与磁盘上的 <c>.ps1</c> 实物对得上</b>
+    /// （第二百四十轮，简报 P0-1 的 B 案：不补 <c>defense-day.ps1</c>，把「不补」写成一句可判的登记）。
+    /// <para>
+    /// <b>补的是哪个洞</b>：第 ③ 步那一支 <c>demo.sh</c> 有 PowerShell 对照物（<c>demo.ps1</c>，
+    /// 段名逐字同名，见 <see cref="DemoPs1_NamesTheSameSectionsAsDemoSh"/>），而<b>第 ①②④ 步没有</b>。
+    /// 这个不对称此前只活在第二百三十七轮的当轮记录里（文末逐轮台账，不在当天会翻开的那两页上），
+    /// 于是 Windows 侧当天真正会读的两份文件（本 README 那一节、<c>docs/NOTES.md</c>「当天先跑哪一支」那一段）
+    /// <b>都没说这一支在 Windows 上怎么跑</b>——接手的人只能回 README 手抄四步，而手抄丢掉的是
+    /// 「任一步非零即停并点名停在第几步」这一条当天最需要的行为。
+    /// </para>
+    /// <para>
+    /// <b>为什么选登记而不是补一支 ps1</b>：这一支四步全在只读文件、比日期、跑 wine，现场就在容器里；
+    /// 补一份长期无人真跑的 PowerShell 副本只会多出第二处要维护的顺序，与本仓
+    /// 「脚本里不许抄第二份」那条纪律是同一取舍。登记写清楚，比再造一个没人跑的脚本便宜且诚实。
+    /// </para>
+    /// <para>
+    /// <b>判五件事</b>：① 本 README「到期日当天一条命令」那一节里有这一句；② <c>docs/NOTES.md</c>
+    /// 「当天先跑哪一支」那一段里有同一句；③ 两处都点到 <c>Git Bash</c> / <c>WSL</c>、那条可跑的命令
+    /// <c>bash .winecheck/defense-day.sh</c>、以及「不提供 <c>defense-day.ps1</c>」这件事本身；
+    /// ④ <b>磁盘上真的没有</b> <c>defense-day.ps1</c>——补了对照物而登记没跟着改，这一句就成了假的；
+    /// ⑤ 磁盘上的 <c>.ps1</c> 只有 <c>demo.ps1</c> 一份（多出一支而登记仍说「只对照第 ③ 步」，同样是假的）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判这几支 bash 在真 Windows 的 Git Bash 里到底跑不跑得动（那是真机那天要量的，
+    /// 随 G-D5 一起挂账），也不判登记的措辞好不好——它判的是「下一轮不必再问一遍」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DefenseDayScript_WindowsSideRunbook_IsRegisteredInBothPlaces()
+    {
+        var readme = Repo.Source(".winecheck", "README.md");
+        var notes = Repo.Source("docs", "NOTES.md");
+
+        // 出处一：本节自己（从那一节的标题起，到下一个二级标题之前——与本仓切节的同一取法）。
+        var sectionStart = readme.IndexOf("## 到期日当天一条命令（`defense-day.sh`）", StringComparison.Ordinal);
+        Assert.True(sectionStart >= 0,
+            "`.winecheck/README.md` 里找不到「到期日当天一条命令（defense-day.sh）」那一节：登记没有落点。");
+        var tail = readme[sectionStart..].Split('\n').Skip(1).ToArray();
+        var cut = Array.FindIndex(tail, l => l.StartsWith("## ", StringComparison.Ordinal));
+        var section = cut < 0 ? string.Join('\n', tail) : string.Join('\n', tail[..cut]);
+
+        // 出处二：NOTES 里那一段（一行到底，与第二百三十七轮写它时同一个形状）。
+        var paragraphStart = notes.IndexOf("> **当天先跑哪一支", StringComparison.Ordinal);
+        Assert.True(paragraphStart >= 0,
+            "`docs/NOTES.md` 里找不到「当天先跑哪一支」那一段：Windows 侧当天读到的那一页又没有出处了。");
+        var paragraph = notes[paragraphStart..].Split('\n')[0];
+
+        foreach (var (place, text) in new[] { (".winecheck/README.md", section), ("docs/NOTES.md", paragraph) })
+        {
+            var missing = new List<string>();
+            foreach (var need in new[] { "defense-day.ps1", "不提供", "Git Bash", "WSL", "bash .winecheck/defense-day.sh" })
+            {
+                if (!text.Contains(need, StringComparison.Ordinal)) missing.Add(need);
+            }
+
+            Assert.True(missing.Count == 0,
+                $"Windows 侧当天那一处登记不完整：{place} 里那一段少了 {string.Join("、", missing)}"
+                + "——当天在场的人读不到「这一支在 Windows 上还是跑 bash，本仓不提供 ps1 对照物」，"
+                + "下一步就是回 README 手抄四步，而手抄丢掉的是「停在第几步」的点名。");
+        }
+
+        // 与磁盘对账：登记说「不提供」，磁盘上就不许有；登记说的那一份唯一 ps1 也不许长出第二份。
+        var ps1 = System.IO.Directory.GetFiles(Directory, "*.ps1")
+            .Select(Path.GetFileName)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+        Assert.DoesNotContain("defense-day.ps1", ps1, StringComparer.Ordinal);
+        Assert.Equal(["demo.ps1"], ps1);
+    }
+
     /// <summary>临时树清不掉不影响判据（与 <c>PreflightScriptTests.FakeTree.Dispose</c> 同一取舍）。</summary>
     private static void TryDelete(string root)
     {
