@@ -33,13 +33,18 @@ namespace ApifoxHelper.Desktop.Native;
 /// 由 <c>StatusLineTextTests.Host_FillsItsCell_SoTheStatusLineGetsTheRemainingWidth</c> 按类逐段判住。
 /// </para>
 /// <para>
-/// <b>补上 Dock 之后量到的是什么</b>（第二百一十六轮，简报 P0-2；第二百一十八轮按 P1-2 去掉无出处的读数）：
+/// <b>补上 Dock 之后量到的是什么</b>（第二百一十六轮，简报 P0-2；第二百二十轮把两个主页面的读数都量到）：
 /// 页面侧状态行这一格从此拿到工具栏那一行的剩余宽度，「放得下就不给入口」那一支<b>第一次真的走到了</b>
-/// （补 Dock 之前它恒为 194px，一条真实失败原因永远放不下）。三档的具体读数不写在这里——它们随窗口宽度
-/// 与缩放档变化，抄进注释就成了没有出处的数；要念就读当场跑出来的那一份：<c>.winecheck/reading.txt</c>
-/// 的 <c>RunStatusFullText</c> 段（三档各 4 段全绿，由 <c>ReadingConsistencyTests</c> 与文档对账），
-/// 原文行在 <c>/tmp/ah-demo/report-&lt;档位&gt;.txt</c> 的「入口不占位时这一行 Npx」那一句里，
-/// 复跑 <c>bash .winecheck/demo.sh</c> 即得。这一句只记机制，不把它读成真机结论（wine 模拟器，G-D5 仍 <c>[ ]</c>）。
+/// （补 Dock 之前它恒为 194px，一条真实失败原因永远放不下）。
+/// </para>
+/// <para>
+/// <b>实测读数（第二百二十轮 · 2026-11-12，<c>PUBLISH=1 bash .winecheck/demo.sh</c> 三档各跑一次）</b>：
+/// 任务页（窗口 1280px）<b>855 / 840 / 774px</b>，配置页（窗口 1200px）<b>572 / 533 / 376px</b>，
+/// 依次对应 ≈100% / ≈125% / ≈200% 三档；配置页那一格在窗口拉到 1280px 时变成 <b>652 / 613 / 456px</b>，
+/// 跟着窗口变宽——取的是剩余宽度，不是某个固定值。两个数都由冒烟段 <c>RunStatusFullText</c> 当场量、
+/// 逐档写进报告行（原文在 <c>/tmp/ah-demo/report-&lt;档位&gt;.txt</c> 的「入口不占位时这一行 Npx」那一句里），
+/// 读数记录落在 <c>.winecheck/reading.txt</c>（<c>ReadingConsistencyTests</c> 与文档对账）。
+/// 这两个数只记模拟器读数，不把它读成真机结论（wine 模拟器，G-D5 仍 <c>[ ]</c>）。
 /// </para>
 /// <para>
 /// <b>高度是固定占位</b>：宿主高度取状态行自身高度（DESIGN.md §6「状态行：固定占位，文案变化不推动布局」）。

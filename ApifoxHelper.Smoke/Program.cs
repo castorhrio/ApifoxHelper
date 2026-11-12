@@ -4125,7 +4125,7 @@ internal static class Program
         var firstStepOffered = false;
         try
         {
-            RunAction("状态行：放得下的短句不给「查看完整错误」入口（真实控件）", () =>
+            RunAction("状态行：两个主页面的短句都放得下、都不给「查看完整错误」入口（真实控件）", () =>
             {
                 host = new Form { Width = 1200, Height = 760, Text = "状态行完整错误冒烟" };
                 page = new TasksPage(
@@ -4182,6 +4182,67 @@ internal static class Program
                 _lines.Add($"     短句「{status.Text}」：文字 {preferred}px、入口不占位时这一行 {available}px、入口可见={entry.Visible}、"
                     + $"工具栏行高 {toolbarHeightBefore}px（窗口 {baselineWidth}px）"
                     + (shouldOffer ? "——这一档连最宽窗口都放不下这一句，「放得下不给入口」那一支本轮在这一档没量到（工具栏按钮列不随缩放让位，见 docs/NOTES.md 挂账）" : ""));
+
+                // 第二个主页面（第二百二十轮，简报 P0-1）：`StatusLineHost` 补 Dock 的读数此前只在任务页量过。
+                // 配置页那一格从第一百六十五轮起就设了 Dock，却一次也没量到「它到底有多宽」——
+                // 类注释里那句「页面侧拿到工具栏剩余宽度」对两个主页面只量到了一个。
+                // 这里按产品入口同一份构造参数真的 new 一次，量「入口不占位时这一行有多宽」，
+                // 再把窗口拉宽量第二次：只有跟着窗口变宽，才证明取的是工具栏的剩余宽度，
+                // 而不是 Panel 缺省 200px（补 Dock 之前这一格恒 194px = 200 − 状态行左右留白 6）。
+                using var projectsForm = new Form { Width = 1200, Height = 760, Text = "配置页状态行冒烟" };
+                using var projects = new ProjectsPage(
+                    services.GetRequiredService<ProfileStore>(),
+                    services.GetRequiredService<CompatService>(),
+                    services.GetRequiredService<ApifoxCli>(),
+                    store,
+                    services.GetRequiredService<JobRunner>(),
+                    services.GetRequiredService<CredentialStore>(),
+                    sortMemory);
+                projects.Dock = DockStyle.Fill;
+                projectsForm.Controls.Add(projects);
+                projectsForm.Show();
+                Application.DoEvents();
+                projects.RefreshData();
+                Application.DoEvents();
+
+                // 真实短句：筛到行的计数句（空状态行「放得下」是废话，量不到这一支）。
+                var projectsFilter = FindFirst<TextBox>(projects) ?? throw new InvalidOperationException("配置页里找不到筛选框。");
+                projectsFilter.Text = "配置";
+                Application.DoEvents();
+
+                var projectsStatus = StatusLabel(projects);
+                if (projectsStatus.Text.Length == 0)
+                {
+                    throw new InvalidOperationException("配置页筛选后状态行没有文字，这一段量不到短句那一支。");
+                }
+                var projectsEntry = ButtonOf(projects, StatusLineText.FullTextButton);
+                var (projectsPreferred, projectsAvailable, projectsShouldOffer) = StatusEntryRule(projectsStatus);
+                if (projectsEntry.Visible != projectsShouldOffer)
+                {
+                    throw new InvalidOperationException(
+                        $"配置页短句「{projectsStatus.Text}」（文字 {projectsPreferred}px、入口不占位时这一行 {projectsAvailable}px）"
+                        + $"下入口可见={projectsEntry.Visible}，按口径该「{(projectsShouldOffer ? "给" : "不给")}」。");
+                }
+                // 补 Dock 之前这一格恒 194px（Panel 缺省 200 − 状态行左右留白 6）：量到不超过它，
+                // 就是那一句 Dock 又漏了、或列样式被改回固定宽——两种都会让长失败原因永远放不下。
+                const int preDockWidth = 194;
+                if (projectsAvailable <= preDockWidth)
+                {
+                    throw new InvalidOperationException(
+                        $"配置页状态行这一格只有 {projectsAvailable}px（补 Dock 之前恒 {preDockWidth}px）：它没有拿到工具栏的剩余宽度。");
+                }
+                // 窗口拉宽：这一格必须跟着变宽（取的是剩余宽度，不是某个固定值）。
+                projectsForm.Width = Math.Min(1600, Screen.PrimaryScreen?.WorkingArea.Width ?? 1600);
+                Application.DoEvents();
+                var (projectsWidePreferred, projectsWideAvailable, _) = StatusEntryRule(projectsStatus);
+                if (projectsWideAvailable <= projectsAvailable)
+                {
+                    throw new InvalidOperationException(
+                        $"窗口从 1200px 拉到 {projectsForm.Width}px，配置页状态行这一格却从 {projectsAvailable}px 变成 {projectsWideAvailable}px："
+                        + "它取的不是工具栏的剩余宽度。");
+                }
+                _lines.Add($"     配置页短句「{projectsStatus.Text}」：文字 {projectsPreferred}px、入口不占位时这一行 {projectsAvailable}px（窗口 1200px）"
+                    + $"→ {projectsWideAvailable}px（窗口 {projectsForm.Width}px，文字 {projectsWidePreferred}px）、入口可见={projectsEntry.Visible}");
             });
 
             RunAction("状态行：真实失败长句放不下时给出入口，且同一行宽上按文字内容重判（真实控件）", () =>
@@ -4342,6 +4403,7 @@ internal static class Program
                     + $"工具栏行高 {ToolbarOf(status).Height}px"
                     + (!shouldOffer && firstStepOffered ? "（同一窗口宽下失败态给过、恢复后不给——入口收得回来）" : ""));
             });
+
         }
         finally
         {
