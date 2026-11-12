@@ -113,6 +113,25 @@ public class OpenSelectionTests
         Assert.Equal(new[] { "Ui.cs" }, callers);
     }
 
+    /// <summary>
+    /// 「不自己索引第一行」的判据：<c>Items[0]</c> 这个形状在<b>清单行</b>上出现即红，
+    /// 但 <c>SubItems[0]</c>（行自身那一格）不算——第二百二十八轮把标识格的等宽字体收进
+    /// <c>Ui.IdentityCell</c> 之后，<c>Ui.IdentityCell(item.SubItems[0]);</c> 这一句里也含
+    /// 「Items[0]」四个字，按裸子串判会把「给首列设字体」误读成「索引第一行落点」。
+    /// <para>
+    /// 判据因此按<b>形状</b>收窄：<c>Items[0]</c> 前面紧邻 <c>Sub</c> 的那一处是「行内第 0 格」，
+    /// 其余（<c>_list.Items[0]</c>、<c>list.Items[0]</c>、<c>Items[0]</c>）都是「清单第一行」。
+    /// 收窄的是误报，不是强度：落点若真写成 <c>_list.Items[0]</c>，这条门照样红。
+    /// </para>
+    /// </summary>
+    private static void AssertNoFirstRowIndexing(string body, string where)
+    {
+        var hit = Regex.Match(body, @"(?<!Sub)Items\[0\]");
+        Assert.False(hit.Success,
+            $"{where} 里出现了「清单第一行」的索引（{hit.Value}）：落点只经 Ui.SelectFirstOnOpen 一处，"
+            + "重建路径不落点、也不自己索引第一行。");
+    }
+
     // ---------- 接线：两个审阅视图在打开时落一次，重建路径不落 ----------
 
     [Theory]
@@ -129,7 +148,7 @@ public class OpenSelectionTests
         Assert.True(filter >= 0 && land > filter, $"{file}:应在 ApplyFilter 之后落点。");
         // 打开时这一处只落选中：不取键盘、不自己索引、不自己滚动（各有自己的唯一入口）。
         Assert.DoesNotContain("KeepKeyboardOnQueue", onLoad, StringComparison.Ordinal);
-        Assert.DoesNotContain("Items[0]", onLoad, StringComparison.Ordinal);
+        AssertNoFirstRowIndexing(onLoad, $"{file} 的 OnLoad");
         Assert.DoesNotContain("EnsureVisible", onLoad, StringComparison.Ordinal);
         Assert.DoesNotContain(".Focus(", onLoad, StringComparison.Ordinal);
     }
@@ -144,7 +163,7 @@ public class OpenSelectionTests
         var applyFilter = MethodBody(file, "ApplyFilter");
         Assert.DoesNotContain("Ui.SelectFirstOnOpen(", applyFilter, StringComparison.Ordinal);
         Assert.DoesNotContain("Ui.SelectItem(", applyFilter, StringComparison.Ordinal);
-        Assert.DoesNotContain("Items[0]", applyFilter, StringComparison.Ordinal);
+        AssertNoFirstRowIndexing(applyFilter, $"{file} 的 ApplyFilter");
         // 重建后仍问一次详情：没选中时那一屏由详情区那句话交代（第六十二轮口径）。
         Assert.Contains("ShowDetail();", applyFilter);
     }

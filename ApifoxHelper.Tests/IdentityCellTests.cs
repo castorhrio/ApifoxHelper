@@ -31,11 +31,22 @@ public class IdentityCellTests
 
     private static string NativeFile(string name) => Repo.Source("Desktop", "Native", name);
 
-    /// <summary>工厂本体：只交出「等宽字体」这一件事，不碰文字、不碰颜色。</summary>
+    /// <summary>
+    /// 工厂本体：只交出「等宽字体」这一件事，不碰文字、不碰颜色。
+    /// <para>
+    /// <b>两个重载、一个落点</b>（第二百二十九轮修正）：第二百二十八轮这条门写的是
+    /// <c>Assert.Single</c>——它把「工厂只有一个」读成了「方法只有一个」，而工厂本来就是两个重载
+    /// （新建一格 / 交出已建好的那一格），于是这条门从落地那一刻起就是红的。判据改成
+    /// 「恰好两个重载，且第二个只做转发」：真正要钉的是「等宽字体只在一处赋值」，
+    /// 那件事由 <see cref="FactoryBody"/> 里那一句 <c>sub.Font = UiTokens.Mono.Value;</c> 判住。
+    /// </para>
+    /// </summary>
     [Fact]
     public void IdentityCell_IsTheOnlyFactoryAndFormatsNoText()
     {
-        Assert.Single(Regex.Matches(UiSource, @"static ListViewItem\.ListViewSubItem IdentityCell\("));
+        Assert.Equal(2, Regex.Matches(UiSource, @"static ListViewItem\.ListViewSubItem IdentityCell\(").Count);
+        // 第二个重载只转发：新建一格之后立刻交给第一个重载，不自己再设一次字体。
+        Assert.Contains("IdentityCell(row.SubItems.Add(text));", UiSource, StringComparison.Ordinal);
         var body = FactoryBody();
         Assert.Contains("sub.Font = UiTokens.Mono.Value;", body, StringComparison.Ordinal);
         // 文字是调用方算好交进来的：工厂不格式化、不发明占位符（「未绑定」「—」这类占位各屏自己那一份）。
