@@ -225,6 +225,74 @@ public class ProfileGridColumnsTests
         Assert.Equal(480, ApifoxHelper.Desktop.Native.ProfileGridColumns.MinFieldBoxWidth);
     }
 
+    // ── 标签列随字号放大（第二百三十五轮，简报 P0-1 甲组根因）──────────────
+
+    [Fact]
+    public void ScaledLabelWidth_NeverShrinksBelowTheBaseline()
+    {
+        // 因子不大于 1 一律回基线：量不到 DPI（回 1）、读数偏低、喂进来一个非正数或 NaN，
+        // 都不把已经在 100% 档量过并归档的那一列收小——收小会把本来放得下的字段名挤成两行，
+        // 等于把一种不确定性换成另一种更明显的破坏（与 DpiScale.Apply 的 ShouldScale 同一条口径）。
+        foreach (var factor in new[] { 0f, -1f, 0.5f, 1f, float.NaN })
+        {
+            Assert.Equal(120, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, factor));
+            Assert.Equal(110, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(110, factor));
+        }
+    }
+
+    [Fact]
+    public void ScaledLabelWidth_GrowsWithTheScalingTier()
+    {
+        // Windows 的真实缩放档位（100 / 125 / 150 / 175 / 200 / 250%）逐个取基线 120 的放大结果。
+        Assert.Equal(150, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, 1.25f));
+        Assert.Equal(180, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, 1.5f));
+        Assert.Equal(210, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, 1.75f));
+        Assert.Equal(240, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, 2f));
+        Assert.Equal(300, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, 2.5f));
+        // 新建任务那一列（基线 110）同一口径。
+        Assert.Equal(138, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(110, 1.25f));
+        Assert.Equal(220, ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(110, 2f));
+        // 单调不减：档位变大不会把列宽收回去。
+        for (var dpi = 96; dpi <= 480; dpi += 8)
+        {
+            var current = ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, dpi / 96f);
+            var higher = ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, (dpi + 8) / 96f);
+            Assert.True(higher >= current, $"{dpi} → {dpi + 8}dpi 列宽从 {current} 收到 {higher}。");
+        }
+    }
+
+    [Fact]
+    public void ScaledLabelWidth_FitsTheWidestFieldNameMeasuredAtEachTier()
+    {
+        // 第二百三十四轮逐行量到的「单行需宽」最大值（同一档里最宽的那个字段名，都是「Apifox 项目 ID」）：
+        // 96 档 97px（200% 档那 194px 的一半）、125% 档 126px、200% 档 194px。
+        // 标签格先给出去自身左右留白 4+4 = 8px，所以「列宽 − 8」必须容得下需宽——
+        // 容不下就折成两行，那一行就从一行高变成 60px / 88px，正是本轮要归零的那 11 行。
+        const int margins = 8;
+        Assert.True(ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, 1f) - margins >= 97,
+            "100% 档标签列放不下「Apifox 项目 ID」（需宽 97px）：这一档本来就放得下，收小即回归。");
+        Assert.True(ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, 1.25f) - margins >= 126,
+            "125% 档标签列放不下「Apifox 项目 ID」（需宽 126px）：那一档超预算的 4 行就是这么来的。");
+        Assert.True(ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, 2f) - margins >= 194,
+            "200% 档标签列放不下「Apifox 项目 ID」（需宽 194px）：那一档甲组 7 行就是这么来的。");
+    }
+
+    [Fact]
+    public void ScaledLabelWidth_UsesTheOneRoundingRule()
+    {
+        // 取整口径不另写一份：列宽与「客户区按因子放大」必须是同一个函数的结果。
+        // 有人抄了第二份取整（远离零 / 截断）之后，两档之间的数就对不上，而没人能看出是哪一份错了。
+        foreach (var factor in new[] { 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 4f })
+        {
+            Assert.Equal(
+                ApifoxHelper.Desktop.Native.DpiScaleFactor.ScaledExtent(120, factor),
+                ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(120, factor));
+            Assert.Equal(
+                ApifoxHelper.Desktop.Native.DpiScaleFactor.ScaledExtent(110, factor),
+                ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(110, factor));
+        }
+    }
+
     // ── 留白与列宽是同一笔账（第一百二十四轮）────────────────────────────
 
     [Fact]
@@ -253,8 +321,12 @@ public class ProfileGridColumnsTests
         var panel = end < 0 ? rest : rest[..end];
 
         // 留白唯一来源：列宽计算取 Padding.Horizontal，不再另写 UiTokens.Xl × 2 的字面。
-        Assert.Contains("ProfileGridColumns.ColumnWidths(Width, [_labelWidth, ProfileGridColumns.MinFieldWidth], Padding.Horizontal)", panel);
+        Assert.Contains("ProfileGridColumns.ColumnWidths(Width, [labelWidth, ProfileGridColumns.MinFieldWidth], Padding.Horizontal)", panel);
         Assert.DoesNotContain("UiTokens.Xl * 2", panel);
+        // 标签列进算式之前先按当前缩放档放大（第二百三十五轮）：固定像素那一格不跟着字号放大，
+        // 125% 档 4 行与 200% 档甲组 7 行就折成两行超预算。原始 _labelWidth 直接进算式即回退。
+        Assert.Contains("var labelWidth = ProfileGridColumns.ScaledLabelWidth(_labelWidth, DpiScale.ScaleFactor());", panel);
+        Assert.DoesNotContain("ColumnWidths(Width, [_labelWidth,", panel);
         // Padding 变化也走同一次重算：改 Padding 不会算错列宽。
         Assert.Matches(@"(?m)^\s*protected override void OnPaddingChanged\(EventArgs e\)", panel);
         var paddingHandler = panel[panel.IndexOf("OnPaddingChanged", StringComparison.Ordinal)..];
@@ -448,5 +520,8 @@ public class ProfileGridColumnsTests
         Assert.Contains("两列字段网格", section);
         Assert.Contains("`Ui.FieldGrid`", section);
         Assert.Contains("`ProfileGridColumns`", section);
+        // 第二百三十五轮：左列不再是「固定宽」——文档退回去那句话，界面跟着退回去就是同一个缺陷复发。
+        Assert.Contains("`ProfileGridColumns.ScaledLabelWidth", section);
+        Assert.Contains("96dpi 的基线", section);
     }
 }

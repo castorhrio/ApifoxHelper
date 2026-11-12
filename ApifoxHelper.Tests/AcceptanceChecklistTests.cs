@@ -972,6 +972,56 @@ public class AcceptanceChecklistTests
         Assert.True(cited.Count == expected.Count,
             $"行内点了 {cited.Count} 份讲稿路径，而 demo.sh 的缺省档位只有 {expected.Count} 档（{string.Join("、", expected)}）："
             + "多出来的那几份要么是自己发明的档位，要么是上一场留在别处的产物，那天没有人替它们背书。");
+
+        // ⑤ 到期日核对这一行（第二百三十五轮，简报 P0-2 的降级支）：真机不可得时，「今天核过、走的是哪一支」
+        //    这件事本身要有落点。此前那条脚本能跑、也打得出一句话，但**跑过的结果没人记账**——
+        //    下一轮（或到期日那天）只能再跑一遍，或者干脆凭印象写结论。
+        var notesLines = Repo.Source("docs", "NOTES.md").Split('\n');
+        var checkLine = notesLines.FirstOrDefault(l => l.TrimStart().StartsWith("> **到期日核对", StringComparison.Ordinal));
+        Assert.True(checkLine is not null,
+            "docs/NOTES.md 顶部的登记里没有「到期日核对」那一行：到期日这件事只剩一条脚本，跑过之后结论落在哪里没人说。"
+            + "补法见 .winecheck/due-date.sh 与 README「到期日核对」一节。");
+        Assert.Contains("due-date.sh", checkLine, StringComparison.Ordinal);
+        Assert.Contains("降级答辩脚本", checkLine, StringComparison.Ordinal);
+
+        // 结论词的两个候选都从实物现读，不在本门抄第二份：
+        //   「未到」那一支用的词 = G-D5 行自己那句「届时仍不可得…」；
+        //   「已过」那一支用的词 = due-date.sh 改判那句里的词（与兄弟门 ③ 读的是同一个）。
+        var unavailableWord = Regex.Match(row.Verdict, @"届时(?<w>仍不可得)").Groups["w"].Value;
+        Assert.True(unavailableWord.Length > 0,
+            "G-D5 那一行里读不到「届时仍不可得」那一句：到期日没到之时该念哪两个词就没了出处，本判据不猜。");
+        var expiredWord = Regex.Match(Repo.Source(".winecheck", "due-date.sh"), @"应改判「(?<w>[^」]+)」").Groups["w"].Value;
+        Assert.True(expiredWord.Length > 0,
+            ".winecheck/due-date.sh 的「已过」那一支里读不到改判用词：本门与 Gd5DueDate_IsNotStaleOrFuture ③ 必须共用脚本自己那个词，"
+            + "各写一份时到期日第二天红的会是格子而不是这一行（第二百一十一轮踩过）。");
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var dueForCheck = DateOnly.ParseExact(rowDate, "yyyy-MM-dd");
+        var expectedWord = dueForCheck < today ? expiredWord : unavailableWord;
+        var otherWord = dueForCheck < today ? unavailableWord : expiredWord;
+        // 只取「结论：」后面那一段——这一行后面还要解释两个词各自什么时候用，拿整行比会把解释读成结论。
+        var conclusion = Regex.Match(checkLine, @"结论：(?<w>[^*—\n]{1,16})").Groups["w"].Value;
+        Assert.True(conclusion.Length > 0,
+            "到期日核对那一行没有「结论：…」那一段：脚本走到哪一支是一句读数，没有结论的读数下一轮仍然要有人自己猜。");
+        Assert.True(conclusion.Contains(expectedWord, StringComparison.Ordinal),
+            $"到期日核对那一行的结论是「{conclusion}」，而今天 {today:yyyy-MM-dd} 相对到期日 {rowDate} 该念「{expectedWord}」："
+            + "脚本那一支走到哪里，登记的结论就得是什么——未到期写改判，等于把没过的那天说成已过；"
+            + "过期了还写未到期，等于替那台没到的机器续期。");
+        Assert.True(!conclusion.Contains(otherWord, StringComparison.Ordinal),
+            $"到期日核对那一行的结论「{conclusion}」同时写着「{expectedWord}」与「{otherWord}」："
+            + "两个结论并存时，那天念哪一个都行，而这句话应该是唯一的一句。");
+
+        // 这一行必须是最近核过的（与 DoD 登记的时效门同一口径：90 天），且不许把当天的倒数抄成事实。
+        var checkedText = Regex.Match(checkLine, @"20\d{2}-\d{2}-\d{2}").Value;
+        Assert.True(DateOnly.TryParseExact(checkedText, "yyyy-MM-dd", out var checkedOn),
+            $"到期日核对那一行的日期「{checkedText}」不是合法的 YYYY-MM-DD：没有日期就不知道它是哪一次核的。");
+        var age = today.DayNumber - checkedOn.DayNumber;
+        Assert.True(age is >= 0 and <= 90,
+            $"到期日核对那一行记的是 {checkedText}，距今 {age} 天（上限 90 天，也不许写在未来）："
+            + "倒数每天在变，一次核对的保质期就这么多；重跑 bash .winecheck/due-date.sh 并把这一行改成这次核到的。");
+        Assert.True(!Regex.IsMatch(checkLine, @"距到期还有\s*\d+\s*天"),
+            "到期日核对那一行把当天的天数抄成了事实：那是脚本那天打出来的读数，第二天就错"
+            + "（与第二百零四轮「动态倒计时不写进文档」同一口径），这一行只留分支与退出码。");
     }
 
     /// <summary>

@@ -751,8 +751,9 @@ public class ReadingConsistencyTests
     /// ④ 两支演示脚本都得写这个键（只改一支，另一支跑出来的记录会被这条门判成缺档）。
     /// </para>
     /// <para>
-    /// <b>它不判什么</b>：<b>不判过预算的行数是不是 0</b>——那是跑出来的事实，不是判据；
-    /// 也不判真机跑没跑（真机 0 台，G-D5 仍是 <c>[ ]</c>）。它只保证「细则念的那两个数」有出处、且与出处一致。
+    /// <b>它不判什么</b>：<b>不判过预算的行数是不是 0</b>——那一件从第二百三十五轮起由本文件
+    /// <see cref="OverBudgetReading_ConfigFormRows_AreZeroAtEveryTier"/> 判，本条只管「细则念的那两个数」有出处、
+    /// 且与出处一致；也不判真机跑没跑（真机 0 台，G-D5 仍是 <c>[ ]</c>）。
     /// </para>
     /// </summary>
     [Fact]
@@ -805,6 +806,39 @@ public class ReadingConsistencyTests
             Assert.True(text.Contains("overbudget=tier=", StringComparison.Ordinal),
                 $"{script} 不写 overbudget= 这一行：用它跑出来的读数记录会缺行高预算那一格，"
                 + "而细则念的那两个数就只剩一支脚本能产出。");
+        }
+    }
+
+    /// <summary>
+    /// 入库读数里「配置表单超预算行数」<b>三档必须全为 0</b>（第二百三十五轮，简报 P0-1 的门）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这条数在第二百三十一轮进门时是<b>只登记不判</b>的——上一条门管「细则念的那两个
+    /// 预算数」有出处，而「过预算的行数」当时是 0、却没有任何东西拦住它变成非 0。第二百三十四轮量到根因
+    /// （标签列 120px 不随字号放大，125% 档破 4 行、200% 档破 10 行），第二百三十五轮把它改成随字号放大
+    /// （<c>ProfileGridColumns.ScaledLabelWidth</c> 与 <c>Ui.cs</c> 的 <c>FieldGridPanel</c> 接线）。
+    /// 改完不立门，下一轮谁把那处接线改回固定像素，三档读数照样全绿——因为<b>这一个上下文</b>（慢一档，
+    /// <c>demo.sh</c> 一跑）里行高不随字体放大，超没超都量不到；真 DPI 上下文那一半由
+    /// <c>DemoTierSwitchTests.PostFixOverbudgetReading_KeepsTheLabelColumnTiersAtZero</c> 判 README 那一段。
+    /// 两道门各判一个上下文，合起来才是「三档归零」这句话的出处。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判 <c>hint=</c>（提示行那一列是第二百三十四轮登记的另一个决定项：预算只按正文档算，
+    /// 两行提示进不进预算还没定案），也不判真机（真机 0 台，G-D5 仍是 <c>[ ]</c>）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void OverBudgetReading_ConfigFormRows_AreZeroAtEveryTier()
+    {
+        var record = ReadingRecord();
+        Assert.True(record.OverBudget.Count > 0,
+            $"{ReadingPath} 里没有 overbudget= 行：这一门就没有可判的数，补一次 bash .winecheck/demo.sh。");
+        foreach (var run in record.OverBudget)
+        {
+            Assert.True(run.Form == 0,
+                $"{run.Tier} 档的配置表单超预算行数是 {run.Form}（应为 0）：那一跑里 {run.FormBudget}px 的预算被"
+                + $"{run.Form} 行破掉，甲组那一族（标签列不随字号放大）又回来了。"
+                + "查 Desktop/Native/ProfileGridColumns.cs 的 ScaledLabelWidth 与 Ui.cs 的 FieldGridPanel 接线，"
+                + "改完重跑 bash .winecheck/demo.sh（三档跑完它自己写回原位）。");
         }
     }
 }

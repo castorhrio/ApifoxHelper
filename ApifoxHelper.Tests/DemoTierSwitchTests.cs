@@ -439,6 +439,143 @@ public class DemoTierSwitchTests
         Assert.True(breaks.Count == 0, "重启前缀 + 单档跑的步骤单不完整：\n  " + string.Join("\n  ", breaks));
     }
 
+    // ── ⑤ 修复后的三档 overbudget 读数（第二百三十五轮，简报 P0-1 的证据那一半）──
+
+    /// <summary>那一行的锚点（是一段话，不是一节，所以不按 <c>##</c> 取）。</summary>
+    private const string PostFixHeading = "**修复后的三档 overbudget 读数";
+
+    /// <summary>修复后读数的三格：档位、配置表单超预算行数、提示行超预算条数。</summary>
+    private sealed record PostFixReading(int Tier, int Form, int Hint);
+
+    /// <summary>取修复后那一段的正文（从锚点到下一个空行；段内不含空行）。</summary>
+    private static string PostFixBlock(string readme)
+    {
+        var at = readme.IndexOf(PostFixHeading, StringComparison.Ordinal);
+        if (at < 0) return string.Empty;
+        var rest = readme[at..];
+        var end = rest.IndexOf("\n\n", StringComparison.Ordinal);
+        return end < 0 ? rest : rest[..end];
+    }
+
+    /// <summary>把修复后那一段整段摘掉的那份 README——只给注入自测用（「改完没人把数带回来」就是这一形状）。</summary>
+    private static string ReadmeWithoutPostFix()
+    {
+        var block = PostFixBlock(Readme);
+        Assert.True(block.Length > 0, "README 里本来就没有那一段，注入自测失去对象——先看第 ⑤ 节的锚点还在不在。");
+        return Readme.Replace(block, string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 修复后那一行的全部破坏形状（<paramref name="readme"/> 可以是注入过的那份）。
+    /// <para>
+    /// <b>为什么 96 与 120 是硬判 0，而 192 判的是「等于那三行分区标题的名字数」</b>：甲组那一族（标签列不随字号
+    /// 放大）在这两档是<b>全部</b>超预算行，改了就该一个不剩；200% 档剩下的三行是第二百三十四轮登记的<b>另一个</b>
+    /// 根因（分区标题用 Section 档，而预算只按正文档算）。把 192 也写成 0 就是拿别的修法没做的事实替这一条修法背书；
+    /// 写成「≤ 3」则变成谁都能把第四行塞进来的免检通道。判成「行数 == 段内点名的那几行」之后，
+    /// 真多出第四行时门会红，逼人先回报告看清是哪一行，而不是顺手把数改大。
+    /// </para>
+    /// </summary>
+    private static List<string> PostFixOverbudgetBreaks(string readme)
+    {
+        var breaks = new List<string>();
+        var block = PostFixBlock(readme);
+        if (block.Length == 0)
+        {
+            breaks.Add($"README 里找不到「{PostFixHeading}」这一段：标签列改成随字号放大之后的三档超预算行数没有读面了，"
+                + "下一轮无从判断这件事是被改回去还是根本没人复跑。");
+            return breaks;
+        }
+
+        var readings = Regex.Matches(block, @"overbudget=tier=(\d+) form=(\d+) hint=(\d+)")
+            .Cast<Match>()
+            .Select(m => new PostFixReading(
+                int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[3].Value)))
+            .ToList();
+        var tiers = readings.Select(r => r.Tier.ToString()).ToList();
+        if (readings.Count != Tiers.Length || !tiers.SequenceEqual(Tiers, StringComparer.Ordinal))
+        {
+            breaks.Add($"这一段点的档位是「{(tiers.Count == 0 ? "一个都没有" : string.Join('/', tiers))}」，"
+                + $"应为 {string.Join('/', Tiers)} 三档各一格（缺一档就是那一档没人照着八步复跑过）："
+                + "行高预算的账按档位记，少一档就少一个上下文。");
+        }
+
+        // 甲组归零的两档：硬判 0。
+        foreach (var tier in new[] { 96, 120 })
+        {
+            var run = readings.FirstOrDefault(r => r.Tier == tier);
+            if (run is not null && run.Form != 0)
+            {
+                breaks.Add($"{tier} 档 form={run.Form}（应为 0）：标签列随字号放大这条修法没起作用，"
+                    + "先回 Desktop/Native/ProfileGridColumns.cs 的 ScaledLabelWidth 与 Ui.cs 的接线看是不是被改回固定像素。");
+            }
+        }
+
+        // 200% 档：剩下的每一行都必须是段内点名的那一行分区标题。
+        var sectionTitles = new[] { "必填", "可选设置（可保存后再补）", "高级设置（可选）" };
+        var run200 = readings.FirstOrDefault(r => r.Tier == 192);
+        var titled = sectionTitles.Count(title => block.Contains(title, StringComparison.Ordinal));
+        if (run200 is not null && run200.Form != titled)
+        {
+            breaks.Add($"192 档 form={run200.Form}，而这一段点名的分区标题只有 {titled} 行"
+                + $"（{string.Join("、", sectionTitles)}）："
+                + "多出来的行不在这一段说的那个根因里——先回 /tmp/ah-demo-192/report-192.txt 看是哪一行超了，"
+                + "再决定把它登记成第四个决定项，别把这里的数改大了事。");
+        }
+        foreach (var needle in new[] { "乙组", "决定项", "预算那条算式只按正文档算" })
+        {
+            if (!block.Contains(needle, StringComparison.Ordinal))
+            {
+                breaks.Add($"这一段再没有「{needle}」：192 档剩下的那几行为什么可以不是 0，靠的是这一段把它说清"
+                    + "（另一个根因、已登记为决定项），话没说清就成了替没做的事背书。");
+            }
+        }
+
+        // hint 那一列的代价：必须带着改前改后那两个可用宽，不能只说「有代价」。
+        if (!block.Contains("如实记一笔代价", StringComparison.Ordinal))
+        {
+            breaks.Add("这一段没有「如实记一笔代价」那句：标签列宽是从同一笔可视宽度里出的，"
+                + "200% 档提示行的超预算条数因此比修复前多——写了修法不写代价，读的人会以为两档都干净了。");
+        }
+        foreach (var width in new[] { "1086", "966" })
+        {
+            if (!block.Contains(width, StringComparison.Ordinal))
+            {
+                breaks.Add($"这一段念的代价里没有可用宽 {width}px 那个数：代价必须是可以回去量的两个数，不是一句形容词。");
+            }
+        }
+
+        // 出处：这一段是重启前缀那一跑（/tmp），不是入库读数那一跑。
+        if (!block.Contains("/tmp/ah-demo-", StringComparison.Ordinal) || !block.Contains("入库读数", StringComparison.Ordinal))
+        {
+            breaks.Add("这一段没说清自己的出处是 /tmp 那三份报告（重启前缀那一跑）：**两个上下文各念各的数**，"
+                + "把它们折成一个说法是第二百三十四轮写下来要避免的动作。");
+        }
+
+        if (!block.Contains("PostFixOverbudgetReading_KeepsTheLabelColumnTiersAtZero", StringComparison.Ordinal))
+        {
+            breaks.Add("这一段没点名钉住本段的门：README 的操作面与 NOTES 的答辩面同一族纪律——"
+                + "一句话悬空，下一轮改的人不知道自己动的是谁背了书的东西。");
+        }
+
+        return breaks;
+    }
+
+    /// <summary>
+    /// 第二百三十五轮把标签列改成随字号放大之后，真 DPI 上下文那三档的超预算行数<b>必须有一段说清，且说清的就是实物</b>。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：简报 P0-1 要「125% / 200% 档超预算行数归零」，而六格表只记<b>修复前</b>那一跑
+    /// （125% 破 4 行、200% 破 10 行 + 提示行 2 条）。修完之后没有一行带着数回来，
+    /// 这一格就只能读成「大概好了」——第二百三十四轮刚把「步骤单要能照着复跑」立成门，同一族的另一半就是
+    /// <b>复跑出来的数要有落点</b>。判据见 <see cref="PostFixOverbudgetBreaks"/>。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PostFixOverbudgetReading_KeepsTheLabelColumnTiersAtZero()
+    {
+        var breaks = PostFixOverbudgetBreaks(Readme);
+        Assert.True(breaks.Count == 0, "修复后的三档 overbudget 读数与实物对不上：\n  " + string.Join("\n  ", breaks));
+    }
+
     // ── 判据自测：注入破坏必须红 ──────────────────────────────────────
 
     /// <summary>
@@ -504,10 +641,38 @@ public class DemoTierSwitchTests
         Assert.NotEqual(Sheet, sheetBadPath);
         Assert.Contains(RunSheetBreaks(sheetBadPath), b => b.Contains("demo-v2.sh", StringComparison.Ordinal));
 
+        // ⑤ 修复后读数：整段删掉（改完没人把数带回来）。
+        var postFixRemoved = ReadmeWithoutPostFix();
+        Assert.Contains(PostFixOverbudgetBreaks(postFixRemoved), b => b.Contains("没有读面", StringComparison.Ordinal));
+
+        // ⑤ 修复后读数：120 档 form 写回 4（标签列那条修法没兑现，或被人改回固定像素）。
+        var postFix125 = Readme.Replace("overbudget=tier=120 form=0 hint=0", "overbudget=tier=120 form=4 hint=0",
+            StringComparison.Ordinal);
+        Assert.NotEqual(Readme, postFix125);
+        Assert.Contains(PostFixOverbudgetBreaks(postFix125), b => b.Contains("120 档 form=4", StringComparison.Ordinal));
+
+        // ⑤ 修复后读数：192 档冒出第四行而段内仍只点名三行分区标题（新根因想混进旧账）。
+        var postFix192 = Readme.Replace("overbudget=tier=192 form=3 hint=4", "overbudget=tier=192 form=4 hint=4",
+            StringComparison.Ordinal);
+        Assert.NotEqual(Readme, postFix192);
+        Assert.Contains(PostFixOverbudgetBreaks(postFix192), b => b.Contains("192 档 form=4", StringComparison.Ordinal));
+
+        // ⑤ 修复后读数：把代价那一句删掉（只报好消息，200% 档提示行多折的两行就没人知道了）。
+        var postFixNoCost = Readme.Replace("如实记一笔代价", "另有一处", StringComparison.Ordinal);
+        Assert.NotEqual(Readme, postFixNoCost);
+        Assert.Contains(PostFixOverbudgetBreaks(postFixNoCost), b => b.Contains("如实记一笔代价", StringComparison.Ordinal));
+
+        // ⑤ 修复后读数：门名被改掉（这一段就不再是「有门钉住的」那一段）。
+        var postFixNoGate = Readme.Replace("PostFixOverbudgetReading_KeepsTheLabelColumnTiersAtZero",
+            "PostFixOverbudgetReading_Renamed", StringComparison.Ordinal);
+        Assert.NotEqual(Readme, postFixNoGate);
+        Assert.Contains(PostFixOverbudgetBreaks(postFixNoGate), b => b.Contains("没点名钉住本段的门", StringComparison.Ordinal));
+
         // 判据本身在真实文件上必须是绿的（否则上面那些「非空」只是因为它一直在报）。
         Assert.Empty(TierSwitchBreaks(Sh, Ps1));
         Assert.Empty(SectionStatsBreaks(Sh, Ps1));
         Assert.Empty(SixCellBreaks(Readme));
         Assert.Empty(RunSheetBreaks(Sheet));
+        Assert.Empty(PostFixOverbudgetBreaks(Readme));
     }
 }

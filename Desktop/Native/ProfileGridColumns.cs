@@ -23,6 +23,33 @@ public static class ProfileGridColumns
     public const int NarrowLabelWidth = 110;
 
     /// <summary>
+    /// 标签列在当前缩放档上应有的宽度：基线宽随字号放大，不向下缩放。
+    /// <para>
+    /// <b>为什么这里不能是固定像素</b>（第二百三十五轮，简报 P0-1 选定的「改列宽策略」那一条修法）：
+    /// 上面两个常量记的是 96dpi 的数，而窗体按缩放因子放大整棵控件树、字体也随系统缩放一起放大——
+    /// 列宽是那一格里<b>没跟着放大</b>的数。第二百三十四轮逐行量到的读数：125% 档「允许回写范围」单行
+    /// 要 120px、「Apifox 项目 ID」要 126px，可用只有 112px（基线 120 减标签自身左右留白 4+4）；
+    /// 200% 档同一族七行需宽 122 至 194px，对的还是那 112px。差出去的 8 到 82px 让每一行折成两行，
+    /// 行高从一行变成 60px 与 88px，于是超出行高预算。收窄文案救不了 200% 那一组（要砍掉四个字符才塞得下
+    /// 「Apifox 项目 ID」），所以改的是列宽本身。
+    /// </para>
+    /// <para>
+    /// <b>倍数为什么取缩放因子，而不是「字号像素高 × 整数倍」</b>：正文行高在 96dpi 是 21px
+    /// （入库读数那一档的预算 45px 减 <c>ProfileFormLayout.RowPadding</c> 的 24 就是它），
+    /// 而 120 ÷ 21 不是整数——写成「× 6」会把已经在 100% 档量过、并被三档读数记录背了书的那一档
+    /// 从 120px 挪到 126px。缩放因子（屏幕 DPI ÷ 96）是 <c>DpiScale.Apply</c> 放大客户区与控件树
+    /// 用的<b>同一个数</b>：字号按它放大、装字号的格子也按它放大，两句话说的是同一件事。
+    /// 取整口径不另写一份，走 <see cref="DpiScaleFactor.ScaledExtent"/>（远离零取整，理由记在那里）。
+    /// </para>
+    /// <para>
+    /// <b>量不到怎么办</b>：因子不大于 1 一律回基线——DPI 读不出来（回 1）与读数偏低都不把已经验证过的
+    /// 列宽收小，收小的那一档会把本来放得下的字段名挤成两行，等于把一种不确定性换成另一种更明显的破坏。
+    /// </para>
+    /// </summary>
+    public static int ScaledLabelWidth(int baseWidth, float factor) =>
+        DpiScaleFactor.ShouldScale(factor) ? DpiScaleFactor.ScaledExtent(baseWidth, factor) : baseWidth;
+
+    /// <summary>
     /// 字段列的可读下限：低于这个宽度，输入框里连一个中文词都看不全。
     /// 取 96 是「一行能放下 6 个中文字符 + 光标」的量级，与 <see cref="UiTokens"/> 的间距档同源推导
     /// （<c>UiTokens.Xl × 4</c>），不是随手挑的数。

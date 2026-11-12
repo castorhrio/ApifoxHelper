@@ -379,13 +379,18 @@ internal static class Ui
         /// <summary>
         /// 按网格当前宽度重算两列宽；宿主还没给出可用宽度时保持构造时的最小宽，等下一次尺寸变化。
         /// 左右留白取 <c>Padding.Horizontal</c>（唯一来源），不再另写一个数。
+        /// 标签列先按当前缩放档放大再进算式（<see cref="ProfileGridColumns.ScaledLabelWidth"/>）。
         /// </summary>
         private void ApplyColumnWidths()
         {
             // 列样式还没建好（构造期 Padding/尺寸事件先到）时没有可写的列，直接跳过：
             // 构造函数末尾与第一次尺寸变化都会再走一次，不靠事件顺序保证正确性。
             if (ColumnStyles.Count < 2) return;
-            var widths = ProfileGridColumns.ColumnWidths(Width, [_labelWidth, ProfileGridColumns.MinFieldWidth], Padding.Horizontal);
+            // 第二百三十五轮的根因就在这一个数上：_labelWidth 记的是 96dpi 的基线，字号随系统缩放放大而列宽不放大时，
+            // 125% 档「允许回写范围」单行要 120px 对可用 112px、200% 档同一族七行要 122 至 194px 对同一个 112px，
+            // 每一行折成两行就超出行高预算。因子取 DpiScale.ScaleFactor()——放大整棵控件树与客户区用的是同一个数。
+            var labelWidth = ProfileGridColumns.ScaledLabelWidth(_labelWidth, DpiScale.ScaleFactor());
+            var widths = ProfileGridColumns.ColumnWidths(Width, [labelWidth, ProfileGridColumns.MinFieldWidth], Padding.Horizontal);
             if (widths[0] <= 0) return;
             if (Math.Abs(ColumnStyles[0].Width - widths[0]) >= 0.5f || Math.Abs(ColumnStyles[1].Width - widths[1]) >= 0.5f)
             {
