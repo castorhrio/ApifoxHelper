@@ -1330,7 +1330,30 @@ internal static class Program
                 }, isNew: true);
                 task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "标识格字体任务" });
                 tasks.Write(task.Id, TaskFiles.ResponseContract, ContractsFixture());
-                _lines.Add($"     夹具：配置 {profile.Id}（Apifox 项目 ID 123456）、任务 {task.Id}（3 条契约）");
+                // 这一段是夹具，但它自己也要判（第二百三十一轮）：配置与任务真的落了盘、契约文件真的写进去了。
+                // 不判的话，后面三段量到的「等宽」可能量在一份空清单上——那时第一段会抛「契约清单是空的」，
+                // 读报告的人会以为是等宽坏了，而真正坏的是夹具。与「响应契约：准备契约清单」同一形状。
+                if (string.IsNullOrWhiteSpace(profile.Id))
+                {
+                    throw new InvalidOperationException("配置保存后没有拿到 Id（没落盘）。");
+                }
+                if (string.IsNullOrWhiteSpace(task.Id))
+                {
+                    throw new InvalidOperationException("任务创建后没有拿到 Id（没落盘）。");
+                }
+                var rereadProfile = profiles.Get(profile.Id);
+                if (rereadProfile.Apifox.ProjectId != "123456")
+                {
+                    throw new InvalidOperationException(
+                        $"落盘的 Apifox 项目 ID 是「{rereadProfile.Apifox.ProjectId}」，期望「123456」（第三段要量这一格）。");
+                }
+                var rereadContracts = tasks.Read<List<ResponseContract>>(task.Id, TaskFiles.ResponseContract)
+                    ?? throw new InvalidOperationException("responseContract.json 写进任务目录后读不回来。");
+                if (rereadContracts.Count != 3)
+                {
+                    throw new InvalidOperationException($"夹具读回 {rereadContracts.Count} 条契约，期望 3 条。");
+                }
+                _lines.Add($"     夹具：配置 {profile.Id}（Apifox 项目 ID 123456）、任务 {task.Id}（3 条契约，读回 {rereadContracts.Count} 条）");
             });
 
             RunAction("标识格字体：响应契约首列（接口身份）实际渲染等宽（真实控件）", () =>
