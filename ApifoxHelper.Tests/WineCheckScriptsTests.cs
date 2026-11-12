@@ -1146,4 +1146,388 @@ public class WineCheckScriptsTests
             ".winecheck/README.md 那节没把「目录集合地板」这一类失败写进入出码 2 的说明或场景表：当天的人看到退出码 2 "
             + "只会去数表有几行，不会去数那一列有几个目录格。");
     }
+
+    // ── 第二百三十七轮（简报 P0-1）：到期日当天那条把四步串起来的命令 ──────────────
+
+    private static string DefenseDayPath => Path.Combine(Directory, "defense-day.sh");
+
+    private static string DefenseDayText
+    {
+        get
+        {
+            Assert.True(File.Exists(DefenseDayPath),
+                "缺 .winecheck/defense-day.sh：到期日当天要做的四件事仍散在四份说明里——"
+                + "那天在场的人得先自己决定先跑哪一支，而这一支存在的理由就是把那个顺序定死。");
+            return File.ReadAllText(DefenseDayPath);
+        }
+    }
+
+    /// <summary>
+    /// 取某一步的调用行号：<c>bash "$HERE/&lt;脚本&gt;"</c> 那一行，容得下 <c>变量=$(bash "$HERE/…" 2&gt;&amp;1)</c>
+    /// 那种收输出的写法（第 ① 步就是——它要把 due-date.sh 的输出收进变量再判「当天」，不落临时文件）。
+    /// </summary>
+    private static int IndexOfDefenseDayCall(string[] lines, string script)
+    {
+        var needle = $"bash \"$HERE/{script}\"";
+        return Array.FindIndex(lines, l => BareCall(l).StartsWith(needle, StringComparison.Ordinal));
+
+        static string BareCall(string line)
+        {
+            var trimmed = line.TrimStart();
+            var assignment = Regex.Match(trimmed, @"^[A-Za-z_][A-Za-z0-9_]*=\$\(bash\s+(?<rest>.*)$");
+            return assignment.Success ? "bash " + assignment.Groups["rest"].Value : trimmed;
+        }
+    }
+
+    /// <summary>
+    /// 这一支串起来的<b>前三步</b>（第四步是本脚本读讲稿打印序，不调脚本）：被调的脚本名 + 步号。
+    /// <para>
+    /// <b>简报那句「四个既有脚本」在这里怎么落</b>：第四支 <c>collect-real-machine.sh</c> <b>不由这一支直接调</b>——
+    /// <c>preflight.sh</c> 的第 ④ 条已经在调它，而且只把退出码 2（核对本身跑不动）算失败；这一支若再调它一次
+    /// 并按「任一步非零即停」处理，就会把「九个归档目录还空着」（真机 0 台时当天的正常状态，退出码 1）
+    /// 读成停链理由，正好把这一族门一直在防的那种误读引进当天。所以本条判的是<b>三支被调用的脚本 + 第四步的出处</b>，
+    /// 而 <c>collect-real-machine.sh</c> 仍由 <c>PreflightScriptTests</c> 与
+    /// <see cref="CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList"/> 各自判住。
+    /// </para>
+    /// </summary>
+    private static readonly (string Script, string Marker)[] DefenseDaySteps =
+        [("due-date.sh", "①"), ("preflight.sh", "②"), ("demo.sh", "③")];
+
+    /// <summary>
+    /// <b>四步顺序固定、任一步非零即停</b>的形状判据（返回问题清单，空清单 = 过得去）。
+    /// <para>
+    /// 判五件事：① 前三步各有一行 <c>bash "$HERE/&lt;脚本&gt;"</c>，且三个行号严格递增（顺序倒了，当天会先烧三档再判日子）；
+    /// ② 每一行调用<b>紧跟</b>一行 <c>RC=$?</c>——中间隔了任何一句，<c>$?</c> 就被那句取走，检查的就不是这一步的退出码；
+    /// ③ 每一步的停链都在自己的 <c>if [ "$RC" != "0" ]; then … fi</c> 块里<b>同时</b>有「停在第 X 步」那句点名
+    /// 与 <c>exit "$RC"</c>（点名与退出分家 = 一个是自述、一个是空转；退出码写成常量 = 当天读不出是停在哪一类）；
+    /// ④ 第 ④ 步的两处「读不到就退场」各自点名 <c>停在第 ④ 步</c> 并在三行内 <c>exit 3</c>——
+    /// 讲稿读不到却照样走完，屏幕末尾那句「四步走完」就成了假话；
+    /// ⑤ 读讲稿那一段排在第 ③ 步之后（排在之前读的是上一场留下的讲稿）。
+    /// </para>
+    /// </summary>
+    private static List<string> DefenseDayChainProblems(string text)
+    {
+        var problems = new List<string>();
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+
+        if (!lines[0].StartsWith("#!/bin/bash", StringComparison.Ordinal)) problems.Add("第一行不是 `#!/bin/bash`");
+        if (!text.Contains("set -u", StringComparison.Ordinal)) problems.Add("没有 `set -u`：变量没赋上值时会静默跑空而不是退场");
+
+        var lastCall = -1;
+        foreach (var (script, marker) in DefenseDaySteps)
+        {
+            var call = IndexOfDefenseDayCall(lines, script);
+            if (call < 0)
+            {
+                problems.Add($"第 {marker} 步找不到 `bash \"$HERE/{script}\"` 那一行（这一支不再调它，顺序就散了）");
+                continue;
+            }
+
+            if (call <= lastCall) problems.Add($"第 {marker} 步（{script}）排在前一步之前：当天会先跑演示再判日子");
+            lastCall = call;
+
+            var next = lines[call + 1].Trim();
+            if (next != "RC=$?")
+                problems.Add($"第 {marker} 步的调用后面跟的不是 `RC=$?`（是「{next}」）：$? 会被中间那一句取走");
+
+            // 收进变量的输出必须打回屏幕：这一支在抬头里承诺「停的那一步自己的输出原样在上面」，
+            // 收而不打印，那句话就成了自述，当天读到的只有空屏加一句「停在第几步」。
+            var captured = Regex.Match(lines[call].TrimStart(), @"^(?<var>[A-Za-z_][A-Za-z0-9_]*)=\$\(bash");
+            if (captured.Success)
+            {
+                var variable = captured.Groups["var"].Value;
+                if (!lines.Skip(call).Take(7).Any(l => l.Contains($"\"${variable}\"", StringComparison.Ordinal)
+                                                      && (l.TrimStart().StartsWith("echo ", StringComparison.Ordinal)
+                                                          || l.TrimStart().StartsWith("printf ", StringComparison.Ordinal)
+                                                          || l.TrimStart().StartsWith("cat ", StringComparison.Ordinal))))
+                {
+                    problems.Add($"第 {marker} 步把输出收进了 ${variable} 却在其后六行内没打回屏幕：那一步失败时当天只看到「停在第 {marker} 步」，看不到它自己点名的原因");
+                }
+            }
+
+            var guard = Array.FindIndex(lines, call, l => l.Trim() == "if [ \"$RC\" != \"0\" ]; then");
+            if (guard < 0)
+            {
+                problems.Add($"第 {marker} 步的调用后面没有 `if [ \"$RC\" != \"0\" ]; then`：那一步非零退出时没人看");
+                continue;
+            }
+
+            var close = Array.FindIndex(lines, guard + 1, l => l.Trim() == "fi");
+            if (close < 0)
+            {
+                problems.Add($"第 {marker} 步那支 `if` 切不出收尾的 `fi`：本条按块边界判，先要能切出块");
+                continue;
+            }
+
+            var block = lines[guard..(close + 1)];
+            // 注释掉的那一行不算点名：第二百零八轮实测，只按「块里有这句话」判时，把整行前面加 `#`
+            // 照样绿——而那时脚本已经不会打出这句话了。取法必须落在真的会跑的那一行的行首。
+            if (!block.Any(l => l.TrimStart().StartsWith($"echo \"停在第 {marker} 步", StringComparison.Ordinal)))
+                problems.Add($"第 ①②③ 步里第 {marker} 步的停链块里没有一句真会跑的 `echo \"停在第 {marker} 步…`"
+                    + "（整行被注释掉也算没有）：脚本停住了但没说停在第几步");
+            if (!block.Any(l => Regex.IsMatch(l.Trim(), @"^exit ""\$RC""$")))
+                problems.Add($"第 {marker} 步的停链块里没有 `exit \"$RC\"`：只点名不停住，下一步会带着没过的那一步继续跑");
+        }
+
+        var fourth = lines
+            .Select((line, index) => (Line: line, Index: index))
+            .Where(x => x.Line.TrimStart().StartsWith("echo \"停在第 ④ 步", StringComparison.Ordinal))
+            .ToList();
+        if (fourth.Count < 2)
+            problems.Add($"第 ④ 步只有 {fourth.Count} 处点名（要 2 处：读不到结尾那句口径、读不到讲稿）："
+                + "缺任何一处，那一类「读不到」就会带着空屏走到末尾那句「四步走完」");
+        foreach (var (_, index) in fourth)
+        {
+            if (!lines.Skip(index + 1).Take(3).Any(l => l.Trim() == "exit 3"))
+                problems.Add($"第 ④ 步第 {index + 1} 行那句点名后面三行内没有 `exit 3`：只说不退，念序那一屏照样算走完");
+        }
+
+        var narration = Array.FindIndex(lines,
+            l => l.TrimStart().StartsWith("NARRATION=\"$OUT/narration-", StringComparison.Ordinal));
+        if (narration < 0) problems.Add("第 ④ 步没有从 $OUT 取 narration-<档位>.txt 的那一行：念序没有出处");
+        else if (narration <= lastCall) problems.Add("第 ④ 步读讲稿排在第 ③ 步跑演示之前：那读的是上一场留下的讲稿");
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 这一支的形状（顺序 / 每步的 <c>RC=$?</c> / 停链点名与退出同块 / 第 ④ 步两处退场）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：到期日当天要做的四件事此前散在四支脚本、四份 README 小节里，
+    /// <b>没有任何一条命令说先跑哪一支</b>。新增这一支把顺序定死，形状就得有人钉：本文件对
+    /// <c>prepare-real-machine.sh</c>（<see cref="PrepareRealMachineScript_EveryStepNamesItsOwnFailure"/>）
+    /// 与 <c>collect-real-machine.sh</c>（<see cref="CollectRealMachineScript_NamesItsOwnFailureAndKeepsOneSourceOfTheFileList"/>）
+    /// 用的是同一族判法——点名必须在失败路径上、必须真的停住。
+    /// </para>
+    /// <para>
+    /// <b>判据自己得是活的</b>：下面注入四处破坏（删掉第 ② 步的点名、把那一句整行注释掉、
+    /// 把第 ③ 步的 <c>exit</c> 摘掉、调换第 ①② 步的调用顺序），逐条必须被报出来。第二百零五轮那一课（「切不出块边界」的门会在
+    /// 正确源码上红、真破坏反倒没人报）就是靠这种自测兜住的。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DefenseDayScript_ChainsTheFourStepsInOrderAndStopsOnAnyNonZero()
+    {
+        var problems = DefenseDayChainProblems(DefenseDayText);
+        Assert.True(problems.Count == 0,
+            "defense-day.sh 的链形状过不去：" + string.Join(" ／ ", problems)
+            + "。这一支是到期日当天唯一一条命令——它「停住了但没说停在第几步」的那天，没有第二个人在场。");
+
+        var lines = DefenseDayText.ReplaceLineEndings("\n").Split('\n');
+
+        // 破坏一：删掉第 ② 步的点名（脚本仍会停住，但当天读不出停在第几步）。
+        var original = DefenseDayText.ReplaceLineEndings("\n");
+        var unnamed = string.Join('\n', lines.Where(l => !l.TrimStart().StartsWith("echo \"停在第 ② 步", StringComparison.Ordinal)));
+        Assert.NotEqual(original, unnamed);
+        Assert.Contains(DefenseDayChainProblems(unnamed), p => p.Contains("②", StringComparison.Ordinal));
+
+        // 破坏二：不删那一行，只把它整行注释掉——脚本照样停得住，但那天读不到「停在第 ② 步」。
+        // 第二百零八轮在 collect-real-machine.sh 上实测过这一族：只按「文本里有这句话」取的判据，注释掉之后照样绿。
+        var commented = string.Join('\n', lines.Select(l =>
+            l.TrimStart().StartsWith("echo \"停在第 ② 步", StringComparison.Ordinal) ? "#" + l : l));
+        Assert.NotEqual(original, commented);
+        Assert.Contains(DefenseDayChainProblems(commented), p => p.Contains("②", StringComparison.Ordinal));
+
+        // 破坏三：把第 ③ 步的 `exit "$RC"` 摘掉（只点名不停住，下一步带着没过的三档继续）。
+        var running = new List<string>(lines);
+        var demoCall = IndexOfDefenseDayCall(running.ToArray(), "demo.sh");
+        var exitAt = running.FindIndex(demoCall, l => l.Trim() == "exit \"$RC\"");
+        Assert.True(exitAt > demoCall, "取法退化：第 ③ 步的停链块里找不到 `exit \"$RC\"`，注入测试成了空转。");
+        running[exitAt] = "  : 忘了退场";
+        Assert.NotEmpty(DefenseDayChainProblems(string.Join('\n', running)));
+
+        // 破坏四：调换第 ①② 步的调用顺序（先跑预检再判日子——那天会先烧掉一场预检才被告知已过）。
+        var swapped = new List<string>(lines);
+        var dueCall = IndexOfDefenseDayCall(swapped.ToArray(), "due-date.sh");
+        var preflightCall = IndexOfDefenseDayCall(swapped.ToArray(), "preflight.sh");
+        Assert.True(0 <= dueCall && dueCall < preflightCall, "取法退化：两支调用的先后没按 ①② 排，注入测试成了空转。");
+        (swapped[dueCall], swapped[preflightCall]) = (swapped[preflightCall], swapped[dueCall]);
+        Assert.NotEmpty(DefenseDayChainProblems(string.Join('\n', swapped)));
+    }
+
+    /// <summary>
+    /// 三样东西都不许抄第二份：到期日（一个 <c>YYYY-MM-DD</c> 都不许出现）、讲稿落点与档位
+    /// （从 <c>demo.sh</c> 的 <c>OUT</c> / <c>TIERS</c> 缺省现读）、结尾那一句口径
+    /// （从 <c>demo.sh</c> 的录制口径第 4 条现读）；「当天」那句标志则从 <c>due-date.sh</c> 现读。
+    /// <para>
+    /// <b>为什么这四样值得钉</b>：抄一份日期，改期那天脚本仍按旧日期判、而且<b>照样绿</b>（它判的是自己那个字面量）——
+    /// 这是 <c>DueDateScriptTests.Script_ReadsTheDueDateFromNotesInsteadOfCarryingASecondCopy</c>
+    /// 那一族在 <c>due-date.sh</c> 上踩过的坑，本条把它挪到这一支上。抄一份落点或档位，改了 <c>demo.sh</c> 的人不会知道这里还留着一份旧的，
+    /// 第 ④ 步就去读一个 <c>demo.sh</c> 永远不会写出的目录，然后退场。抄一份结尾那句，
+    /// 现场念出的那一句与 <c>demo.sh</c> 自己打出的那一句就可能不是同一句。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DefenseDayScript_KeepsOneSourceOfTheDateThePathsAndTheClosingSentence()
+    {
+        var text = DefenseDayText;
+
+        // ① 到期日：本脚本里一个日期字面量都不许出现。
+        var dates = Regex.Matches(text, @"\d{4}-\d{2}-\d{2}").Cast<Match>().Select(m => m.Value).ToList();
+        Assert.True(dates.Count == 0,
+            $"defense-day.sh 里出现了日期字面量 {string.Join("、", dates)}：到期日只有 NOTES 的 G-D5 那一格一份出处，"
+            + "抄进来就意味着改期那天这一支仍按旧日期判，而它照样退 0——那一格才是当天要读的东西。");
+
+        var demo = Repo.Source(".winecheck", "demo.sh");
+
+        // ② 结尾那句：出处那一行必须还在 demo.sh 里，且本脚本只读不抄。
+        Assert.True(Regex.IsMatch(demo, @"(?m)^ *[0-9]+\. 结尾固定一句："),
+            "demo.sh 里读不到「N. 结尾固定一句：」那一行了：第 ④ 步的口径没有出处，本条与那一支同时失去落点。");
+        Assert.Contains("/结尾固定一句：/", text, StringComparison.Ordinal);
+        var closing = Regex.Match(demo, @"(?m)^ *[0-9]+\. 结尾固定一句：(?<s>[^\n]+)").Groups["s"].Value;
+        Assert.True(closing.Length > 20, $"demo.sh 的结尾那句短到不像一句口径：「{closing}」");
+        Assert.False(text.Contains(closing[..Math.Min(24, closing.Length)], StringComparison.Ordinal),
+            "defense-day.sh 把结尾那一句抄了第二份：那一句只有一份出处（demo.sh 的录制口径第 4 条），"
+            + "改那一支的人不会知道这里还留着一份，现场念的两句话就分家了。");
+
+        // ③ 落点与档位：本脚本的 sed 取法必须逐字咬住 demo.sh 那两行赋值。
+        foreach (var knob in new[] { "OUT", "TIERS" })
+        {
+            Assert.True(Regex.IsMatch(demo, @"(?m)^" + knob + @"=\$\{" + knob + @":-(.+)\}$"),
+                $"demo.sh 里 `^{knob}=${{{knob}:-…}}$` 那一行不在了：这一支的现读取法会读到空，"
+                + "而它只能退 3 说「读不到缺省值」——写它的那天得同时改这一支。");
+            Assert.Contains($@"s/^{knob}=${{{knob}:-\(.*\)}}$/\1/p", text, StringComparison.Ordinal);
+        }
+
+        // ④ 「当天」那句标志：从 due-date.sh 的「当天」那一支现读，不在这条门里写死。
+        var dueDate = Repo.Source(".winecheck", "due-date.sh").ReplaceLineEndings("\n").Split('\n');
+        var branch = Array.FindIndex(dueDate, l => l.Trim() == "if [[ \"$DUE\" == \"$TODAY\" ]]; then");
+        Assert.True(branch >= 0,
+            "due-date.sh 的「当天」那一支切不出条件行（写法被改动？）：标志读不到，本条判不到它以为在判的那句。");
+        var firstEcho = dueDate.Skip(branch + 1).FirstOrDefault(l => l.TrimStart().StartsWith("echo \"", StringComparison.Ordinal));
+        Assert.NotNull(firstEcho);
+        var marker = Regex.Match(firstEcho!, "^\\s*echo\\s+\"(?<m>[^$]*)").Groups["m"].Value.Trim();
+        Assert.True(marker.Length > 0, $"从那句 echo 里取不出标志文字：{firstEcho}");
+        Assert.Contains($"TODAY_MARKER=\"{marker}\"", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>找 bash（PATH，再退三个常规位置）；找不到返回 null，调用方走「这台机器判不到」那一支。</summary>
+    /// <remarks>取法与 <c>PreflightScriptTests</c> / <c>DueDateScriptTests</c> / <c>RealMachineEvidenceTests</c>
+    /// 里那三份一致——本轮把它们收敛成一份属于测试基建的重构，不在这一轮的范围内（简报：只做 P0-1）。</remarks>
+    private static string? LocateBash()
+    {
+        var dirs = new List<string>();
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path)) dirs.AddRange(path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+        dirs.AddRange(["/bin", "/usr/bin", "/usr/local/bin"]);
+
+        foreach (var dir in dirs.Distinct(StringComparer.Ordinal))
+        {
+            var candidate = Path.Combine(dir, "bash");
+            try
+            {
+                if (File.Exists(candidate)) return candidate;
+            }
+            catch (ArgumentException)
+            {
+                // 这一台上不合法的目录写法跳过就行。
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>跑一次这一支；<paramref name="env"/> 覆盖到子进程环境上（子脚本原样继承）。</summary>
+    private static (int Exit, string Output) RunDefenseDay(params (string Key, string Value)[] env)
+    {
+        var psi = new ProcessStartInfo(LocateBash()!, DefenseDayPath)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            WorkingDirectory = Repo.Root,
+        };
+        psi.Environment["LANG"] = "C.UTF-8";
+        foreach (var (key, value) in env) psi.Environment[key] = value;
+
+        using var process = Process.Start(psi)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(120_000), "defense-day.sh 跑了 120 秒还没退出——这两条都只该走到第 ①② 步。");
+        return (process.ExitCode, output + error);
+    }
+
+    /// <summary>
+    /// <b>真的跑</b>第 ① 步那一支的失败方向：到期日已过 → 这一支退非零、点名停在第 ① 步、
+    /// 并且<b>不进</b>第 ② 步。假 NOTES 写到期日、<c>TODAY</c> 指到它第二天，于是这一条不依赖今天几号。
+    /// <para>
+    /// 判「不进第 ② 步」而不是只判「说了停在第 ① 步」：那天真正的代价是<b>再烧一遍三档</b>——
+    /// 已过的那一天该做的是改判与回写（<c>docs/NOTES.md</c>「到期日判定（细则）」），
+    /// 把三档跑了既不产出新东西，又会被读成「今天又量了一次」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DefenseDayScript_StopsAtStepOneWhenTheDueDateHasPassed()
+    {
+        if (LocateBash() is null) return; // 这台机器上没有 bash：判不到。
+
+        var root = Path.Combine(Path.GetTempPath(), "ah-defense-" + Guid.NewGuid().ToString("N")[..12]);
+        try
+        {
+            System.IO.Directory.CreateDirectory(Path.Combine(root, "docs"));
+            File.WriteAllText(Path.Combine(root, "docs", "NOTES.md"), "| [ ] | G-D5 真机观感 | 到期日 2026-11-20 |\n");
+
+            var (exit, output) = RunDefenseDay(
+                ("NOTES", Path.Combine(root, "docs", "NOTES.md")),
+                ("TODAY", "2026-11-21"));
+
+            Assert.True(exit != 0, "到期日已过而这一支退出 0——那天会被当成「四步走完」，而它该走的是改判。");
+            Assert.Contains("停在第 ① 步", output, StringComparison.Ordinal);
+            Assert.Contains("已过期", output, StringComparison.Ordinal); // 由 due-date.sh 打出，词表不在这里发明。
+            Assert.DoesNotContain("-- ② 临场预检四条", output, StringComparison.Ordinal);
+            Assert.DoesNotContain("-- ③ 跑冒烟与讲稿", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    /// <summary>
+    /// <b>真的跑</b>第 ② 步那一支的失败方向：临场预检不过 → 这一支退非零、点名停在第 ② 步、
+    /// 并且<b>不进</b>第 ③ 步。<c>REPO</c> 指到一棵没有读数记录、没有归档清单的假树，
+    /// 于是 <c>preflight.sh</c> 的 ②③④ 三条当场红——这一条同样不依赖这台机器上有没有 pwsh 与已发布的冒烟器。
+    /// <para>判的是「带着预检没过的环境不许去跑三档」：跑出来的读数属于上一版源码或另一台机器，
+    /// 而 <c>demo.sh</c> 还会把那份读数写回 <c>reading.txt</c>（本条把 <c>READING</c> 指到仓外，
+    /// 即便有人把这一条改成「让它跑到第 ③ 步」也不会把仓里的对账材料写脏）。</para>
+    /// </summary>
+    [Fact]
+    public void DefenseDayScript_StopsAtStepTwoWhenThePreflightFails()
+    {
+        if (LocateBash() is null) return;
+
+        var root = Path.Combine(Path.GetTempPath(), "ah-defense-" + Guid.NewGuid().ToString("N")[..12]);
+        try
+        {
+            System.IO.Directory.CreateDirectory(Path.Combine(root, "docs"));
+            // 到期日在未来（这一支该继续走到第 ② 步），但假树里没有读数记录、没有归档清单：preflight 必红。
+            File.WriteAllText(Path.Combine(root, "docs", "NOTES.md"), "| [ ] | G-D5 真机观感 | 到期日 2999-12-31 |\n");
+            File.WriteAllText(Path.Combine(root, "reading.txt"), "source=deadbeef\n");
+
+            var (exit, output) = RunDefenseDay(("REPO", root), ("READING", Path.Combine(root, "reading.txt")));
+
+            Assert.True(exit != 0, "临场预检没过而这一支退出 0——带着上一版源码的读数也能开讲。");
+            Assert.Contains("停在第 ② 步", output, StringComparison.Ordinal);
+            Assert.Contains("预检未通过", output, StringComparison.Ordinal);
+            Assert.Contains("是 preflight 自己那四条预检的编号", output, StringComparison.Ordinal);
+            Assert.DoesNotContain("-- ③ 跑冒烟与讲稿", output, StringComparison.Ordinal);
+            Assert.DoesNotContain("wine 前缀：", output, StringComparison.Ordinal); // demo.sh 一旦被调起来第一句就是它。
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    /// <summary>临时树清不掉不影响判据（与 <c>PreflightScriptTests.FakeTree.Dispose</c> 同一取舍）。</summary>
+    private static void TryDelete(string root)
+    {
+        try
+        {
+            System.IO.Directory.Delete(root, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+    }
 }
