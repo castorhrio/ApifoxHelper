@@ -298,6 +298,54 @@ public class ProfileJumpTests
     }
 
     /// <summary>
+    /// 「跳过去时要不要清空筛选」的四格真值表（第二百六十七轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百六十三轮把「那一行可能正被筛选框筛掉」接成了「先清空筛选，再找一次」，
+    /// 但清空的条件写成了「筛选框里有词」——于是<b>那一行本来就在筛选结果里</b>时筛选框照样被清空。
+    /// 用户敲了一个词、从任务详情跳过来改那一份配置，回来发现筛选没了、清单变回全部：白付一笔。
+    /// </para>
+    /// <para>
+    /// 判的是四格：筛了且没找到 → 清（唯一该清的那一格）；筛了且找到了 → 不清；没筛且没找到 → 不清
+    /// （本来就没筛，清空是空动作）；没筛且找到了 → 不清。四格里只有一格为真——把条件写成
+    /// 「筛选框里有词」时第二格会变成「清」，这一条当场红。
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    public void ShouldClearFilter_OnlyWhenTheRowIsHiddenByTheFilter(bool filterActive, bool foundUnderFilter, bool expected) =>
+        Assert.Equal(expected, ProfileJump.ShouldClearFilter(filterActive, foundUnderFilter));
+
+    /// <summary>
+    /// 两遍查找的形状（第二百六十七轮）：<b>先找、再（按需）清、再找</b>——顺序是判据。
+    /// <para>
+    /// 反过来（先清再找）就是第二百六十三轮那个形状：那一行本来就在筛选结果里时筛选框照样被清空。
+    /// 只判「用了 ShouldClearFilter」不够——把它挪到第一遍查找之前，条件里的 <c>found</c> 就永远是
+    /// 初始值，四格真值表照样绿而行为已经退回去。所以这里判的是三件事的先后：
+    /// 第一遍查找 → ShouldClearFilter → ClearListFilter → 第二遍查找。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RevealProfile_SearchesBeforeItTouchesTheFilter()
+    {
+        var body = SourceSlice.BodyOf(ProjectsPage, "public bool RevealProfile(string profileId, string profileName)");
+        var firstSearch = body.IndexOf("var found = SelectRow(profileId);", StringComparison.Ordinal);
+        var decide = body.IndexOf("ProfileJump.ShouldClearFilter(", StringComparison.Ordinal);
+        var clear = body.IndexOf("ClearListFilter();", StringComparison.Ordinal);
+        // 从清空那一处往后找：第一遍那一行是「var found = SelectRow(profileId);」，它的子串也含这一句。
+        var secondSearch = clear < 0 ? -1 : body.IndexOf("found = SelectRow(profileId);", clear, StringComparison.Ordinal);
+
+        Assert.True(firstSearch >= 0, "第一遍查找不见了：那一行本来就在筛选结果里时，筛选框会被无条件清空。");
+        Assert.True(decide > firstSearch, "「要不要清筛选」必须在第一遍查找之后判——否则条件里的 found 永远是初始值。");
+        Assert.True(clear > decide, "清空筛选必须落在 ShouldClearFilter 那一支里。");
+        Assert.True(secondSearch > clear, "清空筛选之后必须再找一次，否则那一跳落不下去。");
+        // 清空筛选只有一处（唯一路径）：多一处就是「两条路各清一次」。
+        Assert.Equal(1, Regex.Matches(body, @"ClearListFilter\(\);").Count);
+    }
+
+    /// <summary>
     /// 页面名不许在 <see cref="ProfileJump"/> 里写成第二份字面量：那一句里的「项目设置」必须来自
     /// <see cref="PageNames.Projects"/>。判法是「源码里不许出现带引号的页面名」——改名字时这一条会红，
     /// 而只改 <see cref="PageNames"/> 不改这里时，上面那条断言仍然绿（它比的是同一个常量）。
@@ -367,13 +415,16 @@ public class ProfileJumpTests
     {
         var body = SourceSlice.BodyOf(ProjectsPage, "public bool RevealProfile(string profileId, string profileName)");
         Assert.Contains("ProfileJump.CanJump(profileId)", body, StringComparison.Ordinal);
-        Assert.Contains("Ui.SelectItem(item)", body, StringComparison.Ordinal);
+        // 选中与滚动走 Ui.SelectItem 唯一入口——第二百六十七轮起它在两遍查找共用的 SelectRow 里。
+        Assert.Contains("Ui.SelectItem(item)", SourceSlice.BodyOf(ProjectsPage, "private bool SelectRow(string profileId)"), StringComparison.Ordinal);
         Assert.Contains("ProfileJump.MissingStatus(profileName)", body, StringComparison.Ordinal);
         // 只换选中与滚动：不打开编辑对话框、不写配置数据。
         Assert.DoesNotContain("ShowDialog(", body, StringComparison.Ordinal);
         Assert.DoesNotContain("_profiles.Save", body, StringComparison.Ordinal);
-        // 筛选把那一行筛掉时先清空筛选（清空走既有重建，不另写一条读取路径）。
+        // 筛选把那一行筛掉时才清空筛选（清空走既有重建，不另写一条读取路径）；
+        // 「要不要清」由 ProfileJump.ShouldClearFilter 一处判，本页不自己写那个条件（第二百六十七轮）。
         Assert.Contains("ListFilter.IsActive(_filter.Text)", body, StringComparison.Ordinal);
+        Assert.Contains("ProfileJump.ShouldClearFilter(", body, StringComparison.Ordinal);
         // 读取失败态走另一句话（第二百六十四轮）：清单没读出来时说「没读出来」，不说「已不存在」。
         Assert.Contains("if (_loadFailed)", body, StringComparison.Ordinal);
         Assert.Contains("ProfileJump.LoadFailedStatus(profileName)", body, StringComparison.Ordinal);
@@ -427,6 +478,10 @@ public class ProfileJumpTests
         var silent = good with { Projects = good.Projects.Replace("ProfileJump.LandedStatus(profileName)", "null", StringComparison.Ordinal) };
         Assert.Contains(WiringProblems(silent.Tasks, silent.Projects, silent.Shell), p => p.Contains("LandedStatus", StringComparison.Ordinal));
 
+        // ⑨ 清空筛选不再看「找没找到」（退回第二百六十三轮那个形状：筛选框里有词就清）。
+        var unconditional = good with { Projects = good.Projects.Replace("ProfileJump.ShouldClearFilter(ListFilter.IsActive(_filter.Text), found)", "ListFilter.IsActive(_filter.Text)") };
+        Assert.Contains(WiringProblems(unconditional.Tasks, unconditional.Projects, unconditional.Shell), p => p.Contains("ShouldClearFilter", StringComparison.Ordinal));
+
         // ⑧ 那颗「重试」直接再读一次（挂起的那一跳没人消费）。
         var unconsumed = good with { Projects = good.Projects.Replace("_emptyRetry.Click += (_, _) => RetryLoad();", "_emptyRetry.Click += (_, _) => LoadProfiles();", StringComparison.Ordinal) };
         Assert.Contains(WiringProblems(unconsumed.Tasks, unconsumed.Projects, unconsumed.Shell), p => p.Contains("RetryLoad", StringComparison.Ordinal));
@@ -466,6 +521,9 @@ public class ProfileJumpTests
         if (!projects.Contains("ProfileJump.LoadFailedStatus(", StringComparison.Ordinal))
             problems.Add("配置页没有用 ProfileJump.LoadFailedStatus 说「清单这次没读出来」——"
                 + "读取失败态下清单是空的，落到 MissingStatus 就会把「读不出来」说成「已不存在」。");
+        if (!projects.Contains("ProfileJump.ShouldClearFilter(", StringComparison.Ordinal))
+            problems.Add("配置页没有用 ProfileJump.ShouldClearFilter 判「要不要清空筛选」——"
+                + "条件写成「筛选框里有词」时，那一行本来就在筛选结果里也会被清空，用户白付一笔。");
         if (!projects.Contains("Ui.SelectItem(", StringComparison.Ordinal))
             problems.Add("配置页没有走 Ui.SelectItem 唯一入口选中那一行。");
         if (!projects.Contains("_pendingReveal = (profileId, profileName);", StringComparison.Ordinal))

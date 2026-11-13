@@ -216,6 +216,13 @@ internal sealed class ProjectsPage : UserControl, INativePage
     /// 而这一跳的意图正是「看那一行」。
     /// </para>
     /// <para>
+    /// <b>清空筛选是有条件的</b>（第二百六十七轮）：先在当前筛选下找一遍，<b>找到了就不动筛选框</b>——
+    /// 第二百六十三轮把条件写成了「筛选框里有词」，于是那一行本来就在筛选结果里时筛选框照样被清空，
+    /// 用户回来发现筛选没了、清单变回全部，白付一笔。现在两遍查找：第一遍在当前筛选下找，
+    /// 第二遍（只在没找到且筛选生效时）清空筛选再找一次；「要不要清」由
+    /// <see cref="ProfileJump.ShouldClearFilter"/> 一处判，本方法不自己写那个条件。
+    /// </para>
+    /// <para>
     /// <b>本方法依赖一个不变量：清空筛选是同步重建的</b>。<see cref="ClearListFilter"/> 只给筛选框赋值，
     /// 重建发生在 <c>TextChanged</c> 里那次 <see cref="LoadProfiles"/> 调用上——它是同步的，所以
     /// 「清空筛选」这一句返回时 <c>_list.Items</c> 已经是重建后的那一份，本方法能在<b>同一次调用内</b>
@@ -246,20 +253,46 @@ internal sealed class ProjectsPage : UserControl, INativePage
             SetStatus(ProfileJump.LoadFailedStatus(profileName), UiTokens.BadText);
             return false;
         }
-        if (ListFilter.IsActive(_filter.Text)) ClearListFilter();
+        // 第一遍：当前筛选下就在屏上——找到了就不动筛选框。筛选框里的词是用户敲的，
+        // 那一行本来就在筛选结果里时清空它，等于让用户白付一笔（回来还得重新敲一遍）。
+        var found = SelectRow(profileId);
+        // 第二遍：那一行可能正被筛选框筛掉——此时才清空筛选（走 ClearListFilter 唯一路径），再找一次。
+        // 「要不要清」由 ProfileJump.ShouldClearFilter 一处判（筛没筛 × 找没找到，四格真值表在测试里）。
+        if (ProfileJump.ShouldClearFilter(ListFilter.IsActive(_filter.Text), found))
+        {
+            ClearListFilter();
+            found = SelectRow(profileId);
+        }
+        if (found)
+        {
+            // 回执：选中在配置页上还有另一个来源（上次留下的选中），两种来源在屏幕上长得一样。
+            SetStatus(ProfileJump.LandedStatus(profileName), UiTokens.Muted);
+            return true;
+        }
+        // 清单读出来了、里面没有这一行：配置已被删除，如实说清发生了什么并给出下一步，不静默停在清单顶部。
+        SetStatus(ProfileJump.MissingStatus(profileName), UiTokens.BadText);
+        return false;
+    }
+
+    /// <summary>
+    /// 在清单里按配置 Id 选中那一行，并把键盘交给清单（<see cref="RevealProfile"/> 两遍查找共用）。
+    /// <para>
+    /// 选中与滚动走 <see cref="Ui.SelectItem"/> 唯一入口（与「重建后恢复选中」同一口径）；
+    /// 返回「有没有这一行」——<b>不在这里说任何话</b>：落到了说什么、找不到说什么由调用方按
+    /// <see cref="ProfileJump"/> 的口径给，两遍查找共用同一份说法。
+    /// </para>
+    /// </summary>
+    private bool SelectRow(string profileId)
+    {
         foreach (ListViewItem item in _list.Items)
         {
             if (item.Tag is ProjectProfile profile && profile.Id == profileId)
             {
                 Ui.SelectItem(item);
                 _list.Focus();
-                // 回执：选中在配置页上还有另一个来源（上次留下的选中），两种来源在屏幕上长得一样。
-                SetStatus(ProfileJump.LandedStatus(profileName), UiTokens.Muted);
                 return true;
             }
         }
-        // 清单读出来了、里面没有这一行：配置已被删除，如实说清发生了什么并给出下一步，不静默停在清单顶部。
-        SetStatus(ProfileJump.MissingStatus(profileName), UiTokens.BadText);
         return false;
     }
 

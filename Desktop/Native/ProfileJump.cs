@@ -102,4 +102,27 @@ public static class ProfileJump
     /// </para>
     /// </summary>
     public static string LandedStatus(string profileName) => $"已定位到配置「{profileName}」。";
+
+    /// <summary>
+    /// 跳过去时<b>要不要清空筛选框</b>（第二百六十七轮）：先在当前筛选下找那一行，找到了就不动筛选框。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百六十三轮把「那一行可能正被筛选框筛掉」接成了「先清空筛选，再找一次」，
+    /// 但清空的条件写成了「筛选框里有词」——于是<b>那一行本来就在筛选结果里</b>时，筛选框照样被清空。
+    /// 用户敲了一个词、从任务详情跳过来改那一份配置，回来发现筛选没了、清单变回全部：
+    /// 他付了一笔代价（重新敲一遍关键词），而这一跳根本不需要他付。
+    /// </para>
+    /// <para>
+    /// <b>规则</b>：清空筛选是「那一行不在屏上」时才付的代价——<paramref name="filterActive"/> 为假
+    /// （本来就没筛）或 <paramref name="foundUnderFilter"/> 为真（那一行就在筛选结果里）时都不清。
+    /// 两个入参都是调用方当场算出来的事实，不是「大概」：筛选有没有生效由
+    /// <see cref="ListFilter.IsActive"/> 判，那一行在不在屏上由第一遍查找的结果给。
+    /// </para>
+    /// <para>
+    /// <b>为什么这条规则要单独落一处</b>：它是「跳过去」这件事里唯一一处会<b>改用户输入</b>的动作
+    /// （筛选框里的词是用户敲的），而它此前只活在 <c>ProjectsPage.RevealProfile</c> 的一句 <c>if</c> 里。
+    /// 落成纯函数之后，四种组合（筛没筛 × 找没找到）在 Linux 上就能逐格判，不必等真机。
+    /// </para>
+    /// </summary>
+    public static bool ShouldClearFilter(bool filterActive, bool foundUnderFilter) =>
+        filterActive && !foundUnderFilter;
 }

@@ -4017,3 +4017,16 @@
 - **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20）。本轮那四段跑在 wine 10.0 + Xvfb 里，**是模拟器，不是真机**——真机上切页之后那一行滚到哪、键盘落在哪、那颗「重试」按下去的手感，仍随 G-D5 复核。
 - **本轮未做（如实挂账）**：① 简报 P1-1（`defense-day.sh` 四步失败信息是否都点名「停在第几步 / 下一步」）**未做**——回合将尽，且脚本本体在冻结窗口内，只许登记类改动，需先逐条读四步分支再决定改不改；② 简报 P1-2（`Api/ApifoxRoutes.cs` 两处错误前缀与 `ProfileLoadState.PickerFailureStatus` 同形不同源的漂移登记）**未做**；③ 简报 P2-1 / P2-2 / P2-3 未做（P2-3 会动 `reading.txt` 指纹，须与三档冒烟同轮）；④ 不动 `Web/` 过渡壳、不动 `.winecheck/` 脚本本体（冻结窗口内）、不改服务层语义、不动视觉令牌与间距档位。
 - **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+## 第二百六十七轮（2026-11-13）：跳过去时那一行本来就在筛选结果里，筛选框不再被白清一次——「要不要清筛选」收成一处四格真值表（具名 pass：clarify + harden）
+
+- **本轮范围**：接续不覆盖。开局工作树干净（HEAD `255e20e`），先只读复核再动手：`dotnet test` 基线 **2994 通过 / 0 失败**（`reading.txt` 的 `source=5f06e5fa…` 与当前源码一致，第二百六十六轮那一跑就是按这份源码跑的——审查报告里「`source=` ≠ HEAD」那一句是把**源码指纹**读成了 commit 哈希，两者不是一回事，这一条由 `ReadingConsistencyTests.ReadingRecord_SourceIsTheCurrentSource` 判，本轮开局是绿的）。
+- **补的是哪个缺口**：第二百六十三轮把「那一行可能正被筛选框筛掉」接成了「先清空筛选，再找一次」，但清空的条件写成了「筛选框里有词」——于是**那一行本来就在筛选结果里**时，筛选框照样被清空。用户敲了一个词、从任务详情跳过来改那一份配置，回来发现筛选没了、清单变回全部：他白付了一笔（重新敲一遍关键词），而这一跳根本不需要他付。这是「跳过去」这件事里唯一一处会**改用户输入**的动作，此前只活在 `ProjectsPage.RevealProfile` 的一句 `if` 里。
+- **已交付 ①（clarify：规则收成一处）**：`Desktop/Native/ProfileJump.cs` 新增 `ShouldClearFilter(筛选有没有生效, 那一行在不在屏上)`——四格里只有「筛了且没找到」为真。两个入参都是调用方当场算出来的事实（`ListFilter.IsActive` 与第一遍查找的结果），不是「大概」。
+- **已交付 ②（clarify：两遍查找）**：`ProjectsPage.RevealProfile` 改成**先找、再（按需）清、再找**：第一遍在当前筛选下找，找到了就不动筛选框；第二遍只在「没找到且筛选生效」时清空筛选（仍走 `ClearListFilter` 唯一路径）再找一次。选中与滚动抽成 `SelectRow`（两遍共用，仍走 `Ui.SelectItem` 唯一入口），**它不在这里说任何话**——落到了说什么、找不到说什么仍由 `ProfileJump` 的口径给。
+- **已交付 ③（harden：`ProfileJumpTests` 补两条 + 一发注入）**：`ShouldClearFilter_OnlyWhenTheRowIsHiddenByTheFilter` 四格真值表（把条件写回「筛选框里有词」时第二格当场红）；`RevealProfile_SearchesBeforeItTouchesTheFilter` 判**顺序**（第一遍查找 → `ShouldClearFilter` → `ClearListFilter` → 第二遍查找）与「清空筛选只有一处」——只判「用了 `ShouldClearFilter`」不够：把它挪到第一遍查找之前，条件里的 `found` 永远是初始值，四格真值表照样绿而行为已经退回去。`WiringProblems` 补一条判据、注入补一发（无条件清筛选），各报一处。
+- **读数**：`dotnet build`（主工程 / 测试工程）**0 警告 0 错误**；`dotnet test` **2994 → 2997 通过 / 2 失败**，两条红都是本轮已知的挂账：① `RoundLedgerTests.RecentRounds_AreAllInTheLedger`（本轮条目写进账本之前先红过，写完即绿）；② `ReadingConsistencyTests.ReadingRecord_SourceIsTheCurrentSource`——本轮改了产品代码，`reading.txt` 的 `source=` 落后于当前源码（`5f06e5fa…` → `b19dfd32…`），**三档冒烟本轮未重跑**（回合将尽），**这一条如实写在这里，不冒充新读数**；下一轮第一件事是 `PUBLISH=1 bash .winecheck/demo.sh` 复跑并写回读数。
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20）。本仓没有 Windows 运行时，**这一跳的点击本身在 Linux 上跑不起来**——本轮判的是「四格真值表 + 两遍查找的顺序」，不是「点下去筛选框里的词真的还在」；**下一轮应补的冒烟段**（本轮未做）：在 `ApifoxHelper.Smoke` 里加一段「筛选框里敲一个能匹配目标行的词 → 跳过来 → 筛选框里的词逐字还在、清单行数不变、选中那一行、状态行是 `LandedStatus`」与一段「敲一个不匹配的词 → 跳过来 → 筛选被清空、清单回来、选中那一行」，让这半截在 wine 里用真实控件跑一次（并同步在 `Desktop/Native/MeasuredScreens.cs` 登记新段）。
+- **顺手核过的一件事**：`bash .winecheck/due-date.sh` 本轮再跑一次（简报 P0-2），走的是**未到**那一支（退出码 0），结论照旧——真机仍不可得，`G-D5` 那一格不动，按到期日走降级路径；天数不在这里归档（第二百零四轮同一口径）。
+- **本轮未做（如实挂账）**：① 三档冒烟复跑与上面那两段冒烟（见上一条）；② 简报 P1-1（`defense-day.sh` 四步失败信息）与 P1-2（`Api/ApifoxRoutes.cs` 错误前缀漂移登记）未做；③ 不动 `Web/` 过渡壳、不动 `.winecheck/` 脚本本体（冻结窗口内）、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
