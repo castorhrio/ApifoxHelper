@@ -3854,3 +3854,106 @@
 - **仍未验的（不冒充）**：**真机 0 台**（G-D5 仍 `[ ]`，到期日 2026-11-20），以上全部是 Linux 容器内的源码与文档形状判定；本轮三条门判的是「文档有没有长回去」，判不到观感，也不替人打勾。
 - **本轮未做（如实挂账）**：① 简报 P1-1（`RunFirstRunWithoutApifoxOrSdk` 空态首程冒烟段）**未做**——本轮 P0-1 已占满，按简报「不并行」推迟到下一轮；② 简报 P2-1（正则门加「夹具必须被非空匹配」自检）、P2-2（`CodeScan.Parse` 内插字符串嵌套的探测门）、P2-3（`CapabilitiesLayoutTests` 对账缺口）、P2-4（产品叙事与主题贴合度）**均未做**；③ 不动 `Web/` 过渡壳、不改服务层语义、不动任何 `*LayoutTests.cs`。
 - **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；G-D5 / G-D6 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+> **回填说明（第二百六十一轮）**：下面六条（第二百五十五至二百六十轮）的账本条目**由第二百六十一轮补写**——那六轮各自提交了可交付切片，但**没有一轮把条目写进本账本**（第二百六十轮的 commit message 逐字承认「本轮未写」），于是账本从第二百五十四轮直接断到第二百六十一轮。补写口径：**只写仓里能核到的东西**——各轮 commit message 的正文、以及仓内代码与测试里带轮次标记的注释；commit message 没记的读数一律写「未记」，**不补造**。补写之后由 `ApifoxHelper.Tests/RoundLedgerTests.cs` 判住「最近六轮不许断档」，断一轮即红。
+
+## 第二百五十五轮（2026-11-13）：「假门防护」从一屏扩到全仓 `*LayoutTests.cs` 一族——手工填写说明那一屏删掉一句同源恒等式并补形状门；到期日核对按当天实跑更新；「125% / 200% 档行高预算」标成先量这一项（简报 P0-1 + P0-2 + P0-3 + P1-1，具名 pass：harden + clarify）
+
+- **本轮范围**：接续不覆盖。开局 `git status` 干净（第二百五十四轮已提交），无半成品接续。先只读复核再动手：`dotnet test` 基线 **2936 通过 / 0 失败**。
+- **已交付 ①（clarify：到期日核对按当天实跑更新——简报 P0-1）**：`bash .winecheck/due-date.sh` 实跑（退出码 0，走「未到」那一支），`docs/NOTES.md` 顶部「到期日核对」那一行按本轮复跑更新轮次；结论仍是「真机仍不可得」，`G-D5` 那一格**不动**。不新增门。
+- **已交付 ②（clarify：G-D5 真机复核清单加「先量这一项」——简报 P0-2）**：表前加一段，第 2 条「量什么」格同步标注——写明「三档冒烟全绿 ≠ 行高预算在 125% / 200% 也过」，并指到本节末「行高预算判定（细则）」。**只调顺序、不加断言**：判据层一个字没动。
+- **已交付 ③（harden：同源恒等式清扫到全仓七份 `*LayoutTests.cs`——简报 P1-1）**：只读核对全仓七份，结论是**同源恒等式还剩一处**——`ManualDraftLayoutTests.TheFixedAreaShare_UsesTheSameCaliberAsTheOtherScreens` 里那句 `Assert.Equal(InputAreaHeight(MainRows), DialogHeight - fixedArea)`（右边由 `DialogHeight` 的定义推出，永远为真，注释却念「主内容拿得到判据行数」）。删掉该句，补 `TheFixedAreaShareGate_IsNotAnIdentity`（第二百五十一轮形态）。
+- **已交付 ④（harden：每一份 `*LayoutTests.cs` 的恒等式防护必须登记）**：新增 `LayoutMeasurementGateTests.EveryLayoutTestFile_HasItsIdentityGuardRegistered`——每一份必须在 `IdentityGuards`（有形状门）或 `NoIdentityGuard`（写清为什么不需要）里出现一次；登记的门必须真的含 `Assert.DoesNotContain`，且该在的真判据还在。另三份的恒等式如实登记为「不是唯一判据」，不补形状门。
+- **变异验证（实测三发，各自当场红并点名）**：① 恒等式写回 → 红；② 新增一份未登记的 `*LayoutTests.cs` → 红；③ 登记的门方法改名 → 红。另 `IdentityGuardDetector_ReportsTheBreaksItMustCatch` 七发注入各报一处。
+- **读数**：`dotnet build`（主工程）**0 警告 0 错误**；`dotnet test` **2936 → 2939 全绿**（+3）。**本轮不新增冒烟段、不动 `.winecheck/` 脚本本体（答辩前冻结窗口内）、不动产品代码与视觉令牌**，故三档冒烟读数不变（仍为第二百五十三轮那一跑：三档各 251 通过 / 0 失败、逐屏对账 0 处对不上、整支退出码 0），本轮没有重跑它——**这一条如实写在这里，不冒充新读数**。
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20），以上全部是 Linux 容器内的源码与文档形状判定；本轮三条门判的是「恒等式有没有被登记」，判不到观感，也不替人打勾。
+- **本轮未做（如实挂账）**：① 简报 P2 族（`reading.txt` 段内读数入档、顶部登记段再 distill、`DialogHeight` 改属性）**均未做**——P0 与 P1-1 已用满本轮预算；② 不动 `Web/` 过渡壳、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+## 第二百五十六轮（2026-11-13）：「连接与写入探测」那一屏的量测段第一次逐笔对账——补三笔「实测 vs 口径」，752 锚点改成先量后判；`KnownGaps` 清空，「没有量测段」的理由变成可判；假门防护这一族收尾登记（简报 P0-1 + P0-2 + P1-1，具名 pass：harden + clarify）
+
+- **本轮范围**：接续不覆盖。开局工作树干净（第二百五十五轮已提交）。先只读复核再动手：`dotnet test` 基线 **2939 通过 / 0 失败**。
+- **已交付 ①（harden：`RunCapabilitiesShown` 补三笔「实测 vs 口径」对账——简报 P0-1）**：这一段的量测此前只判了一句恒等式（「四块加起来等于客户区」——内容区 Fill、按钮行 Bottom，加起来必然等于客户区，常量漂了窗体高跟着漂，那一句照样绿），正是第二百四十九至二百五十二轮连续四轮撞的同一形态。本轮在 `ApifoxHelper.Smoke/Program.cs` 里补三笔真对账：**固定三块实测合计 vs `CapabilitiesLayout.FixedPanesHeight`**、**结果区实测高 vs `ResultPaneHeight(ProbeRows)`**、**窗体客户区实测高 vs `DialogHeight`**。三笔都是「量在真控件上（`Show()` + `DoEvents()` 之后读 `ClientSize`）、判在那一笔 `if`」。
+- **已交付 ②（harden：752 锚点改成先量后判——简报 P0-1）**：`CapabilitiesLayoutTests.DialogHeight_IsTheFormulaAtTheMeasuredRowCount` 此前有一句 `Assert.Equal(752, …DialogHeight)`——一句**锚点断言**，本文件里没有任何一处真的量过 752。它挡不住它想挡的那件事：常量漂了这一格跟着红，但红的是「有人改了常量」，不是「真实窗口里放不下了」。本轮改成「字段用的值 == 算式在实测口径处的取值」，并把「三笔对账真的在冒烟段里」写成形状门；752 只在 `DialogHeightFor_TracksEveryRow` 里作为算式在 7 行处的取值出现（那是算术，不是读数）。
+- **已交付 ③（harden：`KnownGaps` 清空——简报 P0-2）**：第二百五十三轮挂的那一笔（`CapabilitiesLayoutTests.cs` 的 `RunCapabilitiesShown` 一笔对账都没有）本轮补上，按挂账自己的规矩删掉那一行。**空表是结果不是豁免**：`EveryRegisteredMeasurementSegment_ReconcilesMeasuredAgainstTheCaliber` 现在真的在判 `CapabilitiesLayoutTests.cs`（此前它被这张表跳过）。
+- **已交付 ④（harden：「没有量测段」的理由变成可判——简报 P0-2）**：`NoMeasurementSegment` 的每一条理由必须含「恒等式」或「口径」二词之一、且不短于 `MinReasonLength` 字——一条理由只要说清了「这一份里有没有同源恒等式」或「它的判据是哪个口径的取值」，就答完了这一族要问的那个问题。`ReasonDetector_ReportsTheBreaksItMustCatch` 四发注入（第二百五十五轮之前那一句散文的原样 / 点了词但太短 / 空理由 / 合规行）各报一处。
+- **已交付 ⑤（clarify：假门防护这一族收尾登记）**：`docs/NOTES.md` 顶部加「假门防护这一族：收尾登记」一行——这一族从第二百五十二轮起连做五轮，本轮是最后一轮；能机械判的已经判完，剩下的两件事（「量到的数对不对」「这一屏该不该这么分」）只有人读得出来，再加门只会把「门绿」当成「做完了」。**下一轮若再出现「找恒等式 / 补形状门」的 commit，应判为重复路径并停在这里。**
+- **读数**：`dotnet build`（主工程）**0 警告 0 错误**；`dotnet test` **2939 → 2941 全绿**（+2 = `NoMeasurementSegment_Reasons_SayWhyTheIdentityIsNotAFakeGate` 与 `ReasonDetector_ReportsTheBreaksItMustCatch`）。**本轮改了冒烟器（`RunCapabilitiesShown` 补三笔对账），但没有重跑三档冒烟**——`reading.txt` 的 `source=` 因此落后于当前源码，这一笔在第二百五十八轮复跑时补上（`7c5dbbb5…` → `bdc498a0…`）。**这一条如实写在这里，不冒充新读数。**
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20）。三笔对账是 Linux 容器内 wine + Xvfb 模拟器上量的，判不到真机观感，也不替人打勾。
+- **本轮未做（如实挂账）**：① 简报 P2 族未做；② 不动 `Web/` 过渡壳、不动 `.winecheck/` 脚本本体（冻结窗口内）、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+## 第二百五十七轮（2026-11-13）：两个主页面的名字收成一处（`PageNames`）——侧栏按钮、视图菜单项与 14 处「请到某一页去做某件事」的引导文案同源；「任务页」这种侧栏上找不到的简称一并改掉（具名 pass：clarify + harden）
+
+- **本轮范围**：接续不覆盖。开局工作树干净（第二百五十六轮已提交）。先只读复核再动手：`dotnet test` 基线 **2941 通过 / 0 失败**。
+- **补的是哪个缺口**：首程与七个任务阶段对话框的下一步全靠一句话指路，而那句话指名的页面此前是**就地写的第二串字面量**（按钮写「项目设置」、文案写「项目设置」/「任务页」）。改一处不改另一处，界面就会指着一个不存在的页面（与第四十六轮「文字不指向不存在的按钮」同族）。
+- **已交付 ①（clarify：产品侧收成一处）**：新增 `Desktop/Native/PageNames.cs`（纯数据、不依赖 WinForms、共享编译）。`NativeShellForm` 的侧栏按钮与视图菜单项、`TasksPage` 空态与状态行、`ContractsDialog` / `EndpointTrace` / `EndpointTraceDialog` 的分析设置指路、七个任务阶段对话框的「先在某一页点某个按钮」共 **21 处**全部改从 `PageNames` 取；「任务页」改成「「检查任务」页」，与侧栏那颗按钮上的字逐字一致。
+- **已交付 ②（harden：`PageNamesTests` 九条）**：名字本身（两个、不空、不带「」与「页」）、名字与页面键是两件事（`LastPageKeys` 不动，改名字不该让上次停留的页面失效）、侧栏与菜单项接线、**14 处引导文案逐文件数「有几处」**（第二百四十四 / 二百四十五轮的课：只判「有没有」时新加一处没接线的文案不会被发现）、界面源码里不许再出现页面名引号字面量与侧栏上找不到的简称（封闭豁免名单 + 「名单仍然需要」自检）、共享编译登记、判据自己被抓得住（四发注入 + 注释引述不报）。
+- **顺手修好两处被这次改动打回的门**：`EmptyStateActionTests` 的字面量提取器此前只认「右边是一个字面量」，拼接式会让「说明文字指名的入口就是那个按钮」退化成「以『先在「』开头」（第一百六十轮同一课），本轮扩到拼接式（字面量原样 / `PageNames.X` 取页面名 / 同文件常量递归展开）；`ShellShortcutsTests` 与 `LoadFailureStateTests` 里钉着旧字面量的三句跟着改到新形态。
+- **读数**：`dotnet build`（主工程）**0 警告 0 错误**；`dotnet test` **2941 → 2950 全绿**（+9 = `PageNamesTests` 九条）。未新增冒烟段、未动 `.winecheck/` 脚本本体（答辩前冻结窗口内）、未动视觉令牌与服务层语义，故三档冒烟读数不变（仍为第二百五十三轮那一跑），本轮没有重跑它。
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20），以上是 Linux 容器内源码与测试证据；侧栏按钮文字在真机字体度量下的观感随 `G-D5` 复核。
+- **本轮未做（如实挂账）**：① 简报 P2 族未做；② 不动 `Web/` 过渡壳、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+## 第二百五十八轮（2026-11-13）：空态说明里的页面名不再「写错也当检查任务」——未知 `PageNames.X` 当场断言红，映射直接读 `PageNames` 的公开常量（不抄第二份）；`GuideSites` 失败信息补「新增页面 / 对话框先在这里登记次数」；三档冒烟按当前源码复跑并写回真实读数（简报 P1-1 + P1-2，具名 pass：harden + clarify）
+
+- **本轮范围**：接续不覆盖。开局工作树干净（第二百五十七轮已提交）。先只读复核再动手：`dotnet test` 基线 **2950 通过 / 0 失败**。
+- **已交付 ①（harden：一处静默落点改成当场红——简报 P1-1）**：第二百五十七轮把页面名收进 `PageNames` 之后，`EmptyStateActionTests.Resolve` 里那一句写成了 `id == "PageNames.Projects" ? Projects : Tasks`——于是 `PageNames.Projcts`（拼错）、`PageNames.Profiles`（旧名）、甚至 `PageNames.Whatever` 全都被**当成「检查任务」**还原出来。空态说明里点错一个页面名，这条断言不但不红，还会拿一个错的页面名去比「说明文字里有没有那个按钮的名字」——**门钉住的是一种写法，不是一条规则**（第一百六十轮同一课），而这一次它连「写错了」都判不出来。现在改成：已知的页面名走映射，**未知的当场断言红**，并把「已知的是哪几个」写进失败信息。
+- **已交付 ②（harden：映射不抄第二份）**：`Resolve_KnownPageNames_MapToTheSharedConstants` 判「登记表与 `PageNames` 的公开常量逐一对上」——往 `PageNames` 里加一个页面名，这一条会点名要它一起被认。`Resolve_UnknownPageName_IsRedInsteadOfSilentlyTasks` 是注入自验：写一个 `PageNames` 里没有的名字，必须当场红。
+- **已交付 ③（clarify：`GuideSites` 失败信息补一句——简报 P1-2）**：`PageNamesTests.GuideText_TakesThePageNameFromTheSharedSource` 的失败信息补上「若新增页面 / 对话框，先在这里登记次数（这一行就是登记处，别在别处另开一份）」——此前只说「新加 / 删掉一处引导文案要回来改这个数」，没说新增页面该往哪登记。
+- **已交付 ④（三档冒烟按当前源码复跑并写回真实读数）**：`PUBLISH=1 bash .winecheck/demo.sh` 三档各 **251 通过 / 0 失败**、逐屏对账 **0 处对不上**、整支退出码 **0**；`.winecheck/reading.txt` 由实跑写回（源指纹 `7c5dbbb5…` → `bdc498a0…`）。**这一跑同时补上了第二百五十六轮改冒烟器却没重跑留下的那一笔**（见第二百五十六轮「读数」）。
+- **读数**：`dotnet build`（主工程）**0 警告 0 错误**；`dotnet test` **2950 → 2952 全绿**（+2 = 本轮两条注入自验）。三档冒烟见上一条（251 / 0 / exit 0 ×3，`reading.txt` 已写回）。
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20），以上全部是 Linux 容器内 wine + Xvfb 模拟器证据；本轮两条门判的是「写错页面名会不会红」，判不到真机观感，也不替人打勾。
+- **本轮未做（如实挂账）**：① 简报 P2 族未做；② 不动 `Web/` 过渡壳、不动 `.winecheck/` 脚本本体（冻结窗口内）、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+## 第二百五十九轮（2026-11-13）：读数对应哪份源码第一次可判 + 真机动作单每一条都在核对脚本里有对应动作（简报 P0-1 + P0-2，具名 pass：harden + clarify）
+
+- **本轮范围**：接续不覆盖。开局工作树干净（第二百五十八轮已提交）。先只读复核再动手：`dotnet test` 基线 **2952 通过 / 0 失败**。
+- **已交付 ①（harden：`reading.txt` 的 `source=` 从「靠人复算」变成判据——简报 P0-1）**：此前那一格只能靠人每轮手工复算（第二百一十四轮就是这么干的），不是判据。新增 `ApifoxHelper.Tests/SourceFingerprint.cs`——与 `demo.sh` 的 `source_fingerprint()` **同一口径**：全部 `*.cs`、剪掉 `bin` / `obj` 与测试工程、按路径字节序排好逐文件 sha1 再整体 sha1。`ReadingRecord_SourceIsTheCurrentSource` 判 `source=` 必须等于当前源码指纹。
+- **已交付 ②（harden：判据自己被抓得住）**：`SourceDriftDetector_ReportsTheBreaksItMustCatch` 四发注入（不存在的指纹 / 另一批源码 / 空值 / 截断 SHA）当场红；`SourceFingerprint_ChangesWithOneByteAndIgnoresBinObjAndTests` 判「改一字节就变、`bin` / `obj` / 测试工程不参与」；`SourceFingerprint_AgreesWithTheShellOneWhenBashIsHere` 把 `demo.sh` 里那个函数原文取出来交给 bash 跑，与 C# 这一份**逐字比**——两份实现只有一处能改。
+- **已交付 ③（harden：动作单每一条都在核对脚本里有对应动作——简报 P0-2）**：动作单 7 条、README 产出物清单 7 行、脚本核对的 9 个目录，此前只有「目录两边同名」与「README 行号 1–7」两条门，挡不住「动作单里多出一条没人核的动作」。新增 `RealMachineChecklist_EveryActionIsNamedByTheCollectScript`：① 动作单编号 1–7 各一次；② 每一条的归档目录与 README 同一行逐条相同；③ **真跑一次 `collect-real-machine.sh`**，输出里「← 动作 N」对 1–7 各出现一次。两发注入（动作 3 目录改成 `journey/`、动作 7 编号改成 8）当场红。
+- **读数**：`dotnet build`（主工程）**0 警告 0 错误**；`dotnet test` **2952 → 2957 全绿**（+5 = 本轮五条门）。当前 `source=bdc498a0…` 与当前源码一致，**无需重跑三档冒烟**——这一条由本轮新增的那条门自己判，不是自述。
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20）；本轮三条门判的是「读数出自哪份源码」与「动作单有没有悬空条目」，判不到真机观感，也不替人打勾。
+- **本轮未做（如实挂账）**：① 简报 P2 族未做；② 不动 `Web/` 过渡壳、不动 `.winecheck/` 脚本本体（冻结窗口内）、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+## 第二百六十轮（2026-11-13）：CLI 输出换行符第一次有判据（CRLF 与 LF 解析等价 + 偏移累加形状门）；九个归档目录各有一句「未达成时照念」的降级说法（简报 P0-1 + P0-2，具名 pass：harden + clarify）
+
+- **本轮范围**：接续不覆盖。开局工作树干净（第二百五十九轮已提交）。先只读复核再动手：`dotnet test` 基线 **2957 通过 / 0 失败**。
+- **已交付 ①（harden：CRLF 下 `offset` 少 1 的简报判断——本轮实测不成立，代码本来就是对的）**：`ApifoxCli.Parse` 切的是 `'\n'`，所以 `line.Length` 里已经含了行尾 `'\r'`，`+1` 补的正是被切掉的那个 `'\n'`：CRLF 行 `"abc\r"` 长 4，`+1 = 5`，而 `"abc\r\n"` 正好 5 个字符。真执行实测：前导说明行 + CRLF + JSON 喂进 `ApifoxCli.Parse`，`ParseError` 为 `null`、`Data` 正确，与 LF 那份逐字相同。
+- **已交付 ②（harden：`CliCrlfOutputTests` 五条）**：① CRLF 前导行 + JSON 解析成功；② CRLF 与 LF 的 `Data` 逐字相同；③ 截断 JSON 时两份报出的「第 N 个字节处」也相同（偏移是相对 JSON 起点算的，不是相对整段输出）；④ 偏移累加只许是 `line.Length + 1` 的形状门；⑤ 形状门自验（三发注入各报一处，合规行不报）。
+- **为什么必须立形状门**：简报建议的「修正」`line.Length + Environment.NewLine.Length` 本身就是一个**只在 Windows 上发作的回归**——Windows 上 `Environment.NewLine` 是 2 个字符，而 `line.Length` 已经数过 `'\r'`，每行多算 1，JSON 起点右移一格，真机第一次跑 CLI 就报「JSON 格式无效」；而 Linux 上 `Environment.NewLine` 恰好也是 1 个字符，**行为测试一发都抓不住**。实测两发注入：① 换成 `Environment.NewLine.Length` → 形状门红、四条行为断言全绿（正是「Linux 上永远绿」）；② 换成 `+ 2` → 三条红（行为 + 形状）。两发都已还原。
+- **已交付 ③（clarify：九个目录未达成时，答辩现场照念什么——简报 P0-2）**：`docs/evidence/real-machine/README.md` 新增一节「九个目录未达成时的降级说法（答辩现场照念，不现场组织）」：九个归档目录各一行，四格 = 归档目录 / 对应验收 / 照念的那句话（≤ 80 字，每句都带 `[ ]`）/ 指到哪（真的在测试工程里的断言名）。此前 README 只说「空目录 = 未达成」，没说未达成时怎么念——现场组织出来的说法每场都不一样，最坏的一种是把「没量到」念成「量过了」。
+- **已交付 ④（harden：降级说法两条门）**：`RealMachineEvidenceTests` 新增 `DegradeStatements_CoverEveryArchiveDirectory`（真 README 零问题）与 `DegradeStatementDetector_ReportsTheBreaksItMustCatch`（七发注入各报一处：删一行 / 说法清空 / 说法 85 字 / 说法里没有 `[ ]` / 指到不存在的断言 / 多一行清单外目录 / 对应验收号写错）。判据本体是纯函数 `DegradeProblems`（文本进、问题出），与 `SourceDriftDetector` 同一做法。
+- **读数**：`dotnet build`（主工程）**0 警告 0 错误**；`dotnet test` **2957 → 2964 全绿**（+5 = `CliCrlfOutputTests`，+2 = 降级说法两条）。**三档冒烟本轮未重跑**（未改产品代码、未动 `.winecheck/` 脚本本体），`reading.txt` 的 `source=` 与 `SourceFingerprint.OfRepo()` 仍一致（`ReadingRecord_SourceIsTheCurrentSource` 绿）。
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20）；CRLF 那一条是 Linux 容器内真执行实测的，**Windows 真机上的 CLI 输出仍未验**——本轮判的是「两种换行下解析等价」，判不到真机观感，也不替人打勾。
+- **本轮未做（如实挂账）**：① **`docs/NOTES.md` 的第二百六十轮条目本轮未写**（回合将尽，先提交可交付切片）——由第二百六十一轮回填补上；② `ApifoxCli.Parse` 里那段「为什么 `+1` 对两种换行都对」的**行内注释本轮未落**（改它会动源码指纹，需与三档冒烟同轮），理由逐字写在 `CliCrlfOutputTests` 的类注释里；③ 不动 `Web/` 过渡壳、不动 `.winecheck/` 脚本本体（冻结窗口内）、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+## 第二百六十一轮（2026-11-13）：轮次账本从第二百五十四轮直接断到本轮——补写第二百五十五至二百六十轮六条，并立一条「最近六轮不许断档」的门（控制仓简报 P0-1，具名 pass：harden + clarify）
+
+- **本轮范围**：接续不覆盖。开局工作树干净（第二百六十轮已提交）。先只读复核再动手：`dotnet test` 基线 **2964 通过 / 0 失败**。
+- **补的是哪个缺口**：`docs/NOTES.md` 的逐轮条目是答辩现场被追问「最近几轮做了什么」时唯一的索引。第二百五十五至二百六十轮各自提交了可交付切片，却**一轮都没写进账本**（第二百六十轮的 commit message 逐字承认「本轮未写」），账本从第二百五十四轮直接断到本轮。断档的代价不是「少几行字」：现场翻账本翻到第二百五十四轮就没了，最近六轮做过什么只能靠翻 `git log`，而 `git log` 不在答辩材料里。
+- **已交付 ①（clarify：补写六条账本条目）**：第二百五十五至二百六十轮各一条，位置在「回填说明」之后。**补写口径只写仓里能核到的东西**——各轮 commit message 的正文、以及仓内代码与测试里带轮次标记的注释；commit message 没记的读数一律写「未记」，**不补造**。六条都带「读数」与「本轮未做」两行（现场要问的就是这两件事）。
+- **已交付 ②（harden：`RoundLedgerTests` 三条）**：① `RecentRounds_AreAllInTheLedger`——账本最近 6 轮（含最新一轮）每轮都有 `## ` 条目，且**账本的最新一轮不落后于代码里提到的最新一轮**（扫 `ApifoxHelper.Tests` / `ApifoxHelper.Smoke` / `Desktop` 三处带轮次标记的注释；不扫 `docs/`，那里有「第九百九十九轮」这种故意不存在的夹具）；② `LedgerDetector_ReportsTheBreaksItMustCatch`——四发注入（中间漏一轮 / 账本落后于代码 / 条目里没有「读数」/ 合规账本不报）各报一处；③ `ChineseRoundNumber_ParsesEveryFormTheLedgerUses`——中文轮次号解析逐个钉死，**读不出来就抛**（静默返回 0 会让「最近六轮都在」在空集合上成立，第二百零五轮同一形态）。
+- **为什么以前没有门**：本仓已有的轮次相关门（`MeasuredScreensTests` 的「登记里说第 N 轮量过，而 NOTES 里查不到这一轮」）判的是**被引用的**轮次有没有落点，判不到「最近一轮有没有落点」——只要没人引用第二百六十轮，它缺席就没人红。这一条补的正是那个方向：**从最新一轮往回数**。
+- **变异验证（实测）**：本轮写完条目之前先跑了一次全量 `dotnet test`，`RecentRounds_AreAllInTheLedger` **当场红**并点名「账本最新一轮是第二百六十轮，而代码里已经提到第二百六十二轮」——这条门不是写完条目之后才「顺手绿」的，它先红过。
+- **读数**：`dotnet build`（主工程）**0 警告 0 错误**；`dotnet test` **2964 → 2967 全绿**（+3 = `RoundLedgerTests` 三条）。**三档冒烟本轮未重跑**（未改产品代码、未动 `.winecheck/` 脚本本体），`reading.txt` 的 `source=` 与 `SourceFingerprint.OfRepo()` 仍一致（`ReadingRecord_SourceIsTheCurrentSource` 绿）。
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20）；本轮判的是「账本有没有断档」，判不到条目写得对不对，也不替人打勾。
+- **本轮未做（如实挂账）**：① 简报 P0-2（`demo.ps1` ↔ `demo.sh` 逐段同名的机械门）**本轮未做**——复核发现段名那一半第二百零五轮已有 `DemoPs1_NamesTheSameSectionsAsDemoSh`，缺的是「读数落点」那一半，留给下一轮；② 简报 P1-1 / P1-2 / P2 族未做；③ 不动 `Web/` 过渡壳、不动 `.winecheck/` 脚本本体（冻结窗口内）、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。
+
+## 第二百六十二轮（2026-11-13）：两支演示脚本的读数记录第一次判「落在同一个文件上」；方法体界定在逐字 / 原始 / 插值字符串下第一次可判（简报 P0-2 + P1-1，具名 pass：harden + clarify）
+
+- **本轮范围**：接续不覆盖。开局工作树带着第二百六十一轮未提交的账本回填与 `RoundLedgerTests.cs`（**保留并接续，未覆盖**）。先只读复核再动手：`dotnet test` 基线 **2967 通过 / 0 失败**。
+- **已交付 ①（harden：两支脚本的读数落点同源——简报 P0-2 的后半句）**：简报说「`demo.ps1` 与 `demo.sh` 逐段同名、同读数」当前未见断言——**复核结论：段名那一半第二百零五轮已有**（`WineCheckScriptsTests.DemoPs1_NamesTheSameSectionsAsDemoSh`，判段名集合逐字相等 + 地板 15 条 + 九条关键段名 + 档位段头与三份产物同形 + 环境变量同一套），**缺的是「读数写到哪里」**：两支各自把 `READING` 的缺省值写在自己脚本里（`demo.sh` 是 `${READING:-$REPO/.winecheck/reading.txt}`，`demo.ps1` 是 `Join-Path $Repo '.winecheck/reading.txt'`），改一支不改另一支，Windows 侧跑出来的读数就落到另一个文件上，而 `ReadingConsistencyTests` 与 `docs/NOTES.md` 念的数只认仓里那一份。新增 `BothDemoScripts_DefaultTheReadingRecordToTheSameFile`：① 两支都取得到缺省值（取不到即红，不静默跳过）；② 去掉 `$REPO/` 前缀后逐字相同；③ 缺省值必须在仓里（`.winecheck/reading.txt`），不许是 `/tmp` 之类的仓外路径。
+- **已交付 ②（harden：判据自己被抓得住）**：`ReadingDefaultDetector_ReportsTheBreaksItMustCatch` 三发注入（`demo.ps1` 缺省值改成 `/tmp/reading.txt` / 两支指向不同文件 / `demo.sh` 的缺省值取不出来）各报一处，合规的一对不报。判据本体是纯函数 `ReadingDefaultProblems`（文本进、问题出），与 `SourceDriftDetector` 同一做法。**另做了一发真注入**：把 `.winecheck/demo.ps1` 的缺省值改成 `/tmp/reading.txt`，`BothDemoScripts_DefaultTheReadingRecordToTheSameFile` 当场红，随后还原（`git diff .winecheck/` 为空）。
+- **已交付 ③（harden：`MaskLiterals` 扩到逐字 / 原始字符串——简报 P1-1）**：`CliCrlfOutputTests.MaskLiterals` 自认「不是通用 C# 词法器」，此前只认普通字符串与字符字面量。于是「`Parse` 的方法体界定对不对」这件事**只在当前这份方法体恰好没有逐字 / 原始字符串时**成立——`Parse` 里哪天多一句 `@"…"`，界定就会错位（错位方向是「找不到闭合」或「闭合到下一个方法」，两种都会让形状门去判一段不是 `Parse` 的代码）。本轮扩它认：普通 / 插值 `$"…"` / 逐字 `@"…"`（含 `$@"…"` / `@$"…"`，`""` 是转义、反斜杠不是）/ 原始 `"""…"""`（引号数 ≥ 3，可带 `$` 前缀）/ 字符字面量 / 行注释。**仍然不是通用词法器**：插值字符串的 `{…}` 里再嵌一个带引号的表达式（`$"{a ?? "b"}"`）认不出——这一条**如实登记在方法注释里**，不假装覆盖。
+- **已交付 ④（harden：界定本身可注入）**：`ParseBody()` 抽成 `BodyOf(source, header)`（源码进、方法体出），于是「换一种字面量写法会不会界定错」第一次能被假源码喂进去判。新增三条：`ParseBody_BoundsTheMethodOnEveryLiteralForm`（四种字面量各造一份假源码，方法体里都带一对花括号、后面还跟着另一个方法；判① 含偏移累加那一行、② 不含后面那个方法的名字——只判 ① 的话「闭合到下一个方法」这种错位照样绿）、`LiteralFormBoundary_ReportsTheBreaksItMustCatch`（方法体真没闭合 / 签名不在，两发注入各报一处，且失败信息点名「字面量写法」这个最可能的原因）、`MaskLiterals_KeepsTheBracesOutsideVerbatimAndRawStrings`（逐字 / 原始字符串里的花括号不许把方法体的花括号一起抹掉，同时判字面量本体真的被抹掉——否则「花括号还在」可以靠「什么都没抹」蒙过去）。
+- **变异验证（实测两发，各自当场红并点名）**：① 关掉逐字字符串那一支 → `ParseBody_BoundsTheMethodOnEveryLiteralForm` 与 `MaskLiterals_KeepsTheBracesOutsideVerbatimAndRawStrings` 两条红；② 关掉原始字符串那一支 → `ParseBody_BoundsTheMethodOnEveryLiteralForm` 红。两发都已还原。**第一版夹具是假绿**：最初把字面量写成 `var c = @"C:\"; if (x) { y(); }`，关掉逐字那一支时界定**仍然正确**（被多抹掉的花括号恰好是配对的），于是那条断言抓不住它要抓的东西——改成把字面量放进一个 `if` 块里（`if (x) { var c = @"C:\"; }`），被吃掉的是那个块的 `}`，闭合才会落到下一个方法上。这一笔如实记在这里：**夹具的「红」也要被验过**。
+- **简报 P1-2 复核结论（未新增门，如实登记）**：`ErrorCopy.InvalidJsonMessage` 与 `JsonErrorCopy.InvalidJsonMessage` 的「逐字一致」**不是靠断言维持的，是靠 `const` 引用维持的**——`Api/ErrorCopy.cs` 里那一行是 `public const string InvalidJsonMessage = JsonErrorCopy.InvalidJsonMessage;`，编译期就是同一个常量，再写一条 `Assert.Equal` 是一句恒等式（本仓第二百五十五轮刚清扫过这一族）。简报要的第二半（`ApifoxCli.Parse` 的 `catch (JsonException)` 分支用的是 `JsonErrorCopy.InvalidJson`）**已有门**：`CliParseErrorTests.Parse_TakesTheJsonCopyFromTheSharedSource`（判该分支含 `JsonErrorCopy.InvalidJson(ex)`、不含 `ex.Message`、不含旧文案）与 `CliParseErrorTests.BothPaths_PointAtTheSameNeutralCopy`（判 `Api/ErrorCopy.cs` 与 `Apifox/ApifoxCli.cs` 都指向那一份、都不再自己拼「个字节处」）。**本轮不为它加门**，理由写在这里而不是只活在 commit message 里。
+- **读数**：`dotnet build`（主工程）**0 警告 0 错误**；`dotnet test` **2967 → 2972 全绿**（+2 = 读数落点两条，+3 = 字面量界定三条）。**三档冒烟本轮未重跑**（未改产品代码、未动 `.winecheck/` 脚本本体——`demo.ps1` 那一发注入已还原），`reading.txt` 的 `source=` 与 `SourceFingerprint.OfRepo()` 仍一致（`ReadingRecord_SourceIsTheCurrentSource` 绿）。
+- **仍未验的（不冒充）**：**真机 0 台**（`G-D5` 仍 `[ ]`，到期日 2026-11-20）；**Windows 侧那一半讲稿仍未真跑过**——本轮判的是「两支脚本的读数落点与段名同源」，判不到 `demo.ps1` 在 Windows 上跑出来的读数与 Linux 侧逐字相同（那要真机，或至少一次 pwsh + wine 的实跑），也不替人打勾。
+- **本轮未做（如实挂账）**：① 简报 P2-1（降级说法表「指到哪」的近似拼写注入）、P2-2（降级说法表第 6 行与验收表勾选的耦合登记）、P2-3（`ApifoxCli.Parse` 行内注释落位——**改它会动 `reading.txt` 的 `source=` 指纹，须与三档冒烟同轮**）**均未做**；② 不动 `Web/` 过渡壳、不动 `.winecheck/` 脚本本体（冻结窗口内）、不改服务层语义、不动视觉令牌与间距档位。
+- **约束核对**：未连接或写入 Apifox，未调用任何模型服务，未使用子 agent，未切换模型或账户；不改写入安全不变量；`G-D5` / `G-D6` 两格不动，不替人打勾；未把控制仓简报或审查报告写入本仓。

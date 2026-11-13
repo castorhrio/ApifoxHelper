@@ -724,6 +724,115 @@ public class WineCheckScriptsTests
     }
 
     /// <summary>
+    /// 两支演示脚本的读数记录<b>落在同一个文件上</b>（第二百六十二轮，控制仓简报 P0-2 的后半句）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="DemoPs1_NamesTheSameSectionsAsDemoSh"/>（第二百零五轮）判的是
+    /// 「两支打印的段名逐字相同」，<see cref="BothDemoScripts_WriteTheSameReadingRecord"/> 判的是
+    /// 「两支写的键相同」——但<b>写到哪里</b>没人判。两支各自把 <c>READING</c> 的缺省值写在自己的脚本里：
+    /// <c>demo.sh</c> 是 <c>${READING:-$REPO/.winecheck/reading.txt}</c>，<c>demo.ps1</c> 是
+    /// <c>Join-Path $Repo '.winecheck/reading.txt'</c>。改一支不改另一支，Windows 侧跑出来的读数就落到
+    /// 另一个文件上——而 <c>ReadingConsistencyTests</c> 与 <c>docs/NOTES.md</c> 念的数只认仓里那一份，
+    /// 于是「照 <c>demo.ps1</c> 念的那一行」在门那里根本没有出处。到期日降级答辩要念的正是这份读数，
+    /// 所以「同源」必须包含「同一个落点」。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 两支都取得到缺省值（取不到就红，不静默跳过）；② 去掉 <c>$REPO/</c> 前缀之后
+    /// 逐字相同；③ 缺省值必须在仓里（<c>.winecheck/reading.txt</c>），不许是 <c>/tmp</c> 之类的仓外路径——
+    /// 仓外路径跑完就没了，文档念的数没有可对账的出处。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不跑这两支脚本（<c>demo.ps1</c> 的实跑记录在 <c>.winecheck/README.md</c>
+    /// 「Windows 侧那支」一节），也不判读数本身对不对（那是 <c>ReadingConsistencyTests</c> 的事）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void BothDemoScripts_DefaultTheReadingRecordToTheSameFile()
+    {
+        var problems = ReadingDefaultProblems(
+            Repo.Source(".winecheck", "demo.sh"),
+            Repo.Source(".winecheck", "demo.ps1"));
+        Assert.True(problems.Count == 0,
+            "两支演示脚本的读数记录落点不是同一个文件：\n  " + string.Join("\n  ", problems)
+            + "\n口径：两支的 READING 缺省值都必须是仓里的 .winecheck/reading.txt——"
+            + "文档与门念的那份读数只有这一个出处。");
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：三发注入各报一处，合规的一对不报。
+    /// <para>
+    /// ① <c>demo.ps1</c> 的缺省值改成仓外路径（Windows 侧跑完读数就没了）；② 两支指向不同文件
+    /// （各写一份，谁也不知道该念哪一份）；③ <c>demo.sh</c> 的缺省值取不出来（取法退化时不许静默绿）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ReadingDefaultDetector_ReportsTheBreaksItMustCatch()
+    {
+        const string sh = "READING=${READING:-$REPO/.winecheck/reading.txt}\n";
+        const string ps1 = "if (-not $Reading) { $Reading = Join-Path $Repo '.winecheck/reading.txt' }\n";
+        Assert.Empty(ReadingDefaultProblems(sh, ps1));
+
+        var outside = ReadingDefaultProblems(sh, "if (-not $Reading) { $Reading = '/tmp/reading.txt' }\n");
+        Assert.Contains(outside, p => p.Contains("/tmp", StringComparison.Ordinal));
+
+        var split = ReadingDefaultProblems(sh, "if (-not $Reading) { $Reading = Join-Path $Repo '.winecheck/reading-ps.txt' }\n");
+        Assert.Contains(split, p => p.Contains("不是同一个文件", StringComparison.Ordinal));
+
+        var missing = ReadingDefaultProblems("READING=$REPO/.winecheck/reading.txt\n", ps1);
+        Assert.Contains(missing, p => p.Contains("demo.sh", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 读数记录缺省落点的判据本体：返回空 = 两支同源；返回一句话 = 不合规，那句话就是红的时候念出来的那一句。
+    /// <para>
+    /// 写成纯函数（文本进、问题出）是为了让上面那条自测能拿<b>注入过的</b>夹具喂它——
+    /// 与 <c>SourceDriftDetector</c> / <c>LayoutMeasurementGateTests.Problems</c> 同一形状。
+    /// </para>
+    /// </summary>
+    private static List<string> ReadingDefaultProblems(string sh, string ps1)
+    {
+        var problems = new List<string>();
+
+        var shMatch = Regex.Match(sh, @"READING=\$\{READING:-(?<path>[^}]*)\}");
+        if (!shMatch.Success)
+        {
+            problems.Add("demo.sh 里取不到 READING 的缺省值（`READING=${READING:-$REPO/…}` 那一行）——"
+                + "取法退化时「两支同源」会在空集合上成立。");
+        }
+
+        // 两种写法都认：Join-Path $Repo '…'（仓里的相对路径）与直接写一个绝对路径（那正是要抓的那一发）。
+        var ps1Match = Regex.Match(ps1, @"if \(-not \$Reading\) \{ \$Reading = (?:Join-Path \$Repo )?'(?<path>[^']*)' \}");
+        if (!ps1Match.Success)
+        {
+            problems.Add("demo.ps1 里取不到 READING 的缺省值（`Join-Path $Repo '…'` 那一行）——"
+                + "取法退化时「两支同源」会在空集合上成立。");
+        }
+
+        if (!shMatch.Success || !ps1Match.Success) return problems;
+
+        // demo.sh 的缺省值带 $REPO/ 前缀（它拼的是绝对路径），demo.ps1 用 Join-Path 拼，值里没有前缀。
+        // 比的是「相对仓根的那一段」，所以先把前缀去掉——去掉之后两边才可比。
+        var shPath = shMatch.Groups["path"].Value;
+        if (shPath.StartsWith("$REPO/", StringComparison.Ordinal)) shPath = shPath["$REPO/".Length..];
+        var ps1Path = ps1Match.Groups["path"].Value;
+        if (!string.Equals(shPath, ps1Path, StringComparison.Ordinal))
+        {
+            problems.Add($"两支的读数记录不是同一个文件：demo.sh 写「{shPath}」、demo.ps1 写「{ps1Path}」——"
+                + "换一支脚本跑，文档念的那份读数就没有出处了。");
+        }
+
+        foreach (var (name, path) in new[] { ("demo.sh", shPath), ("demo.ps1", ps1Path) })
+        {
+            if (!path.StartsWith(".winecheck/", StringComparison.Ordinal))
+            {
+                problems.Add($"{name} 的读数记录缺省值「{path}」不在仓里（应为 .winecheck/reading.txt）——"
+                    + "仓外路径跑完就没了，文档念的数没有可对账的出处。");
+            }
+        }
+
+        return problems;
+    }
+
+    /// <summary>
     /// 纯文本级 PowerShell 结构检查（<see cref="DemoPs1_Structure_IsBalanced"/> 的实现）。
     /// 返回问题清单，空清单 = 过得去。
     /// </summary>

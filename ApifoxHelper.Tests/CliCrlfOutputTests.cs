@@ -190,19 +190,127 @@ public class CliCrlfOutputTests
     }
 
     /// <summary>
+    /// 方法体界定在<b>每一种字面量写法</b>下都落在同一对花括号上（第二百六十二轮，简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="MaskLiterals"/> 自认「不是通用 C# 词法器」，而它此前只认普通
+    /// 字符串与字符字面量。于是「<c>Parse</c> 的方法体界定对不对」这件事<b>只在当前这份方法体恰好没有
+    /// 逐字 / 原始字符串时</b>成立——<c>Parse</c> 里哪天多一句 <c>@"…"</c>，界定就会错位，而错位的方式
+    /// 是「找不到闭合」或「闭合到下一个方法」，两种都会让形状门去判一段不是 <c>Parse</c> 的代码。
+    /// 判据只在特定输入下正确，与仓库「判据自己被抓得住」的纪律不符。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：四种字面量各造一份假源码（方法体里都带一对花括号，且后面还跟着另一个方法），
+    /// 界定出来的方法体必须① 含偏移累加那一行、② 不含后面那个方法的名字。第二件事是这一条的要点：
+    /// 只判 ① 的话，「闭合到下一个方法」这种错位照样绿。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判 <c>Parse</c> 现在有没有这些写法（它没有），也不判插值字符串的
+    /// <c>{…}</c> 里再嵌引号那种形态——那一种 <see cref="MaskLiterals"/> 仍然认不出，如实登记在它的注释里。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ParseBody_BoundsTheMethodOnEveryLiteralForm()
+    {
+        foreach (var (name, line) in new[]
+        {
+            ("普通字符串", "var a = \"{ 原文 }\"; if (x) { y(); }"),
+            ("插值字符串", "var b = $\"值 {x}\"; if (x) { y(); }"),
+            // 逐字 / 原始这两发刻意把字面量放进一个 if 块里：抹错时被吃掉的是那个块的 `}`，
+            // 于是「闭合」会落到下一个方法上——只判「含偏移累加那一行」是抓不住这种错位的。
+            ("逐字字符串", "if (x) { var c = @\"C:\\\"; }"),
+            ("原始字符串", "if (x) { var d = \"\"\"a\"b\"\"\"; }"),
+        })
+        {
+            var body = BodyOf(FakeSource(line), ParseHeader);
+            Assert.True(body.Contains("offset += line.Length + 1;", StringComparison.Ordinal),
+                $"{name}：界定出来的方法体里没有偏移累加那一行——界定错位了（多半是字面量没被抹干净，"
+                + "把方法体的花括号一起抹掉了）。");
+            Assert.False(body.Contains("AfterTheMethod", StringComparison.Ordinal),
+                $"{name}：界定出来的方法体里出现了后面那个方法的名字——闭合落到了下一个方法上，"
+                + "形状门会去判一段不是 Parse 的代码。");
+        }
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：两发注入各报一处。
+    /// <para>
+    /// ① 方法体真的没闭合（少一个 <c>}</c>）——必须当场红，且失败信息点名「字面量写法」这个最可能的原因，
+    /// 否则下一个人只会看到一句「没有闭合」然后去数括号；② 签名不在——必须当场红，否则「找不到落点」
+    /// 会静默变成空方法体，而空方法体上「偏移累加是 <c>line.Length + 1</c>」是一句永远为假的话，
+    /// 门会红在别的地方。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LiteralFormBoundary_ReportsTheBreaksItMustCatch()
+    {
+        var unbalanced = "public static CliResult Parse(ProcessResult process)\n{\n    offset += line.Length + 1;\n";
+        var ex = Assert.ThrowsAny<Exception>(() => BodyOf(unbalanced, ParseHeader));
+        Assert.Contains("没有闭合", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("字面量", ex.Message, StringComparison.Ordinal);
+
+        Assert.ThrowsAny<Exception>(() => BodyOf("class X { }", ParseHeader));
+    }
+
+    /// <summary>
+    /// 逐字字符串与原始字符串里的花括号<b>不许</b>把方法体的花括号一起抹掉——这是
+    /// <see cref="MaskLiterals"/> 第二百六十二轮扩它的<b>理由</b>，单独钉一条。
+    /// <para>
+    /// 扩之前：<c>@"C:\"</c> 会被读成「<c>\"</c> 是转义引号」，一路吃到行尾，把同一行后面的
+    /// <c>if (x) { y(); }</c> 连花括号一起抹掉。这一条判的就是「抹完之后花括号还在」——
+    /// 它红了，说明 <see cref="MaskLiterals"/> 又退回到只认普通字符串。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void MaskLiterals_KeepsTheBracesOutsideVerbatimAndRawStrings()
+    {
+        var verbatim = MaskLiterals("var c = @\"C:\\\"; if (x) { y(); }");
+        Assert.Contains("{", verbatim, StringComparison.Ordinal);
+        Assert.Contains("}", verbatim, StringComparison.Ordinal);
+
+        var raw = MaskLiterals("var d = \"\"\"{ 原文 }\"\"\"; if (x) { y(); }");
+        Assert.Contains("{", raw, StringComparison.Ordinal);
+        Assert.Contains("}", raw, StringComparison.Ordinal);
+
+        // 字面量本体必须真的被抹掉（否则「花括号还在」可以靠「什么都没抹」蒙过去）。
+        Assert.DoesNotContain("原文", verbatim, StringComparison.Ordinal);
+        Assert.DoesNotContain("原文", raw, StringComparison.Ordinal);
+    }
+
+    /// <summary>夹具：一份「Parse 方法体里有一行 <paramref name="line"/>，后面还跟着另一个方法」的假源码。</summary>
+    private static string FakeSource(string line) =>
+        "public static CliResult Parse(ProcessResult process)\n"
+        + "{\n"
+        + "    " + line + "\n"
+        + "    offset += line.Length + 1;\n"
+        + "}\n"
+        + "public static void AfterTheMethod() { }\n";
+
+    /// <summary>
     /// <c>ApifoxCli.Parse</c> 的方法体（按花括号深度界定，不靠缩进猜），已去掉行注释。
     /// <para>
     /// 数括号必须在<b>抹掉字面量</b>的那一份上数：这个方法体里有 <c>StartsWith('{')</c> 这样的字符字面量，
     /// 直接数原文会把那个 <c>{</c> 当成开括号，方法体永远「没有闭合」（本文件第一版就是这么红的）。
     /// </para>
     /// </summary>
-    private static string ParseBody()
+    private static string ParseBody() => BodyOf(Repo.Source("Apifox", "ApifoxCli.cs"), ParseHeader);
+
+    /// <summary><c>ApifoxCli.Parse</c> 的签名（界定方法体时唯一的落点）。</summary>
+    private const string ParseHeader = "public static CliResult Parse(ProcessResult process)";
+
+    /// <summary>
+    /// 从一份源码里取出 <paramref name="header"/> 那个方法的方法体（含首尾花括号），已去掉行注释。
+    /// <para>
+    /// 抽成「源码进、方法体出」的纯函数，是为了让
+    /// <see cref="ParseBody_BoundsTheMethodOnEveryLiteralForm"/> 能拿<b>假源码</b>喂它——
+    /// 第二百六十二轮之前它直接读仓里的文件，于是「换一种字面量写法会不会界定错」这件事
+    /// 只能靠人读代码，判据自己没被跑过（第二百零九轮那两发假变异同一课）。
+    /// </para>
+    /// </summary>
+    private static string BodyOf(string source, string header)
     {
-        var source = Repo.Source("Apifox", "ApifoxCli.cs");
         var masked = MaskLiterals(source);
-        const string header = "public static CliResult Parse(ProcessResult process)";
         var start = masked.IndexOf(header, StringComparison.Ordinal);
-        Assert.True(start >= 0, $"Apifox/ApifoxCli.cs 里找不到「{header}」：偏移累加那一行没有落点了。");
+        Assert.True(start >= 0, $"源码里找不到「{header}」：偏移累加那一行没有落点了。");
         var open = masked.IndexOf('{', start);
         Assert.True(open > start, $"「{header}」后面没有方法体。");
 
@@ -213,13 +321,33 @@ public class CliCrlfOutputTests
             else if (masked[i] == '}' && --depth == 0) return CodeOnly(source[open..(i + 1)]);
         }
 
-        Assert.Fail($"「{header}」的方法体没有闭合。");
+        Assert.Fail($"「{header}」的方法体没有闭合——最可能的原因是方法体里出现了 "
+            + "MaskLiterals 认不出的字面量写法（逐字 / 原始 / 带嵌套引号的插值字符串），"
+            + "它把后面的花括号一起抹掉了。先扩 MaskLiterals，再改这个方法体。");
         return "";
     }
 
     /// <summary>
     /// 把字符串字面量、字符字面量与行注释抹成空格（长度与换行位置不变，下标仍对得上原文）。
-    /// 只为本文件「数括号」这一件事服务，不是通用的 C# 词法器。
+    /// <para>
+    /// <b>它认哪几种字面量</b>：普通字符串 <c>"…"</c>、插值字符串 <c>$"…"</c>、逐字字符串
+    /// <c>@"…"</c>（含 <c>$@"…"</c> / <c>@$"…"</c>）、原始字符串 <c>"""…"""</c>（引号数 ≥ 3，可带
+    /// <c>$</c> 前缀）、字符字面量 <c>'…'</c>、行注释 <c>//…</c>。
+    /// </para>
+    /// <para>
+    /// <b>为什么第二百六十二轮要扩它</b>：此前只认普通字符串与字符字面量，于是逐字字符串
+    /// <c>@"C:\"</c> 会被当成「<c>\"</c> 是转义引号」——它一路吃到行尾，把同一行后面的
+    /// <c>if (x) { y(); }</c> 连花括号一起抹掉，方法体界定当场错位（<b>错位方向是「找不到闭合」或
+    /// 「闭合到下一个方法」</b>，两种都会让形状门判错东西）。原始字符串 <c>"""…"""</c> 同理：
+    /// 三个引号会被读成「空字符串 + 一个开引号」。这不是「Parse 现在有这些写法」，而是
+    /// <b>判据只在特定输入下正确</b>——与仓库「判据自己被抓得住」的纪律不符。
+    /// </para>
+    /// <para>
+    /// <b>它仍然不是通用 C# 词法器</b>：插值字符串的 <c>{…}</c> 里若再嵌一个带引号的表达式
+    /// （<c>$"{a ?? "b"}"</c>），这里会把内层引号当成外层字符串的结尾。这一条<b>没有</b>被覆盖，
+    /// 由 <see cref="ParseBody_BoundsTheMethodOnEveryLiteralForm"/> 的最后一发注入如实登记：
+    /// 真要在 <c>Parse</c> 里写这种形态，先扩这个方法，别指望它自己扛住。
+    /// </para>
     /// </summary>
     private static string MaskLiterals(string text)
     {
@@ -231,6 +359,65 @@ public class CliCrlfOutputTests
             {
                 while (i < chars.Length && chars[i] != '\n')
                 {
+                    chars[i] = ' ';
+                    i++;
+                }
+
+                continue;
+            }
+
+            // 原始字符串 """…"""（引号数 ≥ 3，可带 $ 前缀）：抹到与开头等量的连续引号为止。
+            if (chars[i] == '"' && i + 2 < chars.Length && chars[i + 1] == '"' && chars[i + 2] == '"')
+            {
+                var quotes = 0;
+                while (i + quotes < chars.Length && chars[i + quotes] == '"') quotes++;
+                for (var k = 0; k < quotes; k++) chars[i + k] = ' ';
+                i += quotes;
+                while (i < chars.Length)
+                {
+                    if (chars[i] != '"')
+                    {
+                        chars[i] = ' ';
+                        i++;
+                        continue;
+                    }
+
+                    var run = 0;
+                    while (i + run < chars.Length && chars[i + run] == '"') run++;
+                    for (var k = 0; k < run; k++) chars[i + k] = ' ';
+                    i += run;
+                    if (run >= quotes) break;
+                }
+
+                continue;
+            }
+
+            // 逐字字符串 @"…" / $@"…" / @$"…"："" 是转义引号，反斜杠不是转义符，可以跨行。
+            var verbatimAt = -1;
+            if (chars[i] == '@' && i + 1 < chars.Length && chars[i + 1] == '"') verbatimAt = i + 1;
+            else if (chars[i] == '$' && i + 2 < chars.Length && chars[i + 1] == '@' && chars[i + 2] == '"') verbatimAt = i + 2;
+            else if (chars[i] == '@' && i + 2 < chars.Length && chars[i + 1] == '$' && chars[i + 2] == '"') verbatimAt = i + 2;
+            if (verbatimAt >= 0)
+            {
+                for (var k = i; k <= verbatimAt; k++) chars[k] = ' ';
+                i = verbatimAt + 1;
+                while (i < chars.Length)
+                {
+                    if (chars[i] == '"' && i + 1 < chars.Length && chars[i + 1] == '"')
+                    {
+                        chars[i] = ' ';
+                        chars[i + 1] = ' ';
+                        i += 2;
+                        continue;
+                    }
+
+                    if (chars[i] == '"')
+                    {
+                        chars[i] = ' ';
+                        i++;
+                        break;
+                    }
+
                     chars[i] = ' ';
                     i++;
                 }
