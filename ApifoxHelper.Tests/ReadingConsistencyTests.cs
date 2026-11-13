@@ -550,10 +550,11 @@ public class ReadingConsistencyTests
     /// 读数记录必须自己说清是哪一支脚本、哪一台机器、哪一天、哪一版源码跑出来的，
     /// 并且自己写明<b>这不是真机结果</b>——这份记录将来会被拿去答辩，来历不明的读数最危险。
     /// <para>
-    /// <b>它不判什么</b>：<b>不判这份记录比当前源码新</b>。那是 <c>demo.sh</c> 在跑的时候按源码内容指纹
-    /// 拦的事（<c>smoke-source.sha</c> 对不上它就拒绝念）。把同一条判据搬进 <c>dotnet test</c>，
-    /// 等于「改一行产品代码、没先跑一次 wine，整个测试工程就红」——一道当场解不开的闸门比没有闸门更糟，
-    /// 而这一条在演示脚本里已经解得开（重跑一次就行）。
+    /// <b>它不判什么</b>：<b>不判这份记录比当前源码新</b>——那一件事第二百五十九轮起由
+    /// <see cref="ReadingRecord_SourceIsTheCurrentSource"/> 判（<c>source=</c> 必须等于当前源码的指纹）。
+    /// 本条只管「来历四行齐不齐、口径写没写清」。第二百零七轮这里曾写着「不判记录比当前源码新」，
+    /// 理由是「一道当场解不开的闸门比没有闸门更糟」；第二百五十九轮把那条判据搬进测试时，
+    /// 解不开的那一半已经解开了（失败信息里就写着补救命令，且它不需要 wine），理由与取舍见那一条的注释。
     /// </para>
     /// </summary>
     [Fact]
@@ -840,5 +841,227 @@ public class ReadingConsistencyTests
                 + "查 Desktop/Native/ProfileGridColumns.cs 的 ScaledLabelWidth 与 Ui.cs 的 FieldGridPanel 接线，"
                 + "改完重跑 bash .winecheck/demo.sh（三档跑完它自己写回原位）。");
         }
+    }
+
+    // ---------- 第二百五十九轮（简报 P0-1）：读数对应哪份源码，第一次可判 ----------
+
+    /// <summary>
+    /// 读数记录里的 <c>source=</c> 必须等于<b>当前源码</b>的指纹（第二百五十九轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>.winecheck/reading.txt</c> 的 <c>source=</c> 记的是「那份三档读数出自哪一版源码」，
+    /// 而此前<b>没有任何东西判它还是不是当前源码</b>——第二百一十四轮是人工复算了一遍
+    /// （<c>53143628…</c> 与记录一字相同，于是判定「不需要重跑」），那一轮是对的，但它不是判据：
+    /// 下一轮没人复算，一份过期的读数照样全绿，而答辩现场念的正是那几个数。
+    /// 简报把这一条写成「<c>source=</c> 必须是当前 HEAD 或其后代可达的 commit」——本仓的 <c>source=</c>
+    /// <b>不是 commit SHA，是源码内容指纹</b>（<c>demo.sh</c> 的 <c>source_fingerprint()</c> 写出），
+    /// 所以等价的判据是「<c>source=</c> 必须等于当前源码算出来的那个指纹」，比 commit 更严：
+    /// 同一版源码里改一个字节，指纹就变，而 commit 不变。
+    /// </para>
+    /// <para>
+    /// <b>它推翻了本文件第二百零七轮写下的一句取舍，理由要写清</b>：那一轮在
+    /// <see cref="ReadingRecord_NamesItsScriptToolDateSourceAndKeepsTheSimulatorCaliber"/> 的注释里写着
+    /// 「不判这份记录比当前源码新……把同一条判据搬进 <c>dotnet test</c>，等于『改一行产品代码、没先跑一次 wine，
+    /// 整个测试工程就红』——一道当场解不开的闸门比没有闸门更糟」。那句话在当时是对的：它防的是
+    /// <b>把「跑没跑」也塞进测试</b>。但本轮要判的不是「跑没跑」，是「记录说的是哪一版源码」——
+    /// 这一件事<b>不需要 wine</b>（纯文件哈希），而且<b>解得开</b>：失败信息里就写着那一条命令
+    /// （<c>bash .winecheck/demo.sh</c>，三档跑完它自己写回原位）。真正解不开的闸门是「没有补救路径」，
+    /// 不是「补救要跑一次演示」——本仓每一轮改产品代码本来就要跑那一次。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那份报告是不是真跑出来的（<c>reading.txt</c> 与报告原文都可以被手写，
+    /// 门看不出来——这是「机器产出」与「真机证据」之间的固有边界，见本文件开头那段），
+    /// 也不判真机跑没跑（真机 0 台，G-D5 仍是 <c>[ ]</c>）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ReadingRecord_SourceIsTheCurrentSource()
+    {
+        var record = ReadingRecord();
+        var now = SourceFingerprint.OfRepo();
+        var drift = SourceDrift(record.Source, now);
+        Assert.True(drift is null, drift);
+    }
+
+    /// <summary>
+    /// 「记录里的 <c>source=</c> 与当前源码对不上」这一件事的<b>唯一判法</b>（收成一处，
+    /// 好让 <see cref="SourceDriftDetector_ReportsTheBreaksItMustCatch"/> 把每一发破坏各喂一遍）。
+    /// 返回 null = 对得上；返回一句话 = 对不上，那句话就是红的时候念出来的那一句。
+    /// </summary>
+    private static string? SourceDrift(string recorded, string current)
+    {
+        if (string.IsNullOrWhiteSpace(recorded))
+        {
+            return $"{ReadingPath} 的 source= 是空的：读数没有说清自己出自哪一版源码。"
+                + "补一次：bash .winecheck/demo.sh（三档跑完它自己写回原位）。";
+        }
+
+        if (!Regex.IsMatch(recorded, "^[0-9a-f]{40}$"))
+        {
+            return $"{ReadingPath} 的 source=「{recorded}」不是 40 位小写十六进制：它不是源码指纹，"
+                + "这一份只能由 .winecheck/demo.sh 或 demo.ps1 写出（手改就是把出处变成自述）。";
+        }
+
+        if (!string.Equals(recorded, current, StringComparison.Ordinal))
+        {
+            return $"{ReadingPath} 的 source= 是 {Short(recorded)}，当前源码算出来是 {Short(current)}："
+                + "读数对应的源码不是当前源码，请重跑 bash .winecheck/demo.sh 写回。"
+                + "（这一条不判那份报告是不是真跑出来的，只判它说的是哪一版源码。）";
+        }
+
+        return null;
+    }
+
+    /// <summary>指纹的前 10 位（红的时候念出来够定位，又不至于把一整串塞进消息里）。</summary>
+    private static string Short(string fingerprint) =>
+        fingerprint.Length <= 10 ? fingerprint : fingerprint[..10] + "…";
+
+    /// <summary>
+    /// 上面那条判法<b>抓不抓得住</b>——四发破坏各喂一遍（第二百五十九轮）。
+    /// <para>
+    /// 只在真仓上判的门，抓不抓得住全靠那天有没有人想到去试；本仓对每一条判据都跑一遍反向，
+    /// 为的就是让「它绿着」不等于「它什么都看不见」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SourceDriftDetector_ReportsTheBreaksItMustCatch()
+    {
+        var now = SourceFingerprint.OfRepo();
+
+        // 前提：当前记录是干净的——下面每一发「变红」才只可能来自注入的破坏。
+        Assert.Null(SourceDrift(now, now));
+
+        // ① 一个不存在的指纹：形状对（40 位小写十六进制）、内容不对。
+        var nonexistent = SourceDrift(new string('0', 40), now);
+        Assert.NotNull(nonexistent);
+        Assert.Contains("读数对应的源码不是当前源码", nonexistent, StringComparison.Ordinal);
+        Assert.Contains("bash .winecheck/demo.sh", nonexistent, StringComparison.Ordinal);
+
+        // ② 另一批源码的指纹：临时小树上改一个字节就算出另一个值——这正是「改了产品代码没重跑」那一发。
+        var other = SourceDrift(FingerprintOfTempTree(edited: true), now);
+        Assert.NotNull(other);
+        Assert.Contains("读数对应的源码不是当前源码", other, StringComparison.Ordinal);
+
+        // ③ 空值：读数没有说清出自哪一版源码。
+        Assert.NotNull(SourceDrift("", now));
+
+        // ④ 不是指纹（截断的 SHA）：形状就不对，不许被当成「对得上」。
+        Assert.NotNull(SourceDrift(now[..8], now));
+    }
+
+    /// <summary>
+    /// 指纹本身的两条性质：<b>改一个字节就变</b>、<b>bin / obj / 测试工程不参与</b>（第二百五十九轮）。
+    /// <para>
+    /// 第二条是 <c>demo.sh</c> 那五行里最容易读漏的一处：剪掉 <c>ApifoxHelper.Tests/</c> 是刻意的
+    /// （测试工程不编进冒烟产物，改了它不该要求重发冒烟器），剪掉 <c>bin</c> / <c>obj</c> 也是刻意的
+    /// （产物不是源码）。这两条一旦被改掉，指纹就会在「只改了测试」时也变——那时
+    /// <see cref="ReadingRecord_SourceIsTheCurrentSource"/> 会红在一个与读数无关的改动上。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SourceFingerprint_ChangesWithOneByteAndIgnoresBinObjAndTests()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ah-fp-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(dir, "Desktop"));
+            File.WriteAllText(Path.Combine(dir, "Program.cs"), "class A { }");
+            File.WriteAllText(Path.Combine(dir, "Desktop", "B.cs"), "class B { }");
+
+            var clean = SourceFingerprint.Of(dir);
+            Assert.Equal(clean, SourceFingerprint.Of(dir)); // 同一棵树算两次必须同值
+
+            // ① 改一个字节就变。
+            File.WriteAllText(Path.Combine(dir, "Desktop", "B.cs"), "class B { int x; }");
+            var edited = SourceFingerprint.Of(dir);
+            Assert.NotEqual(clean, edited);
+
+            // ② bin / obj / 测试工程里的 .cs 不参与（塞进去指纹不动）。
+            foreach (var ignored in new[] { "bin", "obj", Path.Combine("ApifoxHelper.Tests", "bin") })
+            {
+                var sub = Path.Combine(dir, ignored);
+                Directory.CreateDirectory(sub);
+                File.WriteAllText(Path.Combine(sub, "Ignored.cs"), "class Ignored { }");
+            }
+
+            Directory.CreateDirectory(Path.Combine(dir, "ApifoxHelper.Tests"));
+            File.WriteAllText(Path.Combine(dir, "ApifoxHelper.Tests", "SomeTests.cs"), "class T { }");
+            Assert.Equal(edited, SourceFingerprint.Of(dir));
+
+            // ③ 新增一个产品源码文件就变（不是只认已有文件的内容）。
+            File.WriteAllText(Path.Combine(dir, "Desktop", "C.cs"), "class C { }");
+            Assert.NotEqual(edited, SourceFingerprint.Of(dir));
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch (IOException) { /* 临时目录清不掉不影响判据 */ }
+        }
+    }
+
+    /// <summary>一棵临时小树算出来的指纹（<paramref name="edited"/> 决定那个文件是原样还是改过一个字节）。</summary>
+    private static string FingerprintOfTempTree(bool edited)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ah-fp-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(dir, "Desktop"));
+            File.WriteAllText(Path.Combine(dir, "Program.cs"), "class A { }");
+            File.WriteAllText(Path.Combine(dir, "Desktop", "B.cs"), edited ? "class B { int x; }" : "class B { }");
+            return SourceFingerprint.Of(dir);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch (IOException) { /* 同上 */ }
+        }
+    }
+
+    /// <summary>
+    /// C# 这一份指纹与 <c>demo.sh</c> 那一份<b>逐字相同</b>（第二百五十九轮）。
+    /// <para>
+    /// <b>为什么必须真跑一遍 shell</b>：两份实现各自「自洽」是最难发现的一类漂——C# 这边改了剪枝规则，
+    /// 它自己算得稳稳的，而 <c>reading.txt</c> 是 shell 那一支写的，于是
+    /// <see cref="ReadingRecord_SourceIsTheCurrentSource"/> 会红在一个其实没改过源码的仓上。
+    /// 这一条把 <c>demo.sh</c> 里那个函数<b>原文取出来</b>交给 bash 跑（不在测试里抄第三份管道），
+    /// 与本类算出来的值逐字比。
+    /// </para>
+    /// <para>
+    /// <b>判不到的那台机器</b>：没有 bash 时这一条直接返回（同
+    /// <c>DemoPs1_ParsesWithARealPowerShellParserWhenOneIsHere</c> 的做法）。那时
+    /// <see cref="ReadingRecord_SourceIsTheCurrentSource"/> 仍按 C# 这一份判——它判的是「记录与当前源码」，
+    /// 与「两份实现是否一致」是两件事，后者判不到就说判不到。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SourceFingerprint_AgreesWithTheShellOneWhenBashIsHere()
+    {
+        var bash = RealMachineEvidenceTests.LocateBash();
+        if (bash is null) return; // 这台机器上没有 bash：判不到，不静默绿也不假装判过。
+
+        var demo = Repo.Source(".winecheck", "demo.sh");
+        var function = Regex.Match(demo, @"(?ms)^source_fingerprint\(\) \{.*?^\}");
+        Assert.True(function.Success,
+            "取法退化：.winecheck/demo.sh 里找不到 source_fingerprint() 那个函数——"
+            + "这一条门就失去了「与 shell 那一支逐字比」的对象。");
+
+        var psi = new ProcessStartInfo(bash)
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            WorkingDirectory = Repo.Root,
+        };
+        psi.ArgumentList.Add("-s");
+        psi.Environment["LANG"] = "C.UTF-8";
+
+        using var process = Process.Start(psi)!;
+        process.StandardInput.Write($"REPO={Repo.Root}\n{function.Value}\nsource_fingerprint\n");
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEnd().Trim();
+        var error = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(120_000), "demo.sh 的 source_fingerprint() 跑了 120 秒还没退出——它只该读一遍源码树。");
+
+        Assert.True(process.ExitCode == 0,
+            $"demo.sh 的 source_fingerprint() 退出码 {process.ExitCode}：{error.Trim()}");
+        Assert.Equal(output, SourceFingerprint.OfRepo());
     }
 }

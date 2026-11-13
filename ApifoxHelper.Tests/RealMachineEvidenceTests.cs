@@ -1478,7 +1478,7 @@ public class RealMachineEvidenceTests
     }
 
     /// <summary>找 bash（PATH，再退到三个常规位置）。找不到返回 null，调用方走「这台机器判不到」那一支。</summary>
-    private static string? LocateBash()
+    internal static string? LocateBash()
     {
         var dirs = new List<string>();
         var path = Environment.GetEnvironmentVariable("PATH");
@@ -1749,6 +1749,67 @@ public class RealMachineEvidenceTests
             "collect-real-machine.sh 的代码行里出现了归档目录名字面量：" + string.Join(" ／ ", copied.Select(d => d + "/"))
             + "。地板只该写死数量 9——名字仍只从 docs/evidence/real-machine/README.md 现读，"
             + "抄进脚本就等于两份清单，改那份的人不会想起来改这支，当天它按上一版的名字报警。");
+    }
+
+    // ---------- 第二百五十九轮（简报 P0-2）：动作单每一条都在核对脚本里有对应动作 ----------
+
+    /// <summary>
+    /// 真机动作单的每一条，都在归档核对脚本里有对应动作（脚本按动作号点名），
+    /// 或明确标注为「人工截图」——防止清单条目悬空（第二百五十九轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：动作单 7 条、README 产出物清单 7 行、脚本核对的 9 个目录，此前只有
+    /// 「目录两边同名」（<see cref="Readme_CoversEveryArchiveDirectoryTheActionListNames"/>）与
+    /// 「README 行号 1–7」（<see cref="Readme_ExistsAndSaysAnEmptyDirectoryMeansUnmet"/>）两条门。
+    /// 它们挡得住「目录少一个」，挡不住「动作单里多出一条没人核的动作」——那一条的归档目录若与别的动作共用，
+    /// 目录集合仍然相等，而脚本按 README 的动作号点名，多出来的那一条永远不会被念到。
+    /// 真机当天跑完它，脚本不会说「这一条还差东西」，人也就不会去补。
+    /// </para>
+    /// <para>
+    /// <b>判三件事</b>：① 动作单 7 条，编号 1–7 各一次（与 README 逐行对应）；
+    /// ② 每一条的归档目录与 README 同一行<b>逐条相同</b>（脚本按 README 的动作号点名，两边配错就点错）；
+    /// ③ 真的跑一次脚本，输出里「← 动作 N」对 1–7 各出现一次——脚本按动作号点名，
+    /// 这一条证明它真的看得见动作单的每一条。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判真机跑没跑（真机 0 台，G-D5 仍是 <c>[ ]</c>），
+    /// 也不判归档内容对不对（截图有没有裁切、那三个数落得对不对，都要人看）。
+    /// 没有 bash 时第 ③ 条判不到——那种情况不许静默绿：①② 两条纯文本判定在任何平台上都判得到，
+    /// ③ 只在有 bash 时跑（同 <see cref="CollectScript_TreatsThePlaceholderAsEmptyAndNamesEveryDirectory"/> 的做法）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RealMachineChecklist_EveryActionIsNamedByTheCollectScript()
+    {
+        // ① 动作单 7 条，编号 1–7 各一次。
+        var actions = ActionRows();
+        Assert.Equal(Enumerable.Range(1, 7), actions.Select(r => r.Number).OrderBy(n => n));
+
+        // ② 每一条的归档目录与 README 同一行逐条相同：脚本按 README 的动作号点名，两边配错就点错。
+        var readme = ArtifactRows().ToDictionary(r => r.Action, r => DirectoriesIn(r.DirCell));
+        foreach (var row in actions)
+        {
+            var dirs = DirectoriesIn(row.Archive);
+            Assert.True(dirs.Count > 0,
+                $"动作单第 {row.Number} 条没点到归档目录：脚本按目录核对，没有目录这一条就无从被点名。");
+            Assert.True(readme.ContainsKey(row.Number),
+                $"README 产出物清单里没有第 {row.Number} 行：脚本按 README 的动作号点名，缺这一行，"
+                + "动作单第 " + row.Number + " 条在脚本里就没有对应动作。");
+            var expected = readme[row.Number];
+            Assert.True(dirs.OrderBy(d => d, StringComparer.Ordinal).SequenceEqual(expected.OrderBy(d => d, StringComparer.Ordinal)),
+                $"动作单第 {row.Number} 条归档到（" + string.Join(" ／ ", dirs.Select(d => d + "/"))
+                + "），README 第 " + row.Number + " 行声明的是（" + string.Join(" ／ ", expected.Select(d => d + "/"))
+                + "）：两边配错，脚本按 README 点名时就会把这一条念到别的目录上。");
+        }
+
+        // ③ 脚本真的按动作号点名每一条（跑一次，看输出里 1–7 各出现一次）。
+        if (LocateBash() is null) return;
+        var (_, output) = RunCollectScript(evidence: null);
+        foreach (var row in actions)
+        {
+            Assert.True(Regex.IsMatch(output, $@"← 动作 {row.Number}(?!\d)"),
+                $"归档核对脚本的输出里没有「← 动作 {row.Number}」：动作单第 {row.Number} 条在脚本里没有对应动作，"
+                + "清单条目悬空——真机当天跑完这一条，脚本不会点名它。");
+        }
     }
 
     // ---------- 第二百一十二轮（简报 P0-1）：真机到手 30 分钟执行单 ----------
