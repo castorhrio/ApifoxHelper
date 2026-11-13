@@ -402,7 +402,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         head.Controls.Add(executionCaption, 0, 5);
         head.SetColumnSpan(executionCaption, 2);
 
-        var actionCaption = Ui.Caption("写入清单（按执行顺序：模型在前、接口在后；选中动作在下方显示写入内容）");
+        var actionCaption = Ui.Caption("写入清单（按执行顺序：模型在前、接口在后；「资源」那格是方法加路径或 model: 名；选中动作在下方显示写入内容）");
         actionCaption.Dock = DockStyle.Top;
         actionCaption.Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, 0);
         var actionHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };

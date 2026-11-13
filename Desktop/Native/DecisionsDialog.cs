@@ -163,6 +163,10 @@ internal sealed class DecisionsDialog : DpiAwareForm
 
         var detailGrid = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, ColumnCount = 1, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Sm) };
         detailGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        // 「资源」这一格是什么（第二百零五轮记下的那一半，第二百七十八轮交出文字）：这一屏的模型行交出的
+        // 是裸模型名，与同步预览那两张清单的 model: 键不是同一种写法，所以这句话只能在本屏自己讲。
+        // 经 Ui.Caption 出厂而不是下面那两句的 CaptionBold 标题档：那两句是分区标题，这一句是说明行。
+        AddCaptionRow(detailGrid, Ui.Caption("「资源」这一列装两种身份：接口那一行是方法与路径，模型那一行是模型自己的名字。"));
         AddCaptionRow(detailGrid, "选中条目的差异详情与处理说明");
         AddCaptionRow(detailGrid, "决策保存后任务内容即变化：已有检查结果与同步计划过期，重新检查后决策才会体现在合并结果与计划中。");
         AddBoxRow(detailGrid, Ui.Hairline(_detail), 190);
