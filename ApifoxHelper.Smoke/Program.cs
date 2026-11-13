@@ -5911,6 +5911,13 @@ internal static class Program
         // 屏名天生不同，同宽也会判成不同宽。
         var declared = new Dictionary<string, List<(string Screen, int Width)>>(StringComparer.Ordinal);
 
+        // 按整个表头序列认那一张清单：同一个对话框里往往有两三张，只数列数会撞车。
+        ListView FindList(Form dialog, string screenName, string[] titles) =>
+            FindAll<ListView>(dialog).FirstOrDefault(candidate2 =>
+                candidate2.Columns.Cast<ColumnHeader>().Select(column => column.Text).SequenceEqual(titles))
+            ?? throw new InvalidOperationException(
+                $"{screenName}里找不到表头序列为「{string.Join("、", titles)}」的清单：列增删或改名了，本段量测口径需要重定。");
+
         foreach (var (screenName, headers, build) in screens)
         {
             RunAction($"清单列宽：{screenName}的同族列与另几屏同宽、列宽合计不超过预算（可视宽减一条竖向滚动条）、表头与样例文字放得下（真实控件量）", () =>
@@ -5921,10 +5928,7 @@ internal static class Program
                 dialog.PerformLayout();
                 Application.DoEvents();
 
-                var list = FindAll<ListView>(dialog).FirstOrDefault(candidate2 =>
-                    candidate2.Columns.Cast<ColumnHeader>().Select(column => column.Text).SequenceEqual(headers))
-                    ?? throw new InvalidOperationException(
-                        $"{screenName}里找不到表头序列为「{string.Join("、", headers)}」的清单：列增删或改名了，本段量测口径需要重定。");
+                var list = FindList(dialog, screenName, headers);
 
                 var widths = list.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
                 var sum = widths.Sum();
@@ -6005,7 +6009,220 @@ internal static class Program
                 }
             });
         }
+
+        // ④「出滚动条那一刻」的真实宽（第二百四十三轮，简报 P1-4）。上一轮自记的一句话是本轮的开工依据：
+        // 「本段构造的是空清单，ClientSize 里还没有滚动条，只能按 SystemInformation.VerticalScrollBarWidth
+        // 扣一笔当预算」——那一个数是**估的**。这一轮把它量出来，两个前提先由本轮实测定下：
+        // ① 必须把对话框真的 Show 出来：只建句柄不显示时，同步预览预览页上那两张清单的
+        //    <c>ClientSize.Height</c> 实测是 <b>0px</b>（那一页 <c>Visible = false</c>），
+        //    于是上一轮念的「写入清单 984 对预算 1001」其实是一张没布局过的清单的数；
+        // ② 清单里得有行：先走产品自己的路（任务目录里有计划 → 点「查看已有计划」→ <c>ShowPlan</c> 填行），
+        //    真行不够溢出时才补夹具行，报告里把两个数分开写。**这一跑仍是 wine + Xvfb 模拟器，不是真机。**
+        var planFixture = new SyncPlan
+        {
+            Id = "plan-column-fit",
+            TaskId = task.Id,
+            Hash = "9f3c1e77b2a84d06",
+            TaskRevision = task.Revision,
+            Status = "awaitingConfirm",
+            ProjectId = "128",
+            ProjectName = "列宽实测项目",
+            CliVersion = "2.2.6",
+            CreatedAt = DateTimeOffset.Now,
+            Actions =
+            [
+                .. Enumerable.Range(1, 24).Select(i => new PlanAction
+                {
+                    ActionId = $"a{i}",
+                    ResourceKey = $"GET /api/probe/{i}",
+                    Kind = "updateEndpoint",
+                    RemoteId = 9000 + i,
+                    Validation = "passed",
+                    Changes = ["新增字段"],
+                    State = "pending",
+                }),
+            ],
+            Excluded =
+            [
+                .. Enumerable.Range(1, 24).Select(i => new PlanExclusion
+                {
+                    ResourceKey = $"POST /api/probe/{i}",
+                    Reason = "检查之后远端已被修改",
+                }),
+            ],
+        };
+        tasks.Write(task.Id, TaskFiles.Diff, SupplementFixture());
+        tasks.Write(task.Id, TaskFiles.Plan, planFixture);
+
+        foreach (var (screenName, headers, build) in screens)
+        {
+            RunAction($"清单列宽：{screenName}真的显示出来并装进行之后，真实可视宽与上一轮那个「减一笔」预算并列、列尾不被横向滚动条藏住（真实控件量）", () =>
+            {
+                using var dialog = build();
+                dialog.Show();
+                Application.DoEvents();
+
+                // 同步预览那两张清单在预览页上：点产品自己那颗「查看已有计划」把它们带出来（不直接调内部方法）。
+                if (dialog is SyncPreviewDialog)
+                {
+                    var viewPlan = FindAll<Button>(dialog).FirstOrDefault(static button => button.Text == "查看已有计划")
+                        ?? throw new InvalidOperationException("同步预览里没有「查看已有计划」那颗按钮：入口改名或删除了，本段量测口径需要重定。");
+                    if (!viewPlan.Enabled)
+                    {
+                        throw new InvalidOperationException("「查看已有计划」在任务目录已有计划时仍禁用：那两张清单的可见前提不成立，量到的还是没布局的数。");
+                    }
+                    viewPlan.PerformClick();
+                    Application.DoEvents();
+                }
+
+                var list = FindList(dialog, screenName, headers);
+                var sum = list.Columns.Cast<ColumnHeader>().Select(column => column.Width).Sum();
+                var emptyVisible = list.ClientSize.Width;
+                var scrollbar = SystemInformation.VerticalScrollBarWidth;
+                var budget = emptyVisible - scrollbar;
+
+                // 行高按这一刻真实那一行量（不是按磅值猜）：本仓已经有一次「按磅值认行」在 125% / 200% 档认不出东西。
+                var realRows = list.Items.Count;
+                var rowHeight = realRows > 0 ? Math.Max(1, list.Items[0].Bounds.Height) : Math.Max(1, list.Font.Height);
+                var capacity = list.ClientSize.Height / rowHeight;
+
+                // 几何证据先落进报告，再判：判失败的那一屏也要留下量到的数（与 RunActionHeaderFit 同一纪律）。
+                // 祖先链从清单往上到窗体；同页停靠块给的是「这一页的高度被谁分走了」。
+                var chain = new List<string>();
+                for (Control? current = list; current is not null; current = current.Parent)
+                {
+                    chain.Add($"{(current is Form ? "窗体" : current.GetType().Name)} {current.ClientSize.Height}px");
+                }
+                var siblings = list.Parent?.Parent?.Controls.Cast<Control>()
+                    .Select(control => $"{control.GetType().Name}:{control.Height}px") ?? [];
+
+                _lines.Add(
+                    $"     {screenName}（几何）：清单这一刻约装 {capacity} 行（行高 {rowHeight}px、清单高 {list.ClientSize.Height}px）；" +
+                    $"由内到外 {string.Join(" ← ", chain)}；同页停靠 {string.Join("、", siblings)}" +
+                    (capacity < 3 && !DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())
+                        ? "——非设计档：这一档窗体被虚拟屏截断，那一刻的行数不判（随 G-D5 真机复核）"
+                        : string.Empty));
+
+                var designTier = !DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor());
+                if (capacity < 3 && designTier)
+                {
+                    throw new InvalidOperationException(
+                        $"{screenName}显示出来之后这一刻只装得下 {capacity} 行（清单高 {list.ClientSize.Height}px、行高 {rowHeight}px）：" +
+                        $"这一屏的清单在主界面上看不见，不能读成「放得下」。同页停靠：{string.Join("、", siblings)}。");
+                }
+
+                var filledByFixture = 0;
+                if (realRows <= capacity)
+                {
+                    // 真行不足以出滚动条时才补夹具行：列数按该屏自己的表头，文字取表头名——几何是真的，语义是假的。
+                    filledByFixture = capacity + 12 - realRows;
+                    list.BeginUpdate();
+                    for (var i = 0; i < filledByFixture; i++)
+                    {
+                        list.Items.Add(new ListViewItem(headers.Select(title => $"{title}-补{i}").ToArray()));
+                    }
+                    list.EndUpdate();
+                    Application.DoEvents();
+                }
+
+                var filledVisible = list.ClientSize.Width;
+                var vertical = HasScrollBar(list, WsVscroll);
+                var horizontal = HasScrollBar(list, WsHscroll);
+
+                _lines.Add(
+                    $"     {screenName}：清单高 {list.ClientSize.Height}px、行高 {rowHeight}px、约装 {capacity} 行；" +
+                    $"行：产品路径 {realRows} 行" + (filledByFixture > 0 ? $" + 夹具 {filledByFixture} 行" : "（不必补行）") + "；" +
+                    $"列宽合计 {sum}px；空清单可视宽 {emptyVisible}px → 有行后可视宽 {filledVisible}px（少 {emptyVisible - filledVisible}px）、" +
+                    $"系统给的竖向滚动条 {scrollbar}px、上一轮的预算 {budget}px；" +
+                    $"控件自己报的滚动条状态：竖向{(vertical ? "在" : "不在")}、横向{(horizontal ? "在" : "不在")}" +
+                    $"（{(horizontal ? "横向在 = 列尾被藏" : "横向不在 = 列尾没被藏")}；" +
+                    $"{(filledVisible == budget ? "有行后的可视宽等于那个预算——那一笔按满宽扣是对的" : $"有行后可视宽没按那个预算缩（差 {Math.Abs(filledVisible - budget)}px）：滚动条画在客户区内，那一笔是留给行矩形的，实占见上一句的「少 N px」")}）");
+
+                if (!vertical)
+                {
+                    throw new InvalidOperationException(
+                        $"{screenName}装到 {realRows + filledByFixture} 行（约装 {capacity} 行）仍未逼出竖向滚动条：本段没量到「出滚动条那一刻」，量测口径需要重定，不能读成通过。");
+                }
+
+                if (designTier && horizontal)
+                {
+                    throw new InvalidOperationException(
+                        $"{screenName}有行之后出了横向滚动条：列宽合计 {sum}px 超过真实可用宽（有行后可视宽 {filledVisible}px、竖向滚动条实占 {emptyVisible - filledVisible}px、系统给 {scrollbar}px）——列尾在真实那一屏上被藏。");
+                }
+            });
+        }
+
+        // ⑤预览页这一刻四块区域各给到几行（第二百四十三轮：本轮那个 0 行缺陷的判据落点）。
+        // 上一段一屏一条各量各的宽；这一段专管这一页的**竖直预算**——五块区域挤在一个定高窗体里，
+        // 谁让给谁由 SyncPreviewPanes 一处算，四块的高度与行数在本段当场对账。
+        RunAction("清单列宽：同步预览预览页四块区域这一刻各给到几行（写入清单 / 未纳入清单 / 写入内容 / 说明区，真实控件量）", () =>
+        {
+            using var dialog = new SyncPreviewDialog(
+                tasks,
+                services.GetRequiredService<SyncPlanService>(),
+                services.GetRequiredService<SyncExecutor>(),
+                services.GetRequiredService<JobRunner>(),
+                task);
+            dialog.Show();
+            Application.DoEvents();
+            var viewPlan = FindAll<Button>(dialog).FirstOrDefault(static button => button.Text == "查看已有计划")
+                ?? throw new InvalidOperationException("同步预览里没有「查看已有计划」那颗按钮：入口改名或删除了，本段量测口径需要重定。");
+            viewPlan.PerformClick();
+            Application.DoEvents();
+
+            string[] TitlesOf(string screenName) => screens.First(entry => entry.Name == screenName).Headers;
+            var action = FindList(dialog, "同步预览写入清单", TitlesOf("同步预览写入清单"));
+            var excluded = FindList(dialog, "同步预览未纳入清单", TitlesOf("同步预览未纳入清单"));
+            var payload = FindAll<TextBox>(dialog).FirstOrDefault(box => box.Multiline && box.ScrollBars == ScrollBars.Both)
+                ?? throw new InvalidOperationException("找不到「选中动作的写入内容」那块只读框（ScrollBars.Both 这一形状变了），本段量测口径需要重定。");
+            var notes = FindAll<TextBox>(dialog).FirstOrDefault(box => box.Multiline && box.ScrollBars == ScrollBars.Vertical)
+                ?? throw new InvalidOperationException("找不到「范围外影响 / 计划提示 / 保留设置」那块只读框，本段量测口径需要重定。");
+
+            var rows = new (string Name, int Got, int Floor)[]
+            {
+                ("写入清单", action.ClientSize.Height / SyncPreviewPanes.RowHeight, SyncPreviewPanes.ActionRows),
+                ("未纳入清单", excluded.ClientSize.Height / SyncPreviewPanes.RowHeight, SyncPreviewPanes.ExcludedRows),
+                ("写入内容", payload.ClientSize.Height / SyncPreviewPanes.RowHeight, SyncPreviewPanes.PayloadRows),
+                ("说明区", notes.ClientSize.Height / SyncPreviewPanes.RowHeight, SyncPreviewPanes.NotesRows),
+            };
+
+            _lines.Add(
+                $"     预览页四块（同一份行高 {SyncPreviewPanes.RowHeight}px 算行数）：" +
+                string.Join("、", rows.Select(row => $"{row.Name} {row.Got} 行（判据 {row.Floor}）")) +
+                $"；窗体客户区 {dialog.ClientSize.Height}px、预览页 {action.Parent?.Parent?.Parent?.ClientSize.Height ?? 0}px");
+
+            // 125% / 200% 档窗体被屏幕截断（本轮实测：192 档窗体高要 1540px 而屏只有 1000px），
+            // 那一刻的行数属于「量不到」而不是「放不下」，与列宽口径同一取舍：判据只在设计档成立。
+            if (DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())) return;
+
+            var shortOf = rows
+                .Where(row => row.Got < row.Floor)
+                .Select(row => $"{row.Name} 这一刻只给到 {row.Got} 行（判据 {row.Floor} 行）")
+                .ToList();
+            if (shortOf.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "预览页的竖直预算不成立：" + string.Join("、", shortOf) +
+                    "——本轮开工前实测到的正是「写入清单 0 行」（写死的 190 / 130 / 150 三块把主清单挤没了），这一处不得读成通过。");
+            }
+        });
     }
+
+    /// <summary>这一刻这条清单上有没有那一根滚动条：读控件自己的窗口样式位，不按行数猜。</summary>
+    private static bool HasScrollBar(Control control, int styleBit) =>
+        (GetWindowStyle(control.Handle, GwlStyle) & styleBit) != 0;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowStyle(IntPtr hWnd, int nIndex);
+
+    /// <summary><c>GWL_STYLE</c>：取窗口样式位。按十进制写（本仓的规矩：十六进制字面量是颜色的位置）。</summary>
+    private const int GwlStyle = -16;
+
+    /// <summary><c>WS_VSCROLL</c> = 0x00200000。</summary>
+    private const int WsVscroll = 2097152;
+
+    /// <summary><c>WS_HSCROLL</c> = 0x00100000。</summary>
+    private const int WsHscroll = 1048576;
 
     /// <summary>样例参数名：真实工程里常见的长名（三族取法都会把它附在「参数」之后）。</summary>
     private const string SampleParameterName = "cancellationToken";

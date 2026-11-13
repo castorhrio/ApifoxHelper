@@ -176,7 +176,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        DpiScale.Apply(this, new Size(1020, 740));
+        DpiScale.Apply(this, new Size(1020, SyncPreviewPanes.DialogHeight));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -269,8 +269,16 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         var excludedFilterRow = Ui.FilterRow(_excludedKeyword, counts: null);
         excludedFilterRow.BackColor = UiTokens.Bg;
         excludedFilterRow.Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm);
-        // 宿主高度让出筛选行那一行（写入清单是这一页的主内容，不为第二张清单再挤它）。
-        _excludedHost = new Panel { Dock = DockStyle.Bottom, Height = 150, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
+        // 宿主高度经 SyncPreviewPanes 一份预算给（第二百四十三轮）：这一页五块区域的竖直分法此前是
+        // 三个互不相干的像素数（190 / 130 / 150）加一个定死窗体高，实测把主清单挤到 0 行；
+        // 现在四块都按「要给几行」算。底色随本页（Bg）：工厂给的是对话框的 Panel 底，这一页是页面底。
+        _excludedHost = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = SyncPreviewPanes.ListPaneHeight(SyncPreviewPanes.ExcludedRows),
+            BackColor = UiTokens.Bg,
+            Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0),
+        };
         _excludedHost.Controls.Add(excludedInner);
         _excludedHost.Controls.Add(_excludedHint);
         _excludedHost.Controls.Add(excludedFilterRow);
@@ -411,11 +419,13 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         var payloadInner = Ui.Hairline(_payload);
         payloadInner.Dock = DockStyle.Fill;
         payloadInner.Height = 160;
-        var payloadHost = BuildBottomHost(payloadInner, "选中动作的写入内容（敏感值已脱敏；与执行时写入的 JSON 一致）", 190);
+        // 两块文字区都是可滚的只读框（写入内容双向滚、说明区垂直滚）：让出的高度只是少看几行，
+        // 不是读不到——这一页要挤没的却是不能滚的主清单，所以让的是这两块（SyncPreviewPanes 一行算式）。
+        var payloadHost = BuildBottomHost(payloadInner, "选中动作的写入内容（敏感值已脱敏；与执行时写入的 JSON 一致）", SyncPreviewPanes.TextPaneHeight(SyncPreviewPanes.PayloadRows));
         var notesInner = Ui.Hairline(_notes);
         notesInner.Dock = DockStyle.Fill;
         notesInner.Height = 100;
-        var notesHost = BuildBottomHost(notesInner, "共享模型对范围外接口的影响、计划提示与保留设置", 130);
+        var notesHost = BuildBottomHost(notesInner, "共享模型对范围外接口的影响、计划提示与保留设置", SyncPreviewPanes.TextPaneHeight(SyncPreviewPanes.NotesRows));
 
         // 停靠按集合倒序生效：标题区最先停靠（顶部）、筛选行紧随其后，写入内容、说明区、排除清单自下而上，
         // 写入清单填满剩余空间。
