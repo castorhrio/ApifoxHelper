@@ -97,6 +97,38 @@
 | 三 | 任务详情的阶段条 | 阶段条与「开始扫描」按钮 | 点「开始扫描」→ 等状态行从「执行中」变成完成 | 状态行如实写出扫描结果（接口数与注释位点总数），阶段条推进到下一站；全程没有弹出浏览器、没有要求敲命令行 | `journey-3-扫描.png` |
 | 四 | 任务详情的「查看注释缺口」按钮 | 注释缺口页的计数行与列表 | 点「查看注释缺口」→ 读计数行 | 计数行写出注释位点总数，与 `symbols.json` 里的条数一致；列表里每一行都能点开看代码证据 | `journey-4-注释缺口.png` |
 
+## 九个目录未达成时的降级说法（答辩现场照念，不现场组织）
+
+> **这一节解决什么**（第二百六十轮，简报 P0-2）：本文件开头那句「空目录 = 未达成」说的是**判据**，
+> 但没说**未达成时答辩现场怎么念**。到期日 2026-11-20 那天机器仍不可得时，现场要一句话说清
+> 「这个目录对应哪条验收、没达成时 G-D5 那一格标什么」——此前这一步靠人现场组织，而现场组织出来的说法
+> 每场都不一样，最坏的一种是把「没量到」念成「量过了」。这一节把九个目录逐行写成可照念的一句话。
+>
+> **怎么用**：答辩现场按行念第三列，一个字都不用改；被追问「凭什么」时念第四列那一条断言名
+> （它真的在 `ApifoxHelper.Tests/` 里，写错一个字母当场红）。**第三列每一句都必须带 `[ ]`**——
+> 那是 G-D5 那一格在未达成时的标记，念的时候不许把它念成「已达成」。
+>
+> **机械门**：`ApifoxHelper.Tests/RealMachineEvidenceTests.cs` 的
+> `RealMachineEvidenceTests.DegradeStatements_CoverEveryArchiveDirectory` 判五件事——① 九个目录各一行、
+> 不多不少（多一个清单外的目录即红）；② 每行四格不空；③ 第三列 ≤80 字且带 `[ ]`；
+> ④ 第四列点到的断言名真的在测试工程里（或点到 `docs/NOTES.md` 的某一轮）；
+> ⑤ 第二列写的「第 N 条」与产出物清单里声明这个目录的那一行**同一个号**（写错号即红）。
+> 判据自己抓不抓得住由 `RealMachineEvidenceTests.DegradeStatementDetector_ReportsTheBreaksItMustCatch`
+> 拿七发注入当场验。**它不判真机有没有跑**，也不判这些说法念出来好不好听——它只保证
+> 「九个目录每一个都有一句可照念的话，且那句话指得到仓里的实物」。
+
+| 归档目录 | 对应验收 | 未达成时的降级说法（≤80 字，照念） | 指到哪（断言 / 轮次） |
+| --- | --- | --- | --- |
+| `docs/evidence/real-machine/journey/` | G-D5 第 1 条 | 首程四站只在 wine 走通，真机未验；第 1 条保持 [ ]，不念「已走通」。 | `RealMachineEvidenceTests.CheckedAction_RequiresItsArchiveDirectoryToHoldFiles` |
+| `docs/evidence/real-machine/100/` | G-D5 第 2 条 | 100% 档无真机截图；三档缺一档即整条不勾，第 2 条保持 [ ]。 | `RealMachineEvidenceTests.Readme_MeasureKeys_AreAllNamedByTheActionListRow` |
+| `docs/evidence/real-machine/125/` | G-D5 第 2 条 | 125% 档无真机截图；同上，第 2 条保持 [ ]，不拿模拟器读数顶。 | `RealMachineEvidenceTests.DpiPlaceholder_ExpandsToAllThreeTiersAndBothCellsNameThem` |
+| `docs/evidence/real-machine/200/` | G-D5 第 2 条 | 200% 档无真机截图；同上，第 2 条保持 [ ]，不拿模拟器读数顶。 | `RealMachineEvidenceTests.DpiPlaceholder_ExpandsToAllThreeTiersAndBothCellsNameThem` |
+| `docs/evidence/real-machine/mixed-dpi/` | G-D5 第 3 条 | 副屏拖动未量；第 3 条保持 [ ]，念「混合 DPI 无真机读数」。 | `RealMachineEvidenceTests.DpiChangeNumbers_HaveOneNamedLandingLineEach` |
+| `docs/evidence/real-machine/scale-change/` | G-D5 第 4 条 | 运行中改档未量；第 4 条保持 [ ]，念「两屏是否跟随未验」。 | `RealMachineEvidenceTests.DpiChangeNumbers_HaveOneNamedLandingLineEach` |
+| `docs/evidence/real-machine/fonts/` | G-D5 第 5 条 | 字体命中名未核；第 5 条保持 [ ]，念「三类文字实际字体未验」。 | `RealMachineEvidenceTests.ActionRunbook_NamesOnlyPresetControlSlotsAndRealArchiveFiles` |
+| `docs/evidence/real-machine/apifox-write/` | G-D5 第 6 条 | 真实写入未跑；第 6 条保持 [ ]，SHARED-3/4/7/8 仍 [ ]，不拿 mock 顶。 | `AcceptanceChecklistTests.Checklist_RealMachineGate_IsStillUnmetAndSaysSo` |
+| `docs/evidence/real-machine/smoke/` | G-D5 第 7 条 | 真机冒烟未跑；第 7 条保持 [ ]，念「报告出自 wine 模拟器」。 | `AcceptanceChecklistTests.Gd5_ExpiryVerdict_IsRecordedWithTheDegradationRunPath` |
+
 ## 什么算过、什么不算过（判据只有这几条）
 
 - **空目录 = 未达成**。目录在、文件不在，等于没跑。

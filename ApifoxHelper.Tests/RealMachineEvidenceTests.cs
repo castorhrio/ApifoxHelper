@@ -1998,4 +1998,216 @@ public class RealMachineEvidenceTests
         Assert.True(sheet.Contains("不判真机有没有跑", StringComparison.Ordinal),
             "这一页没写「不判真机有没有跑」：七步走得通不等于七步走完了，这一句是这一页与「G-D5 已达成」之间唯一的隔断。");
     }
+
+    // ---------- 第二百六十轮（简报 P0-2）：九个目录未达成时的降级说法 ----------
+
+    /// <summary>「降级说法」那一节的标题（二级标题，落在那份 README 里）。</summary>
+    private const string DegradeHeading = "## 九个目录未达成时的降级说法（答辩现场照念，不现场组织）";
+
+    /// <summary>一句降级说法的字数上限（答辩现场照念的一句话，超过这个长度就念不完）。</summary>
+    private const int MaxDegradeChars = 80;
+
+    /// <summary>降级说法的一行：归档目录 / 对应验收 / 照念的那句话 / 指到哪（断言名或轮次）。</summary>
+    internal readonly record struct DegradeRow(string Dir, string Gate, string Statement, string Pointer, int Cells);
+
+    /// <summary>那一节的正文行（标题行到下一个二级标题之前）。</summary>
+    private static string[] DegradeLines(string readmeText)
+    {
+        var lines = readmeText.Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == DegradeHeading);
+        if (start < 0) return [];
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    /// <summary>那一节里点到归档目录的行（表头与分隔行没有目录名，自然被跳过）。</summary>
+    internal static List<DegradeRow> DegradeRows(string readmeText)
+    {
+        var rows = new List<DegradeRow>();
+        foreach (var line in DegradeLines(readmeText))
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            var dirs = DirectoriesIn(cells[0]);
+            if (dirs.Count == 0) continue;
+            rows.Add(new DegradeRow(
+                dirs[0],
+                cells.Count > 1 ? cells[1] : "",
+                cells.Count > 2 ? cells[2] : "",
+                cells.Count > 3 ? cells[3] : "",
+                cells.Count));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// 「九个目录未达成时的降级说法」的判据本体（纯函数：文本进、问题出）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>（第二百六十轮，简报 P0-2）：本文件开头那句「空目录 = 未达成」说的是判据，
+    /// 但<b>没说未达成时答辩现场怎么念</b>。到期日 2026-11-20 那天机器仍不可得时，现场要一句话说清
+    /// 「这个目录对应哪条验收、没达成时 G-D5 那一格标什么」——此前这一步靠人现场组织，
+    /// 而现场组织出来的说法每场都不一样，最坏的一种是把「没量到」念成「量过了」。
+    /// </para>
+    /// <para>
+    /// <b>判五件事</b>：① 九个目录各一行、不多不少（多一个清单外的目录即红）；
+    /// ② 每行四格（目录 / 对应验收 / 照念的那句话 / 指到哪）；③ 那句话 ≤80 字且带 <c>[ ]</c>
+    /// （<c>[ ]</c> 是 G-D5 那一格在未达成时的标记，念的时候不许念成「已达成」）；
+    /// ④ 第四列点到的断言名真的在测试工程里（或点到 <c>docs/NOTES.md</c> 的某一轮）；
+    /// ⑤ 第二列写的「第 N 条」与产出物清单里声明这个目录的那一行<b>同一个号</b>——写错号即红。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机有没有跑</b>（本机没有 Windows 图形子系统），
+    /// 也不判这些说法念出来好不好听——它只保证「九个目录每一个都有一句可照念的话，且那句话指得到仓里的实物」。
+    /// </para>
+    /// </summary>
+    internal static List<string> DegradeProblems(string readmeText)
+    {
+        var problems = new List<string>();
+        if (DegradeLines(readmeText).Length == 0)
+        {
+            problems.Add($"README 缺「{DegradeHeading}」一节：九个目录未达成时，答辩现场没有可照念的一句话。");
+            return problems;
+        }
+
+        var artifacts = ArtifactRows();
+        var rows = DegradeRows(readmeText);
+        var byDir = rows.GroupBy(r => r.Dir, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        foreach (var dir in ExpectedDirectories)
+        {
+            if (!byDir.TryGetValue(dir, out var list))
+            {
+                problems.Add($"docs/evidence/real-machine/{dir}/ 没有降级说法行：未达成时这一条现场只能临时组织说法。");
+                continue;
+            }
+
+            if (list.Count > 1)
+            {
+                problems.Add($"docs/evidence/real-machine/{dir}/ 有 {list.Count} 行降级说法：一个目录一句话，多出来的那句没人判。");
+            }
+
+            var row = list[0];
+            if (row.Cells != 4)
+            {
+                problems.Add($"docs/evidence/real-machine/{dir}/ 那一行不是 4 列（实际 {row.Cells} 列，应为 目录 / 对应验收 / 照念的那句话 / 指到哪）。");
+            }
+
+            if (row.Statement.Length == 0)
+            {
+                problems.Add($"docs/evidence/real-machine/{dir}/ 没写降级说法：那一格空着，现场就得临时编。");
+            }
+            else
+            {
+                if (row.Statement.Length > MaxDegradeChars)
+                {
+                    problems.Add($"docs/evidence/real-machine/{dir}/ 的降级说法 {row.Statement.Length} 字（上限 {MaxDegradeChars}）：照念的一句话念不完。");
+                }
+
+                if (!row.Statement.Contains("[ ]", StringComparison.Ordinal))
+                {
+                    problems.Add($"docs/evidence/real-machine/{dir}/ 的降级说法没写「[ ]」：未达成时 G-D5 那一格标什么，念的人会念成「已达成」。");
+                }
+            }
+
+            if (!CitesRealArtifact(row.Pointer))
+            {
+                problems.Add($"docs/evidence/real-machine/{dir}/ 的「指到哪」没指到仓内实物（断言名要真的在测试工程里，或点到 docs/NOTES.md 的某一轮）："
+                    + "被追问「凭什么」时念不出出处。");
+            }
+
+            var declared = artifacts
+                .Where(a => DirectoriesIn(a.DirCell).Contains(dir, StringComparer.Ordinal))
+                .Select(a => a.Action)
+                .Distinct()
+                .ToList();
+            var named = Regex.Matches(row.Gate, @"第\s*(\d+)\s*条")
+                .Select(m => int.Parse(m.Groups[1].Value))
+                .Distinct()
+                .ToList();
+            if (named.Count != 1 || !declared.Contains(named[0]))
+            {
+                problems.Add($"docs/evidence/real-machine/{dir}/ 的「对应验收」写的是「{row.Gate}」，"
+                    + $"而产出物清单里声明这个目录的是第 {string.Join("、", declared)} 条：号写错，现场会按另一条动作答辩。");
+            }
+        }
+
+        foreach (var dir in byDir.Keys.Where(d => !ExpectedDirectories.Contains(d, StringComparer.Ordinal)))
+        {
+            problems.Add($"docs/evidence/real-machine/{dir}/ 不在九个归档目录里：多一个目录就是多一句没人判的说法。");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 九个归档目录每一个都有一句可照念的降级说法（第二百六十轮，简报 P0-2）。
+    /// <para>
+    /// 判据本体在 <see cref="DegradeProblems"/>；这一条只负责「真 README 上零问题」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DegradeStatements_CoverEveryArchiveDirectory()
+    {
+        var problems = DegradeProblems(ReadmeText());
+        Assert.True(problems.Count == 0,
+            "九个目录的降级说法有 " + problems.Count + " 处问题：\n  " + string.Join("\n  ", problems)
+            + "\n口径：到期日 2026-11-20 那天机器仍不可得时，现场按这一节逐行照念，不现场组织说法。");
+    }
+
+    /// <summary>
+    /// 降级说法那一节的判据自己抓得住它该抓的那几发（注入自验，同 <c>SourceDriftDetector_ReportsTheBreaksItMustCatch</c>）。
+    /// <para>
+    /// 七发破坏各喂一遍：① 删掉 <c>fonts/</c> 那一行；② 把 <c>journey/</c> 的说法清空；
+    /// ③ 说法写到 85 字；④ 说法里不写 <c>[ ]</c>；⑤ 指到一条不存在的断言；
+    /// ⑥ 多一行清单外的目录；⑦ 把 <c>smoke/</c> 的「第 7 条」写成「第 3 条」。
+    /// 合规的那一份不许被报——否则这条门只会被整条注释掉。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DegradeStatementDetector_ReportsTheBreaksItMustCatch()
+    {
+        var text = ReadmeText();
+        Assert.Empty(DegradeProblems(text));
+
+        string RowOf(string dir) => DegradeLines(text).First(l => l.Contains("real-machine/" + dir + "/", StringComparison.Ordinal));
+
+        // ① 删掉一行。
+        var dropped = text.Replace(RowOf("fonts"), "", StringComparison.Ordinal);
+        Assert.Contains(DegradeProblems(dropped), p => p.Contains("real-machine/fonts/", StringComparison.Ordinal));
+
+        // ② 说法清空。
+        var emptied = text.Replace(RowOf("journey"), WithStatement(RowOf("journey"), ""), StringComparison.Ordinal);
+        Assert.Contains(DegradeProblems(emptied), p => p.Contains("real-machine/journey/", StringComparison.Ordinal) && p.Contains("没写降级说法", StringComparison.Ordinal));
+
+        // ③ 说法超长。
+        var longOne = text.Replace(RowOf("journey"), WithStatement(RowOf("journey"), new string('字', 82) + " [ ]"), StringComparison.Ordinal);
+        Assert.Contains(DegradeProblems(longOne), p => p.Contains("上限", StringComparison.Ordinal));
+
+        // ④ 说法里没有 [ ]。
+        var noMark = text.Replace(RowOf("journey"), WithStatement(RowOf("journey"), "首程四站真机未验，第 1 条保持未达成。"), StringComparison.Ordinal);
+        Assert.Contains(DegradeProblems(noMark), p => p.Contains("[ ]", StringComparison.Ordinal));
+
+        // ⑤ 指到一条不存在的断言。
+        var badPointer = text.Replace(RowOf("journey"), WithStatement(RowOf("journey"), "首程四站真机未验；第 1 条保持 [ ]。", "`RealMachineEvidenceTests.NoSuchAssertion`"), StringComparison.Ordinal);
+        Assert.Contains(DegradeProblems(badPointer), p => p.Contains("指到哪", StringComparison.Ordinal));
+
+        // ⑥ 多一行清单外的目录。
+        var extra = text.Replace(RowOf("smoke"), RowOf("smoke") + "\n| `docs/evidence/real-machine/dpi-150/` | G-D5 第 2 条 | 多出来的一档；第 2 条保持 [ ]。 | `RealMachineEvidenceTests.Readme_ExistsAndSaysAnEmptyDirectoryMeansUnmet` |", StringComparison.Ordinal);
+        Assert.Contains(DegradeProblems(extra), p => p.Contains("dpi-150/", StringComparison.Ordinal));
+
+        // ⑦ 对应验收的号写错。
+        var wrongGate = text.Replace(RowOf("smoke"), RowOf("smoke").Replace("G-D5 第 7 条", "G-D5 第 3 条", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains(DegradeProblems(wrongGate), p => p.Contains("对应验收", StringComparison.Ordinal));
+    }
+
+    /// <summary>把一行表格的「照念的那句话」（第 3 格）与「指到哪」（第 4 格）换掉，其余格原样保留。</summary>
+    private static string WithStatement(string rowLine, string statement, string? pointer = null)
+    {
+        var cells = rowLine.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+        cells[2] = statement;
+        if (pointer is not null) cells[3] = pointer;
+        return "| " + string.Join(" | ", cells) + " |";
+    }
 }
