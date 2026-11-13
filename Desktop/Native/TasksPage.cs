@@ -85,7 +85,11 @@ internal sealed class TasksPage : UserControl, INativePage
 
     // 三阶段进度条（口径在 StageSteps）：三格 ghost 按钮 + 一句「点一下会发生什么」，
     // 点一下滚到对应分区（冻结页面 stepper 点一下切到该阶段页签的同一手势）。
-    private readonly FlowLayoutPanel _stepper = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+    // 按可用宽换行是量出来的，不是猜的：wine 96 档截图逐像素扫到第一格白面 228px 宽、第二格从 272px
+    // 起、到 402px 就被网格右边界截断（「未核」只剩半个字），第三格整格在可视区之外，详情区因此挂出
+    // 一条横向滚动条。网格那一格 402px 是 RunDetailBreak 每一档都念的数。不换行时这一行读不全，
+    // 而它恰恰是「三个阶段各到哪一步」的唯一凭据。
+    private readonly FlowLayoutPanel _stepper = new() { AutoSize = true, WrapContents = true, Margin = new Padding(0) };
     private readonly Button[] _stepButtons;
     private readonly Label _stepperHint = Ui.Caption(StageSteps.JumpHint);
     // 三个分区的标题控件：进度条点击的滚动落点（文字取 StageSteps 常量，本页不就地拼）。
@@ -348,6 +352,10 @@ internal sealed class TasksPage : UserControl, INativePage
         _detailHint = Ui.Caption("选择左侧任务查看阶段进度。");
         _detailHint.Dock = DockStyle.Fill;
         _detailHint.TextAlign = ContentAlignment.MiddleCenter;
+        // Ui.Caption 出厂是 AutoSize 标签：AutoSize 盖掉 Dock 给的尺寸，这一句就缩成文字本身那么大、
+        // 停在栏的左上角（wine 截图量到在栏顶），而 MiddleCenter 什么也没居中。关掉 AutoSize，
+        // Dock=Fill 才真的把这格铺满，居中才有对象。
+        _detailHint.AutoSize = false;
 
         // 清单区形状（发丝边 + 叠在前面的空态）取 Ui.ListHost 一份：两页同一份，z 序只在那里定。
         _split.Panel1.Controls.Add(Ui.ListHost(_list, _empty));
