@@ -73,17 +73,17 @@ internal sealed class GenerationDialog : DpiAwareForm
         var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);
 
         AddSection(grid, "注释草稿生成");
-        AddRow(grid, "生成方式", _mode);
-        AddRow(grid, "服务地址", Ui.Field(_baseUrl));
+        Ui.FieldRow(grid, "生成方式", _mode);
+        Ui.FieldRow(grid, "服务地址", Ui.Field(_baseUrl));
         Ui.HintRow(grid, "例如 https://api.openai.com/v1；只发送用户确认的材料。");
-        AddRow(grid, "模型", Ui.Field(_model));
-        AddRow(grid, "超时秒数", Field(_timeout, GenerationEntries.FieldTimeoutSeconds));
-        AddRow(grid, "每批数量", Field(_batch, GenerationEntries.FieldMaxSlotsPerRequest));
+        Ui.FieldRow(grid, "模型", Ui.Field(_model));
+        Ui.FieldRow(grid, "超时秒数", Field(_timeout, GenerationEntries.FieldTimeoutSeconds));
+        Ui.FieldRow(grid, "每批数量", Field(_batch, GenerationEntries.FieldMaxSlotsPerRequest));
         Ui.HintRow(grid, "每次请求最多包含的注释位置数；数字留空用默认值。");
 
         AddSection(grid, "服务密钥");
         _key.Width = 280;
-        AddRow(grid, "服务密钥", Row(Ui.Field(_key), _saveKeyButton));
+        Ui.FieldRow(grid, "服务密钥", Row(Ui.Field(_key), _saveKeyButton));
         Ui.HintRow(grid, GenerationEntries.KeyHint + "。");
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
@@ -219,18 +219,6 @@ internal sealed class GenerationDialog : DpiAwareForm
         var caption = SectionCaption(text);
         grid.Controls.Add(caption, 0, row);
         grid.SetColumnSpan(caption, 2);
-    }
-
-    private void AddRow(TableLayoutPanel grid, string label, Control field)
-    {
-        var row = grid.RowCount;
-        grid.RowCount = row + 1;
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        var caption = Ui.Body(label);
-        caption.Margin = new Padding(0, UiTokens.Sm, UiTokens.Sm, UiTokens.Xs);
-        grid.Controls.Add(caption, 0, row);
-        field.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
-        grid.Controls.Add(field, 1, row);
     }
 
     private void SetStatus(string message, Color color)

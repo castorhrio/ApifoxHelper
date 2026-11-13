@@ -309,6 +309,41 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 两列字段网格里的字段行（一行一个编辑位）：标签列一句 <c>Body</c>、字段列放调用方交进来的那个控件。
+    /// <para>
+    /// <b>为什么要有这一处</b>（第 1 站剩下的那一半，具名 pass：distill）：「模块与模板 / 序列化与分析 /
+    /// 模型服务」三个配置子对话框各带一份<b>逐字相同</b>的私有 <c>AddRow</c>——同一件事三种写法，
+    /// 与第二百零六轮收掉的那三份私有 <c>AddHint</c> 是同一个形状。收成一处之后，三个对话框再改
+    /// 行内留白就只有这一处可改。
+    /// </para>
+    /// <para>
+    /// <b>顺带并进来的那一支守卫</b>：行容器（<c>FlowLayoutPanel</c>）自己排布行内留白，外层不再加——
+    /// 这一支此前只在配置页与新建任务页那两份私有 <c>AddRow</c> 里（第二百二十二轮在 wine 量过：
+    /// 容器里最高的控件是按钮，再套一层留白就把行撑高）。三个子对话框的副本没有它，于是
+    /// 「模型服务」的服务密钥那一行与「模块与模板」的从既有接口提取那一行各被外层多套 4+4：
+    /// wine 96 档实测 48px，而容器自己只有 40px（内含 FieldBox 23px / Button 40px）。
+    /// </para>
+    /// <para>
+    /// 本工厂只管形状不管文字，也不管标签列为空那一支：那三个对话框的提示行自第二百零六轮起
+    /// 一律走 <see cref="HintRow"/>，字段行没有「空标签」这种调用。两个主页面各自的字段网格
+    /// 用的是另一套行内留白（配置页标签上留白 <c>Xs</c> 且左对齐锚定、任务页标签上留白 <c>Md</c>
+    /// 且字段下留白 <c>Sm</c>），它们各自的行高在 wine 有别的段量过，本轮不折进这一处。
+    /// </para>
+    /// </summary>
+    public static void FieldRow(TableLayoutPanel grid, string label, Control field)
+    {
+        var row = grid.RowCount;
+        grid.RowCount = row + 1;
+        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var caption = Ui.Body(label);
+        caption.Margin = new Padding(0, UiTokens.Sm, UiTokens.Sm, UiTokens.Xs);
+        grid.Controls.Add(caption, 0, row);
+        // 行容器自己排布行内留白（Row 出厂时把 Margin 置 0），外层再套 4+4 就是 8px 死空白。
+        if (field is not FlowLayoutPanel) field.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
+        grid.Controls.Add(field, 1, row);
+    }
+
+    /// <summary>
     /// 两列字段网格（DESIGN.md §6「两列字段网格」，第一百二十三轮）：左列字段名固定宽、右列输入框吃剩余宽度，
     /// 列宽随网格<b>当前</b>宽度重算——配置编辑、新建任务与三个配置子对话框共用这一份形状。
     /// <para>

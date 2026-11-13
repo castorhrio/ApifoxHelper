@@ -64,37 +64,37 @@ internal sealed class ProfileAnalysisDialog : DpiAwareForm
         var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);
 
         AddSection(grid, "序列化与响应封装");
-        AddRow(grid, "JSON 命名", _naming);
-        AddRow(grid, "枚举输出为字符串", _enumAsString);
-        AddRow(grid, "非空引用类型", _nonNullable);
+        Ui.FieldRow(grid, "JSON 命名", _naming);
+        Ui.FieldRow(grid, "枚举输出为字符串", _enumAsString);
+        Ui.FieldRow(grid, "非空引用类型", _nonNullable);
         Ui.HintRow(grid, "与 Swashbuckle SupportNonNullableReferenceTypes 一致。");
         _wrappers.Height = 64;
-        AddRow(grid, "通用响应封装", Ui.Field(_wrappers));
+        Ui.FieldRow(grid, "通用响应封装", Ui.Field(_wrappers));
         Ui.HintRow(grid, "每行：类型名=数据属性名，例如 PNOSActionResult=Data；用于追踪 data 的实际类型（响应契约）。");
 
         AddSection(grid, "代码分析");
-        AddRow(grid, "分析配置名", Ui.Field(_configuration));
-        AddRow(grid, "编译常量", Ui.Field(_symbols));
+        Ui.FieldRow(grid, "分析配置名", Ui.Field(_configuration));
+        Ui.FieldRow(grid, "编译常量", Ui.Field(_symbols));
         Ui.HintRow(grid, "留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。");
-        AddRow(grid, "调用深度", Field(_depth, ProfileAnalysis.FieldMaxTraceDepth));
-        AddRow(grid, "方法预算", Field(_budget, ProfileAnalysis.FieldMaxMethodsPerEndpoint));
+        Ui.FieldRow(grid, "调用深度", Field(_depth, ProfileAnalysis.FieldMaxTraceDepth));
+        Ui.FieldRow(grid, "方法预算", Field(_budget, ProfileAnalysis.FieldMaxMethodsPerEndpoint));
         Ui.HintRow(grid, "数字留空用默认值。");
         _xmlDocPaths.Height = 56;
-        AddRow(grid, "XML 文档路径", Field(_xmlDocPaths, ProfileAnalysis.FieldXmlDocPaths));
+        Ui.FieldRow(grid, "XML 文档路径", Field(_xmlDocPaths, ProfileAnalysis.FieldXmlDocPaths));
         Ui.HintRow(grid, "可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。");
-        AddRow(grid, "去掉 Async 后缀", _suppressAsync);
+        Ui.FieldRow(grid, "去掉 Async 后缀", _suppressAsync);
         Ui.HintRow(grid, "与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。");
 
         AddSection(grid, "质量规则");
-        AddRow(grid, "通用 data 属性名", Ui.Field(_dataProperty));
-        AddRow(grid, "参数说明必填", _requireParam);
-        AddRow(grid, "字段说明必填", _requireProperty);
+        Ui.FieldRow(grid, "通用 data 属性名", Ui.Field(_dataProperty));
+        Ui.FieldRow(grid, "参数说明必填", _requireParam);
+        Ui.FieldRow(grid, "字段说明必填", _requireProperty);
 
         AddSection(grid, "Apifox CLI");
-        AddRow(grid, "读取并发", Field(_concurrency, ProfileAnalysis.FieldReadConcurrency));
+        Ui.FieldRow(grid, "读取并发", Field(_concurrency, ProfileAnalysis.FieldReadConcurrency));
         Ui.HintRow(grid, "只读详情的并发数（1–8）；写入始终串行。");
-        AddRow(grid, "node 路径", Ui.Field(_nodePath));
-        AddRow(grid, "cli.js 路径", Ui.Field(_cliPath));
+        Ui.FieldRow(grid, "node 路径", Ui.Field(_nodePath));
+        Ui.FieldRow(grid, "cli.js 路径", Ui.Field(_cliPath));
         Ui.HintRow(grid, "可选；为空时自动查找 PATH 与全局 npm 目录。");
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
@@ -218,18 +218,6 @@ internal sealed class ProfileAnalysisDialog : DpiAwareForm
         var caption = SectionCaption(text);
         grid.Controls.Add(caption, 0, row);
         grid.SetColumnSpan(caption, 2);
-    }
-
-    private void AddRow(TableLayoutPanel grid, string label, Control field)
-    {
-        var row = grid.RowCount;
-        grid.RowCount = row + 1;
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        var caption = Ui.Body(label);
-        caption.Margin = new Padding(0, UiTokens.Sm, UiTokens.Sm, UiTokens.Xs);
-        grid.Controls.Add(caption, 0, row);
-        field.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
-        grid.Controls.Add(field, 1, row);
     }
 
     private void SetStatus(string message, Color color)
