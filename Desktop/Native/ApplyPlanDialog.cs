@@ -142,7 +142,7 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
             if (_plan is { } plan) PopulateSkipped(plan);
         };
         _skippedHost = new Panel { Dock = DockStyle.Bottom, Height = 180, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
-        var skippedCaption = Ui.Caption("跳过的位置（原因如下；处理后重新生成计划）");
+        var skippedCaption = Ui.Caption("跳过的位置：这些注释位置本次不写回源码，每条为什么写在「原因」列；改完点「重新生成计划」。");
         skippedCaption.Dock = DockStyle.Top;
         var skippedInner = Ui.Hairline(_skippedList);
         skippedInner.Dock = DockStyle.Fill;
@@ -416,7 +416,7 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
 
     /// <summary>
     /// 跳过清单（DESIGN.md §6「列表列排序」，第一百零八轮）：整份计划里没能生成修改的注释位置，
-    /// 每个被跳过的候选一行（位置 + 原因）。这一屏的说明行写着「跳过的位置（原因如下；处理后重新生成计划）」，
+    /// 每个被跳过的候选一行（位置 + 原因）。这一屏的说明行写着「跳过的位置：这些注释位置本次不写回源码，每条为什么写在「原因」列；改完点「重新生成计划」。」，
     /// 要按原因处理就得先把同一原因的集中看——排序键取 <see cref="ApplyPlanSort.SkippedKey"/> 单一口径
     /// （与两格同源），界面不就地写 switch。
     /// 跳过清单没有选中语义（没有详情区、没有动作挂在它上面），故排序只改呈现顺序：

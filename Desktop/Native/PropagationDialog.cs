@@ -121,7 +121,7 @@ internal sealed class PropagationDialog : DpiAwareForm
         detailHost.Controls.Add(detailInner);
         detailHost.Controls.Add(detailCaption);
 
-        var xmlCaption = Ui.Caption("XML 文档文件（早于源码修改的可能是旧生成物）");
+        var xmlCaption = Ui.Caption("XML 文档文件：「更新时间」那一格里标着「早于源码修改」的是旧生成物，不算注释已生效。");
         xmlCaption.Dock = DockStyle.Top;
         var xmlInner = Ui.Hairline(_xmlList);
         xmlInner.Dock = DockStyle.Fill;

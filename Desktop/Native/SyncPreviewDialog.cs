@@ -262,7 +262,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         var excludedInner = Ui.Hairline(_excludedList);
         excludedInner.Dock = DockStyle.Fill;
         excludedInner.Height = 92;
-        var excludedCaption = Ui.Caption("未纳入计划（原因如下；处理后重新检查、重新生成同步预览）");
+        var excludedCaption = Ui.Caption("未纳入计划（为什么没进这份计划，「未纳入原因」那一列逐条写着；要重做先点「重新选择接口」）");
         excludedCaption.Dock = DockStyle.Top;
         // 筛选行取工厂（第六十八轮立的形状）：这一屏只有关键词框、没有筛选下拉，计数在表头行，故 counts 传 null。
         // 底色随本页（Bg）：工厂给的是对话框的 Panel 底，这一页是页面底。

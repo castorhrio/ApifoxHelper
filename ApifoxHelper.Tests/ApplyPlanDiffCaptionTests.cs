@@ -9,7 +9,7 @@ namespace ApifoxHelper.Tests;
 /// 而那块只读框此前没有标题——另六处底部/详情预览区都有（检查结果「选中接口的结构差异…」、
 /// 核对传播「选中条目的说明文字…」、代码证据 <c>EvidenceEntries.SnippetCaption</c>、
 /// 同步预览「选中动作的写入内容…」与「共享模型对范围外接口的影响…」、本对话框的跳过清单
-/// 「跳过的位置（原因如下…）」）：同一只壳里同一个动作在别处有、在这一处没有，属同壳不同行为，
+/// 「跳过的位置：……每条为什么写在「原因」列……」）：同一只壳里同一个动作在别处有、在这一处没有，属同壳不同行为，
 /// 按第五十五、五十七、五十九轮那条判据判定为缺口，不是偏好。
 /// 说明行讲清三件事：这块框是什么（选中文件的注释差异）、改的是什么（只改 /// 注释行）、
 /// 与回写的关系（与回写时写入的内容一致）——用户不必先点一行再猜。
@@ -94,7 +94,10 @@ public class ApplyPlanDiffCaptionTests
         // 这一屏的两块只读区（跳过清单、差异预览）都有说明行：不留一块没有标题的框。
         var source = Repo.Source("Desktop", "Native", File);
         Assert.Equal(2, Regex.Matches(source, @"Ui\.Caption\(").Count);
-        Assert.Contains("Ui.Caption(\"跳过的位置（原因如下；处理后重新生成计划）\")", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "Ui.Caption(\"跳过的位置：这些注释位置本次不写回源码，每条为什么写在「原因」列；改完点「重新生成计划」。\")",
+            source,
+            StringComparison.Ordinal);
         Assert.Contains("Ui.Caption(ApplyPlanEntries.DiffCaption)", source, StringComparison.Ordinal);
     }
 
