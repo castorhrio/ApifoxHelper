@@ -63,7 +63,9 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        DpiScale.Apply(this, new Size(780, 620));
+        // 窗体高按「结果区要给几行」算（CapabilitiesLayout）：620 时结果区只剩 82px、清单本体 39px，
+        // 而一次探测登记 7 条检查——跑完要滚动才看得全（第二百四十七轮 wine 96 档实测）。
+        DpiScale.Apply(this, new Size(780, CapabilitiesLayout.DialogHeight));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

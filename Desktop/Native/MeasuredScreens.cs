@@ -130,10 +130,11 @@ internal static class MeasuredScreens
         new("完整旅程（一条任务走到底）", "RunFullJourney",
             ["ProfileDialog", "NewTaskDialog", "CandidatesDialog", "ApplyPlanDialog"], true, "第一百三十九轮",
             "docs/NOTES.md 第一百三十九轮：八段按 README「使用流程」1–9 步里不触碰 Apifox 写入的那几站走完"),
+        new("连接与写入探测", "RunCapabilitiesShown",
+            ["CapabilitiesDialog"], true, "第二百四十七轮",
+            "docs/NOTES.md 第二百四十七轮：真的 Show() 出来之后量到结果区只剩 82px、清单本体 39px（装得下 1 行），窗体高改按「结果区要给几行」算"),
 
         // ── 未量：冒烟器只 new 一次 + 建句柄，从不显示 ──
-        new("连接与写入探测", "Cases", ["CapabilitiesDialog"], false, "第二百四十三轮",
-            "docs/NOTES.md 第二百四十三轮：冒烟器每一段都只「建句柄 + CreateControl + PerformLayout」，从不显示窗体——这一屏至今只被构造过"),
         new("契约检查结果", "Cases", ["CheckResultsDialog"], false, "第二百四十三轮",
             "docs/NOTES.md 第二百四十三轮：同一句挂账——只构造不显示的屏，ClientSize 的高是 0，量到的数不能读成「放得下」"),
         new("接口追踪明细", "RunActionRowFit", ["EndpointTraceDialog"], false, "第二百四十三轮",

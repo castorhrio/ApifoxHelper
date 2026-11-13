@@ -288,6 +288,9 @@ internal static class Program
         Section("按钮行高度（八屏按钮行量行高与最高按钮，真实控件）", nameof(RunActionRowFit));
         RunActionRowFit(services, dataRoot);
 
+        Section("连接与写入探测真的显示出来（四块停靠区高度对客户区、结果区装得下七项探测结果、清单不出横向滚动条，真实控件量）", nameof(RunCapabilitiesShown));
+        RunCapabilitiesShown(services, dataRoot);
+
         Section("完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）", nameof(RunFullJourney));
         RunFullJourney(services, dataRoot);
 
@@ -6204,6 +6207,126 @@ internal static class Program
                 throw new InvalidOperationException(
                     "预览页的竖直预算不成立：" + string.Join("、", shortOf) +
                     "——本轮开工前实测到的正是「写入清单 0 行」（写死的 190 / 130 / 150 三块把主清单挤没了），这一处不得读成通过。");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 连接与写入探测这一屏「真的显示出来」之后量一次（第二百四十七轮，简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百四十六轮把「哪些屏真的显示过」登记成表并配了门，登记里这一屏
+    /// （<c>CapabilitiesDialog</c>）标的是<b>未量</b>——它至今只被 <c>Cases</c> 里 <c>new</c> 一次 + 建句柄，
+    /// 而一张没显示过的窗体 <c>ClientSize</c> 的高是 0，量到的数不能读成「放得下」。这一屏在产品故事里是
+    /// 「写入前先探测」的入口（F02），也是答辩最可能被点名的一屏：四块停靠区怎么分、探测结果七项装不装得下、
+    /// 清单会不会出横向滚动条，此前<b>一个数都没有</b>。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：真的 <c>Show()</c> 出来（<c>OnLoad</c> 会去查 CLI / 登录 / 项目读取，本环境查不到，
+    /// 那是产品路径上的失败态，不影响几何），然后读三件事——① 四块停靠区（连接检查 / 探测区 / 结果区 / 状态行）
+    /// 的高度加起来是不是等于客户区高（停靠分法不漏不叠）；② 结果清单装下七行之后出不出竖向滚动条
+    /// （七项 = 服务层探测登记的检查条数：读取测试接口 / 分支隔离 / 原样写回说明 / 临时修改说明 / 恢复说明 /
+    /// 整段写回参数请求体响应 / 导出概览与详情的引用一致）；③ 列宽合计对清单可视宽（出不出横向滚动条）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判观感（字体、留白、按钮热区随 G-D5 真机复核），不判探测本身跑不跑得通
+    /// （那要真实 Apifox 测试接口），也不判「这一屏该不该这么分」——量的是现状。判据只在设计档成立：
+    /// 125% / 200% 档窗体被虚拟屏截断，那一刻的行数属于「量不到」而不是「放不下」（与 <c>RunListColumnFit</c>
+    /// 同一取舍）。<b>这一跑是 wine + Xvfb 模拟器，不是真机。</b>
+    /// </para>
+    /// </summary>
+    private static void RunCapabilitiesShown(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var jobs = services.GetRequiredService<JobRunner>();
+        var profile = profiles.List().First();
+
+        RunAction("连接与写入探测：真的显示出来之后，四块停靠区高度加起来等于客户区、结果区装得下七项探测结果、清单不出横向滚动条（真实控件量）", () =>
+        {
+            using var dialog = new CapabilitiesDialog(services.GetRequiredService<CompatService>(), store, jobs, profile);
+            dialog.Show();
+            Application.DoEvents();
+
+            // 四块停靠区按产品自己的停靠方式认（结果区 Fill、连接检查与探测区 Top、状态行 Bottom）：
+            // 认不出就点名，不按控件顺序猜。
+            var docked = dialog.Controls.Cast<Control>().ToList();
+            var result = docked.SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的结果区：停靠分法变了，本段量测口径需要重定。");
+            var status = docked.SingleOrDefault(control => control.Dock == DockStyle.Bottom)
+                ?? throw new InvalidOperationException("这一屏没有底部状态行宿主：停靠分法变了，本段量测口径需要重定。");
+            var tops = docked.Where(control => control.Dock == DockStyle.Top).ToList();
+            if (tops.Count != 2)
+            {
+                throw new InvalidOperationException($"顶部停靠区有 {tops.Count} 块，期望 2 块（连接检查 + 探测区）：本段量测口径需要重定。");
+            }
+
+            var list = FindAll<ListView>(dialog).SingleOrDefault()
+                ?? throw new InvalidOperationException("这一屏找不到探测结果清单：本段量测口径需要重定。");
+            // 结果清单在产品路径上由探测结果打开（FinishProbe 里 Visible = true）；本段把它置为可见再量，
+            // 量的是同一块区域的高度，不是产品状态（与 RunListColumnFit 补夹具行同一取舍）。
+            list.Visible = true;
+            dialog.PerformLayout();
+            Application.DoEvents();
+
+            var client = dialog.ClientSize;
+            var sum = result.Height + tops.Sum(control => control.Height) + status.Height;
+            var columns = list.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
+            var columnSum = columns.Sum();
+            var visible = list.ClientSize.Width;
+
+            // 七项 = 服务层探测登记的检查条数：这个数收在 CapabilitiesLayout.ProbeRows 一处，
+            // 本段不抄第二份（服务层多一条检查而预算没跟，CapabilitiesLayoutTests 当场红）。
+            const int ProbeChecks = CapabilitiesLayout.ProbeRows;
+            var emptyHeight = list.ClientSize.Height;
+            list.BeginUpdate();
+            for (var i = 0; i < ProbeChecks; i++)
+            {
+                // 夹具行的文字取表头名：几何是真的，语义是假的（与 RunListColumnFit 补行同一纪律）。
+                list.Items.Add(new ListViewItem(list.Columns.Cast<ColumnHeader>().Select(column => $"{column.Text}-补{i}").ToArray()));
+            }
+            list.EndUpdate();
+            Application.DoEvents();
+
+            var rowHeight = list.Items.Count > 0 ? Math.Max(1, list.Items[0].Bounds.Height) : Math.Max(1, list.Font.Height);
+            // 最后一行底边对清单可视高：这是「装不装得下」的直接读数，滚动条样式位只是它的一个后果。
+            // 两者一起记，是因为「行数刚好等于可视高」时滚动条仍可能因为表头占位而出现——
+            // 只念滚动条会让人以为是行高算错了（本轮第一版就撞在这里：清单 147px、7 × 21 = 147px，滚动条仍在）。
+            var lastBottom = list.Items.Count > 0 ? list.Items[^1].Bounds.Bottom : 0;
+            var vertical = HasScrollBar(list, WsVscroll);
+            var horizontal = HasScrollBar(list, WsHscroll);
+
+            _lines.Add(
+                $"     连接与写入探测：{DpiContext(dialog)}、窗体客户区 {client.Width}×{client.Height}px；" +
+                $"四块停靠区 连接检查 {tops[0].Height}px + 探测区 {tops[1].Height}px + 结果区 {result.Height}px + 状态行 {status.Height}px = {sum}px" +
+                (sum == client.Height ? "（等于客户区高）" : $"（与客户区高差 {sum - client.Height}px）") +
+                $"；结果清单空时高 {emptyHeight}px、装 {ProbeChecks} 行后行高 {rowHeight}px、清单高 {list.ClientSize.Height}px、" +
+                $"第 {ProbeChecks} 行底边 {lastBottom}px（表头占 {lastBottom - ProbeChecks * rowHeight}px）；" +
+                $"列宽 [{string.Join(", ", columns)}] 合计 {columnSum}px 对清单可视宽 {visible}px；" +
+                $"控件自己报的滚动条状态：竖向{(vertical ? "在" : "不在")}、横向{(horizontal ? "在" : "不在")}");
+
+            // 判据只在设计档成立：125% / 200% 档窗体被虚拟屏截断，那一刻的行数属于「量不到」而不是「放不下」。
+            if (DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())) return;
+
+            if (sum != client.Height)
+            {
+                throw new InvalidOperationException(
+                    $"四块停靠区的高度加起来是 {sum}px，客户区高 {client.Height}px（差 {sum - client.Height}px）：" +
+                    "停靠分法漏了一块或叠了一块，这一屏的某一块在真实窗口里会被压掉。");
+            }
+
+            if (vertical || lastBottom > list.ClientSize.Height)
+            {
+                throw new InvalidOperationException(
+                    $"结果清单装 {ProbeChecks} 行（探测登记的检查条数）就出了竖向滚动条：结果区只有 {result.Height}px、" +
+                    $"清单高 {list.ClientSize.Height}px、行高 {rowHeight}px、第 {ProbeChecks} 行底边 {lastBottom}px" +
+                    $"（表头占 {lastBottom - ProbeChecks * rowHeight}px）——探测跑完七项结果要滚动才看得全，" +
+                    "而这一屏正是「写入前先探测」的入口，七项结果该一屏读完。");
+            }
+
+            if (horizontal)
+            {
+                throw new InvalidOperationException(
+                    $"结果清单出了横向滚动条：列宽合计 {columnSum}px 超过清单可视宽 {visible}px——「详情」那一列在真实那一屏上被藏。");
             }
         });
     }

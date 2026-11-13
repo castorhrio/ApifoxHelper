@@ -72,6 +72,8 @@
     <!-- 「哪些屏真的显示过」的登记（第二百四十六轮）：纯数据、不依赖 WinForms，门在 MeasuredScreensTests。 -->
     <Compile Include="..\Desktop\Native\MeasuredScreens.cs" Link="Shared\MeasuredScreens.cs" />
     <Compile Include="..\Desktop\Native\SyncPreviewPanes.cs" Link="Shared\SyncPreviewPanes.cs" />
+    <!-- 「连接与写入探测」的竖直预算（第二百四十七轮）：纯数据、不依赖 WinForms，门在 CapabilitiesLayoutTests。 -->
+    <Compile Include="..\Desktop\Native\CapabilitiesLayout.cs" Link="Shared\CapabilitiesLayout.cs" />
     <Compile Include="..\Desktop\Native\ListSort.cs" Link="Shared\ListSort.cs" />
     <Compile Include="..\Desktop\Native\CheckResultSort.cs" Link="Shared\CheckResultSort.cs" />
     <Compile Include="..\Desktop\Native\EndpointTraceSort.cs" Link="Shared\EndpointTraceSort.cs" />

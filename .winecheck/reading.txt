@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-13
-source=3e74442c2e3952fb9ab15f75360dafbec23465ee
-tier=96 passed=246 failed=0 exit=0
-tier=120 passed=246 failed=0 exit=0
-tier=192 passed=246 failed=0 exit=0
+source=d2f32afc9837f478a9a28b6fe950111f86eb2b8b
+tier=96 passed=247 failed=0 exit=0
+tier=120 passed=247 failed=0 exit=0
+tier=192 passed=247 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -40,6 +40,7 @@ section=RunCaptionFit tier=96 passed=3 failed=0
 section=RunActionHeaderFit tier=96 passed=1 failed=0
 section=RunListColumnFit tier=96 passed=15 failed=0
 section=RunActionRowFit tier=96 passed=8 failed=0
+section=RunCapabilitiesShown tier=96 passed=1 failed=0
 section=RunFullJourney tier=96 passed=10 failed=0
 section=RunEndToEnd tier=120 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=120 passed=6 failed=0
@@ -66,6 +67,7 @@ section=RunCaptionFit tier=120 passed=3 failed=0
 section=RunActionHeaderFit tier=120 passed=1 failed=0
 section=RunListColumnFit tier=120 passed=15 failed=0
 section=RunActionRowFit tier=120 passed=8 failed=0
+section=RunCapabilitiesShown tier=120 passed=1 failed=0
 section=RunFullJourney tier=120 passed=10 failed=0
 section=RunEndToEnd tier=192 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=192 passed=6 failed=0
@@ -92,4 +94,5 @@ section=RunCaptionFit tier=192 passed=3 failed=0
 section=RunActionHeaderFit tier=192 passed=1 failed=0
 section=RunListColumnFit tier=192 passed=15 failed=0
 section=RunActionRowFit tier=192 passed=8 failed=0
+section=RunCapabilitiesShown tier=192 passed=1 failed=0
 section=RunFullJourney tier=192 passed=10 failed=0
