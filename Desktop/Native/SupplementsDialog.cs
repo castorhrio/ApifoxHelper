@@ -182,12 +182,12 @@ internal sealed class SupplementsDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新检查再试。", UiTokens.BadText);
+            ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在「" + PageNames.Tasks + "」页重新检查再试。", UiTokens.BadText);
             return;
         }
         if (_result is null)
         {
-            ShowHint("尚未检查。先在任务页点「开始检查」：补充说明的编辑位（标题、参数、请求体、响应）来自检查结果。", UiTokens.Muted);
+            ShowHint("尚未检查。先在「" + PageNames.Tasks + "」页点「开始检查」：补充说明的编辑位（标题、参数、请求体、响应）来自检查结果。", UiTokens.Muted);
             return;
         }
         try

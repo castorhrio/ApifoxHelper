@@ -54,8 +54,9 @@ public class ShellShortcutsTests
         var shell = Repo.Source("Desktop", "Native", "NativeShellForm.cs");
         // 快捷键只能从共享口径取（entry.Gesture），界面代码不得就地写手势。
         Assert.Matches(@"(?m)^\s*item\.ShortcutKeys = \(Keys\)new KeysConverter\(\)\.ConvertFromString\(entry\.Gesture\)!;", shell);
-        Assert.Matches(@"(?m)^\s*BoundItem\(""项目设置\(&P\)"", ShellShortcuts\.Projects, ShowProjects\),", shell);
-        Assert.Matches(@"(?m)^\s*BoundItem\(""检查任务\(&T\)"", ShellShortcuts\.Tasks, ShowTasks\),", shell);
+        // 菜单项文字与侧栏按钮同源（第二百五十七轮）：页面名只从 PageNames 取，不就地写第二串字面量。
+        Assert.Matches(@"(?m)^\s*BoundItem\(PageNames\.Projects \+ ""\(&P\)"", ShellShortcuts\.Projects, ShowProjects\),", shell);
+        Assert.Matches(@"(?m)^\s*BoundItem\(PageNames\.Tasks \+ ""\(&T\)"", ShellShortcuts\.Tasks, ShowTasks\),", shell);
         Assert.Matches(@"(?m)^\s*BoundItem\(""刷新当前页\(&R\)"", ShellShortcuts\.Refresh, RefreshVisiblePage\),", shell);
         Assert.Matches(@"(?m)^\s*BoundItem\(""筛选当前列表\(&F\)"", ShellShortcuts\.Find, FocusListFilterOnVisiblePage\),", shell);
         Assert.Matches(@"(?m)^\s*help\.DropDownItems\.Add\(BoundItem\(""关于 Apifox 助手\(&A\)"", ShellShortcuts\.About, ShowAbout\)\);", shell);

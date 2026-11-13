@@ -321,15 +321,16 @@ public class LoadFailureStateTests
         Assert.Equal(2, Regex.Matches(load, @"canRetry: true").Count);
         Assert.Contains("LoadFailureState.FailureMessage(LoadFailureState.Decisions.Title", load);
         Assert.Contains("LoadFailureState.FailureMessage(LoadFailureState.Decisions.SavedTitle", load);
-        // 「尚未检查」不是失败态：重试解决不了它，下一步在任务页。
-        Assert.Contains("尚未检查。先在任务页点「开始检查」", load);
+        // 「尚未检查」不是失败态：重试解决不了它，下一步在任务页——页面名从 PageNames 取（第二百五十七轮），
+        // 文案里写的就是侧栏那颗按钮上的字，不写「任务页」这种界面上找不到的简称。
+        Assert.Contains("尚未检查。先在「\" + PageNames.Tasks + \"」页点「开始检查」", load);
         // 提示出口按门控决定「重试」是否出现（筛选空态与「尚未检查」都不显示）。
         var hint = Slice(dialog, "private void ShowHint(string message, Color color", "private void EnableActions(");
         Assert.Matches(@"(?m)^\s*_retry\.Visible = canRetry;", hint);
         // 不再把「关闭后重试」当成下一步（注释里对旧文案的引述不算）。
         var code = CodeOnly(dialog);
         Assert.DoesNotContain("请关闭后重试", code);
-        Assert.DoesNotContain("请关闭后在任务页重新检查再试", code);
+        Assert.DoesNotContain("请关闭后在「\" + PageNames.Tasks + \"」页重新检查再试", code);
     }
 
     [Fact]

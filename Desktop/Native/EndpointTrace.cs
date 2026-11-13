@@ -46,7 +46,7 @@ public static class EndpointTrace
         var lines = new List<string> { "接口：" + endpointKey };
         if (budgetExceeded)
         {
-            lines.Add("单接口分析预算用尽，调用链追踪提前收手，预算后的调用未读取；可在项目设置「序列化与分析」中调大「方法预算」后重新扫描。");
+            lines.Add("单接口分析预算用尽，调用链追踪提前收手，预算后的调用未读取；可在" + PageNames.Projects + "「序列化与分析」中调大「方法预算」后重新扫描。");
         }
         lines.Add(methodsRead.Count > 0
             ? "读取的方法（" + methodsRead.Count + "）：" + string.Join("、", methodsRead)

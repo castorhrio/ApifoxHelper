@@ -171,7 +171,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         detailHost.Controls.Add(detailInner);
         detailHost.Controls.Add(detailCaption);
 
-        var modelsCaption = Ui.Caption("数据模型（映射与状态；绑定确认在任务页「处理差异确认」中完成）");
+        var modelsCaption = Ui.Caption("数据模型（映射与状态；绑定确认在「" + PageNames.Tasks + "」页「处理差异确认」中完成）");
         modelsCaption.Dock = DockStyle.Top;
         var modelsInner = Ui.Hairline(_modelList);
         modelsInner.Dock = DockStyle.Fill;
@@ -221,7 +221,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
             _filter.Enabled = false;
             _keyword.Enabled = false;
             _modelKeyword.Enabled = ListFilter.KeywordEnabled(false);
-            ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新检查再试。", UiTokens.BadText);
+            ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在「" + PageNames.Tasks + "」页重新检查再试。", UiTokens.BadText);
             return;
         }
         if (result is null)
@@ -229,7 +229,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
             _filter.Enabled = false;
             _keyword.Enabled = false;
             _modelKeyword.Enabled = ListFilter.KeywordEnabled(false);
-            ShowHint("尚未检查。先在任务页点「开始检查」：读取分支概览与范围内接口、模型详情，与目标比较后在这里展示差异。", UiTokens.Muted);
+            ShowHint("尚未检查。先在「" + PageNames.Tasks + "」页点「开始检查」：读取分支概览与范围内接口、模型详情，与目标比较后在这里展示差异。", UiTokens.Muted);
             return;
         }
         _result = result;

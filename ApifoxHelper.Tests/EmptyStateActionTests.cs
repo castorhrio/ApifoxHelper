@@ -198,11 +198,44 @@ public class EmptyStateActionTests
         Assert.Contains("第五十轮", ledger);
     }
 
+    /// <summary>
+    /// 取 <c>const string NAME = …;</c> 的<b>最终文字</b>（第二百五十七轮）。
+    /// <para>
+    /// 此前只认「右边是一个字面量」这一种写法。第二百五十七轮把空态说明里的页面名收进
+    /// <see cref="PageNames"/> 之后，右边变成「字面量 + 共享常量 + 字面量」的拼接——
+    /// 旧提取器会只取到第一段（<c>先在「</c>），于是「说明文字指名的入口就是那个按钮」
+    /// 这条断言退化成「说明文字以『先在「』开头」，永远为真。门钉住的是一种写法，不是一条规则
+    /// （第一百六十轮同一课）。本轮把提取口径扩到拼接式：字面量原样、<c>PageNames.X</c> 取页面名、
+    /// 同文件里的 <c>const string</c> 递归展开——判的仍是「最终那句话里有没有那个按钮的名字」。
+    /// </para>
+    /// </summary>
     private static string Literal(string source, string name)
     {
-        var match = Regex.Match(source, $@"const string {name}\s*=\s*""([^""]*)""");
+        var match = Regex.Match(source, $@"const string {name}\s*=\s*(?<rhs>[^;]+);");
         Assert.True(match.Success, $"缺少常量 {name}。");
-        return match.Groups[1].Value;
+        return Resolve(source, match.Groups["rhs"].Value);
+    }
+
+    /// <summary>把常量右值还原成最终文字：字面量原样、<c>PageNames.X</c> 取页面名、同文件常量递归展开。</summary>
+    private static string Resolve(string source, string rhs)
+    {
+        var text = new StringBuilder();
+        foreach (Match part in Regex.Matches(rhs, @"""(?<lit>[^""]*)""|(?<id>[A-Za-z_][\w.]*)"))
+        {
+            if (part.Groups["lit"].Success)
+            {
+                text.Append(part.Groups["lit"].Value);
+                continue;
+            }
+            var id = part.Groups["id"].Value;
+            if (id.StartsWith("PageNames.", StringComparison.Ordinal))
+            {
+                text.Append(id == "PageNames.Projects" ? PageNames.Projects : PageNames.Tasks);
+                continue;
+            }
+            text.Append(Literal(source, id));
+        }
+        return text.ToString();
     }
 
     /// <summary>取 [start, end) 之间的源码段：把「在重建里接线」的断言限定在方法体内。</summary>

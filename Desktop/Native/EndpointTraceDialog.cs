@@ -155,7 +155,7 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         if (store is null || store.Coverage.Count == 0)
         {
             // Coverage 与证据同一次扫描写入；旧任务缺这段数据时如实说明出路，不留白。
-            ShowHint("这份任务的扫描结果没有接口追踪数据。请在项目设置确认「方法预算」等分析设置后重新扫描。", UiTokens.Muted);
+            ShowHint("这份任务的扫描结果没有接口追踪数据。请在" + PageNames.Projects + "确认「方法预算」等分析设置后重新扫描。", UiTokens.Muted);
             return;
         }
         _coverages = store.Coverage;

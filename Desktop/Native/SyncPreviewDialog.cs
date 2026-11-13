@@ -459,12 +459,12 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            DisableSelect("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新检查再试。", UiTokens.BadText);
+            DisableSelect("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在「" + PageNames.Tasks + "」页重新检查再试。", UiTokens.BadText);
             return;
         }
         if (_diff is null || _diff.Endpoints.Count == 0)
         {
-            DisableSelect("请先完成契约检查：在任务页点「开始检查」，检查完成后在这里勾选要同步的接口。", UiTokens.Muted);
+            DisableSelect("请先完成契约检查：在「" + PageNames.Tasks + "」页点「开始检查」，检查完成后在这里勾选要同步的接口。", UiTokens.Muted);
             return;
         }
         if (_task.OfflineMode)

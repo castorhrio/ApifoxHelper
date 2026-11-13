@@ -57,9 +57,9 @@ internal sealed class NativeShellForm : Form
         BackColor = UiTokens.Bg;
         Font = UiTokens.Body.Value;
 
-        _navProjects = NavButton("项目设置");
+        _navProjects = NavButton(PageNames.Projects);
         _navProjects.Click += (_, _) => ShowProjects();
-        _navTasks = NavButton("检查任务");
+        _navTasks = NavButton(PageNames.Tasks);
         _navTasks.Click += (_, _) => ShowTasks();
 
         _navPanel.Controls.Add(_marker);
@@ -157,8 +157,8 @@ internal sealed class NativeShellForm : Form
         var view = new ToolStripMenuItem("视图(&V)");
         view.DropDownItems.AddRange(new ToolStripItem[]
         {
-            BoundItem("项目设置(&P)", ShellShortcuts.Projects, ShowProjects),
-            BoundItem("检查任务(&T)", ShellShortcuts.Tasks, ShowTasks),
+            BoundItem(PageNames.Projects + "(&P)", ShellShortcuts.Projects, ShowProjects),
+            BoundItem(PageNames.Tasks + "(&T)", ShellShortcuts.Tasks, ShowTasks),
             new ToolStripSeparator(),
             BoundItem("刷新当前页(&R)", ShellShortcuts.Refresh, RefreshVisiblePage),
             BoundItem("筛选当前列表(&F)", ShellShortcuts.Find, FocusListFilterOnVisiblePage),

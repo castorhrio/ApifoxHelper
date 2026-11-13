@@ -157,12 +157,12 @@ internal sealed class PropagationDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            ShowHint("读取核对结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在任务页重新核对再试。", UiTokens.BadText);
+            ShowHint("读取核对结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在「" + PageNames.Tasks + "」页重新核对再试。", UiTokens.BadText);
             return;
         }
         if (result is null)
         {
-            ShowHint("尚未核对。先在任务页点「核对传播」：核对检查已确认注释是否写入源码、出现在生成的 XML 文档、并被 Swagger 读取到正确位置。", UiTokens.Muted);
+            ShowHint("尚未核对。先在「" + PageNames.Tasks + "」页点「核对传播」：核对检查已确认注释是否写入源码、出现在生成的 XML 文档、并被 Swagger 读取到正确位置。", UiTokens.Muted);
             return;
         }
         _hint.Visible = false;

@@ -56,7 +56,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Panel _empty;
     // 空态文字按「还没有任务」与「筛到零行」两态切换：筛到零行不说成没有任务，并给出清空筛选的下一步。
     private const string EmptyTitle = "还没有检查任务";
-    private const string EmptyHint = "先在「项目设置」新建配置，然后点「新建任务」开始源码扫描。";
+    private const string EmptyHint = "先在「" + PageNames.Projects + "」新建配置，然后点「" + NewTaskLabel + "」开始源码扫描。";
     private readonly Label _emptyTitle = Ui.Title(EmptyTitle);
     private readonly Label _emptyHint = Ui.Body(EmptyHint, muted: true);
     // 「新建任务」文字单一落点：工具栏实心主按钮与空态按钮同名同源，不出现第二处字面。
@@ -1332,7 +1332,7 @@ internal sealed class TasksPage : UserControl, INativePage
         {
             if (_profiles.List().Count == 0)
             {
-                SetStatus("还没有项目配置。请先在「项目设置」新建配置，再创建任务。", UiTokens.WarnText);
+                SetStatus("还没有项目配置。请先在「" + PageNames.Projects + "」新建配置，再创建任务。", UiTokens.WarnText);
                 return;
             }
         }

@@ -121,7 +121,7 @@ internal sealed class BuildLogDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            ShowHint("读取构建记录失败：" + Redactor.Redact(ex.Message) + "。可关闭后在任务页重新执行构建。", UiTokens.BadText);
+            ShowHint("读取构建记录失败：" + Redactor.Redact(ex.Message) + "。可关闭后在「" + PageNames.Tasks + "」页重新执行构建。", UiTokens.BadText);
         }
     }
 
@@ -129,7 +129,7 @@ internal sealed class BuildLogDialog : DpiAwareForm
     {
         if (record is null)
         {
-            ShowHint("尚未构建。在任务页「生成文档」区点「执行定向构建」：确认后在任务的工作区执行 dotnet build --no-restore 刷新 XML 文档。", UiTokens.Muted);
+            ShowHint("尚未构建。在「" + PageNames.Tasks + "」页「生成文档」区点「执行定向构建」：确认后在任务的工作区执行 dotnet build --no-restore 刷新 XML 文档。", UiTokens.Muted);
             return;
         }
         var (text, tone) = BuildStatus.LastText(record);

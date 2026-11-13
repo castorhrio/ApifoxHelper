@@ -163,7 +163,7 @@ internal sealed class ContractsDialog : DpiAwareForm
         if (_contracts.Count == 0)
         {
             // 与冻结页面同一口径：没有需要补充的契约时说明原因与出路，不留白。
-            ShowHint("没有需要补充的响应契约（未配置通用响应封装，或接口返回具体类型）。请在项目设置中填写「通用响应封装」，并重新扫描。", UiTokens.Muted);
+            ShowHint("没有需要补充的响应契约（未配置通用响应封装，或接口返回具体类型）。请在" + PageNames.Projects + "中填写「通用响应封装」，并重新扫描。", UiTokens.Muted);
             return;
         }
         _hint.Visible = false;

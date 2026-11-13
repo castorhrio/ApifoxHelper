@@ -236,7 +236,7 @@ internal sealed class DecisionsDialog : DpiAwareForm
         {
             _filter.Enabled = false;
             _keyword.Enabled = false;
-            ShowHint("尚未检查。先在任务页点「开始检查」：差异确认的条目（高风险变化、说明冲突、模型绑定）来自检查结果。", UiTokens.Muted);
+            ShowHint("尚未检查。先在「" + PageNames.Tasks + "」页点「开始检查」：差异确认的条目（高风险变化、说明冲突、模型绑定）来自检查结果。", UiTokens.Muted);
             return;
         }
         if (!ReloadDecisions(out var error))
