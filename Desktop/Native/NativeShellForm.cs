@@ -258,6 +258,14 @@ internal sealed class NativeShellForm : Form
             _host.Services.GetRequiredService<Sync.SyncExecutor>(),
             _sortMemory);
 
+        // 任务详情「打开配置」这一跳的接线（第二百六十三轮）：两页互不引用，由壳把请求接到另一页的落点上。
+        // 先切页（切页会重读配置清单），再按 Id 选中那一行；找不到时那一页自己把原因写在状态行上。
+        _tasksPage.OpenProfileRequested += (profileId, profileName) =>
+        {
+            ShowProjects();
+            _projectsPage.RevealProfile(profileId, profileName);
+        };
+
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;
         _tasksPage.Dock = DockStyle.Fill;

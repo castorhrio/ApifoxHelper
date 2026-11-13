@@ -101,6 +101,10 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Label _detailName = Ui.Section();
     private readonly Label _detailMeta = Ui.Caption();
     private readonly Label _detailRange = Ui.Caption();
+    // 「打开配置」这一跳（第二百六十三轮）：任务详情顶部那行元信息写着「配置 X」，而 X 此前只是一串只读文字——
+    // 想改那个配置（换 Swagger 来源、改允许回写范围、补模块前缀）只能自己切到项目设置页、再在清单里按名字找回来。
+    // 按钮文字、有没有落点、找不到时说什么三件事的唯一落点在 ProfileJump；本页只负责把它摆出来并发出请求。
+    private readonly Button _openProfileButton = Ui.Ghost(ProfileJump.ButtonLabel);
     private readonly Label _sourceStatus = Ui.StatusText();
     private readonly Label _sourceNumbers = Ui.Mono();
     private readonly FlowLayoutPanel _scanActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
@@ -170,6 +174,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _syncPlans = syncPlans;
         _syncExecutor = syncExecutor;
         _sortMemory = sortMemory;
+        // 这一跳要换页，而页面之间不互相引用（两页都由壳建、由壳切）：本页只发请求，接线在壳那一处。
+        _openProfileButton.Click += (_, _) => RequestOpenProfile();
         // 状态行宿主先建：工具栏把它当一格控件加进去（标签与入口按钮的显隐由它自己管）。
         _statusHost = new StatusLineHost(_status);
 
@@ -388,6 +394,7 @@ internal sealed class TasksPage : UserControl, INativePage
         AddDetailRow(grid, _detailName);
         AddDetailRow(grid, _detailMeta);
         AddDetailRow(grid, _detailRange);
+        AddDetailRow(grid, _openProfileButton);
         AddDetailRow(grid, _sourceSection);
         AddDetailRow(grid, _sourceStatus);
         AddDetailRow(grid, _sourceNumbers);
@@ -431,6 +438,27 @@ internal sealed class TasksPage : UserControl, INativePage
         grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         control.Margin = new Padding(control.Margin.Left, control.Margin.Top, 0, UiTokens.Xs);
         grid.Controls.Add(control, 0, row);
+    }
+
+    /// <summary>
+    /// 「打开配置」这一跳的请求（第二百六十三轮）：参数是任务绑定的配置 Id 与名字。
+    /// <para>
+    /// 本页<b>不</b>自己切页、也不引用另一页——两页都由壳建、由壳切（<c>NativeShellForm</c>），
+    /// 这里只把「用户点了这一跳」这件事交出去，接线在壳那一处。名字随请求一起带过去，
+    /// 是因为「跳过去找不到那一行」时要说清是哪一个配置（<see cref="ProfileJump.MissingStatus"/>）。
+    /// </para>
+    /// </summary>
+    public event Action<string, string>? OpenProfileRequested;
+
+    /// <summary>
+    /// 点「打开配置」：没有选中任务、或这个任务没有绑定配置（配置 Id 为空）时不发请求——
+    /// 认不出该跳到哪一份配置时不跳，也不拿清单第一行顶替（判定在 <see cref="ProfileJump.CanJump"/>）。
+    /// </summary>
+    private void RequestOpenProfile()
+    {
+        if (_selectedTask is not { } task) return;
+        if (!ProfileJump.CanJump(task.ProfileSnapshot.Id)) return;
+        OpenProfileRequested?.Invoke(task.ProfileSnapshot.Id, task.ProfileSnapshot.Name);
     }
 
     public void OnPageShown()
@@ -837,6 +865,8 @@ internal sealed class TasksPage : UserControl, INativePage
         {
             bannerButton.Enabled = job is null;
         }
+        // 「打开配置」与作业无关：它只换页、不写数据，扫描前扫描中都能用；没有绑定配置（配置 Id 为空）时没有落点。
+        _openProfileButton.Enabled = _selectedTask is not null && ProfileJump.CanJump(_selectedTask.ProfileSnapshot.Id);
         _gapButton.Enabled = scanReady;
         _candidatesButton.Enabled = scanReady;
         _ruleButton.Enabled = scanReady;

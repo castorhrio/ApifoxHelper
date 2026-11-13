@@ -156,8 +156,11 @@ public class EscapeClearsFilterTests
         foreach (var page in Pages)
         {
             var source = Repo.Source(page);
-            // 两个触发（Esc 与空态按钮）、一条清空路径：页内不得出现第二处把关键词赋空。
-            Assert.Equal(2, CodeLines(source, "ClearListFilter();").Count);
+            // 触发数逐页钉死、清空路径只有一条：页内不得出现第二处把关键词赋空。
+            // 任务页两处（Esc 与空态按钮）；项目设置页三处——第二百六十三轮多出「从任务详情跳过来」这一跳：
+            // 那一行可能正被筛选框筛掉，清空筛选是唯一能到那里的路，且仍走同一条清空路径（不自己给框赋值）。
+            var expectedTriggers = page.EndsWith("ProjectsPage.cs", StringComparison.Ordinal) ? 3 : 2;
+            Assert.Equal(expectedTriggers, CodeLines(source, "ClearListFilter();").Count);
             var writes = CodeLines(source, "_filter.Text = \"\";");
             Assert.Single(writes);
             var clear = Slice(source, "private void ClearListFilter()", "private void Load" + (page.EndsWith("TasksPage.cs", StringComparison.Ordinal) ? "Tasks" : "Profiles") + "()");

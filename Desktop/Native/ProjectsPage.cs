@@ -189,6 +189,49 @@ internal sealed class ProjectsPage : UserControl, INativePage
     public void RefreshData() => LoadProfiles();
 
     /// <summary>
+    /// 「从任务详情跳到它绑定的配置」的落点（第二百六十三轮）：按配置 Id 在清单里选中那一行并滚进可见区，
+    /// 返回「有没有落到那一行」。
+    /// <para>
+    /// <b>为什么要有这一步</b>：任务详情顶部那行元信息写着「配置 X」，而 X 此前只是一串只读文字——
+    /// 想改那个配置只能自己切到本页、再在清单里按名字找回来。配置一多，这一步就是「先记住名字、
+    /// 再在另一页找回来」，而任务详情已经把那个名字摆在眼前了。
+    /// </para>
+    /// <para>
+    /// <b>三件事各归各的落点</b>：认不认得出该跳到哪一份配置由 <see cref="ProfileJump.CanJump"/> 判
+    /// （Id 为空即没有落点，不拿清单第一行顶替）；选中与滚动走 <see cref="Ui.SelectItem"/> 唯一入口
+    /// （与「重建后恢复选中」同一口径）；找不到那一行时说什么由 <see cref="ProfileJump.MissingStatus"/> 给，
+    /// 本页不就地拼那句话。
+    /// </para>
+    /// <para>
+    /// <b>筛选</b>：那一行可能正被筛选框筛掉——此时先清空筛选，再找一次。清空走
+    /// <see cref="ClearListFilter"/> 那一条唯一路径（经 <c>TextChanged</c> 触发既有重建，不另写一条读取路径），
+    /// 本方法不自己给筛选框赋值。清空筛选是「用户要看的那一行不在屏上」时唯一能到那里的路，
+    /// 而这一跳的意图正是「看那一行」。
+    /// </para>
+    /// <para>
+    /// <b>它不做什么</b>：不打开编辑对话框、不改配置数据、不写任何文件——只换选中与滚动位置。
+    /// 真机上那一行滚到哪、键盘落在哪随 G-D5 真机复核。
+    /// </para>
+    /// </summary>
+    public bool RevealProfile(string profileId, string profileName)
+    {
+        if (!ProfileJump.CanJump(profileId)) return false;
+        if (ListFilter.IsActive(_filter.Text)) ClearListFilter();
+        foreach (ListViewItem item in _list.Items)
+        {
+            if (item.Tag is ProjectProfile profile && profile.Id == profileId)
+            {
+                Ui.SelectItem(item);
+                _list.Focus();
+                return true;
+            }
+        }
+        // 配置已被删除、或磁盘上那份配置读不出来：如实说清发生了什么并给出下一步，不静默停在清单顶部。
+        SetStatus(ProfileJump.MissingStatus(profileName), UiTokens.BadText);
+        return false;
+    }
+
+    /// <summary>
     /// 把键盘交给配置列表（壳在「这一页出现」时调用：切页与启动，第九十六轮）。
     /// 这一页的列表在重建后恢复选中（第三十四轮），详情与「编辑」「连接与写入探测」随选中启用——
     /// 而切页后键盘落在导航按钮上，方向键动的是别的控件、Ctrl+C 也复制不到那一行。
