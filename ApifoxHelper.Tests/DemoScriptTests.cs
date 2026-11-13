@@ -149,6 +149,122 @@ public class DemoScriptTests
         }
     }
 
+    /// <summary>
+    /// 逐屏表每一行的「结论口径」与它引的证据必须对得上，且引的段必须真的在冒烟器 <c>Main</c> 的注册清单里
+    /// （第二百五十三轮，简报 P1-2，具名 pass：harden + clarify）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="EveryCitedSegment_HasADefinitionAndASectionId"/> 判的是「引了段名 → 段有方法、
+    /// 有 <c>Section(…, nameof(…))</c>」，<see cref="DemoScript_KeepsSourceOnlyScreensOutOfTheWineClaim"/> 判的是
+    /// 「脚本有那一支、表里真有这种行」——<b>两条都不判「这一行自己前后一致」</b>：
+    /// 一行可以写着「wine 量到」却一个段都不引（讲稿会写「这一屏没有 wine 冒烟段」，与表里的结论口径互相打脸），
+    /// 也可以写着「源码 + 编译证据」却引了段（讲稿会念出那一段的通过数，与「只有源码证据」矛盾）。
+    /// 这一条把「主张 ↔ 证据」逐行对上，形状沿用 <c>DefenseNarrativeTests.Narrative_EveryBlockPointsAtEvidenceThatCanActuallyRun</c>
+    /// 那一份（五块答辩口径），只是对象换成逐屏表。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判「wine 量到的数对不对」（那是报告与读数记录的事）；不判真机跑没跑（真机 0 台，G-D5 仍 <c>[ ]</c>）；
+    /// 也不判「这一屏该不该只有源码证据」——那是人的判断，机械门只判「说了什么就得引什么」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryRowClaimingWineMeasurement_CitesASegmentThatActuallyRuns()
+    {
+        var problems = RowClaimMismatches(
+            Rows().Select(row => (row.Num, row.Screen, row.Evidence, row.Verdict)).ToList(),
+            Repo.SmokeSectionNames());
+        Assert.Empty(problems);
+    }
+
+    /// <summary>
+    /// 上面那段判据<b>自己</b>被抓得住：四发注入各喂一次，每一发都必须报出自己那一处。
+    /// <para>
+    /// 本仓的教训是「判据自己没被跑过」比「没有判据」更贵（第二百零九轮那两处假变异、第二百四十三轮 M4 那一发假绿）。
+    /// 第一发是「说 wine 量到却不引段」，第二发是「说只有源码证据却引了段」，第三发是「引的段跑不到」，
+    /// 第四发是合规行（不报）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RowClaimGate_ReportsTheBreaksItMustCatch()
+    {
+        string[] registered = ["RunScanResultsInteraction"];
+
+        // ① 说 wine 量到，却一个段都不引：讲稿会写「这一屏没有 wine 冒烟段」。
+        var wineWithoutSegment = RowClaimMismatches(
+            [("1", "注释缺口对话框", "构造冒烟 + `ScanService` 用例", "wine 量到")], registered);
+        Assert.Single(wineWithoutSegment);
+        Assert.Contains("没有引任何冒烟段", wineWithoutSegment[0], StringComparison.Ordinal);
+
+        // ② 说只有源码与编译证据，却引了段：讲稿会念出那一段的通过数。
+        var sourceOnlyWithSegment = RowClaimMismatches(
+            [("2", "生成文档核对", "wine 冒烟 `RunScanResultsInteraction` 五段", "源码 + 编译证据")], registered);
+        Assert.Single(sourceOnlyWithSegment);
+        Assert.Contains("却引了", sourceOnlyWithSegment[0], StringComparison.Ordinal);
+
+        // ③ 引的段不在 Main 的注册清单里：跑不到，讲稿里不会出现这一行。
+        var unregistered = RowClaimMismatches(
+            [("3", "注释缺口对话框", "wine 冒烟 `RunNotRegistered` 五段", "wine 量到")], registered);
+        Assert.Single(unregistered);
+        Assert.Contains("RunNotRegistered", unregistered[0], StringComparison.Ordinal);
+        Assert.Contains("注册清单", unregistered[0], StringComparison.Ordinal);
+
+        // ④ 合规行：说 wine 量到、引的段在注册清单里——一处都不报。
+        Assert.Empty(RowClaimMismatches(
+            [("4", "注释缺口对话框", "wine 冒烟 `RunScanResultsInteraction` 五段", "wine 量到")], registered));
+    }
+
+    /// <summary>
+    /// 逐屏表每一行的「结论口径 ↔ 证据」对账，返回「哪几行对不上」的说明（空 = 全对上）。
+    /// <para>
+    /// 写成纯数据进、问题出的函数，是为了让上面那条自测能拿<b>注入过的</b>夹具喂它——
+    /// 与 <c>LayoutMeasurementGateTests.Problems</c> / <c>WiringAssertionShapeTests.Problems</c> 同一形状。
+    /// </para>
+    /// </summary>
+    private static List<string> RowClaimMismatches(
+        IReadOnlyList<(string Num, string Screen, string Evidence, string Verdict)> rows,
+        IReadOnlyList<string> registered)
+    {
+        var problems = new List<string>();
+        foreach (var (num, screen, evidence, verdict) in rows)
+        {
+            var cited = Regex.Matches(evidence, @"Run[A-Za-z0-9]+")
+                .Select(match => match.Value)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            var claimsWine = verdict.Contains("wine 量到", StringComparison.Ordinal);
+            var claimsSourceOnly = verdict.Contains("源码 + 编译证据", StringComparison.Ordinal);
+
+            if (claimsWine && cited.Count == 0)
+            {
+                problems.Add(
+                    $"逐屏表第 {num} 行「{screen}」说「wine 量到」，却没有引任何冒烟段——"
+                    + "讲稿会写「这一屏没有 wine 冒烟段——只有源码与编译证据」，与表里的结论口径互相打脸。");
+            }
+
+            if (claimsSourceOnly && cited.Count > 0)
+            {
+                problems.Add(
+                    $"逐屏表第 {num} 行「{screen}」说「源码 + 编译证据」，却引了 {string.Join(" / ", cited)}——"
+                    + "讲稿会念出那一段的通过数，与「只有源码证据」矛盾。");
+            }
+
+            if (!claimsWine && !claimsSourceOnly)
+            {
+                problems.Add(
+                    $"逐屏表第 {num} 行「{screen}」的结论口径既不说「wine 量到」、也不说「源码 + 编译证据」——"
+                    + "现场念到这一行时不知道该按哪一档交代。");
+            }
+
+            foreach (var segment in cited.Where(segment => !registered.Contains(segment, StringComparer.Ordinal)))
+            {
+                problems.Add(
+                    $"逐屏表第 {num} 行「{screen}」引用了 {segment}，但它不在冒烟器 Main 的注册清单里——"
+                    + "这一段跑不到，讲稿里不会出现这一行，照着念就是空手。");
+            }
+        }
+
+        return problems;
+    }
+
     /// <summary>报告里真的带着段名 id：否则上面那条只是源码切片，跑起来仍然对不上。</summary>
     [Fact]
     public void SmokeProgram_WritesTheSegmentIdIntoTheSectionTitle()

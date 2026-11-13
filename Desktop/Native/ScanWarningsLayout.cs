@@ -7,8 +7,18 @@ namespace ApifoxHelper.Desktop.Native;
 /// 而它要同时放三块——说明行（这一屏在讲「哪些位置被降级处理了」）、警告清单（填满剩余）、
 /// 按钮行。把三块按产品自己的停靠方式量出来：说明行 <b>25px</b>（标签 17 + 下外边距 8）、
 /// 按钮行 <b>60px</b>，合计 <b>85px</b>；内容网格自己的上下内边距 <b>24px</b>；
-/// 警告清单宿主 <b>365px</b>，清单本体 <b>355px</b>——扣掉宿主镀铬 10px 之后
+/// 警告清单宿主 <b>346px</b>，清单本体 <b>336px</b>——扣掉宿主镀铬 10px 之后
 /// <b>装得下 16 行</b>中文警告文本。
+/// <para>
+/// <b>那两个数（346 / 336）是这一处算式在 16 行处的取值</b>，不是另一档的读数：
+/// 改算式之前那一屏（窗体高 480）量到的是宿主 365px / 清单本体 355px，
+/// 那一对读数只属于「改之前」，写在 <see cref="MainRows"/> 的注释里当来历，不再出现在这一句里
+/// （第二百五十三轮：这一句此前把改之前的读数写进了「这一处现在怎么算」的说明，
+/// 与全仓其余六处的 346 / 336 分家；门在
+/// <c>ScanWarningsLayoutTests.TheClassComment_ReadsTheSameNumbersAsTheFormula</c>，
+/// 它把这一句、<see cref="TextBoxPadding"/>、<see cref="ListHostChrome"/>、<see cref="ListHostMargin"/>
+/// 四处注释念的数逐处撞算式取值）。
+/// </para>
 /// </para>
 /// <para>
 /// <b>这一屏的主内容是那份降级清单</b>：用户在这里看的是「哪些位置被降级处理了、为什么」，
@@ -64,7 +74,7 @@ public static class ScanWarningsLayout
 
     /// <summary>
     /// 文本框自己那一圈 = <b>0px</b>（实测：只读预览框走 <c>Ui.Hairline</c>，
-    /// <c>BorderStyle</c> 已被去掉，框高 355px 与可视高 355px 逐字相等）。
+    /// <c>BorderStyle</c> 已被去掉，框高 336px 与可视高 336px 逐字相等）。
     /// <para>
     /// <b>它必须单独记一笔</b>：<see cref="ManualDraftLayout.TextBoxPadding"/> 那一处是 <b>1px</b>
     /// （那边是带边框的输入框），两处数值不同不是抄错——一个是输入框、一个是只读预览框。
@@ -76,7 +86,7 @@ public static class ScanWarningsLayout
 
     /// <summary>
     /// 警告清单宿主比清单本体多出来的那一截 = <b>10px</b>
-    /// （实测：宿主 365px 对清单 355px；即宿主自己的下内边距 8px + 发丝边 2px）。
+    /// （实测：宿主 346px 对清单 336px；即宿主自己的下内边距 8px + 发丝边 2px）。
     /// 判据：窗体高按宿主算，行数按清单本体算，两者之间差的就是这一笔。
     /// <para>
     /// <b>它与 <see cref="EndpointTraceLayout.ListHostChrome"/> 数值相同（都是 10px）但来历不同</b>：
@@ -88,7 +98,7 @@ public static class ScanWarningsLayout
 
     /// <summary>
     /// 警告清单宿主在内容网格里的上下外边距 = <b>6px</b>
-    /// （实测：网格第 2 行 371px 对宿主自身高 365px；差的是 WinForms 给表格单元控件的默认
+    /// （实测：网格第 2 行 352px 对宿主自身高 346px；差的是 WinForms 给表格单元控件的默认
     /// <c>Margin(3,3,3,3)</c>）。<b>它是框架默认值，代码里没有一处能设它</b>。
     /// <para>
     /// <b>它必须单独记一笔</b>：漏掉它，窗体高会少 6px，警告清单少装得下约四分之一行——

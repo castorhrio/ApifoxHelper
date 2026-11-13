@@ -196,6 +196,157 @@ public class ScanWarningsLayoutTests
     }
 
     /// <summary>
+    /// 类注释里念的那两个数，必须就是算式在 <see cref="ScanWarningsLayout.MainRows"/> 处的取值
+    /// （第二百五十三轮，简报 P1-1，具名 pass：clarify + harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>ScanWarningsLayout.cs</c> 的类注释与 <c>ListHostChrome</c> 注释此前念
+    /// 「宿主 365px / 清单本体 355px」，而全仓其余六处（本文件类注释、<c>DialogHeight_IsTheFormulaAtTheMeasuredRowCount</c>
+    /// 那个 461 锚点、<c>MeasuredScreens</c>、<c>docs/NOTES.md</c> 第二百五十二轮记录、<c>ListHostHeight(16) = 346</c>）
+    /// 按 346 / 336 念。只读核对结论：<b>是笔误</b>——365 / 355 是「改算式之前那一屏（窗体高 480）」的读数，
+    /// 被写进了「这一处现在怎么算」的说明里，不是另一档（120 / 192）的读数。
+    /// </para>
+    /// <para>
+    /// <b>这一条判什么</b>：把 <c>ScanWarningsLayout.cs</c> 的注释行取出来，逐处判「注释里念的数 == 算式取值」——
+    /// 类注释那一句（宿主 / 清单本体）、<c>TextBoxPadding</c> 那一句（框高 / 可视高）、
+    /// <c>ListHostChrome</c> 那一句（宿主 / 清单）、<c>ListHostMargin</c> 那一句（网格第 2 行 / 宿主自身高）。
+    /// <b>不改任何常量与算式</b>：这一条只判注释文字，算式那一族在
+    /// <see cref="ListHostHeight_IsRowsTimesLineHeightPlusTheTwoChromes"/> 与
+    /// <see cref="DialogHeight_IsTheFormulaAtTheMeasuredRowCount"/> 里。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判注释的散文好不好读；不判「改之前」那一对读数（365 / 355）该不该留——
+    /// 留着当来历是有价值的，只判它<b>必须带「改算式之前」这个前缀</b>，否则下一轮读到的人会以为那就是当前取值。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheClassComment_ReadsTheSameNumbersAsTheFormula()
+    {
+        var comments = CommentLines(NativeFile("ScanWarningsLayout.cs"));
+
+        // 五处读数句必须都在：删掉一句等于把「注释与算式对账」这件事删掉，门就再也管不住它。
+        Assert.Equal(1, Count(comments, @"警告清单宿主 <b>\d+px</b>"));
+        Assert.Equal(1, Count(comments, @"清单本体 <b>\d+px</b>"));
+        Assert.Equal(1, Count(comments, @"框高 \d+px 与可视高 \d+px"));
+        Assert.Equal(1, Count(comments, @"宿主 \d+px 对清单 \d+px"));
+        Assert.Equal(1, Count(comments, @"网格第 2 行 \d+px 对宿主自身高 \d+px"));
+
+        Assert.Empty(CommentMismatches(comments));
+    }
+
+    /// <summary>
+    /// 上面那段判据<b>自己</b>被抓得住：把第二百五十二轮之前那一句的原样喂进去，必须报出两处。
+    /// <para>
+    /// <b>为什么这一条必须存在</b>：本仓的教训是「判据自己没被跑过」比「没有判据」更贵
+    /// （第二百零九轮那两处假变异、第二百四十三轮 M4 那一发假绿）。这一条同时钉住「来历句豁免」的边界：
+    /// 带「改算式之前」前缀的斜杠写法放过，不带前缀的当场红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheCommentGate_ReportsTheStaleReadingItMustCatch()
+    {
+        // ① 改之前那一句的原样：把「改之前」的读数写进了「现在怎么算」的说明。
+        var stale = "/// 警告清单宿主 <b>365px</b>，清单本体 <b>355px</b>——扣掉宿主镀铬 10px 之后";
+        var problems = CommentMismatches(stale);
+        Assert.Equal(2, problems.Count);
+        Assert.Contains(problems, problem => problem.Contains("346", StringComparison.Ordinal));
+        Assert.Contains(problems, problem => problem.Contains("336", StringComparison.Ordinal));
+
+        // ② 来历句（带「改算式之前」前缀的斜杠写法）不算错——它是来历，不是当前取值。
+        Assert.Empty(CommentMismatches(
+            "/// 改算式之前那一屏（窗体高 480）量到的是宿主 365px / 清单本体 355px，"));
+
+        // ③ 不带前缀的斜杠写法当场红：来历句与「现在怎么算」必须分得开。
+        var unlabeled = CommentMismatches("/// 量到的是宿主 365px / 清单本体 355px，");
+        Assert.Single(unlabeled);
+        Assert.Contains("改算式之前", unlabeled[0], StringComparison.Ordinal);
+
+        // ④ 合规写法：注释念的就是算式取值，一处都不报。
+        Assert.Empty(CommentMismatches(
+            "/// 警告清单宿主 <b>346px</b>，清单本体 <b>336px</b>——扣掉宿主镀铬 10px 之后"));
+    }
+
+    /// <summary>
+    /// 注释里念的数与算式取值逐处对账，返回「哪几处分家」的说明（空 = 全对上）。
+    /// <para>
+    /// 写成纯文本进、问题出的函数，是为了让上面那条自测能拿<b>注入过的</b>夹具喂它——
+    /// 与 <c>LayoutMeasurementGateTests.Problems</c> / <c>WiringAssertionShapeTests.Problems</c> 同一形状。
+    /// </para>
+    /// </summary>
+    private static List<string> CommentMismatches(string comments)
+    {
+        var host = ScanWarningsLayout.ListHostHeight(ScanWarningsLayout.MainRows);
+        var text = ScanWarningsLayout.TextHeight(ScanWarningsLayout.MainRows);
+        var gridRow = host + ScanWarningsLayout.ListHostMargin;
+        var problems = new List<string>();
+
+        foreach (Match match in Regex.Matches(comments, @"警告清单宿主 <b>(?<n>\d+)px</b>"))
+        {
+            Judge("类注释「警告清单宿主 Npx」", match.Groups["n"], host, problems);
+        }
+
+        foreach (Match match in Regex.Matches(comments, @"清单本体 <b>(?<n>\d+)px</b>"))
+        {
+            Judge("类注释「清单本体 Npx」", match.Groups["n"], text, problems);
+        }
+
+        foreach (Match match in Regex.Matches(comments, @"框高 (?<n>\d+)px 与可视高 (?<m>\d+)px"))
+        {
+            Judge("TextBoxPadding 注释「框高 Npx」", match.Groups["n"], text, problems);
+            Judge("TextBoxPadding 注释「可视高 Npx」", match.Groups["m"], text, problems);
+        }
+
+        foreach (Match match in Regex.Matches(comments, @"宿主 (?<n>\d+)px 对清单 (?<m>\d+)px"))
+        {
+            Judge("ListHostChrome 注释「宿主 Npx」", match.Groups["n"], host, problems);
+            Judge("ListHostChrome 注释「清单 Npx」", match.Groups["m"], text, problems);
+        }
+
+        foreach (Match match in Regex.Matches(comments, @"网格第 2 行 (?<n>\d+)px 对宿主自身高 (?<m>\d+)px"))
+        {
+            Judge("ListHostMargin 注释「网格第 2 行 Npx」", match.Groups["n"], gridRow, problems);
+            Judge("ListHostMargin 注释「宿主自身高 Npx」", match.Groups["m"], host, problems);
+        }
+
+        // 来历句：斜杠写法只许出现在「改算式之前」那一句里。
+        foreach (Match match in Regex.Matches(comments, @"宿主 (?<n>\d+)px / 清单本体 (?<m>\d+)px"))
+        {
+            var line = LineOf(comments, match.Index);
+            if (line.Contains("改算式之前", StringComparison.Ordinal)) continue;
+            problems.Add(
+                $"「{line.Trim()}」把改之前的读数（宿主 {match.Groups["n"].Value}px / 清单本体 {match.Groups["m"].Value}px）"
+                + "写成了「现在怎么算」——来历句必须带「改算式之前」这个前缀，"
+                + $"否则下一轮读到的人会以为当前取值就是 {match.Groups["n"].Value} / {match.Groups["m"].Value}。");
+        }
+
+        return problems;
+    }
+
+    /// <summary>一处读数句的对账：注释念的数与算式取值不等就记一笔。</summary>
+    private static void Judge(string what, Group group, int expected, List<string> problems)
+    {
+        var got = int.Parse(group.Value, System.Globalization.CultureInfo.InvariantCulture);
+        if (got == expected) return;
+        problems.Add(
+            $"{what} 念的是 {got}px，算式在 {ScanWarningsLayout.MainRows} 行处给的是 {expected}px——"
+            + "注释与算式分家，下一轮读到的人会按注释去改常量。");
+    }
+
+    /// <summary>一个字符位置所在的那一行（用来判「来历句有没有前缀」）。</summary>
+    private static string LineOf(string text, int index)
+    {
+        var start = text.LastIndexOf('\n', Math.Max(0, index - 1)) + 1;
+        var end = text.IndexOf('\n', index);
+        return end < 0 ? text[start..] : text[start..end];
+    }
+
+    /// <summary>
+    /// 一份源码里的注释行，拼成一段文本——这一族门只判注释文字。
+    /// <b>取注释的口径在 <see cref="CodeScan.CommentLines"/> 一处</b>，这里不另写一份过滤。
+    /// </summary>
+    private static string CommentLines(string source) =>
+        string.Join('\n', CodeScan.CommentLines(source));
+
+    /// <summary>
     /// 登记表里这一屏从「未量」改成「已量」并写清轮次——简报 P0-1 要的那一行。
     /// <para>
     /// 通用的对账在 <c>MeasuredScreensTests</c>；这一条只钉「这一屏这一轮真的被认领了」，

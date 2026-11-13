@@ -224,6 +224,27 @@ internal static class CodeScan
     public static IEnumerable<string> Lines(string source) =>
         Parse(source).Select(l => l.Code).Where(code => code.Trim().Length > 0);
 
+    /// <summary>
+    /// 注释行的原文（<c>///</c> 文档注释、<c>//</c> 行注释、<c>/* … */</c> 区间内的行），保留缩进；
+    /// 代码行与空行都不在内。
+    /// <para>
+    /// <b>为什么这一份也放在这里</b>：第二百五十三轮要判「类注释里念的读数与算式取值是否一致」，
+    /// 那需要<b>注释文字</b>而不是代码行。若在测试文件里自己写一句「取 <c>///</c> 开头的行」，
+    /// 就是本仓明令禁止的「第二份去注释」——<c>CodeScanTests.CommentFilter_IsWrittenInOnePlaceOnly</c>
+    /// 会当场红。故取注释也走同一台状态机：<see cref="Parse"/> 判出「这一行没有代码」，
+    /// 原文那一行就是注释。
+    /// </para>
+    /// </summary>
+    public static IEnumerable<string> CommentLines(string source)
+    {
+        var raw = source.Split('\n');
+        var parsed = Parse(source);
+        for (var i = 0; i < parsed.Count && i < raw.Length; i++)
+        {
+            if (parsed[i].Code.Trim().Length == 0 && raw[i].Trim().Length > 0) yield return raw[i];
+        }
+    }
+
     /// <summary>代码行，去掉行首缩进。</summary>
     public static IEnumerable<string> TrimmedLines(string source) => Lines(source).Select(code => code.TrimStart());
 
