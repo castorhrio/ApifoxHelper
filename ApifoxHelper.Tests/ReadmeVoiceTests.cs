@@ -90,4 +90,93 @@ public class ReadmeVoiceTests
 
     private static string Excerpt(string text) =>
         text.Length <= 60 ? text : text[..60] + "…";
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 「已知限制」每条不许写成一篇小论文（第二百五十四轮，简报 P0-1：去 AI 味道）
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>「已知限制」每一条的字数上限。第二百五十四轮重排之后实测最长一条 244 字。</summary>
+    private const int MaxKnownLimitChars = 500;
+
+    /// <summary>「已知限制」一节的标题。</summary>
+    private const string KnownLimitsHeading = "## 已知限制";
+
+    /// <summary>「已知限制」一节的行（标题行到下一个 <c>## </c> 之前；它是最后一节时取到文末）。</summary>
+    private static string[] KnownLimitLines()
+    {
+        var lines = Readme.ReplaceLineEndings("\n").Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == KnownLimitsHeading);
+        Assert.True(start >= 0, $"README.md 缺「{KnownLimitsHeading}」一节：挂账必须留，删掉这一节即红。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[(start + 1)..(end < 0 ? lines.Length : end)];
+    }
+
+    /// <summary>「已知限制」的每一条（以 <c>- </c> 开头的一行算一条）。</summary>
+    private static List<string> KnownLimitItems(IEnumerable<string> lines) => lines
+        .Where(l => l.StartsWith("- ", StringComparison.Ordinal))
+        .ToList();
+
+    /// <summary>超长条目念成人话（顺序稳定：按出现顺序，取开头当名字）。</summary>
+    private static List<string> OverlongKnownLimits(IEnumerable<string> items, int max) => items
+        .Where(i => i.Length > max)
+        .Select(i => $"「{Excerpt(i)}」{i.Length} 字（上限 {max}）")
+        .ToList();
+
+    /// <summary>
+    /// 「已知限制」每一条都要能在 30 秒内读完（第二百五十四轮，简报 P0-1）。
+    /// <para>
+    /// <b>要解决的问题</b>：这一节的首条此前长达数百行，把 G-D5、降级脚本、PowerShell 分岔、标签列改宽
+    /// 四轮历史全塞在一条里。新读者（评审）读它的时候抓不住「产品是什么、缺什么」——这正是审查清单
+    /// D 节「去 AI 味道」在本仓最明显的一处失分：真人写的限制清单是一条一条的，不是一篇编年史。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 每一条 ≤ <see cref="MaxKnownLimitChars"/> 字（超了即红并点名是哪一条多少字）；
+    /// ② 这一节里不许有「续行」——每一条就是一行，多行堆在一条里等于又写成了一篇；
+    /// ③ 条目数有地板（8 条）：重排是「拆开」，不是「删掉」，把挂账删掉换绿是不许的。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：不判每条写得对不对、也不判该不该挂账。历史读数该去哪（`docs/NOTES.md` 对应轮次）
+    /// 由人判断；门只挡住「又长回去」这一种退化。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void KnownLimits_EveryItemStaysShortEnoughToScan()
+    {
+        var lines = KnownLimitLines();
+        var items = KnownLimitItems(lines);
+
+        var overlong = OverlongKnownLimits(items, MaxKnownLimitChars);
+        Assert.True(overlong.Count == 0,
+            $"README.md「已知限制」有 {overlong.Count} 条超过 {MaxKnownLimitChars} 字：\n  "
+            + string.Join("\n  ", overlong)
+            + "\n一条只写「现状 + 缺什么 + 指向哪里」，历史读数移到 docs/NOTES.md 对应轮次。"
+            + "拆成几条独立条目，不要把它们重新堆回一条里。");
+
+        // ② 不许续行：这一节里每一行非空文字都必须是一条的开头。
+        var continuations = lines
+            .Select((l, i) => (Line: l, Index: i))
+            .Where(x => x.Line.Trim().Length > 0 && !x.Line.StartsWith("- ", StringComparison.Ordinal))
+            .Select(x => $"第 {x.Index + 1} 行「{Excerpt(x.Line.Trim())}」")
+            .ToList();
+        Assert.True(continuations.Count == 0,
+            "README.md「已知限制」里有不属于任何一条的行（续行）：\n  " + string.Join("\n  ", continuations)
+            + "\n一条就是一行：续行会把一条重新写成一篇，读者扫不到条目边界。");
+
+        // ③ 条目数地板：重排是拆开，不是删掉。
+        Assert.True(items.Count >= 8,
+            $"README.md「已知限制」只剩 {items.Count} 条（地板 8 条）：重排是把长条目拆成几条，"
+            + "不是把挂账删掉换绿——挂账必须留。");
+
+        // 判据自验：注入一条超长必须被点名，恰好等于上限不算超。
+        var injected = new List<string>
+        {
+            // 条目本身带「- 」两个字符，故边界那一条的正文是上限减 2。
+            "- " + new string('字', MaxKnownLimitChars - 2),
+            "- " + new string('字', MaxKnownLimitChars - 1),
+        };
+        var named = OverlongKnownLimits(injected, MaxKnownLimitChars);
+        Assert.Single(named);
+        Assert.Contains($"{MaxKnownLimitChars + 1} 字", named[0], StringComparison.Ordinal);
+        Assert.Empty(OverlongKnownLimits([], MaxKnownLimitChars));
+    }
 }

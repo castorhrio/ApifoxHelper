@@ -204,4 +204,179 @@ public class DocsSpacingTests
             $"docs/NOTES.md 里那句登记必须写「对外文本排版登记 {count} 条」（这一跑实测就是 {count} 处）："
             + "读答辩材料的人要从那一行知道判到哪一层，写着一个跑不出来的数就等于没写。");
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 验收表「一格不许写成一篇小论文」（第二百五十四轮，简报 P0-1：去 AI 味道）
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>验收表单元格的字数上限。第二百五十四轮重排之后实测最长一格 375 字（G-D4 的证据列）。</summary>
+    private const int MaxAcceptanceCellChars = 400;
+
+    /// <summary>验收口径一节的标题（与 <c>AcceptanceChecklistTests</c> 判的是同一节，取法各自独立）。</summary>
+    private const string AcceptanceHeading = "## 本仓验收口径（可勾选）";
+
+    /// <summary>被移出的详细口径小节：三级标题以这个前缀开头，四级小节以这个后缀结尾。</summary>
+    private const string DetailSectionPrefix = "### 验收表逐格详细口径";
+
+    private const string DetailSubsectionSuffix = "：详细口径";
+
+    /// <summary>验收口径一节的行（标题行到下一个 <c>## </c> 之前，含被移出的详细口径小节）。</summary>
+    private static string[] AcceptanceSectionLines()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").ReplaceLineEndings("\n").Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == AcceptanceHeading);
+        Assert.True(start >= 0, $"docs/NOTES.md 缺「{AcceptanceHeading}」一节：验收表字数门没有可判的对象。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    /// <summary>验收表里的一格：属于哪一条（条目名）、第几列、正文。</summary>
+    private readonly record struct Cell(string Item, int Column, string Text);
+
+    /// <summary>表里所有可勾选行的每一格（第 0 列是勾选框，不判）。</summary>
+    private static List<Cell> AcceptanceCells(IEnumerable<string> sectionLines)
+    {
+        var cells = new List<Cell>();
+        foreach (var line in sectionLines)
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var parts = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            if (parts.Count != 5 || (parts[0] != "[x]" && parts[0] != "[ ]")) continue;
+            for (var i = 1; i < parts.Count; i++) cells.Add(new Cell(parts[1], i, parts[i]));
+        }
+        return cells;
+    }
+
+    /// <summary>超长格念成人话（顺序稳定：按条目名、列号）。</summary>
+    private static List<string> OverlongCells(IEnumerable<Cell> cells, int max) => cells
+        .Where(c => c.Text.Length > max)
+        .OrderBy(c => c.Item, StringComparer.Ordinal).ThenBy(c => c.Column)
+        .Select(c => $"「{c.Item}」第 {c.Column} 列 {c.Text.Length} 字（上限 {max}）")
+        .ToList();
+
+    /// <summary>
+    /// 验收表每一格都不许写成一篇小论文（第二百五十四轮，简报 P0-1）。
+    /// <para>
+    /// <b>要解决的问题</b>：这张表是评审第一眼读到的东西，而它此前有单元格内嵌约 1500 字——判据层、读数层、
+    /// 时效门、行动书全塞在一个 <c>| … |</c> 里，括号套括号、层数过深。真人写的验收表不会这样：
+    /// 格子里是「结论 + 一句读数 + 指向哪里」，细节在下面的小节里。这不是排版洁癖——审查清单 A 节
+    /// 「正文行长约 28–40 字」在这里被彻底违反，读的人第一眼就会把它读成生成物。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：表里每一格 ≤ <see cref="MaxAcceptanceCellChars"/> 字，超了即红并点名到哪一条哪一列多少字。
+    /// 长内容不是删掉，是<b>移出去</b>——移到「验收表逐格详细口径」一节，由
+    /// <see cref="DetailSubsections_ResolveFromTheCellsThatPointAtThem"/> 判「格子指向的小节真的在」。
+    /// </para>
+    /// <para>
+    /// <b>判据自己被抓得住</b>：注入一格超长（上限 + 1 字）必须被点名，恰好等于上限不算超——
+    /// 这一族的老毛病是判据写错时门看起来是绿的，所以夹具与边界都在同一条用例里跑。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AcceptanceTable_EveryCellStaysShortEnoughToRead()
+    {
+        var overlong = OverlongCells(AcceptanceCells(AcceptanceSectionLines()), MaxAcceptanceCellChars);
+        Assert.True(overlong.Count == 0,
+            $"docs/NOTES.md 验收表有 {overlong.Count} 格超过 {MaxAcceptanceCellChars} 字：\n  "
+            + string.Join("\n  ", overlong)
+            + "\n格子里只留「结论 + 一句读数 + 指向哪里」，长读数与判据移到「验收表逐格详细口径」一节，"
+            + "格子里写一句「见「X：详细口径」」。移出的是位置，不是内容——判它们的那几条门一条都不用动。");
+
+        // 判据自验：注入一格超长必须被点名（否则这条门绿着也说明不了任何事）。
+        var injected = new List<Cell>
+        {
+            new("G-D9 注入的条目", 3, new string('字', MaxAcceptanceCellChars + 1)),
+            new("G-D9 注入的条目", 4, new string('字', MaxAcceptanceCellChars)),
+        };
+        var named = OverlongCells(injected, MaxAcceptanceCellChars);
+        Assert.Single(named);
+        Assert.Contains("G-D9 注入的条目", named[0], StringComparison.Ordinal);
+        Assert.Contains("第 3 列", named[0], StringComparison.Ordinal);
+        Assert.Contains($"{MaxAcceptanceCellChars + 1} 字", named[0], StringComparison.Ordinal);
+
+        // 空表念成「没有超长格」，不是「判不动」。
+        Assert.Empty(OverlongCells([], MaxAcceptanceCellChars));
+    }
+
+    /// <summary>详细口径一节里的四级小节名（去掉 <c>#### </c> 前缀）。</summary>
+    private static List<string> DetailSubsections(IEnumerable<string> sectionLines) => sectionLines
+        .Where(l => l.StartsWith("#### ", StringComparison.Ordinal))
+        .Select(l => l[5..].Trim())
+        .Where(t => t.EndsWith(DetailSubsectionSuffix, StringComparison.Ordinal))
+        .ToList();
+
+    /// <summary>格子里写的「见「X：详细口径」」指向（去重，顺序稳定）。</summary>
+    private static List<(string Item, string Name)> Pointers(IEnumerable<Cell> cells) => cells
+        .SelectMany(c => Regex.Matches(c.Text, "「(?<n>[^」]+" + DetailSubsectionSuffix + ")」")
+            .Select(m => (Item: c.Item, Name: m.Groups["n"].Value)))
+        .Distinct()
+        .OrderBy(p => p.Item, StringComparer.Ordinal).ThenBy(p => p.Name, StringComparer.Ordinal)
+        .ToList();
+
+    /// <summary>指向了不存在的小节（悬空指针）。</summary>
+    private static List<string> DanglingPointers(IEnumerable<Cell> cells, IReadOnlyCollection<string> headings) =>
+        Pointers(cells).Where(p => !headings.Contains(p.Name))
+            .Select(p => $"「{p.Item}」指向的「{p.Name}」在详细口径一节里没有对应小节")
+            .ToList();
+
+    /// <summary>没有任何一格指向的小节（孤儿小节：内容移出去了，但读者找不到入口）。</summary>
+    private static List<string> OrphanSubsections(IEnumerable<Cell> cells, IReadOnlyCollection<string> headings)
+    {
+        var all = cells.ToList();
+        return headings
+            .Where(h => !all.Any(c => c.Text.Contains("「" + h + "」", StringComparison.Ordinal)))
+            .Select(h => $"「{h}」没有任何一格指向它")
+            .ToList();
+    }
+
+    /// <summary>
+    /// 格子里那句「见「X：详细口径」」必须真的有小节，且没有没人指的小节（第二百五十四轮，简报 P0-1）。
+    /// <para>
+    /// <b>为什么这条门必须与上一条同时存在</b>：上一条只判「格子短了」。把长内容删掉、或把指针写成
+    /// 一个不存在的小节名，格子一样短、上一条一样绿——<b>读者按指针翻下去会翻空</b>。
+    /// 两条合起来才是「移出位置、不丢内容」：短了（上一条）+ 指得到（这一条）。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 每一处指向都有同名四级小节（悬空即红，点名是哪一条指向了哪个名字）；
+    /// ② 每一个四级小节都至少被一格指向（孤儿即红——内容移出去了却没人引，等于埋了）。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：小节里的正文对不对、够不够长。那是各条判据自己的事（`AcceptanceChecklistTests`
+    /// 判表格那一列的引用解析得开），这里只判「入口通不通」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DetailSubsections_ResolveFromTheCellsThatPointAtThem()
+    {
+        var lines = AcceptanceSectionLines();
+        var cells = AcceptanceCells(lines);
+        var headings = DetailSubsections(lines);
+
+        Assert.True(headings.Count > 0,
+            "docs/NOTES.md 的验收口径一节里没有「验收表逐格详细口径」小节：格子里的「见「X：详细口径」」会全部悬空。");
+
+        var dangling = DanglingPointers(cells, headings);
+        Assert.True(dangling.Count == 0,
+            "验收表里有指向不存在小节的格子：\n  " + string.Join("\n  ", dangling)
+            + "\n要么把小节名写对，要么把那一格的内容真的移出去——指针指空比不写指针更糟。");
+
+        var orphans = OrphanSubsections(cells, headings);
+        Assert.True(orphans.Count == 0,
+            "详细口径一节里有没人指向的小节：\n  " + string.Join("\n  ", orphans)
+            + "\n内容移出去了却没有任何一格引它，读者从表格翻不到——要么在对应格子里写上指针，要么把这一节删掉。");
+
+        // 判据自验：悬空指针与孤儿小节都必须被点名（这一族的老毛病：判据写错时门看起来是绿的）。
+        var fixtureCells = new List<Cell>
+        {
+            new("G-D9 注入的条目", 3, "见「G-D9 注入：详细口径」。"),
+            new("G-D9 注入的条目", 4, "见「G-D3 状态完备：详细口径」。"),
+        };
+        var fixtureHeadings = new List<string> { "G-D3 状态完备：详细口径", "G-D9 没人指的小节：详细口径" };
+        var fixtureDangling = DanglingPointers(fixtureCells, fixtureHeadings);
+        Assert.Single(fixtureDangling);
+        Assert.Contains("G-D9 注入：详细口径", fixtureDangling[0], StringComparison.Ordinal);
+        var fixtureOrphans = OrphanSubsections(fixtureCells, fixtureHeadings);
+        Assert.Single(fixtureOrphans);
+        Assert.Contains("G-D9 没人指的小节：详细口径", fixtureOrphans[0], StringComparison.Ordinal);
+    }
 }
