@@ -236,6 +236,300 @@ public class LayoutMeasurementGateTests
         }
     }
 
+    // ---------- 「假门防护」扩到全仓 *LayoutTests.cs 一族（第二百五十五轮，简报 P1-1）----------
+
+    /// <summary>
+    /// 有<b>专门的「不许退回恒等式」门</b>的 <c>*LayoutTests.cs</c>：文件 → 门方法名。
+    /// <para>
+    /// <b>补的是哪一笔挂账</b>：第二百五十二轮在 commit 里如实挂账「P0-2：假门防护扩到全仓
+    /// <c>*LayoutTests.cs</c> 一族未做」；第二百五十三轮把「逐笔对账」扩到了全仓一族
+    /// （<see cref="Registered"/> 那一份），但<b>「判它不是恒等式」这一半仍只长在一屏的门里</b>
+    /// （<c>EndpointTraceLayoutTests.TheHalfDialogGate_IsNotAnIdentity</c>）。
+    /// 第二百五十五轮只读核对全仓七份 <c>*LayoutTests.cs</c>，结论是：<b>同源恒等式还剩一处</b>——
+    /// <c>ManualDraftLayoutTests.TheFixedAreaShare_UsesTheSameCaliberAsTheOtherScreens</c> 里那句
+    /// <c>Assert.Equal(InputAreaHeight(MainRows), DialogHeight − fixedArea)</c>，注释念的是
+    /// 「主内容拿得到判据行数那么多行」，而那一句由 <c>DialogHeight</c> 的定义推出、永远为真。
+    /// 本轮把它删掉并补上形状门，于是这一族有两份。
+    /// </para>
+    /// <para>
+    /// <b>这一份登记判什么</b>：登记的门方法<b>真的在文件里</b>、且它<b>真的在判形状</b>
+    /// （段内至少一句 <c>Assert.DoesNotContain</c>——判的是「那个记号不在」），
+    /// 同时<b>该在的那一条真判据还在</b>（段内至少一句 <c>Assert.Contains</c> 或 <c>Assert.True</c>，
+    /// 否则把整条门删空也能过）。
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, string> IdentityGuards = new(StringComparer.Ordinal)
+    {
+        ["EndpointTraceLayoutTests.cs"] = "TheHalfDialogGate_IsNotAnIdentity",
+        ["ManualDraftLayoutTests.cs"] = "TheFixedAreaShareGate_IsNotAnIdentity",
+    };
+
+    /// <summary>
+    /// <b>没有</b>专门形状门的 <c>*LayoutTests.cs</c>：文件 → 理由（为什么这一份不需要）。
+    /// <para>
+    /// <b>这一份登记要诚实</b>：其中三份<b>确实还有同源恒等式</b>（<c>DialogHeight</c> 由
+    /// <c>DialogHeightFor</c> 定义，所以「各块之和 == DialogHeight」永远为真）。本轮<b>不为它们补形状门</b>，
+    /// 理由写在每一条里：那一句的注释没有替它宣称一件它判不到的事，而同一方法里另有实测口径的取值判据。
+    /// 第二百五十一轮补形状门，是因为那一屏<b>只剩</b>恒等式；这三份不是。
+    /// </para>
+    /// <para>
+    /// <b>登记在这里是为了让「不需要」变成一句可判的话</b>：新增一份 <c>*LayoutTests.cs</c> 时，
+    /// <see cref="EveryLayoutTestFile_HasItsIdentityGuardRegistered"/> 会当场红并点名——
+    /// 那时要么补形状门登记进 <see cref="IdentityGuards"/>，要么把这一份为什么没有假门形态写清楚。
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, string> NoIdentityGuard = new(StringComparer.Ordinal)
+    {
+        ["CapabilitiesLayoutTests.cs"] =
+            "这一份里确实还有同源恒等式（ResultPaneHeight_IsRowsTimesRowHeightPlusHeaderAndChrome 末尾那句"
+            + "「FixedPanesHeight + ResultPaneHeight(ProbeRows) == DialogHeight」，右边就是 DialogHeightFor 的定义）。"
+            + "本轮不为它补形状门：那一句的注释没有替它宣称一件它判不到的事，而同一方法里 7 * 21 + 24 + 43 与 21 "
+            + "是实测口径的取值判据、DialogHeightFor_TracksEveryRow 再判 6 / 7 / 8 三个行数点——"
+            + "恒等式不是这一份唯一的判据。第二百五十一轮补形状门，是因为那一屏只剩恒等式；这一份不是。",
+        ["CheckResultsLayoutTests.cs"] =
+            "同 Capabilities 那一份：MainListHeight_IsRowsTimesRowHeightPlusHeader 末尾那句"
+            + "「FixedPanesHeight + MainListHeight(MainRows) + ListHostChrome == DialogHeight」是恒等式，"
+            + "但同一方法里 8 * 21 + 24 与 21 是取值判据，DialogHeightFor_TracksEveryRow 再判 7 / 8 / 9 三个行数点；"
+            + "FixedPanesHeight_IsTheSumOfTheSixNamedPanes 里那句「和是加出来的」同样是恒等式，"
+            + "但六块各自钉死（31 / 39 / 124 / 168 / 148 / 60）且总和钉死 570。恒等式不是这一份唯一的判据。",
+        ["ScanWarningsLayoutTests.cs"] =
+            "同前两份：ListHostHeight_IsRowsTimesLineHeightPlusTheTwoChromes 末尾那句是恒等式，"
+            + "但同一方法里 16 * 21、16 * 21 + 10、17 * 21 + 10 与 21 是取值判据，"
+            + "DialogHeightFor_TracksEveryRow 再判 15 / 16 / 17 三个行数点；"
+            + "FixedPanesHeight_IsTheSumOfTheTwoNamedPanes 里两块各自钉死（25 / 60）且总和钉死 85。",
+        ["ProfileFormLayoutTests.cs"] =
+            "判的是纯算式（MaxRowHeight 的 17 + RowPadding 与 41、RowPadding 的 4 + 8 + 12），"
+            + "没有「窗体高 = 各块之和」这种同源恒等式；量测在冒烟器 RunProfileFormLayout 里由"
+            + " ProfileFormLayoutBudgetTests 那一族对账，不在本族登记范围内。",
+        ["SplitLayoutTests.cs"] =
+            "判的是列宽分配（FixedPanel.Panel2、SplitterDistance 的可行性门控）与接线正则，"
+            + "没有竖直预算的同源恒等式。",
+    };
+
+    /// <summary>
+    /// 全仓每一份 <c>*LayoutTests.cs</c> 都要在 <see cref="IdentityGuards"/> 或
+    /// <see cref="NoIdentityGuard"/> 里出现一次，且登记的那条门真的在判形状。
+    /// <para>
+    /// <b>它不判什么</b>：不判「这一份还有没有别的假门」——判据是中文散文与算式，机械判不了；
+    /// 它判的是「每一份都被做过一次决定」，以及「登记为有形状门的那一份，那条门真的在判形状」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryLayoutTestFile_HasItsIdentityGuardRegistered()
+    {
+        var directory = Path.Combine(Repo.Root, "ApifoxHelper.Tests");
+        var layoutTests = Directory.GetFiles(directory, "*LayoutTests.cs")
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        Assert.NotEmpty(layoutTests);
+
+        var problems = IdentityGuardProblems(
+            layoutTests,
+            IdentityGuards,
+            NoIdentityGuard,
+            file => Repo.Source("ApifoxHelper.Tests", file));
+        Assert.Empty(problems);
+    }
+
+    /// <summary>
+    /// 上面那段判据<b>自己</b>被抓得住：七发注入各喂一次，每一发都必须报出自己那一处。
+    /// <para>
+    /// 与 <see cref="GateDetector_ReportsTheBreaksItMustCatch"/> 同一纪律：判据自己没被跑过，
+    /// 比没有判据更贵（第二百零九轮那两处假变异、第二百四十三轮 M4 那一发假绿都是这一种）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void IdentityGuardDetector_ReportsTheBreaksItMustCatch()
+    {
+        var files = new[] { "AaaLayoutTests.cs", "BbbLayoutTests.cs" };
+        var compliant = """
+            public class AaaLayoutTests
+            {
+                [Fact]
+                public void TheGate_IsNotAnIdentity()
+                {
+                    Assert.DoesNotContain("DialogHeight - fixedArea", gate, StringComparison.Ordinal);
+                    Assert.Contains("fixedArea * 2 < ", gate, StringComparison.Ordinal);
+                }
+            }
+            """;
+        string Read(string file) => compliant;
+
+        // ① 合规：一份有形状门、一份登记了「为什么不需要」。
+        Assert.Empty(IdentityGuardProblems(
+            files,
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["AaaLayoutTests.cs"] = "TheGate_IsNotAnIdentity" },
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["BbbLayoutTests.cs"] = "夹具：这一份没有竖直预算。" },
+            Read));
+
+        // ② 一份都没登记：新增的 *LayoutTests.cs 悄悄绕过这一族门。
+        var second = IdentityGuardProblems(files, EmptyRegistry(), EmptyRegistry(), Read);
+        Assert.Equal(2, second.Count);
+        Assert.Contains("既没有专门的「不许退回恒等式」门", second[0], StringComparison.Ordinal);
+
+        // ③ 登记的门方法不存在（改名或删掉）。
+        var third = IdentityGuardProblems(
+            ["AaaLayoutTests.cs"],
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["AaaLayoutTests.cs"] = "TheGate_ThatIsGone" },
+            EmptyRegistry(),
+            Read);
+        Assert.Single(third);
+        Assert.Contains("在文件里找不到", third[0], StringComparison.Ordinal);
+
+        // ④ 形状门退化成取值门：一句 DoesNotContain 都没有。
+        var valueOnly = """
+            public class AaaLayoutTests
+            {
+                [Fact]
+                public void TheGate_IsNotAnIdentity()
+                {
+                    Assert.Equal(187, fixedArea);
+                    Assert.Contains("fixedArea * 2 < ", gate, StringComparison.Ordinal);
+                }
+            }
+            """;
+        var fourth = IdentityGuardProblems(
+            ["AaaLayoutTests.cs"],
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["AaaLayoutTests.cs"] = "TheGate_IsNotAnIdentity" },
+            EmptyRegistry(),
+            _ => valueOnly);
+        Assert.Single(fourth);
+        Assert.Contains("Assert.DoesNotContain", fourth[0], StringComparison.Ordinal);
+
+        // ⑤ 只判「不在」、不判「该在的还在」：整条门删空也能过。
+        var onlyAbsent = """
+            public class AaaLayoutTests
+            {
+                [Fact]
+                public void TheGate_IsNotAnIdentity()
+                {
+                    Assert.DoesNotContain("DialogHeight - fixedArea", gate, StringComparison.Ordinal);
+                }
+            }
+            """;
+        var fifth = IdentityGuardProblems(
+            ["AaaLayoutTests.cs"],
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["AaaLayoutTests.cs"] = "TheGate_IsNotAnIdentity" },
+            EmptyRegistry(),
+            _ => onlyAbsent);
+        Assert.Single(fifth);
+        Assert.Contains("只判「不在」", fifth[0], StringComparison.Ordinal);
+
+        // ⑥ 两份登记互相矛盾：同一份既说有形状门、又说不需要。
+        var sixth = IdentityGuardProblems(
+            ["AaaLayoutTests.cs"],
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["AaaLayoutTests.cs"] = "TheGate_IsNotAnIdentity" },
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["AaaLayoutTests.cs"] = "夹具：矛盾登记。" },
+            Read);
+        Assert.Single(sixth);
+        Assert.Contains("互相矛盾", sixth[0], StringComparison.Ordinal);
+
+        // ⑦ 理由空着：空理由等于没登记。
+        var seventh = IdentityGuardProblems(
+            ["BbbLayoutTests.cs"],
+            EmptyRegistry(),
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["BbbLayoutTests.cs"] = "  " },
+            Read);
+        Assert.Single(seventh);
+        Assert.Contains("理由空着", seventh[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>自测用的空登记表（不借用产品那一份，免得产品改了把自测带红）。</summary>
+    private static Dictionary<string, string> EmptyRegistry() => new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 把一批 <c>*LayoutTests.cs</c> 喂给判据，返回「哪几处不达形态」的说明（空 = 每一份都被做过一次决定）。
+    /// <para>
+    /// 写成「文件名进、问题出」的纯函数，是为了让上面那条自测能拿<b>注入过的</b>夹具喂它——
+    /// 与 <see cref="Problems"/> / <c>WiringAssertionShapeTests.Problems</c> 同一形状。
+    /// </para>
+    /// </summary>
+    private static List<string> IdentityGuardProblems(
+        IReadOnlyList<string> layoutTests,
+        IReadOnlyDictionary<string, string> guards,
+        IReadOnlyDictionary<string, string> noGuard,
+        Func<string, string> readFile)
+    {
+        var problems = new List<string>();
+        foreach (var file in layoutTests)
+        {
+            var hasGuard = guards.ContainsKey(file);
+            var hasReason = noGuard.ContainsKey(file);
+
+            if (hasGuard && hasReason)
+            {
+                problems.Add($"{file} 同时登记在 IdentityGuards 与 NoIdentityGuard 里：两份登记互相矛盾，"
+                    + "读的人不知道这一份到底有没有形状门。");
+                continue;
+            }
+
+            if (!hasGuard && !hasReason)
+            {
+                problems.Add($"{file} 既没有专门的「不许退回恒等式」门、也没登记「为什么不需要」："
+                    + "新增一份 *LayoutTests.cs 就要在这里做一次决定——补形状门（登记进 IdentityGuards），"
+                    + "或写清这一份为什么没有假门形态（登记进 NoIdentityGuard）。");
+                continue;
+            }
+
+            if (hasGuard)
+            {
+                var method = guards[file];
+                var signature = $"public void {method}()";
+                var body = MethodBodyOrNull(readFile(file), signature);
+                if (body is null)
+                {
+                    problems.Add($"{file} 登记的形状门 {method} 在文件里找不到：门改名或删掉，这一份就再没人判形状。");
+                    continue;
+                }
+
+                if (!body.Contains("Assert.DoesNotContain", StringComparison.Ordinal))
+                {
+                    problems.Add($"{file} 的 {method} 一句 Assert.DoesNotContain 都没有："
+                        + "形状门判的是「那个记号不在」，只判取值等于多少是判不到「假门回来了」的。");
+                }
+
+                if (!body.Contains("Assert.Contains", StringComparison.Ordinal)
+                    && !body.Contains("Assert.True", StringComparison.Ordinal))
+                {
+                    problems.Add($"{file} 的 {method} 只判「不在」、不判「该在的还在」："
+                        + "把整条门删空也能过——要留的那一条真判据必须同时被点到。");
+                }
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(noGuard[file]))
+            {
+                problems.Add($"{file} 的「为什么不需要形状门」理由空着——空理由等于没登记。");
+            }
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 取一个方法体：从签名那一行起，到第一个「四空格缩进的收尾大括号」为止；取不到返回 <c>null</c>。
+    /// <para>
+    /// <b>为什么不在这里断言</b>：这一支要被上面那条自测拿「方法不存在」的夹具喂，
+    /// 断言会把「该报的问题」变成「测试自己炸了」——报问题由调用方做。
+    /// </para>
+    /// </summary>
+    private static string? MethodBodyOrNull(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        if (start < 0) return null;
+        var body = new List<string>();
+        foreach (var line in source[start..].Split('\n'))
+        {
+            body.Add(line);
+            if (line.TrimEnd() == "    }") break;
+        }
+
+        return string.Join('\n', body);
+    }
+
     /// <summary>
     /// 上面那段判据<b>自己</b>被抓得住：六发注入各喂一次，每一发都必须报出自己那一处。
     /// <para>

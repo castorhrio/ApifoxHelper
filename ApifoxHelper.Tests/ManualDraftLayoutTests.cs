@@ -246,21 +246,58 @@ public class ManualDraftLayoutTests
     /// 与另一屏不是一个口径，拿来跨屏比较是错的。
     /// 本轮这一屏量过之后，那一格改成同一口径：187 / 400。
     /// </para>
+    /// <para>
+    /// <b>第二百五十五轮删掉了一句同源恒等式（简报 P1-1）</b>：此前这里还有一句
+    /// <c>Assert.Equal(InputAreaHeight(MainRows), DialogHeight − fixedArea)</c>，注释念的是
+    /// 「主内容拿得到判据行数那么多行」——<b>而那一句永远为真</b>：
+    /// <c>DialogHeight ≡ FixedPanesHeight + GridPaddingHeight + InputAreaHeight(MainRows)</c>，
+    /// 右边减掉 <c>fixedArea</c> 就是左边，改任一输入两边同时动。它给的是「主内容装得下」的
+    /// <b>虚假安全感</b>，与第二百五十一轮从 <c>EndpointTraceLayoutTests</c> 删掉的那两句同一个形状。
+    /// </para>
+    /// <para>
+    /// <b>「主内容拿得到判据行数」这句话现在挂在哪</b>：挂在<b>实跑</b>上——
+    /// <c>RunManualDraftShown</c> 量的是真控件（输入区宿主实测高、输入框实测高、行高实测高），
+    /// 算式那边是常量，两边对账，由
+    /// <see cref="TheMeasurement_ReconcilesTheMeasuredInputAreaAgainstTheFormula"/> 钉住还在。
+    /// 这里留的是「固定区占屏比」这一句——两个独立算出来的数之间的关系，不是恒等式。
+    /// </para>
     /// </summary>
     [Fact]
     public void TheFixedAreaShare_UsesTheSameCaliberAsTheOtherScreens()
     {
         var fixedArea = ManualDraftLayout.FixedPanesHeight + ManualDraftLayout.GridPaddingHeight;
         Assert.Equal(187, fixedArea);
-        // 主内容拿得到判据行数那么多行：窗体高扣掉固定区，剩下的正是输入区。
-        Assert.Equal(
-            ManualDraftLayout.InputAreaHeight(ManualDraftLayout.MainRows),
-            ManualDraftLayout.DialogHeight - fixedArea);
         // 固定区不到整屏的一半——与接口追踪明细那一屏（55%）方向相反，这一屏的主内容是宽裕的。
         Assert.True(
             fixedArea * 2 < ManualDraftLayout.DialogHeight,
             $"固定区 {fixedArea}px 已不再少于窗体高 {ManualDraftLayout.DialogHeight}px 的一半："
             + "「这一屏的主内容是宽裕的」这句话需要重新量过。");
+    }
+
+    /// <summary>
+    /// 这一条不许退回「恒等式」的形状（第二百五十五轮，简报 P1-1，具名 pass：harden）。
+    /// <para>
+    /// <b>判的是形状，不是某一句的取值</b>：第二百五十一轮在 <c>EndpointTraceLayoutTests</c> 上
+    /// 删掉两句恒等式时，同一形态在本文件里还留着一句——那一轮只修了一屏，这一轮把它收口。
+    /// 恒等式的形状是源码里的记号（减号两边同源），删掉一句断言不会留痕，
+    /// 只有回看源码才发现——而那正是「假门」能活下来的原因。
+    /// </para>
+    /// <para>
+    /// <b>为什么能判自己的源码</b>：与 <c>EndpointTraceLayoutTests.TheHalfDialogGate_IsNotAnIdentity</c>
+    /// 同一形态（第二百五十一轮），本仓已有先例。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheFixedAreaShareGate_IsNotAnIdentity()
+    {
+        var source = Repo.Source("ApifoxHelper.Tests", "ManualDraftLayoutTests.cs");
+        var gate = MethodSlice(source, "public void TheFixedAreaShare_UsesTheSameCaliberAsTheOtherScreens()");
+        // ① 「输入区高 = 窗体高 − 固定区」：右边由 DialogHeight 的定义推出，改任一输入两边同时动。
+        Assert.DoesNotContain("ManualDraftLayout.DialogHeight - fixedArea", gate, StringComparison.Ordinal);
+        // ② 要留的那一条还在：两个独立算出来的数之间的关系，不是恒等式。
+        Assert.Contains("fixedArea * 2 < ManualDraftLayout.DialogHeight", gate, StringComparison.Ordinal);
+        // ③ 固定区那个读数还在（187 是量出来的，不是加出来的）。
+        Assert.Contains("Assert.Equal(187, fixedArea)", gate, StringComparison.Ordinal);
     }
 
     /// <summary>共享编译：这条算式与测试工程是同一份，不是测试里抄的第二份。</summary>
