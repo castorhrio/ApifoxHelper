@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-13
-source=f7def4042332bdcd3dcffbfb565b3e7547f9cbac
-tier=96 passed=250 failed=0 exit=0
-tier=120 passed=250 failed=0 exit=0
-tier=192 passed=250 failed=0 exit=0
+source=b0c6f08f9a4d425b8eb57d206043cd8f803cbd3c
+tier=96 passed=251 failed=0 exit=0
+tier=120 passed=251 failed=0 exit=0
+tier=192 passed=251 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -44,6 +44,7 @@ section=RunCapabilitiesShown tier=96 passed=1 failed=0
 section=RunCheckResultsShown tier=96 passed=1 failed=0
 section=RunEndpointTraceShown tier=96 passed=1 failed=0
 section=RunManualDraftShown tier=96 passed=1 failed=0
+section=RunScanWarningsShown tier=96 passed=1 failed=0
 section=RunFullJourney tier=96 passed=10 failed=0
 section=RunEndToEnd tier=120 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=120 passed=6 failed=0
@@ -74,6 +75,7 @@ section=RunCapabilitiesShown tier=120 passed=1 failed=0
 section=RunCheckResultsShown tier=120 passed=1 failed=0
 section=RunEndpointTraceShown tier=120 passed=1 failed=0
 section=RunManualDraftShown tier=120 passed=1 failed=0
+section=RunScanWarningsShown tier=120 passed=1 failed=0
 section=RunFullJourney tier=120 passed=10 failed=0
 section=RunEndToEnd tier=192 passed=3 failed=0
 section=RunWriteBackEndToEnd tier=192 passed=6 failed=0
@@ -104,4 +106,5 @@ section=RunCapabilitiesShown tier=192 passed=1 failed=0
 section=RunCheckResultsShown tier=192 passed=1 failed=0
 section=RunEndpointTraceShown tier=192 passed=1 failed=0
 section=RunManualDraftShown tier=192 passed=1 failed=0
+section=RunScanWarningsShown tier=192 passed=1 failed=0
 section=RunFullJourney tier=192 passed=10 failed=0

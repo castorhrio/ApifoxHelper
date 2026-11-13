@@ -134,14 +134,17 @@ internal static class MeasuredScreens
             ["CapabilitiesDialog"], true, "第二百四十七轮",
             "docs/NOTES.md 第二百四十七轮：真的 Show() 出来之后量到结果区只剩 82px、清单本体 39px（装得下 1 行），窗体高改按「结果区要给几行」算"),
 
-        // ── 未量：冒烟器只 new 一次 + 建句柄，从不显示 ──
+        // ── 第二百四十八轮起逐屏收口：这一节此前是「未量：冒烟器只 new 一次 + 建句柄，从不显示」，
+        //    三屏（契约检查结果 / 接口追踪明细 / 手工填写说明）与最后一屏（扫描警告）已逐轮真的 Show() 出来。
+        //    第二百五十二轮起**未量屏为 0**——这一节留着，是因为「哪几屏曾经未量」本身是台账的一部分；
+        //    下一轮若新增一屏只构造不显示，按同一形状在末尾补一行 Measured=false 即可，门会当场点名。
         new("契约检查结果", "RunCheckResultsShown", ["CheckResultsDialog"], true, "第二百四十八轮",
             "docs/NOTES.md 第二百四十八轮：真的 Show() 出来之后量到接口清单只剩 140px（扣掉表头装得下 5 行），窗体高改按「接口清单要给几行」算"),
         new("接口追踪明细", "RunEndpointTraceShown", ["EndpointTraceDialog"], true, "第二百五十轮",
             "docs/NOTES.md 第二百五十轮：真的 Show() 出来之后量到接口清单宿主 286px、清单本体 276px（扣掉表头装得下 12 行），窗体高改按「接口清单要给几行」算"),
         new("手工填写说明", "RunManualDraftShown", ["ManualDraftDialog"], true, "第二百五十一轮",
             "docs/NOTES.md 第二百五十一轮：真的 Show() 出来之后量到输入区宿主 213px、输入框 211px（装得下 10 行），窗体高改按「输入区要给几行」算"),
-        new("扫描警告", "Cases", ["ScanWarningsDialog"], false, "第二百四十三轮",
-            "docs/NOTES.md 第二百四十三轮：同一句挂账——这一屏至今只被构造过，没有一段真的把它显示出来"),
+        new("扫描警告", "RunScanWarningsShown", ["ScanWarningsDialog"], true, "第二百五十二轮",
+            "docs/NOTES.md 第二百五十二轮：真的 Show() 出来之后量到警告清单宿主 346px、清单本体 336px（装得下 16 行），窗体高改按「警告清单要给几行」算"),
     ];
 }

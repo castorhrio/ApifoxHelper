@@ -298,6 +298,8 @@ internal static class Program
         RunEndpointTraceShown(services, dataRoot);
         Section("手工填写说明真的显示出来（三块停靠区高度对客户区、固定四块与 ManualDraftLayout 对账、输入区实测高与算式对账、装得下十行，真实控件量）", nameof(RunManualDraftShown));
         RunManualDraftShown(services, dataRoot);
+        Section("扫描警告真的显示出来（两块停靠区高度对客户区、固定两块与 ScanWarningsLayout 对账、警告清单实测高与算式对账、装得下若干行，真实控件量）", nameof(RunScanWarningsShown));
+        RunScanWarningsShown(services, dataRoot);
 
         Section("完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）", nameof(RunFullJourney));
         RunFullJourney(services, dataRoot);
@@ -6876,6 +6878,205 @@ internal static class Program
                     $"输入区这一刻只装得下 {capacity} 行（输入框可视高 {input.ClientSize.Height}px、行高 {lineHeight}px），" +
                     $"判据是 {ManualDraftLayout.MainRows} 行：这一屏的主内容就是这个输入区，装不下就等于「写说明时看不见自己写了什么」，" +
                     "不能读成「放得下」。");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 「扫描警告」这一屏真的显示出来之后量到的那几个数（第二百五十二轮，简报 P0-1，具名 pass：layout）。
+    /// <para>
+    /// <b>这一屏此前为什么量不到</b>：冒烟器每一段都只「建句柄 + <c>CreateControl</c> + <c>PerformLayout</c>」，
+    /// 从不显示窗体——而一张没显示过的窗体 <c>ClientSize</c> 的高是 0，量到的数不能读成「放得下」。
+    /// <see cref="MeasuredScreens"/> 登记表里这一屏从第二百四十三轮起一直挂着「未量」，
+    /// 它是<b>全仓最后一屏</b>未量的（其余各屏都已 <c>Show()</c> 过）。
+    /// </para>
+    /// <para>
+    /// <b>这一屏的主内容是什么</b>：那份降级清单（扫描警告 / 未解析符号 / 外部类型三类条目）——
+    /// 用户在这里看的是「哪些位置被降级处理了、为什么」。所以容量口径是
+    /// <b>「警告清单这一刻装得下几行」</b>，与 <see cref="ManualDraftLayout"/> 那一屏的
+    /// 「输入区装得下几行」<b>不是同一个口径</b>：那一屏是<b>输入</b>（手写说明），
+    /// 这一屏是<b>只读预览</b>（降级条目），两者也不能跨屏抄数。
+    /// </para>
+    /// <para>
+    /// <b>这一屏此前为什么是全仓最后一屏</b>：它的窗体高写死 <c>720×480</c>，与「警告清单要给几行」
+    /// 之间没有算式绑住——第二百四十四轮起那一族屏都改成了「按行数算」，这一屏此前一直排在最后。
+    /// </para>
+    /// </summary>
+    private static void RunScanWarningsShown(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "扫描警告显示冒烟" });
+
+        // 真实项目里这一屏放的是三类降级条目，形状按产品自己的 ScanOverview.DegradationItems 口径
+        // （未解析符号带「未解析：」前缀、外部类型带「外部类型（不可回写）：」前缀、扫描警告原样）。
+        // 条目必须多于判据行数：清单不会为了空行撑高，条目少了量到的容量会被条目数截住。
+        var items = new List<string>
+        {
+            "未解析：Probe.Api.Controllers.ProbeController.Get",
+            "未解析：Probe.Api.Controllers.ProbeController.Post",
+            "未解析：Probe.Api.Services.OrderService.Create",
+            "未解析：Probe.Api.Services.OrderService.Query",
+            "外部类型（不可回写）：Newtonsoft.Json.Linq.JToken",
+            "外部类型（不可回写）：Microsoft.Data.SqlClient.SqlConnection",
+            "外部类型（不可回写）：System.Text.Json.JsonDocument",
+            "扫描警告：Probe.Api/Controllers/ProbeController.cs 的 using 指令无法解析",
+            "扫描警告：Probe.Api/Services/OrderService.cs 的泛型实参在调用点才确定",
+            "扫描警告：Probe.Api/Models/Order.cs 的继承链超过解析上限",
+            "扫描警告：Probe.Api/Controllers/AccountController.cs 的条件编译分支无法静态判定",
+            "扫描警告：Probe.Api/Middleware/TraceMiddleware.cs 的源生成器未能展开",
+        };
+
+        RunAction("扫描警告：真的显示出来之后，两块停靠区高度加起来等于客户区、固定两块与 ScanWarningsLayout 对账、警告清单实测高与算式对账、装得下若干行（真实控件量）", () =>
+        {
+            // 两块停靠区按产品自己的停靠方式认（内容网格 Fill、按钮行 Bottom）：
+            // 认不出就点名，不按控件顺序猜。
+            using var dialog = new ScanWarningsDialog(task, items);
+            dialog.Show();
+            Application.DoEvents();
+
+            var client = dialog.ClientSize;
+            var docked = dialog.Controls.Cast<Control>().ToList();
+            var content = docked.OfType<TableLayoutPanel>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的内容网格：停靠分法变了，本段量测口径需要重定。");
+            var buttonRow = docked.OfType<FlowLayoutPanel>().SingleOrDefault()
+                ?? throw new InvalidOperationException("这一屏没有底部按钮行（FlowLayoutPanel）：停靠分法变了，本段量测口径需要重定。");
+
+            // 警告清单：内容网格里那个只读多行框（这一屏的主内容）。
+            var text = FindAll<TextBox>(content).SingleOrDefault(box => box.Multiline && box.ReadOnly)
+                ?? throw new InvalidOperationException("内容网格里找不到只读多行预览框：主内容换了，本段量测口径需要重定。");
+            var hairline = text.Parent as Panel
+                ?? throw new InvalidOperationException("预览框没有发丝边宿主：形状变了，本段量测口径需要重定。");
+            var listHost = hairline.Parent as Panel
+                ?? throw new InvalidOperationException("发丝边宿主没有清单宿主：形状变了，本段量测口径需要重定。");
+
+            // 内容网格的两行按「控件在第几行」认，不按控件顺序猜（第二百四十九轮那一课）。
+            // 行高取布局引擎算出来的那一份（TableLayoutPanel.GetRowHeights 是 public，GetRowHeight 是 protected）。
+            var rowHeights = content.GetRowHeights();
+            if (rowHeights.Length != 2)
+            {
+                throw new InvalidOperationException($"内容网格有 {rowHeights.Length} 行，期望 2 行（说明行 + 警告清单）：本段量测口径需要重定。");
+            }
+
+            var guidanceLabel = content.Controls.Cast<Control>().OfType<Label>().SingleOrDefault()
+                ?? throw new InvalidOperationException("内容网格里找不到说明行（Label）：本段量测口径需要重定。");
+            if (content.GetRow(guidanceLabel) != 0)
+            {
+                throw new InvalidOperationException($"内容网格里说明行在第 {content.GetRow(guidanceLabel)} 行，期望第 0 行：本段量测口径需要重定。");
+            }
+
+            var guidanceRow = rowHeights[0];
+            var listRow = rowHeights[1];
+
+            var sum = content.Height + buttonRow.Height;
+            var fixedPanes = guidanceRow + buttonRow.Height;
+            var lineHeight = Math.Max(1, text.Font.Height);
+            var capacity = text.ClientSize.Height / lineHeight;
+            // 宿主比清单本体多出来的那一截（宿主内边距 + 发丝边）单独量：漂了要能点名是哪一笔。
+            var measuredChrome = listHost.Height - text.ClientSize.Height;
+
+            _lines.Add(
+                $"     扫描警告：{DpiContext(dialog)}、窗体客户区 {client.Width}×{client.Height}px；" +
+                $"两块停靠区 内容网格 {content.Height}px + 按钮行 {buttonRow.Height}px = {sum}px" +
+                (sum == client.Height ? "（等于客户区高）" : $"（与客户区高差 {sum - client.Height}px）") +
+                $"；固定两块 实测 说明行 {guidanceRow}px + 按钮行 {buttonRow.Height}px = {fixedPanes}px" +
+                $"；警告清单宿主实测 {listHost.Height}px、清单本体 {text.ClientSize.Height}px、宿主多出 {measuredChrome}px" +
+                $"（宿主内边距 {listHost.Padding.Vertical}px + 发丝边 {hairline.Padding.Vertical}px + 文本框自身 {text.Height - text.ClientSize.Height}px）；" +
+                $"行高 {lineHeight}px、约装 {capacity} 行、条目 {items.Count} 条；" +
+                $"内容网格上下内边距 {content.Padding.Vertical}px、清单宿主下内边距 {listHost.Padding.Vertical}px；" +
+                $"网格 客户区 {content.ClientSize.Height}px、可用区 {content.DisplayRectangle.Height}px、" +
+                $"行高 [{string.Join(", ", rowHeights)}] 合计 {rowHeights.Sum()}px、" +
+                $"行样式 [{string.Join(", ", content.RowStyles.Cast<RowStyle>().Select(style => style.SizeType + (style.SizeType == SizeType.Percent ? " " + style.Height : "")))}]、" +
+                $"说明行控件高 {guidanceLabel.Height}px 边距 {guidanceLabel.Margin.Vertical}px、" +
+                $"清单宿主高 {listHost.Height}px 边距 {listHost.Margin.Vertical}px");
+
+            // 判据只在设计档成立：125% / 200% 档窗体被虚拟屏截断，那一刻的行数属于「量不到」而不是「放不下」。
+            if (DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())) return;
+
+            if (sum != client.Height)
+            {
+                throw new InvalidOperationException(
+                    $"两块停靠区的高度加起来是 {sum}px，客户区高 {client.Height}px（差 {sum - client.Height}px）：" +
+                    "停靠分法漏了一块或叠了一块，这一屏的某一块在真实窗口里会被压掉。");
+            }
+
+            // 实测 ↔ 口径逐笔对账（第二百五十二轮）：这一段标题里念的三件事，每一件都要真的判。
+            // 只判「两块加起来等于客户区」是**恒等式**（内容网格 Fill、按钮行 Bottom，加起来必然等于客户区），
+            // 它抓不到「常量漂了」——常量漂了窗体高跟着漂，两边一起动，那一句照样绿。
+            // 所以下面每一笔都拿**实测**去撞**口径里的那个数**，任一方单独改都被对面问住。
+            if (fixedPanes != ScanWarningsLayout.FixedPanesHeight)
+            {
+                throw new InvalidOperationException(
+                    $"固定两块实测合计 {fixedPanes}px（说明行 {guidanceRow} + 按钮行 {buttonRow.Height}），"
+                    + $"而 ScanWarningsLayout.FixedPanesHeight 是 {ScanWarningsLayout.FixedPanesHeight}px："
+                    + "两块里有一块的高度变了（它们都是 AutoSize，代码里没有一处能设），口径要跟着重量回写。");
+            }
+
+            if (lineHeight != ScanWarningsLayout.LineHeight)
+            {
+                throw new InvalidOperationException(
+                    $"清单行高实测 {lineHeight}px，而 ScanWarningsLayout.LineHeight 是 {ScanWarningsLayout.LineHeight}px："
+                    + "行高变了，按行数算出来的窗体高就不再等于真实排版。");
+            }
+
+            if (measuredChrome != ScanWarningsLayout.ListHostChrome)
+            {
+                throw new InvalidOperationException(
+                    $"警告清单宿主比清单本体多出 {measuredChrome}px（宿主内边距 {listHost.Padding.Vertical}px + "
+                    + $"发丝边 {hairline.Padding.Vertical}px + 文本框自身 {text.Height - text.ClientSize.Height}px），"
+                    + $"而 ScanWarningsLayout.ListHostChrome 是 {ScanWarningsLayout.ListHostChrome}px：镀铬变了，口径要重量。");
+            }
+
+            if (listHost.Height != ScanWarningsLayout.ListHostHeight(ScanWarningsLayout.MainRows))
+            {
+                throw new InvalidOperationException(
+                    $"警告清单宿主实测 {listHost.Height}px，而算式 ListHostHeight({ScanWarningsLayout.MainRows}) 是 "
+                    + $"{ScanWarningsLayout.ListHostHeight(ScanWarningsLayout.MainRows)}px："
+                    + "「清单要给几行」与真实排版对不上（这一句不是恒等式——左边是布局引擎排出来的，右边是算式）。");
+            }
+
+            if (text.ClientSize.Height != ScanWarningsLayout.TextHeight(ScanWarningsLayout.MainRows))
+            {
+                throw new InvalidOperationException(
+                    $"警告清单本体实测 {text.ClientSize.Height}px，而算式 TextHeight({ScanWarningsLayout.MainRows}) 是 "
+                    + $"{ScanWarningsLayout.TextHeight(ScanWarningsLayout.MainRows)}px：清单本体与算式对不上。");
+            }
+
+            if (content.Padding.Vertical != ScanWarningsLayout.GridPaddingHeight)
+            {
+                throw new InvalidOperationException(
+                    $"内容网格上下内边距实测 {content.Padding.Vertical}px，而 ScanWarningsLayout.GridPaddingHeight 是 "
+                    + $"{ScanWarningsLayout.GridPaddingHeight}px：内边距变了，窗体高会少算或多算这一笔。");
+            }
+
+            if (listHost.Margin.Vertical != ScanWarningsLayout.ListHostMargin)
+            {
+                throw new InvalidOperationException(
+                    $"警告清单宿主在网格里的上下外边距实测 {listHost.Margin.Vertical}px，而 ScanWarningsLayout.ListHostMargin 是 "
+                    + $"{ScanWarningsLayout.ListHostMargin}px：这一笔是 WinForms 给表格单元的默认 Margin，"
+                    + "代码里没有一处能设它——它变了说明网格形状变了，口径要重量。");
+            }
+
+            if (listRow != listHost.Height + listHost.Margin.Vertical)
+            {
+                throw new InvalidOperationException(
+                    $"内容网格第 2 行实测 {listRow}px，而「宿主 {listHost.Height}px + 上下外边距 {listHost.Margin.Vertical}px」是 "
+                    + $"{listHost.Height + listHost.Margin.Vertical}px：行高与宿主对不上，说明第 2 行里还塞了别的东西。");
+            }
+
+            if (client.Height != ScanWarningsLayout.DialogHeight)
+            {
+                throw new InvalidOperationException(
+                    $"窗体客户区高实测 {client.Height}px，而 ScanWarningsLayout.DialogHeight 是 {ScanWarningsLayout.DialogHeight}px："
+                    + "窗体高不是由口径给出来的（或口径与产品那一处接线漂了）。");
+            }
+
+            if (capacity < ScanWarningsLayout.MainRows)
+            {
+                throw new InvalidOperationException(
+                    $"警告清单这一刻只装得下 {capacity} 行（清单本体 {text.ClientSize.Height}px ÷ 行高 {lineHeight}px），"
+                    + $"而判据是 {ScanWarningsLayout.MainRows} 行：降级原因看不全，这一屏的主内容被挤掉了。");
             }
         });
     }

@@ -678,7 +678,9 @@ internal sealed class ScanWarningsDialog : DpiAwareForm
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        DpiScale.Apply(this, new Size(720, 480));
+        // 窗体高经口径给（第二百五十二轮）：480 那个字面量与「警告清单要给几行」之间没有算式绑住，
+        // 改行数或改任一块开销，两边不会一起动。算式在 Desktop/Native/ScanWarningsLayout.cs 一处。
+        DpiScale.Apply(this, new Size(ScanWarningsLayout.DialogWidth, ScanWarningsLayout.DialogHeight));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
