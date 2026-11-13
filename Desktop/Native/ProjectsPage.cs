@@ -209,6 +209,20 @@ internal sealed class ProjectsPage : UserControl, INativePage
     /// 而这一跳的意图正是「看那一行」。
     /// </para>
     /// <para>
+    /// <b>本方法依赖一个不变量：清空筛选是同步重建的</b>。<see cref="ClearListFilter"/> 只给筛选框赋值，
+    /// 重建发生在 <c>TextChanged</c> 里那次 <see cref="LoadProfiles"/> 调用上——它是同步的，所以
+    /// 「清空筛选」这一句返回时 <c>_list.Items</c> 已经是重建后的那一份，本方法能在<b>同一次调用内</b>
+    /// 接着遍历它。若哪天把 <see cref="LoadProfiles"/> 改成异步（或把重建挪到 BeginInvoke 里），
+    /// 这里会静默地遍历到旧清单、找不到那一行，然后对用户说「已不存在」——**改异步的人必须同时改这里**。
+    /// 本方法不为此加门：那是形状门，而这一族已在第二百五十六轮收口（见 <c>docs/NOTES.md</c>）。
+    /// </para>
+    /// <para>
+    /// <b>找不到那一行时说什么，分两种原因</b>（第二百六十四轮）：清单读出来了、里面没有这一行 →
+    /// <see cref="ProfileJump.MissingStatus"/>（配置已被删除）；清单<b>本身没读出来</b>（本页处于
+    /// <see cref="_loadFailed"/> 的失败态，清单是空的）→ <see cref="ProfileJump.LoadFailedStatus"/>
+    /// （这次没读出来，点同一屏那颗「重试」再读一次）。两种原因的下一步不同，不能共用一句话。
+    /// </para>
+    /// <para>
     /// <b>它不做什么</b>：不打开编辑对话框、不改配置数据、不写任何文件——只换选中与滚动位置。
     /// 真机上那一行滚到哪、键盘落在哪随 G-D5 真机复核。
     /// </para>
@@ -216,6 +230,13 @@ internal sealed class ProjectsPage : UserControl, INativePage
     public bool RevealProfile(string profileId, string profileName)
     {
         if (!ProfileJump.CanJump(profileId)) return false;
+        // 读取失败态优先：这一屏连「有没有这份配置」都还不知道，说成「已不存在」是把读不出来说成读到了空。
+        // 不先清筛选——清筛选会经 TextChanged 再读一次，而这一屏此刻的下一步是那颗「重试」，不是隐式重读。
+        if (_loadFailed)
+        {
+            SetStatus(ProfileJump.LoadFailedStatus(profileName), UiTokens.BadText);
+            return false;
+        }
         if (ListFilter.IsActive(_filter.Text)) ClearListFilter();
         foreach (ListViewItem item in _list.Items)
         {
@@ -226,7 +247,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
                 return true;
             }
         }
-        // 配置已被删除、或磁盘上那份配置读不出来：如实说清发生了什么并给出下一步，不静默停在清单顶部。
+        // 清单读出来了、里面没有这一行：配置已被删除，如实说清发生了什么并给出下一步，不静默停在清单顶部。
         SetStatus(ProfileJump.MissingStatus(profileName), UiTokens.BadText);
         return false;
     }

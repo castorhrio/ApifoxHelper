@@ -14,10 +14,16 @@ namespace ApifoxHelper.Tests;
 /// 「先记住名字、再在另一页找回来」，而任务详情已经把那个名字摆在眼前了。
 /// </para>
 /// <para>
-/// <b>这一族判什么</b>：① 三件事的唯一落点（按钮文字 / 有没有落点 / 找不到时说什么）都在
-/// <see cref="ProfileJump"/>，界面层不就地拼；② 三处接线各在它该在的地方（任务详情摆按钮并发请求、
-/// 壳把请求接到另一页、配置页按 Id 选中那一行）；③ 按钮的可用状态只有一个落点（详情区动作的单一门控）；
-/// ④ 判据自己被抓得住（注入各报一处）。
+/// <b>这一族判什么</b>：① 四件事的唯一落点（按钮文字 / 有没有落点 / 找不到时说什么 /
+/// 清单没读出来时说什么）都在 <see cref="ProfileJump"/>，界面层不就地拼；② 三处接线各在它该在的地方
+/// （任务详情摆按钮并发请求、壳把请求接到另一页、配置页按 Id 选中那一行）；③ 按钮的可用状态只有一个落点
+/// （详情区动作的单一门控）；④ 判据自己被抓得住（注入各报一处）。
+/// </para>
+/// <para>
+/// <b>第二百六十四轮补的那一条</b>：「找不到那一行」有两种原因——清单读出来了、里面没有这一行
+/// （配置已被删除），与清单<b>本身没读出来</b>（<see cref="ProfileLoadState"/> 的失败态，清单是空的）。
+/// 第二百六十三轮把两种原因盖在同一句话上，用户读到「已不存在」会去新建一份配置，而真正该做的是
+/// 点同一屏那颗「重试」再读一次。现在两句话各说各的原因、各给各的下一步，各有一条真值表。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判「该不该跳」——那是产品判断；也不判真机上切页之后那一行滚到哪、键盘落在哪
@@ -81,6 +87,42 @@ public class ProfileJumpTests
     }
 
     /// <summary>
+    /// 清单<b>本身没读出来</b>时说的那句话（第二百六十四轮）：说的是「这次没读出来」，不是「已不存在」，
+    /// 且下一步指向同一屏那颗「重试」。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：配置页的清单区有三种状态——有行 / 筛到零行 / 读取失败
+    /// （<see cref="ProfileLoadState"/> 口径）。读取失败时清单是空的，而空的原因是磁盘上那份清单读不出来，
+    /// 不是这份配置被删了。第二百六十三轮把两种原因盖在同一句话上，用户读到「已不存在（可能已被删除）」
+    /// 会去新建一份配置，而真正该做的是点本页那颗「重试」再读一次——**说错原因就是把用户往另一条路上引**。
+    /// </para>
+    /// <para>
+    /// 判的是两句话<b>各说各的原因、各给各的下一步</b>：这一条与
+    /// <see cref="MissingStatus_NamesTheProfileAndTheNextStep"/> 一起构成真值表——
+    /// 只判「新那句话里有『没读出来』」是不够的，两句话若退化成同一句，两条断言里必有一条红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LoadFailedStatus_SaysItCouldNotBeReadNotThatItIsGone()
+    {
+        var text = ProfileJump.LoadFailedStatus("示例配置");
+
+        // ① 点名是哪一个配置（与 MissingStatus 同一取舍：用户要知道是哪一份）。
+        Assert.Contains("示例配置", text, StringComparison.Ordinal);
+        // ② 说的是「没读出来」，不是「不存在」——这是这一条存在的全部理由。
+        Assert.Contains("没读出来", text, StringComparison.Ordinal);
+        Assert.Contains("读取失败", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("已不存在", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("已被删除", text, StringComparison.Ordinal);
+        // ③ 下一步是同一屏那颗「重试」，字面取自 ProfileLoadState（全仓只有一处「重试」）。
+        Assert.Contains(ProfileLoadState.RetryLabel, text, StringComparison.Ordinal);
+        Assert.EndsWith("。", text, StringComparison.Ordinal);
+        // ④ 名字换了，那句话跟着换——不是一句写死的文案。
+        Assert.NotEqual(text, ProfileJump.LoadFailedStatus("另一个配置"));
+        // ⑤ 两句话不许退化成同一句：原因不同，下一步也不同。
+        Assert.NotEqual(ProfileJump.MissingStatus("示例配置"), text);
+    }
+
+    /// <summary>
     /// 页面名不许在 <see cref="ProfileJump"/> 里写成第二份字面量：那一句里的「项目设置」必须来自
     /// <see cref="PageNames.Projects"/>。判法是「源码里不许出现带引号的页面名」——改名字时这一条会红，
     /// 而只改 <see cref="PageNames"/> 不改这里时，上面那条断言仍然绿（它比的是同一个常量）。
@@ -121,7 +163,7 @@ public class ProfileJumpTests
         var hits = Regex.Matches(TasksPage, @"_openProfileButton\.Enabled\s*=").Count;
         Assert.Equal(1, hits);
         // 那一处必须在 RefreshDetailActions 里（与其余详情区入口同一份门控），不在别处。
-        var body = BodyOf(TasksPage, "private void RefreshDetailActions(JobInfo? job)");
+        var body = SourceSlice.BodyOf(TasksPage, "private void RefreshDetailActions(JobInfo? job)");
         Assert.Contains("_openProfileButton.Enabled", body, StringComparison.Ordinal);
     }
 
@@ -132,7 +174,7 @@ public class ProfileJumpTests
     public void Shell_WiresTheRequestToTheOtherPage()
     {
         Assert.Contains("_tasksPage.OpenProfileRequested += (profileId, profileName) =>", Shell, StringComparison.Ordinal);
-        var body = BodyOf(Shell, "_tasksPage.OpenProfileRequested += (profileId, profileName) =>");
+        var body = SourceSlice.BodyOf(Shell, "_tasksPage.OpenProfileRequested += (profileId, profileName) =>");
         Assert.Contains("ShowProjects();", body, StringComparison.Ordinal);
         Assert.Contains("_projectsPage.RevealProfile(profileId, profileName);", body, StringComparison.Ordinal);
         // 顺序是判据：先切页再选中——反过来会在切页重读清单时把选中冲掉。
@@ -148,7 +190,7 @@ public class ProfileJumpTests
     [Fact]
     public void ProjectsPage_RevealsTheRowOrSaysWhyItCannot()
     {
-        var body = BodyOf(ProjectsPage, "public bool RevealProfile(string profileId, string profileName)");
+        var body = SourceSlice.BodyOf(ProjectsPage, "public bool RevealProfile(string profileId, string profileName)");
         Assert.Contains("ProfileJump.CanJump(profileId)", body, StringComparison.Ordinal);
         Assert.Contains("Ui.SelectItem(item)", body, StringComparison.Ordinal);
         Assert.Contains("ProfileJump.MissingStatus(profileName)", body, StringComparison.Ordinal);
@@ -157,6 +199,14 @@ public class ProfileJumpTests
         Assert.DoesNotContain("_profiles.Save", body, StringComparison.Ordinal);
         // 筛选把那一行筛掉时先清空筛选（清空走既有重建，不另写一条读取路径）。
         Assert.Contains("ListFilter.IsActive(_filter.Text)", body, StringComparison.Ordinal);
+        // 读取失败态走另一句话（第二百六十四轮）：清单没读出来时说「没读出来」，不说「已不存在」。
+        Assert.Contains("if (_loadFailed)", body, StringComparison.Ordinal);
+        Assert.Contains("ProfileJump.LoadFailedStatus(profileName)", body, StringComparison.Ordinal);
+        // 顺序是判据：失败态那一支必须在「找不到那一行」之前——反过来，空清单会先落到 MissingStatus 上。
+        Assert.True(
+            body.IndexOf("ProfileJump.LoadFailedStatus(", StringComparison.Ordinal)
+            < body.IndexOf("ProfileJump.MissingStatus(", StringComparison.Ordinal),
+            "读取失败态必须先判：清单是空的时候，先落到 MissingStatus 就会把「读不出来」说成「已不存在」。");
     }
 
     // ── 判据自己被抓得住 ──────────────────────────────────────────────
@@ -186,7 +236,11 @@ public class ProfileJumpTests
         var inline = good with { Projects = good.Projects.Replace("ProfileJump.MissingStatus(profileName)", "\"找不到这个配置。\"", StringComparison.Ordinal) };
         Assert.Contains(WiringProblems(inline.Tasks, inline.Projects, inline.Shell), p => p.Contains("MissingStatus", StringComparison.Ordinal));
 
-        // ④ 按钮可用状态长出第二处赋值。
+        // ④ 读取失败态那一支被拆掉（空清单直接落到「已不存在」上）。
+        var noFailureBranch = good with { Projects = good.Projects.Replace("ProfileJump.LoadFailedStatus(profileName)", "ProfileJump.MissingStatus(profileName)", StringComparison.Ordinal) };
+        Assert.Contains(WiringProblems(noFailureBranch.Tasks, noFailureBranch.Projects, noFailureBranch.Shell), p => p.Contains("LoadFailedStatus", StringComparison.Ordinal));
+
+        // ⑤ 按钮可用状态长出第二处赋值。
         var twice = good with { Tasks = good.Tasks.Replace("_gapButton.Enabled = scanReady;", "_openProfileButton.Enabled = true;\n        _gapButton.Enabled = scanReady;", StringComparison.Ordinal) };
         Assert.Contains(WiringProblems(twice.Tasks, twice.Projects, twice.Shell), p => p.Contains("单一落点", StringComparison.Ordinal));
     }
@@ -222,33 +276,13 @@ public class ProfileJumpTests
             problems.Add("配置页没有用 ProfileJump.CanJump 判「该跳到哪一份配置」。");
         if (!projects.Contains("ProfileJump.MissingStatus(", StringComparison.Ordinal))
             problems.Add("配置页没有用 ProfileJump.MissingStatus 说「找不到那一行」（就地拼会让两处说法分家）。");
+        if (!projects.Contains("ProfileJump.LoadFailedStatus(", StringComparison.Ordinal))
+            problems.Add("配置页没有用 ProfileJump.LoadFailedStatus 说「清单这次没读出来」——"
+                + "读取失败态下清单是空的，落到 MissingStatus 就会把「读不出来」说成「已不存在」。");
         if (!projects.Contains("Ui.SelectItem(", StringComparison.Ordinal))
             problems.Add("配置页没有走 Ui.SelectItem 唯一入口选中那一行。");
 
         return problems;
     }
 
-    /// <summary>
-    /// 取一段方法体（从签名那一行到与之配对的右花括号）。只认花括号计数，不认字符串里的花括号——
-    /// 这几段方法体里没有带花括号的字面量，够用；不够用时它会「找不到闭合」而不是静默返回半段。
-    /// </summary>
-    private static string BodyOf(string source, string header)
-    {
-        var start = source.IndexOf(header, StringComparison.Ordinal);
-        Assert.True(start >= 0, $"源码里找不到「{header}」——判据要判的那一段不在了。");
-        var open = source.IndexOf('{', start);
-        Assert.True(open >= 0, $"「{header}」后面没有方法体。");
-        var depth = 0;
-        for (var i = open; i < source.Length; i++)
-        {
-            if (source[i] == '{') depth++;
-            else if (source[i] == '}')
-            {
-                depth--;
-                if (depth == 0) return source[open..(i + 1)];
-            }
-        }
-        Assert.Fail($"「{header}」的方法体没有闭合——判据会去判一段不是它的代码。");
-        return "";
-    }
 }

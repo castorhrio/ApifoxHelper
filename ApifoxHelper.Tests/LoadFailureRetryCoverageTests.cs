@@ -29,8 +29,18 @@ namespace ApifoxHelper.Tests;
 /// </summary>
 public class LoadFailureRetryCoverageTests
 {
-    /// <summary>失败态口径文件自身：它们定义机制与文案，不是「有失败态的屏」，不参与接线断言。</summary>
-    private static readonly string[] StateFiles = ["LoadFailureState.cs", "ProfileLoadState.cs"];
+    /// <summary>
+    /// 失败态口径文件自身：它们定义机制与文案，不是「有失败态的屏」，不参与接线断言。
+    /// <para>
+    /// <c>ProfileJump.cs</c> 第二百六十四轮进这份名单：它给「跳过去时清单没读出来」那句话
+    /// （<c>LoadFailedStatus</c>）指名了那颗「重试」，字面取自 <see cref="ProfileLoadState.RetryLabel"/>——
+    /// 于是它引用了口径文件、被「引用即算有失败态」的发现口径扫进来。但它<b>不是一屏</b>：
+    /// 没有按钮、没有清单、没有读取入口，它只是一句文案的唯一落点。把它算成屏，等于要求一句文案
+    /// 去接一颗按钮——那才是把口径文件与屏混为一谈。**新增的文案口径文件同样进这份名单**，
+    /// 判据是「它有没有自己的读取入口」，不是「它有没有引用口径文件」。
+    /// </para>
+    /// </summary>
+    private static readonly string[] StateFiles = ["LoadFailureState.cs", "ProfileLoadState.cs", "ProfileJump.cs"];
 
     /// <summary>「这一屏有读取失败态」的发现标记：引用口径文件即算。</summary>
     private static readonly string[] StateMarkers = ["LoadFailureState.", "ProfileLoadState."];
