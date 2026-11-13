@@ -76,6 +76,7 @@
     <Compile Include="..\Desktop\Native\CapabilitiesLayout.cs" Link="Shared\CapabilitiesLayout.cs" />
     <Compile Include="..\Desktop\Native\CheckResultsLayout.cs" Link="Shared\CheckResultsLayout.cs" />
     <Compile Include="..\Desktop\Native\EndpointTraceLayout.cs" Link="Shared\EndpointTraceLayout.cs" />
+    <Compile Include="..\Desktop\Native\ManualDraftLayout.cs" Link="Shared\ManualDraftLayout.cs" />
     <Compile Include="..\Desktop\Native\ListSort.cs" Link="Shared\ListSort.cs" />
     <Compile Include="..\Desktop\Native\CheckResultSort.cs" Link="Shared\CheckResultSort.cs" />
     <Compile Include="..\Desktop\Native\EndpointTraceSort.cs" Link="Shared\EndpointTraceSort.cs" />

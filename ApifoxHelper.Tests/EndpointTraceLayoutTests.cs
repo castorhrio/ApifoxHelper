@@ -16,12 +16,13 @@ namespace ApifoxHelper.Tests;
 /// <b>装得下 12 行</b>。
 /// </para>
 /// <para>
-/// <b>为什么挑这一屏</b>（简报 P0-1 的「先量再挑」）：三屏都量过之后，按「主内容要给几行」排，
-/// 这一屏 12 行、手工填写说明 10 行、扫描警告 16 行——<b>没有一屏掉到个位数</b>，所以判据不能照抄
+/// <b>为什么挑这一屏</b>（简报 P0-1 的「先量再挑」）：按「主内容要给几行」排，
+/// 这一屏 12 行、手工填写说明 10 行——<b>没有一屏掉到个位数</b>，所以判据不能照抄
 /// 「只剩个位数行」那一句（简报也写了「以实跑为准，不硬套」）。挑它的理由是另外三条：
-/// ① 固定区占屏比最高（353 / 640 = 55%）；② 它是三屏里唯一有<b>就地写死的定高</b>（追踪明细那个
-/// 190px 的文本框）与<b>裸窗体高</b>（640）的一屏；③ 它的主内容是一张带表头的清单，与
-/// <see cref="CheckResultsLayout"/> 同一形状，收口方式能逐条对上。
+/// ① 固定区占屏比最高（353 / 639 = 55%，同一口径下「手工填写说明」是 187 / 400 = 47%——
+/// 那一格在第二百五十一轮量过之后才有的；「扫描警告」至今未量，不参与比较）；
+/// ② 它是三屏里唯一有<b>就地写死的定高</b>（追踪明细那个 190px 的文本框）与<b>裸窗体高</b>（640）的一屏；
+/// ③ 它的主内容是一张带表头的清单，与 <see cref="CheckResultsLayout"/> 同一形状，收口方式能逐条对上。
 /// </para>
 /// <para>
 /// <b>根因是一个形状而不是一个数</b>：窗体高写死 640，与「接口清单要给几行」之间没有任何算式绑住。
@@ -240,6 +241,22 @@ public class EndpointTraceLayoutTests
     /// <b>判的是「主内容还剩多少」</b>：固定四块 353px 对窗体高 639px，接口清单宿主只剩 286px。
     /// 这一条红了说明有人把固定区撑大了（或把行数改了），那时要重新回答「为什么挑这一屏」。
     /// </para>
+    /// <para>
+    /// <b>这里只留这一条，是第二百五十一轮改的（简报 P0-1 的真缺陷修正）</b>：
+    /// 此前这一条里还有两句——<c>Assert.Equal(286, DialogHeight − FixedPanesHeight)</c> 与
+    /// 「宿主高 − 表头 − 内边距 ≥ 行数 × 行高」——<b>两句都是代数恒等式</b>：
+    /// 前者的右边由 <c>DialogHeight</c> 的定义推出（宿主 ≡ 主内容高 + 宿主那一截），
+    /// 后者左边一减就是 <c>行数 × 行高</c>、右边正是它，永远为真。
+    /// 两句合起来给人「固定区没被撑大」的<b>虚假安全感</b>：真把固定四块改小，
+    /// 这两句照样绿（两边一起动），而「主内容装不装得下」其实已经变了。
+    /// </para>
+    /// <para>
+    /// <b>「主内容还拿得到判据行数」只能在一处判成事实——实跑</b>：
+    /// <c>RunEndpointTraceShown</c> 量的是真控件（宿主实测高、清单实测高、表头实测高、行高实测高），
+    /// 算式那边是常量，两边对账。运行期那三条由
+    /// <see cref="TheMeasurement_ReconcilesTheMeasuredHostAgainstTheFormula"/> 钉住还在；
+    /// 这里留的是「占屏比过半」这一句——它是两个独立算出来的数之间的关系，不是恒等式。
+    /// </para>
     /// </summary>
     [Fact]
     public void FixedPanes_TakeMoreThanHalfOfTheDialog()
@@ -248,13 +265,62 @@ public class EndpointTraceLayoutTests
             EndpointTraceLayout.FixedPanesHeight * 2 > EndpointTraceLayout.DialogHeight,
             $"固定四块 {EndpointTraceLayout.FixedPanesHeight}px 已不再超过窗体高 {EndpointTraceLayout.DialogHeight}px 的一半："
             + "「这一屏固定区占屏比最高」这句话需要重新量过。");
-        // 主内容（接口清单宿主）仍拿得到判据行数那么多行：宿主高 − 宿主多出来的那一截 − 表头 ≥ 行数 × 行高。
-        var listHost = EndpointTraceLayout.DialogHeight - EndpointTraceLayout.FixedPanesHeight;
-        Assert.Equal(286, listHost);
-        Assert.True(
-            listHost - EndpointTraceLayout.ListHostChrome - EndpointTraceLayout.ColumnHeaderHeight
-            >= EndpointTraceLayout.MainRows * EndpointTraceLayout.RowHeight,
-            "接口清单宿主扣掉表头与内边距之后装不下判据行数——这一屏的主内容被固定区挤没了。");
+    }
+
+    /// <summary>
+    /// 这一条不许退回「恒等式」的形状（第二百五十一轮，简报 P0-1 的真缺陷修正，具名 pass：harden）。
+    /// <para>
+    /// <b>判的是形状，不是某一句的取值</b>：本仓已经吃过两次亏——第二百四十九轮在差异检查结果那一屏上，
+    /// 两个数加起来一样（39 与 31 被读反了），任何「和等于 570」的门都抓不到它；
+    /// 第二百五十轮在本文件里写下两句恒等式，判据看着齐了，其实一句也不会红。
+    /// 所以这里判的是<b>形状</b>：把恒等式那两句的记号写回本文件，这一族门当场红。
+    /// </para>
+    /// <para>
+    /// <b>为什么能判自己的源码</b>：恒等式的形状是源码里的记号（减号两边同源），
+    /// 删掉一句断言不会留痕，只有回看源码才发现——而那正是「假门」能活下来的原因。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheHalfDialogGate_IsNotAnIdentity()
+    {
+        var source = Repo.Source("ApifoxHelper.Tests", "EndpointTraceLayoutTests.cs");
+        var gate = MethodSlice(source, "public void FixedPanes_TakeMoreThanHalfOfTheDialog()");
+        // ① 「宿主高 = 窗体高 − 固定四块」：右边由 DialogHeight 的定义推出，改任一输入两边同时动。
+        Assert.DoesNotContain("DialogHeight - EndpointTraceLayout.FixedPanesHeight", gate, StringComparison.Ordinal);
+        // ② 「宿主高 − 表头 − 内边距 ≥ 行数 × 行高」：左边一减就是「行数 × 行高」，右边正是它。
+        Assert.DoesNotContain("ListHostChrome", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("ColumnHeaderHeight", gate, StringComparison.Ordinal);
+        // ③ 要留的那一条还在：两个独立算出来的数之间的关系，不是恒等式。
+        Assert.Contains("FixedPanesHeight * 2 > ", gate, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 「主内容还拿得到判据行数」这句话必须挂在<b>实跑</b>上（第二百五十一轮，简报 P0-1）。
+    /// <para>
+    /// <b>为什么静态判不了</b>：窗体高由「固定四块 + 主内容（按行数算）+ 宿主那一截」推出，
+    /// 所以「宿主装不装得下 <see cref="EndpointTraceLayout.MainRows"/> 行」在算式里<b>恒为真</b>——
+    /// 它是定义，不是事实。事实只在真控件排完版之后才存在：宿主实测高、清单实测高、
+    /// 表头实测高、行高实测高，都是这一段量出来的。
+    /// </para>
+    /// <para>
+    /// <b>三条对账各管一件事</b>：① 实测宿主高对算式（窗体高 − 固定四块）——管「窗体真的给了这么多」；
+    /// ② 实测宿主比清单本体多出来的那一截对 <see cref="EndpointTraceLayout.ListHostChrome"/>——
+    /// 管「内边距与发丝边有没有漂」（漂了会点名是哪一笔，而不是只报一句「装不下」）；
+    /// ③ 实测容量对 <see cref="EndpointTraceLayout.MainRows"/>——管「这一刻到底装得下几行」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheMeasurement_ReconcilesTheMeasuredHostAgainstTheFormula()
+    {
+        var segment = MethodSlice(Repo.SmokeProgram,
+            "private static void RunEndpointTraceShown(IServiceProvider services, string dataRoot)");
+        // ① 实测宿主高 vs 算式：两边都要在——只有算式没有实测，是恒等式；只有实测没有算式，是读数不是判据。
+        Assert.Contains("listHost.Height", segment, StringComparison.Ordinal);
+        Assert.Contains("EndpointTraceLayout.DialogHeight - EndpointTraceLayout.FixedPanesHeight", segment, StringComparison.Ordinal);
+        // ② 宿主多出来的那一截要单独量（漂了要能点名是哪一笔）。
+        Assert.Contains("EndpointTraceLayout.ListHostChrome", segment, StringComparison.Ordinal);
+        // ③ 容量判据仍在（实测容量对判据行数）。
+        Assert.Contains("capacity < EndpointTraceLayout.MainRows", segment, StringComparison.Ordinal);
     }
 
     /// <summary>共享编译：这条算式与测试工程是同一份，不是测试里抄的第二份。</summary>

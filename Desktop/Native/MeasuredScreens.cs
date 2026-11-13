@@ -139,8 +139,8 @@ internal static class MeasuredScreens
             "docs/NOTES.md 第二百四十八轮：真的 Show() 出来之后量到接口清单只剩 140px（扣掉表头装得下 5 行），窗体高改按「接口清单要给几行」算"),
         new("接口追踪明细", "RunEndpointTraceShown", ["EndpointTraceDialog"], true, "第二百五十轮",
             "docs/NOTES.md 第二百五十轮：真的 Show() 出来之后量到接口清单宿主 286px、清单本体 276px（扣掉表头装得下 12 行），窗体高改按「接口清单要给几行」算"),
-        new("手工填写说明", "Cases", ["ManualDraftDialog"], false, "第二百四十三轮",
-            "docs/NOTES.md 第二百四十三轮：同一句挂账——这一屏至今只被构造过，没有一段真的把它显示出来"),
+        new("手工填写说明", "RunManualDraftShown", ["ManualDraftDialog"], true, "第二百五十一轮",
+            "docs/NOTES.md 第二百五十一轮：真的 Show() 出来之后量到输入区宿主 213px、输入框 211px（装得下 10 行），窗体高改按「输入区要给几行」算"),
         new("扫描警告", "Cases", ["ScanWarningsDialog"], false, "第二百四十三轮",
             "docs/NOTES.md 第二百四十三轮：同一句挂账——这一屏至今只被构造过，没有一段真的把它显示出来"),
     ];

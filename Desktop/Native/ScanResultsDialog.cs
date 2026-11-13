@@ -608,7 +608,7 @@ internal sealed class ManualDraftDialog : DpiAwareForm
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        DpiScale.Apply(this, new Size(560, 400));
+        DpiScale.Apply(this, new Size(ManualDraftLayout.DialogWidth, ManualDraftLayout.DialogHeight));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

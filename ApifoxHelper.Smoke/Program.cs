@@ -296,6 +296,8 @@ internal static class Program
 
         Section("接口追踪明细真的显示出来（五块停靠区高度对客户区、接口清单装得下十二行、清单不出横向滚动条，真实控件量）", nameof(RunEndpointTraceShown));
         RunEndpointTraceShown(services, dataRoot);
+        Section("手工填写说明真的显示出来（三块停靠区高度对客户区、固定四块与 ManualDraftLayout 对账、输入区实测高与算式对账、装得下十行，真实控件量）", nameof(RunManualDraftShown));
+        RunManualDraftShown(services, dataRoot);
 
         Section("完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）", nameof(RunFullJourney));
         RunFullJourney(services, dataRoot);
@@ -6569,6 +6571,14 @@ internal static class Program
     /// 顶部两行按内容认名（带关键词框的那一行是筛选行），不按控件顺序猜——这一屏的 43 / 31
     /// 与差异检查结果那一屏的 31 / 39 正好相反，按顺序猜会读反。
     /// </para>
+    /// <para>
+    /// <b>第二百五十一轮加的两条（简报 P0-1 的真缺陷修正）</b>：⑤ 接口清单宿主的<b>实测</b>高与
+    /// 「窗体高 − 固定四块」这个算式逐字相等；⑥ 宿主比清单本体多出来的那一截（内边距 + 发丝边）
+    /// 与 <see cref="EndpointTraceLayout.ListHostChrome"/> 逐字相等。
+    /// 这两条此前只活在算式与散文里——算式自己推自己，那一格永远不会红，
+    /// 于是「宿主 286px」这句话没有任何一处对得上真控件。第五条管「窗体真的给了这么多」，
+    /// 第六条管「内边距与发丝边有没有漂」（漂了能点名是哪一笔，而不是只报一句「装不下」）。
+    /// </para>
     /// </summary>
     private static void RunEndpointTraceShown(IServiceProvider services, string dataRoot)
     {
@@ -6578,7 +6588,7 @@ internal static class Program
         var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "接口追踪明细显示冒烟" });
         tasks.Write(task.Id, TaskFiles.Evidence, EndpointTraceFixture());
 
-        RunAction("接口追踪明细：真的显示出来之后，五块停靠区高度加起来等于客户区、固定四块与 EndpointTraceLayout 对账、接口清单装得下十二行、清单不出横向滚动条（真实控件量）", () =>
+        RunAction("接口追踪明细：真的显示出来之后，五块停靠区高度加起来等于客户区、固定四块与 EndpointTraceLayout 对账、接口清单宿主实测高与算式对账、装得下十二行、清单不出横向滚动条（真实控件量）", () =>
         {
             // 五块停靠区按产品自己的停靠方式认（接口清单 Fill、顶部两行 Top、底部两块 Bottom）：
             // 认不出就点名，不按控件顺序猜。
@@ -6639,12 +6649,21 @@ internal static class Program
             var columnSum = columns.Sum();
             var visible = endpointList.ClientSize.Width;
 
+            // 实测的接口清单宿主高 vs 算式给出的宿主高（第二百五十一轮，简报 P0-1 的真缺陷修正）。
+            // 这一格此前只活在算式与散文里：算式自己推自己，永远不会红；这里第一次让它对上一个真控件量出来的数。
+            var expectedHost = EndpointTraceLayout.DialogHeight - EndpointTraceLayout.FixedPanesHeight;
+            // 宿主比清单本体多出来的那一截（内边距 + 发丝边）也单独量：漂了要能点名是哪一笔，
+            // 而不是只报一句「装不下」。
+            var measuredChrome = listHost.Height - endpointList.ClientSize.Height;
+
             _lines.Add(
                 $"     接口追踪明细：{DpiContext(dialog)}、窗体客户区 {client.Width}×{client.Height}px；" +
                 $"五块停靠区 顶部 {string.Join(" + ", tops.Select(control => PaneName(control) + " " + control.Height + "px"))} + 接口清单 {listHost.Height}px + " +
                 $"底部 {string.Join(" + ", bottoms.Select(control => control.Height + "px"))} = {sum}px" +
                 (sum == client.Height ? "（等于客户区高）" : $"（与客户区高差 {sum - client.Height}px）") +
                 $"；固定四块实测合计 {fixedPanes}px 对 EndpointTraceLayout.FixedPanesHeight {EndpointTraceLayout.FixedPanesHeight}px" +
+                $"；接口清单宿主实测 {listHost.Height}px 对算式 {expectedHost}px（窗体高 {EndpointTraceLayout.DialogHeight}px − 固定四块 {EndpointTraceLayout.FixedPanesHeight}px）" +
+                $"；宿主比清单本体多 {measuredChrome}px 对 ListHostChrome {EndpointTraceLayout.ListHostChrome}px" +
                 $"；接口清单 {realRows} 行、行高 {rowHeight}px、清单高 {endpointList.ClientSize.Height}px、约装 {capacity} 行、" +
                 $"第 {realRows} 行底边 {(realRows > 0 ? endpointList.Items[^1].Bounds.Bottom : 0)}px（表头占 {headerHeight}px）；" +
                 $"清单列宽 [{string.Join(", ", columns)}] 合计 {columnSum}px 对可视宽 {visible}px；" +
@@ -6671,6 +6690,27 @@ internal static class Program
                     "红了先看是哪一块变了，再把常量改成实测值，别把算式改成迁就旧读数。");
             }
 
+            // 实测的宿主高与算式给的宿主高逐字相等（第二百五十一轮）：这一格此前只活在算式里——
+            // 算式自己推自己，改哪一边都绿；这里第一次让它对上一个真控件量出来的数。
+            if (listHost.Height != expectedHost)
+            {
+                throw new InvalidOperationException(
+                    $"接口清单宿主实测 {listHost.Height}px，算式给出的宿主高是 {expectedHost}px" +
+                    $"（窗体高 {EndpointTraceLayout.DialogHeight}px − 固定四块 {EndpointTraceLayout.FixedPanesHeight}px）：" +
+                    "实跑与算式对不上。先看窗体客户区是不是被系统改过（截断、缩放），再看固定四块里哪一块漂了——" +
+                    "红了要动的是常量，不是算式。");
+            }
+
+            // 宿主比清单本体多出来的那一截也逐字相等：漂了要能点名是哪一笔，
+            // 而不是让「装不下几行」那句话替它报错（那一句看不出是内边距还是发丝边）。
+            if (measuredChrome != EndpointTraceLayout.ListHostChrome)
+            {
+                throw new InvalidOperationException(
+                    $"接口清单宿主比清单本体多出来的是 {measuredChrome}px（宿主 {listHost.Height}px − 清单 {endpointList.ClientSize.Height}px），" +
+                    $"口径里 ListHostChrome 是 {EndpointTraceLayout.ListHostChrome}px：这一截漂了。" +
+                    "改的是宿主的内边距或发丝边，要动的是常量不是算式。");
+            }
+
             if (capacity < EndpointTraceLayout.MainRows)
             {
                 throw new InvalidOperationException(
@@ -6683,6 +6723,159 @@ internal static class Program
             {
                 throw new InvalidOperationException(
                     $"接口清单出了横向滚动条：列宽合计 {columnSum}px 超过清单可视宽 {visible}px——「预算」那一列在真实那一屏上被藏。");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 「手工填写说明」这一屏真的显示出来之后量到的那几个数（第二百五十一轮，简报 P1-1，具名 pass：layout）。
+    /// <para>
+    /// <b>这一屏此前为什么量不到</b>：冒烟器每一段都只「建句柄 + <c>CreateControl</c> + <c>PerformLayout</c>」，
+    /// 从不显示窗体——而一张没显示过的窗体 <c>ClientSize</c> 的高是 0，量到的数不能读成「放得下」。
+    /// <see cref="MeasuredScreens"/> 登记表里这一屏从第二百四十三轮起一直挂着「未量」。
+    /// </para>
+    /// <para>
+    /// <b>这一屏的主内容是什么</b>：不是清单，是那个多行说明输入区——用户在这里手写一段中文说明
+    /// （方法用途、参数含义、响应字段含义），一次写三五句是常态。所以这一屏的容量口径是
+    /// 「输入区这一刻装得下几行」，与前几屏的「清单装得下几行」不是同一个口径，也不能跨屏抄。
+    /// </para>
+    /// </summary>
+    private static void RunManualDraftShown(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "手工填写说明显示冒烟" });
+        var slot = new DocSlot
+        {
+            Id = "slot-manual-draft",
+            SymbolId = "M:Probe.Api.Controllers.ProbeController.Get",
+            SymbolKind = "method",
+            Display = "GET /api/probe",
+            Tag = "summary",
+            Status = "missing",
+            File = "Probe.Api/Controllers/ProbeController.cs",
+            Line = 12,
+            Role = "endpoint",
+            Editable = true,
+        };
+
+        RunAction("手工填写说明：真的显示出来之后，三块停靠区高度加起来等于客户区、固定四块与 ManualDraftLayout 对账、输入区实测高与算式对账、装得下十行（真实控件量）", () =>
+        {
+            // 三块停靠区按产品自己的停靠方式认（内容网格 Fill、状态行 Bottom、按钮行 Bottom）：
+            // 认不出就点名，不按控件顺序猜。
+            using var dialog = new ManualDraftDialog(task, slot);
+            dialog.Show();
+            Application.DoEvents();
+            var client = dialog.ClientSize;
+
+            var docked = dialog.Controls.Cast<Control>().ToList();
+            var content = docked.OfType<TableLayoutPanel>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的内容网格：停靠分法变了，本段量测口径需要重定。");
+            var bottoms = docked.Where(control => control.Dock == DockStyle.Bottom).ToList();
+            if (bottoms.Count != 2)
+            {
+                throw new InvalidOperationException($"底部停靠区有 {bottoms.Count} 块，期望 2 块（状态行 + 按钮行）：本段量测口径需要重定。");
+            }
+
+            // 输入区：内容网格里那个多行输入框（它是这一屏的主内容）。
+            var input = FindAll<TextBox>(content).SingleOrDefault(box => box.Multiline)
+                ?? throw new InvalidOperationException("这一屏的内容网格里找不到多行输入框：主内容换了，本段量测口径需要重定。");
+            var host = input.Parent ?? throw new InvalidOperationException("输入框没有宿主面板：输入区形状变了，本段量测口径需要重定。");
+
+            // 底部两块按控件类型认名：状态行是 Panel、按钮行是 FlowLayoutPanel——不按控件顺序猜。
+            // （FlowLayoutPanel 本身就是 Panel，所以状态行要按「类型正好是 Panel」取。）
+            var statusRow = bottoms.SingleOrDefault(control => control.GetType() == typeof(Panel))
+                ?? throw new InvalidOperationException("底部停靠区里找不到状态行（类型正好是 Panel 的那块）：本段量测口径需要重定。");
+            var buttonRow = bottoms.OfType<FlowLayoutPanel>().SingleOrDefault()
+                ?? throw new InvalidOperationException("底部停靠区里找不到按钮行（FlowLayoutPanel）：本段量测口径需要重定。");
+
+            // 内容网格的两行按内容认名：带「纯文本说明」那句的是说明行，另一行是位置行。
+            // 认名之后再回查它落在第几行——名与行号对不上就是排版变了，本段量测口径需要重定。
+            var gridLabels = content.Controls.Cast<Control>().OfType<Label>().ToList();
+            var guidanceLabel = gridLabels.SingleOrDefault(label => label.Text.Contains("纯文本说明", StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("内容网格里找不到说明行（带「纯文本说明」的那句）：本段量测口径需要重定。");
+            var positionLabel = gridLabels.SingleOrDefault(label => !ReferenceEquals(label, guidanceLabel))
+                ?? throw new InvalidOperationException("内容网格里找不到位置行：本段量测口径需要重定。");
+            if (content.GetRow(guidanceLabel) != 1 || content.GetRow(positionLabel) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"内容网格里位置行在第 {content.GetRow(positionLabel)} 行、说明行在第 {content.GetRow(guidanceLabel)} 行：" +
+                    "两行的位置与认名对不上，行高对账会张冠李戴——本段量测口径需要重定。");
+            }
+
+            // 内容网格的三行按「控件在第几行」认，不按控件顺序猜（第二百四十九轮那一课）。
+            // 行高取布局引擎算出来的那一份（TableLayoutPanel.GetRowHeights 是 public，GetRowHeight 是 protected）。
+            var rowHeights = content.GetRowHeights();
+            if (rowHeights.Length != 3)
+            {
+                throw new InvalidOperationException($"内容网格有 {rowHeights.Length} 行，期望 3 行（位置行 + 说明行 + 输入区）：本段量测口径需要重定。");
+            }
+
+            var positionRow = rowHeights[0];
+            var guidanceRow = rowHeights[1];
+            var inputRow = rowHeights[2];
+
+            // 固定四块的实测合计：位置行 + 说明行 + 状态行 + 按钮行。
+            var fixedPanes = positionRow + guidanceRow + statusRow.Height + buttonRow.Height;
+
+            var sum = content.Height + bottoms.Sum(control => control.Height);
+            var lineHeight = Math.Max(1, input.Font.Height);
+            var capacity = input.ClientSize.Height / lineHeight;
+
+            // 实测的输入区宿主高 vs 算式给出的输入区高（这一屏的主内容，必须逐字相等）。
+            var expectedInput = ManualDraftLayout.InputAreaHeight(ManualDraftLayout.MainRows);
+
+            _lines.Add(
+                $"     手工填写说明：{DpiContext(dialog)}、窗体客户区 {client.Width}×{client.Height}px；" +
+                $"三块停靠区 内容网格 {content.Height}px + 底部 {string.Join(" + ", bottoms.Select(control => control.Height + "px"))} = {sum}px" +
+                (sum == client.Height ? "（等于客户区高）" : $"（与客户区高差 {sum - client.Height}px）") +
+                $"；固定四块 实测 位置行 {positionRow}px + 说明行 {guidanceRow}px + 状态行 {statusRow.Height}px + 按钮行 {buttonRow.Height}px " +
+                $"= {fixedPanes}px 对 ManualDraftLayout.FixedPanesHeight {ManualDraftLayout.FixedPanesHeight}px" +
+                $"；输入区宿主实测 {host.Height}px 对算式 {expectedInput}px（{ManualDraftLayout.MainRows} 行 × 行高 {ManualDraftLayout.LineHeight}px " +
+                $"+ 输入框那一圈 {ManualDraftLayout.TextBoxPadding}px + 宿主镀铬 {ManualDraftLayout.FieldBoxPadding}px）" +
+                $"；内容网格给输入区那一行 {inputRow}px、输入框 {input.Height}px（可视 {input.ClientSize.Height}px）、行高 {lineHeight}px、约装 {capacity} 行" +
+                $"；内容网格上下内边距 {content.Padding.Vertical}px");
+
+            // 判据只在设计档成立：125% / 200% 档窗体被虚拟屏截断，那一刻属于「量不到」而不是「放不下」。
+            if (DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())) return;
+
+            if (sum != client.Height)
+            {
+                throw new InvalidOperationException(
+                    $"三块停靠区的高度加起来是 {sum}px，客户区高 {client.Height}px（差 {sum - client.Height}px）：" +
+                    "停靠分法漏了一块或叠了一块，这一屏的某一块在真实窗口里会被压掉。");
+            }
+
+            // 固定四块的实测合计必须与口径逐字相等：挡的是「改一块高度而不改常量」——
+            // 那时窗体高不跟着动，输入区被悄悄挤掉一行，而算式那一条照样绿。
+            if (fixedPanes != ManualDraftLayout.FixedPanesHeight)
+            {
+                throw new InvalidOperationException(
+                    $"固定四块（位置行 {positionRow}px + 说明行 {guidanceRow}px + 状态行 {statusRow.Height}px + 按钮行 {buttonRow.Height}px）" +
+                    $"实测合计 {fixedPanes}px，ManualDraftLayout.FixedPanesHeight 是 {ManualDraftLayout.FixedPanesHeight}px" +
+                    $"（差 {fixedPanes - ManualDraftLayout.FixedPanesHeight}px）：" +
+                    "改了一块的高度而没改常量（或反过来）。位置行、说明行、状态行与按钮行都是 AutoSize，代码里没有一处能设它们——" +
+                    "红了先看是哪一块变了，再把常量改成实测值，别把算式改成迁就旧读数。");
+            }
+
+            // 输入区宿主的实测高必须与算式逐字相等：这一屏的主内容是输入区，
+            // 它比算式少一行就是「写说明时看不见自己写了什么」。
+            if (host.Height != expectedInput)
+            {
+                throw new InvalidOperationException(
+                    $"输入区宿主实测 {host.Height}px，算式给出的是 {expectedInput}px" +
+                    $"（{ManualDraftLayout.MainRows} 行 × {ManualDraftLayout.LineHeight}px + {ManualDraftLayout.TextBoxPadding}px + {ManualDraftLayout.FieldBoxPadding}px）：" +
+                    "实跑与算式对不上。先看固定四块里哪一块漂了，再看窗体客户区是不是被系统改过——红了要动的是常量，不是算式。");
+            }
+
+            // 这一刻装得下几行：输入区高扣掉输入框那一圈，除以行高。
+            if (capacity < ManualDraftLayout.MainRows)
+            {
+                throw new InvalidOperationException(
+                    $"输入区这一刻只装得下 {capacity} 行（输入框可视高 {input.ClientSize.Height}px、行高 {lineHeight}px），" +
+                    $"判据是 {ManualDraftLayout.MainRows} 行：这一屏的主内容就是这个输入区，装不下就等于「写说明时看不见自己写了什么」，" +
+                    "不能读成「放得下」。");
             }
         });
     }
