@@ -288,7 +288,7 @@ internal static class Program
         Section("按钮行高度（八屏按钮行量行高与最高按钮，真实控件）", nameof(RunActionRowFit));
         RunActionRowFit(services, dataRoot);
 
-        Section("连接与写入探测真的显示出来（四块停靠区高度对客户区、结果区装得下七项探测结果、清单不出横向滚动条，真实控件量）", nameof(RunCapabilitiesShown));
+        Section("连接与写入探测真的显示出来（四块停靠区高度对客户区、固定三块与 CapabilitiesLayout 对账、结果区实测高与算式对账、窗体客户区高与 DialogHeight 对账、结果区装得下七项探测结果、清单不出横向滚动条，真实控件量）", nameof(RunCapabilitiesShown));
         RunCapabilitiesShown(services, dataRoot);
 
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
@@ -6322,6 +6322,41 @@ internal static class Program
                 throw new InvalidOperationException(
                     $"四块停靠区的高度加起来是 {sum}px，客户区高 {client.Height}px（差 {sum - client.Height}px）：" +
                     "停靠分法漏了一块或叠了一块，这一屏的某一块在真实窗口里会被压掉。");
+            }
+
+            // 实测 ↔ 口径逐笔对账（第二百五十六轮，简报 P0-1）：这一段标题念的三件事，每一件都要真的判。
+            // 只判「四块加起来等于客户区」是**恒等式**（结果区 Fill、其余 Top/Bottom，加起来必然等于客户区），
+            // 它抓不到「常量漂了」——常量漂了窗体高跟着漂，两边一起动，那一句照样绿。
+            // 所以下面每一笔都拿**实测**去撞**口径里的那个数**，任一方单独改都被对面问住。
+            var fixedPanes = tops.Sum(control => control.Height) + status.Height;
+            if (fixedPanes != CapabilitiesLayout.FixedPanesHeight)
+            {
+                throw new InvalidOperationException(
+                    $"固定三块实测合计 {fixedPanes}px（连接检查 {tops[0].Height} + 探测区 {tops[1].Height} + 状态行 {status.Height}），"
+                    + $"而 CapabilitiesLayout.FixedPanesHeight 是 {CapabilitiesLayout.FixedPanesHeight}px："
+                    + "三块都是 AutoSize，高度由内容与字号决定，代码里没有一处能设——口径要跟着重量回写。");
+            }
+
+            if (result.Height != CapabilitiesLayout.ResultPaneHeight(CapabilitiesLayout.ProbeRows))
+            {
+                throw new InvalidOperationException(
+                    $"结果区实测高 {result.Height}px，而算式 ResultPaneHeight({CapabilitiesLayout.ProbeRows}) 是 "
+                    + $"{CapabilitiesLayout.ResultPaneHeight(CapabilitiesLayout.ProbeRows)}px："
+                    + "「结果区要给几行」与真实排版对不上（这一句不是恒等式——左边是布局引擎排出来的，右边是算式）。");
+            }
+
+            if (rowHeight != CapabilitiesLayout.RowHeight)
+            {
+                throw new InvalidOperationException(
+                    $"结果清单行高实测 {rowHeight}px，而 CapabilitiesLayout.RowHeight 是 {CapabilitiesLayout.RowHeight}px："
+                    + "行高变了，按行数算出来的结果区高就不再等于真实排版。");
+            }
+
+            if (client.Height != CapabilitiesLayout.DialogHeight)
+            {
+                throw new InvalidOperationException(
+                    $"窗体客户区高实测 {client.Height}px，而 CapabilitiesLayout.DialogHeight 是 {CapabilitiesLayout.DialogHeight}px："
+                    + "窗体高不是由口径给出来的（或口径与产品那一处接线漂了）。");
             }
 
             if (vertical || lastBottom > list.ClientSize.Height)

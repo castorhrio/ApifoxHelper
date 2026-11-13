@@ -52,23 +52,46 @@ public class CapabilitiesLayoutTests
     }
 
     /// <summary>
-    /// 窗体高由算式给出，且用的就是产品那一句行数；752 那一格是读数锚点，不是判据。
+    /// 窗体高由算式给出，且用的就是产品那一句行数——<b>先量后判</b>，本文件不再自己念一个没量过的数
+    /// （第二百五十六轮，简报 P0-1）。
     /// <para>
     /// <b>为什么判这个</b>：第二百四十四轮在同步预览那一屏上量到过同一课——窗体高写成字面量、
     /// 与「放不放得下」之间没有算式绑住，改行数或改任一块开销，两边不会一起动，而门在原来那一点上照样全绿。
     /// 这一条把「字段用的值」与「算式在实测口径处的取值」钉成同一个数。
     /// </para>
     /// <para>
-    /// <b>752 那一格红了怎么办</b>：它是本轮 wine 96 档量出来的窗体高（538 + 7 × 21 + 24 + 43）。
-    /// 真要改行数或开销，这一格会红，红了必须去重跑量测并回写 <c>docs/NOTES.md</c> 第二百四十七轮那一节，
-    /// 不许顺手改成新值——「算式跟着漂、实测没跟着量」正是这一族最贵的那种绿。
+    /// <b>752 那个锚点为什么撤掉</b>（第二百五十六轮）：它此前是一句 <c>Assert.Equal(752, …DialogHeight)</c>——
+    /// 一句<b>锚点断言</b>，本文件里没有任何一处真的量过 752。它挡不住它想挡的那件事：常量漂了，
+    /// 这一格跟着红，但红的是「有人改了常量」，不是「真实窗口里放不下了」；而真正该问的那句话
+    /// （「实测客户区高是不是等于口径」）此前<b>一处都没判</b>——<c>RunCapabilitiesShown</c> 只判了
+    /// 「四块加起来等于客户区」这句恒等式（<c>LayoutMeasurementGateTests.KnownGaps</c> 挂的就是这一笔）。
+    /// 现在改成<b>先量后判</b>：量在冒烟段（真控件 <c>Show()</c> 之后读 <c>ClientSize</c>），
+    /// 判在那一笔 <c>if (client.Height != CapabilitiesLayout.DialogHeight)</c>；本文件只判「那一笔对账真的在」。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判量到的数对不对（那要人读报告）；不判 752 这个值本身——它现在只在
+    /// <see cref="DialogHeightFor_TracksEveryRow"/> 里作为算式在 7 行处的取值出现，那是算术不是读数。
     /// </para>
     /// </summary>
     [Fact]
     public void DialogHeight_IsTheFormulaAtTheMeasuredRowCount()
     {
         Assert.Equal(CapabilitiesLayout.DialogHeightFor(CapabilitiesLayout.ProbeRows), CapabilitiesLayout.DialogHeight);
-        Assert.Equal(752, CapabilitiesLayout.DialogHeight);
+
+        // 先量后判：三笔「实测 vs 口径」的对账必须真的在冒烟段里（量在真控件上，判在那一笔 if）。
+        var segment = MethodSlice(Repo.SmokeProgram,
+            "private static void RunCapabilitiesShown(IServiceProvider services, string dataRoot)");
+        Assert.Contains("client.Height != CapabilitiesLayout.DialogHeight", segment, StringComparison.Ordinal);
+        Assert.Contains(
+            "result.Height != CapabilitiesLayout.ResultPaneHeight(CapabilitiesLayout.ProbeRows)",
+            segment,
+            StringComparison.Ordinal);
+        Assert.Contains("fixedPanes != CapabilitiesLayout.FixedPanesHeight", segment, StringComparison.Ordinal);
+
+        // 锚点不许回来：本文件里再出现「Assert.Equal(752, …DialogHeight)」就是把没量过的数又念了一遍。
+        // 针从两段拼出来，免得这一句自己把针写进文件里（那样这条门永远红）。
+        var anchor = "Assert.Equal(" + "752, CapabilitiesLayout.DialogHeight)";
+        Assert.DoesNotContain(anchor, Repo.Source("ApifoxHelper.Tests", "CapabilitiesLayoutTests.cs"), StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -37,6 +37,15 @@ namespace ApifoxHelper.Tests;
 /// <see cref="GateDetector_ReportsTheBreaksItMustCatch"/> 拿第二百五十二轮那一发的<b>原样</b>当夹具，
 /// 当场验这一条抓不抓得住。
 /// </para>
+/// <para>
+/// <b>本族到此收尾（第二百五十六轮，简报 P0-2）</b>：这一族从第二百五十二轮起连做五轮——
+/// 第二百五十二轮补一屏的形状门、第二百五十三轮把「逐笔对账」扩到全仓、第二百五十四轮把验收表分层、
+/// 第二百五十五轮把「不需要形状门」的理由登记成表、本轮把最后两笔挂账收掉
+/// （<see cref="KnownGaps"/> 清空 + <see cref="NoMeasurementSegment"/> 的理由变成可判）。
+/// <b>下一轮若再出现「找恒等式 / 补形状门」的 commit，应判为重复路径</b>：这一族能机械判的已经判完，
+/// 剩下的（「量到的数对不对」「这一屏该不该这么分」）只有人读得出来，再加门只会把「门绿」当成「做完了」。
+/// 这条约束同时记在 <c>docs/NOTES.md</c>「假门防护这一族：收尾登记」一节。
+/// </para>
 /// </summary>
 public class LayoutMeasurementGateTests
 {
@@ -71,30 +80,38 @@ public class LayoutMeasurementGateTests
     private static readonly Dictionary<string, string> NoMeasurementSegment = new(StringComparer.Ordinal)
     {
         ["ProfileFormLayoutTests.cs"] =
-            "判的是配置表单的行高预算算式（三档正文预算线、分区档预算线、认不出的字号不回退），"
+            "这一份里没有「窗体高 = 各块之和」那种同源恒等式：它判的是配置表单的行高预算算式"
+            + "（三档正文预算线、分区档预算线、认不出的字号不回退），每一句都是口径取值判据"
+            + "（17 + RowPadding、RowPadding 的 4 + 8 + 12），不是恒等式；"
             + "量测在冒烟器 RunProfileFormLayout 里由 ProfileFormLayoutBudgetTests 那一族对账，不在本族登记范围内。",
         ["SplitLayoutTests.cs"] =
-            "判的是两列网格的列宽分配（标签列吸收剩余宽度），没有「显示出来量一遍」那一段。",
+            "这一份里没有竖直预算的同源恒等式：它判的是两列网格的列宽分配（标签列吸收剩余宽度），"
+            + "判据是 FixedPanel.Panel2 与 SplitterDistance 的口径取值加接线正则，"
+            + "没有「显示出来量一遍」那一段，也就没有「量到的数只被一句恒等式判过」这种假门形态。",
     };
 
     /// <summary>
-    /// 本轮门扫出来、按简报<b>只挂账不改量测段</b>的缺口：文件 → 缺口说明。
+    /// 门扫出来、按简报<b>只挂账不改量测段</b>的缺口：文件 → 缺口说明。
     /// <para>
     /// <b>为什么挂账而不是顺手补</b>：简报明令「不要在同一轮里既加门又改量测段」——改门改到门绿，
-    /// 门就永远不知道自己该抓什么。所以本轮只把缺口<b>写成一句可判的话</b>：
+    /// 门就永远不知道自己该抓什么。所以挂账那一轮只把缺口<b>写成一句可判的话</b>：
     /// <see cref="KnownGaps_AreStillGaps"/> 判「登记为缺口的这一份<b>现在仍然</b>不达形态」，
     /// 谁把它补好了，那一条当场红并点名「登记过期，删掉这一行」——挂账不会烂在仓里。
+    /// </para>
+    /// <para>
+    /// <b>第二百五十六轮起这张表是空的</b>：第二百五十三轮挂的那一笔（<c>CapabilitiesLayoutTests.cs</c> 的
+    /// <c>RunCapabilitiesShown</c>）本轮补上了三笔「实测 vs 口径」对账，按上面那条规矩删掉了那一行。
+    /// 空表是<b>结果</b>不是<b>豁免</b>：<see cref="EveryRegisteredMeasurementSegment_ReconcilesMeasuredAgainstTheCaliber"/>
+    /// 现在真的在判 <c>CapabilitiesLayoutTests.cs</c>（此前它被这张表跳过）。
     /// </para>
     /// </summary>
     private static readonly Dictionary<string, string> KnownGaps = new(StringComparer.Ordinal)
     {
-        ["CapabilitiesLayoutTests.cs"] =
-            "第二百五十三轮门扫出：RunCapabilitiesShown 一笔「实测 vs 口径」对账都没有——"
-            + "段内只把 CapabilitiesLayout.ProbeRows 当行数用（const int ProbeChecks = …），"
-            + "判的是「装不装得下」（最后一行底边对清单可视高）与滚动条样式位，"
-            + "而 CapabilitiesLayoutTests.DialogHeight_IsTheFormulaAtTheMeasuredRowCount 里那个 752 读数锚点"
-            + "没有任何一处实跑对账（四块停靠区实测合计、结果区实测高、窗体客户区高都没撞过口径）。"
-            + "下一轮补这一段的对账，补完删掉这一行。",
+        // 第二百五十六轮起为空：唯一那一笔（CapabilitiesLayoutTests.cs 的 RunCapabilitiesShown）
+        // 已由本轮补上三笔「实测 vs 口径」对账（固定三块 / 结果区算式 / 窗体客户区），
+        // 按挂账自己的规矩删掉了那一行。**空表不等于这一条门可以删**：它是「显式挂账 + 理由」这个机制本身，
+        // 由 GateDetector_ReportsTheBreaksItMustCatch 的第 ⑦ 发当场验（登记了就不报）。
+        // 下一轮再扫出缺口，照原样往这里加一行，别把缺口写成散文。
     };
 
     /// <summary>
@@ -234,6 +251,120 @@ public class LayoutMeasurementGateTests
                 $"{file} 的缺口已经补上了（{pair.Segment} 现在有 {ledger.Members.Count} 笔对账，"
                 + $"下限是 {MinReconciliations}）：删掉 KnownGaps 里那一行，让这一份按正常形态被门判。");
         }
+    }
+
+    // ---------- 「没有量测段」的理由也要有形状（第二百五十六轮，简报 P0-2，本族收尾轮）----------
+
+    /// <summary>
+    /// <see cref="NoMeasurementSegment"/> 的每一条理由必须写成<b>可判的形态</b>：含「恒等式」或「口径」
+    /// 二词之一，且不短于 <see cref="MinReasonLength"/> 字。
+    /// <para>
+    /// <b>补的是哪一笔挂账</b>：第二百五十五轮把「不需要形状门」的理由从散文升级成登记
+    /// （<see cref="NoIdentityGuard"/>），但「没有量测段」这一份（<see cref="NoMeasurementSegment"/>）
+    /// 的理由仍是一句散文——「判的是纯算式」「没有那一段」都成立，却<b>没有一句话说明那一份里
+    /// 到底有没有同源恒等式、有的话为什么不算假门</b>。下一轮读到它的人只能自己再判一次，
+    /// 而「再判一次」正是这一族四轮以来一直在重复的那件事。
+    /// </para>
+    /// <para>
+    /// <b>为什么是这两个词</b>：这一族要防的假门只有一种形态——<b>同源恒等式</b>被当成判据
+    /// （<c>DialogHeight</c> 由 <c>DialogHeightFor</c> 定义，所以「各块之和 == DialogHeight」永远为真）。
+    /// 一条理由只要说清了「这一份里有没有那种恒等式」或「它的判据是哪个口径的取值」，就答完了这个问题；
+    /// 两个词都不沾的理由，答的是别的问题。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判理由说得对不对（那是人读的）；不判「这一份真的没有恒等式」——
+    /// 判据是中文散文与算式，机械判不了。它判的是「每一条理由都被逼着回答过那个问题」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NoMeasurementSegment_Reasons_SayWhyTheIdentityIsNotAFakeGate()
+    {
+        var problems = ReasonProblems(NoMeasurementSegment);
+        Assert.Empty(problems);
+    }
+
+    /// <summary>
+    /// 上面那段判据<b>自己</b>被抓得住：四发注入各喂一次，每一发都必须报出自己那一处。
+    /// <para>
+    /// 与 <see cref="GateDetector_ReportsTheBreaksItMustCatch"/> 同一纪律：判据自己没被跑过，
+    /// 比没有判据更贵（第二百零九轮那两处假变异、第二百四十三轮 M4 那一发假绿都是这一种）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ReasonDetector_ReportsTheBreaksItMustCatch()
+    {
+        // ① 合规：两条理由都点了「恒等式」或「口径」，且够长。
+        Assert.Empty(ReasonProblems(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["AaaLayoutTests.cs"] = "这一份里没有同源恒等式，判的是口径取值（17 + RowPadding），量测在冒烟器那一段里对账。",
+            ["BbbLayoutTests.cs"] = "这一份判的是列宽口径（FixedPanel.Panel2），没有「显示出来量一遍」那一段，也就没有恒等式。",
+        }));
+
+        // ② 第二百五十五轮之前那一句的原样：散文成立，但没回答「有没有恒等式」。
+        var prose = ReasonProblems(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["SplitLayoutTests.cs"] = "判的是两列网格的列宽分配（标签列吸收剩余宽度），没有「显示出来量一遍」那一段，也没有别的判据。",
+        });
+        Assert.Single(prose);
+        Assert.Contains("恒等式", prose[0], StringComparison.Ordinal);
+        Assert.Contains("口径", prose[0], StringComparison.Ordinal);
+
+        // ③ 点了词但太短：一句话糊过去。
+        var tooShort = ReasonProblems(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["CccLayoutTests.cs"] = "没有恒等式。",
+        });
+        Assert.Single(tooShort);
+        Assert.Contains("字", tooShort[0], StringComparison.Ordinal);
+
+        // ④ 空理由：空理由等于没登记。
+        var empty = ReasonProblems(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["DddLayoutTests.cs"] = "   ",
+        });
+        Assert.Single(empty);
+        Assert.Contains("空着", empty[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>一条「没有量测段」的理由至少要有的字数。<b>40 是下限，不是目标</b>：一句话答不完那个问题。</summary>
+    private const int MinReasonLength = 40;
+
+    /// <summary>
+    /// 把一份「没有量测段」的登记喂给判据，返回「哪几条理由不达形态」的说明（空 = 每条都答过那个问题）。
+    /// <para>
+    /// 写成「登记表进、问题出」的纯函数，是为了让上面那条自测能拿<b>注入过的</b>夹具喂它——
+    /// 与 <see cref="Problems"/> / <see cref="IdentityGuardProblems"/> 同一形状。
+    /// </para>
+    /// </summary>
+    private static List<string> ReasonProblems(IReadOnlyDictionary<string, string> reasons)
+    {
+        var problems = new List<string>();
+        foreach (var (file, reason) in reasons)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                problems.Add($"{file} 的「没有量测段」理由空着——空理由等于没登记。");
+                continue;
+            }
+
+            var text = reason.Trim();
+            if (!text.Contains("恒等式", StringComparison.Ordinal) && !text.Contains("口径", StringComparison.Ordinal))
+            {
+                problems.Add(
+                    $"{file} 的「没有量测段」理由既没点「恒等式」也没点「口径」：这一族要防的假门只有一种形态"
+                    + "（同源恒等式被当成判据），理由必须回答「这一份里有没有那种恒等式」或「它的判据是哪个口径的取值」，"
+                    + "否则下一轮读到它的人只能自己再判一次。");
+            }
+
+            if (text.Length < MinReasonLength)
+            {
+                problems.Add(
+                    $"{file} 的「没有量测段」理由只有 {text.Length} 字（下限 {MinReasonLength} 字）："
+                    + "一句话答不完「有没有恒等式、为什么不算假门」这个问题。");
+            }
+        }
+
+        return problems;
     }
 
     // ---------- 「假门防护」扩到全仓 *LayoutTests.cs 一族（第二百五十五轮，简报 P1-1）----------
