@@ -36,13 +36,19 @@ public class GateSourceConsistencyTests
     /// <paramref name="Forbidden"/>：两边都不许出现的字面量（各写一套的痕迹）。
     /// </para>
     /// </summary>
+    /// <param name="Calls">
+    /// 这一段在冒烟器里被调用的<b>次数</b>（第二百四十五轮）。默认 1；共享辅助按实际调用点登记。
+    /// 判「恰好几次」而不是「大于零」：同一段被调用两次（重复注册、或复制粘贴多一行）时报告里那一段会跑两遍，
+    /// 而「大于零」照样绿——这一族正是 <c>WiringAssertionShapeTests</c> 要堵的形状。
+    /// </param>
     private sealed record Pair(
         string Screen,
         string GateFile,
         string GateMethod,
         string SmokeSection,
         string[] Shared,
-        string[] Forbidden);
+        string[] Forbidden,
+        int Calls = 1);
 
     /// <summary>
     /// 已覆盖的三屏。新增一屏「静态门 + 冒烟段」时在这里加一行——<b>不加就是这一屏没人判同源</b>，
@@ -71,7 +77,11 @@ public class GateSourceConsistencyTests
             "Dialog_TakesItsCopyFromTheSharedSource",
             "ReadFullTextAndCheck",
             ["StatusLineText.FullTextHeading"],
-            ["完整错误信息"]),
+            ["完整错误信息"],
+            // 这一支是共享辅助，被两处扫各调一次：`RunDialogStatusSweep`（15 屏逐屏）与
+            // `RunStatusLineSweep`（逐屏扫）——两处都是「点开读全」这一支的真实调用点，不是重复注册。
+            // 第二百四十五轮把这一格从「大于零」改成「恰好 2」时量到的就是这两个数（4777 / 5026 两行）。
+            Calls: 2),
     ];
 
     private static string SmokeProgram => Repo.Source("ApifoxHelper.Smoke", "Program.cs");
@@ -95,6 +105,14 @@ public class GateSourceConsistencyTests
     public void EveryPair_HasBothHalvesAndTheSmokeSectionIsWired()
     {
         var program = SmokeProgram;
+        // 真调用：一行以段名开头的调用（方法声明行是 `private static void X(`，不匹配）。
+        // 段在 Main 里的注册由每一屏自己的门判（例如 BuildCommandCopySmokeTests.Smoke_RunsTheBuildCommandCopySection）——
+        // 本文件判的是「两半同源」，不重复判注册。
+        //
+        // 第二百四十五轮把这一处从「数出来再判大于零」改成「逐对判恰好一次」：`calls > 0` 判的是
+        // 「有没有」，同一段被调用两次（重复注册、或复制粘贴多一行）照样绿——而报告里那一段会跑两遍。
+        // 这一处正是 WiringAssertionShapeTests 那一族要堵的形状，本轮顺手把它自己先改对。
+        var wrongCalls = new List<string>();
         foreach (var pair in Pairs)
         {
             // 静态门那一半：方法在测试文件里。
@@ -106,15 +124,15 @@ public class GateSourceConsistencyTests
                 $"「{pair.Screen}」的冒烟段 {pair.SmokeSection} 不在 ApifoxHelper.Smoke/Program.cs 里："
                 + "静态门判的那一半没有运行时对照。");
 
-            // 真调用：一行以段名开头的调用（方法声明行是 `private static void X(`，不匹配）。
-            // 段在 Main 里的注册由每一屏自己的门判（例如 BuildCommandCopySmokeTests.Smoke_RunsTheBuildCommandCopySection）——
-            // 本文件判的是「两半同源」，不重复判注册。
             var calls = program.Split('\n')
                 .Count(l => Regex.IsMatch(l, @"^\s+" + Regex.Escape(pair.SmokeSection) + @"\("));
-            Assert.True(calls > 0,
-                $"「{pair.Screen}」的冒烟段 {pair.SmokeSection} 没有真的被调用（注释掉的调用不算接线）："
-                + "报告里不会出现这一段，而静态门照旧全绿。");
+            if (calls != pair.Calls)
+            {
+                wrongCalls.Add($"「{pair.Screen}」的冒烟段 {pair.SmokeSection} 被调用 {calls} 次（应为恰好 {pair.Calls} 次）");
+            }
         }
+
+        Assert.Empty(wrongCalls);
     }
 
     /// <summary>

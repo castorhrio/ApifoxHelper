@@ -23,6 +23,15 @@ namespace ApifoxHelper.Tests;
 /// 四份互不相干的字面量加起来比页面还高，被挤掉的是唯一不能滚的那一块（主清单）。本轮改成：每块先说要给几行，
 /// 像素由同一份行高与同一份开销算，窗体高跟着这几块走。算式在 <see cref="SyncPreviewPanes"/> 一处。
 /// </para>
+/// <para>
+/// <b>第二百四十四轮补的缺口</b>：上一轮把三块固定区从「四个互不相干的字面量」改成「行数 × 行高 + 开销」，
+/// 窗体高却仍是字面量 790，与判定 <c>ActionListFits</c> 之间没有一条算式绑住。上一轮末尾补的那两条门
+/// <b>本轮实测是空的</b>：把 <c>DialogHeightFor</c> 整个改回 <c>=></c> 字面量 790，十条门照样全绿——
+/// 那两条判的都是「算式在 8 行那一点的取值」，而那一点上字面量与算式给同一个数，分不出来。
+/// 本轮改成两件事：算式在 7 / 8 / 9 行三个取值逐个钉死（写死就红），并让「算式给的高度减掉窗体级停靠」
+/// 与 <c>ActionListFits</c> 互为逆（任一方单独改都被对面问住）。顺带把这一屏的两条轴钉住：
+/// 竖直只在 <see cref="SyncPreviewPanes"/>、水平只在 <see cref="ListColumnWidths"/>，两边不写对方的数。
+/// </para>
 /// </summary>
 public class SyncPreviewPanesTests
 {
@@ -50,6 +59,111 @@ public class SyncPreviewPanesTests
             + SyncPreviewPanes.TextPaneHeight(SyncPreviewPanes.NotesRows)
             + SyncPreviewPanes.ListPaneHeight(SyncPreviewPanes.ExcludedRows),
             SyncPreviewPanes.FixedPaneTotal);
+    }
+
+    /// <summary>
+    /// 第二百四十四轮：窗体高由算式给出，且用的就是产品那一句行数。
+    /// <para>
+    /// <b>为什么判这个</b>：上一轮 <c>DialogHeight</c> 是字面量 790、<c>ActionListFits</c> 是独立布尔判定，
+    /// 中间没有一条算式绑住。这一条把「字段用的值」与「算式在实测口径处的取值」钉成同一个数，
+    /// 并把窗体高与 <see cref="SyncPreviewPanes.ActionRows"/> 绑上——两边任一方单独改都红。
+    /// </para>
+    /// <para>
+    /// <b>790 那一格是读数锚点，不是判据</b>：它是第二百四十三轮 wine 96 档量出来的窗体高。
+    /// 真要改行数或开销，这一格会红，红了必须去重跑量测并回写 §6 / §8 那两个数，不许顺手改成新值——
+    /// 「算式跟着漂、实测没跟着量」正是这一族最贵的那种绿。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DialogHeight_IsTheFormulaAtTheMeasuredHeadHeight()
+    {
+        Assert.Equal(SyncPreviewPanes.DialogHeightFor(SyncPreviewPanes.HeadHeight), SyncPreviewPanes.DialogHeight);
+        // 单参那一头用的必须是产品那一句行数，不是测试里另给的一个数。
+        Assert.Equal(
+            SyncPreviewPanes.DialogHeightFor(SyncPreviewPanes.HeadHeight, SyncPreviewPanes.ActionRows),
+            SyncPreviewPanes.DialogHeight);
+        Assert.Equal(790, SyncPreviewPanes.DialogHeight);
+    }
+
+    /// <summary>
+    /// 第二百四十四轮：算式真的跟着行数走——7 / 8 / 9 行三个取值逐个钉死，且一行差恰好是一个行高。
+    /// <para>
+    /// <b>这一条是本轮那发红话的正面</b>：上一轮补的两条门判的都是「算式在 8 行那一点的取值」，
+    /// 而那一点上字面量与算式给同一个数。<b>实测过一发</b>：把 <c>DialogHeightFor</c> 整个改回
+    /// <c>=></c> 字面量 790，旧的十条门照样全绿——那两条分不出「算出来的 790」和「写死的 790」。
+    /// 这一条能分：改坏之后 9 行那一格还是 790，当场红。
+    /// </para>
+    /// <para>
+    /// <b>不动产品常量</b>：行数收在 <c>DialogHeightFor</c> 的参数里，判「跟着变」不必改
+    /// <see cref="SyncPreviewPanes.ActionRows"/> 的 8（同 <see cref="ActionListFits_IsTheArithmeticTheOldLayoutFailed"/>
+    /// 用旧页高判旧布局那一写法）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DialogHeightFor_TracksEveryRowAndEveryChrome()
+    {
+        // 实测口径（8 行）：8 × 21 + 27 + 349 + 154 + 92 = 790。
+        Assert.Equal(790, SyncPreviewPanes.DialogHeightFor(SyncPreviewPanes.HeadHeight, 8));
+        Assert.Equal(811, SyncPreviewPanes.DialogHeightFor(SyncPreviewPanes.HeadHeight, 9));
+        Assert.Equal(769, SyncPreviewPanes.DialogHeightFor(SyncPreviewPanes.HeadHeight, 7));
+        // 一行差 = 一个行高，不多不少（挡的是「rows 收进参数却没进算式」那种写法）。
+        Assert.Equal(
+            SyncPreviewPanes.RowHeight,
+            SyncPreviewPanes.DialogHeightFor(SyncPreviewPanes.HeadHeight, SyncPreviewPanes.ActionRows + 1)
+            - SyncPreviewPanes.DialogHeightFor(SyncPreviewPanes.HeadHeight, SyncPreviewPanes.ActionRows));
+        // 顶部那一格长一行，窗体高跟着长一行（挡的是「只调窗体高、不算上面那一块」那种改法）。
+        Assert.Equal(
+            SyncPreviewPanes.RowHeight,
+            SyncPreviewPanes.DialogHeightFor(
+                SyncPreviewPanes.HeadHeight + SyncPreviewPanes.RowHeight,
+                SyncPreviewPanes.ActionRows) - SyncPreviewPanes.DialogHeight);
+    }
+
+    /// <summary>
+    /// 第二百四十四轮：算式给的高度喂进「放不放得下」那条判定，恰好等价于「行数不少于 <c>ActionRows</c>」——
+    /// 窗体高与判定互为逆，谁单独改了都会被对面问住。
+    /// <para>
+    /// <b>为什么这才算「绑住」</b>：简报要的那一条是「常量与判据之间有一条算式」，而不是「常量的出处写在注释里」。
+    /// 算式减掉 <see cref="SyncPreviewPanes.WindowChrome"/> 就是预览页那一刻的客户区高（实测 701px，
+    /// 比这里保守的 698px 还多 3px，那 3px 的取舍写在 <c>WindowChrome</c> 的注释里）；
+    /// 从这个高里再抽掉一行，判定必须立刻放不下——不然「按行数推窗体高」这句话就只是文字。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheDerivedDialogHeight_IsExactlyWhatActionListFitsNeeds()
+    {
+        var page = SyncPreviewPanes.DialogHeight - SyncPreviewPanes.WindowChrome;
+        Assert.True(SyncPreviewPanes.ActionListFits(page, SyncPreviewPanes.HeadHeight));
+        Assert.False(SyncPreviewPanes.ActionListFits(page - SyncPreviewPanes.RowHeight, SyncPreviewPanes.HeadHeight));
+        Assert.False(SyncPreviewPanes.ActionListFits(
+            page, SyncPreviewPanes.HeadHeight + SyncPreviewPanes.RowHeight * SyncPreviewPanes.ActionRows));
+    }
+
+    /// <summary>
+    /// 屏级契约（简报 P1-1）：这一屏的竖直轴只在 <see cref="SyncPreviewPanes"/>、水平轴只在
+    /// <see cref="ListColumnWidths"/>，两边都不许写对方的数。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：同一屏横竖两条轴分属两个文件，此前没有一处说明这件事。
+    /// 第二百四十三轮修掉的根因是「四份互不相干的像素数」——下一次在这屏加一块区域的人，
+    /// 极可能在竖直文件里写一个宽、或在水平文件里写一个高，凑出第五份就地数。
+    /// 这一条不新增任何行为，只把「两轴互不越界」变成红了会说话的判据。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheTwoAxes_NeverWriteEachOthersNumber()
+    {
+        // 口径名本身不算越界（那边在本轮的注释里被点名），所以先把它摘掉再数宽度数。
+        var vertical = NativeFile("SyncPreviewPanes.cs").Replace("ListColumnWidths", "");
+        Assert.DoesNotContain("Width", vertical, StringComparison.Ordinal);
+        Assert.DoesNotContain("ListColumnWidths.", vertical, StringComparison.Ordinal);
+
+        var horizontal = NativeFile("ListColumnWidths.cs").Replace("SyncPreviewPanes", "");
+        Assert.DoesNotContain("Height", horizontal, StringComparison.Ordinal);
+        Assert.DoesNotContain("SyncPreviewPanes.", horizontal, StringComparison.Ordinal);
+
+        // 这一屏两轴各只有一处落点，数得着：窗体高一处（横着的那两格列宽在 ListColumnWidthsTests 判）。
+        Assert.Single(Regex.Matches(Dialog, @"SyncPreviewPanes\.DialogHeight"));
+        Assert.Equal(1, Count(Dialog, @"new Size\(1020, SyncPreviewPanes\.DialogHeight\)"));
     }
 
     /// <summary>

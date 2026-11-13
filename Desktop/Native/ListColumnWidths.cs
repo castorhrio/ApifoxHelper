@@ -39,6 +39,14 @@ namespace ApifoxHelper.Desktop.Native;
 /// 一屏独用、且没有跨屏同名族的其他列（各清单的说明列、详情列、时间列）仍留在各屏自己那一句里——
 /// 把它们一并搬进来等于给一个没有第二个用户的数字造一个词汇表。这一条由用例钉住不许被顺手「统一」掉。
 /// </para>
+/// <para>
+/// <b>这一文件只管水平轴</b>（屏级契约，与 <see cref="SyncPreviewPanes"/> 各管一半，第二百四十四轮）：
+/// 这里给的每一格都是<b>列宽</b>；那一屏里凡是高度（窗体高、块高、块开销）都归
+/// <c>SyncPreviewPanes</c>，这里一个都不写，反过来那边也不写宽。两轴分开是因为挤没主清单那一发
+/// 正是「同一个数在几处各写一遍」凑出来的——多一处就地像素数，就多用一次「算式与判据各说各的」。
+/// 这一条由 <c>SyncPreviewPanesTests.TheTwoAxes_NeverWriteEachOthersNumber</c> 判（两边源文里
+/// 不得出现对方的口径名），不新增任何行为。
+/// </para>
 /// </summary>
 public static class ListColumnWidths
 {
