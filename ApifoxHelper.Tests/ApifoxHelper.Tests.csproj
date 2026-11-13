@@ -69,6 +69,8 @@
     <Compile Include="..\Desktop\Native\ListRows.cs" Link="Shared\ListRows.cs" />
     <Compile Include="..\Desktop\Native\ListColumns.cs" Link="Shared\ListColumns.cs" />
     <Compile Include="..\Desktop\Native\ListColumnWidths.cs" Link="Shared\ListColumnWidths.cs" />
+    <!-- 「哪些屏真的显示过」的登记（第二百四十六轮）：纯数据、不依赖 WinForms，门在 MeasuredScreensTests。 -->
+    <Compile Include="..\Desktop\Native\MeasuredScreens.cs" Link="Shared\MeasuredScreens.cs" />
     <Compile Include="..\Desktop\Native\SyncPreviewPanes.cs" Link="Shared\SyncPreviewPanes.cs" />
     <Compile Include="..\Desktop\Native\ListSort.cs" Link="Shared\ListSort.cs" />
     <Compile Include="..\Desktop\Native\CheckResultSort.cs" Link="Shared\CheckResultSort.cs" />
