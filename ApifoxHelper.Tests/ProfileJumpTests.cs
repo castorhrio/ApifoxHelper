@@ -346,6 +346,135 @@ public class ProfileJumpTests
     }
 
     /// <summary>
+    /// 「落到了那一行」的回执<b>真的接在「找到了」那一支里</b>（第二百六十八轮，简报 P1-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="ProfileJump.LoadFailedStatus"/> 那句「读出来后会定位到它」
+    /// 已有 <see cref="LoadFailedStatus_PromiseIsBackedByThePendingJump"/> 判住接线，而
+    /// <see cref="ProfileJump.LandedStatus"/> 是同一件事的回执半截——此前只判了「那句话的文案对不对」
+    /// 与「<c>RevealProfile</c> 里出现过 <c>ProfileJump.LandedStatus(</c>」。
+    /// <b>「出现过」不等于「接在那一支里」</b>：把它挪到「找不到」那一支之后、或挪出 <c>if (found)</c>，
+    /// 上面那两条断言照样绿，而用户会在找不到那一行时读到「已定位到配置「X」」。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 那一句是 <c>SetStatus(ProfileJump.LandedStatus(profileName), …)</c> 的完整调用
+    /// （不是只把文案算出来丢掉）；② 它落在 <c>if (found)</c> 之后、<c>MissingStatus</c> 之前——
+    /// 顺序就是「找到了才说落到了」这件事本身。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LandedStatus_IsWiredIntoTheFoundBranch()
+    {
+        var body = SourceSlice.BodyOf(ProjectsPage, "public bool RevealProfile(string profileId, string profileName)");
+        Assert.Empty(RevealWiringProblems(body));
+    }
+
+    /// <summary>
+    /// 「要不要清筛选」的第一个实参<b>取自 <see cref="ListFilter.IsActive"/></b>（第二百六十八轮，简报 P2-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="ProfileJump.ShouldClearFilter"/> 的两个入参都由调用方当场算出来，
+    /// 而「筛选有没有生效」这件事全仓只有一个判法（<see cref="ListFilter.IsActive"/>：去首尾空白后非空）。
+    /// 调用方图省事写成 <c>!string.IsNullOrEmpty(_filter.Text)</c> 时，一个只有空格的筛选框会被当成「筛了」——
+    /// 第二百六十三轮那个缺陷就以另一种形状回来了（清空一个本来就没在筛的框，用户敲的空格被吃掉）。
+    /// </para>
+    /// <para>
+    /// 判据本体在 <see cref="RevealWiringProblems"/>，注入自验在
+    /// <see cref="RevealWiringDetector_ReportsTheBreaksItMustCatch"/>。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ShouldClearFilter_GetsTheFilterStateFromListFilter()
+    {
+        var body = SourceSlice.BodyOf(ProjectsPage, "public bool RevealProfile(string profileId, string profileName)");
+        var call = Regex.Match(body, @"ProfileJump\.ShouldClearFilter\((?<args>[^\n]*)\)");
+        Assert.True(call.Success, "RevealProfile 里没有调 ProfileJump.ShouldClearFilter：要不要清筛选没有唯一落点。");
+        Assert.Equal("ListFilter.IsActive(_filter.Text)", call.Groups["args"].Value.Split(',')[0].Trim());
+    }
+
+    /// <summary>
+    /// 上面两条判据<b>自己</b>被抓得住（第二百六十八轮）：拿四发注入各喂一次
+    /// <see cref="RevealWiringProblems"/>——删掉回执、把回执挪到「找不到」之后、把第一个实参就地拼、
+    /// 以及合规的那一份（不报）。
+    /// <para>
+    /// 本仓第二百零九轮的教训是「判据自己没被跑过」比「没有判据」更贵：一条永远为真的断言
+    /// 与没有断言在报告里长得一样。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RevealWiringDetector_ReportsTheBreaksItMustCatch()
+    {
+        var good = SourceSlice.BodyOf(ProjectsPage, "public bool RevealProfile(string profileId, string profileName)");
+        Assert.Empty(RevealWiringProblems(good));
+
+        // ① 回执那一句被删掉：那句话只剩文案，没有接线。
+        var silent = good.Replace(LandedCall, "// 不给回执", StringComparison.Ordinal);
+        Assert.Contains(RevealWiringProblems(silent), p => p.Contains("回执只是文案", StringComparison.Ordinal));
+
+        // ② 回执挪到「找不到」那一支之后：找不到那一行时也会说「已定位到」。
+        var reordered = good
+            .Replace(LandedCall, "", StringComparison.Ordinal)
+            .Replace(MissingCall, MissingCall + "\n        " + LandedCall, StringComparison.Ordinal);
+        Assert.Contains(RevealWiringProblems(reordered), p => p.Contains("顺序反了", StringComparison.Ordinal));
+
+        // ③ 第一个实参就地拼（框里有没有字）：只有空格的筛选框会被当成「筛了」。
+        var inline = good.Replace(
+            "ProfileJump.ShouldClearFilter(ListFilter.IsActive(_filter.Text), found)",
+            "ProfileJump.ShouldClearFilter(!string.IsNullOrEmpty(_filter.Text), found)",
+            StringComparison.Ordinal);
+        Assert.Contains(RevealWiringProblems(inline), p => p.Contains("第一个实参", StringComparison.Ordinal));
+
+        // ④ 合规的那一份：一处都不报（上面三条注入若把判据改成恒真，这一条会红）。
+        Assert.Empty(RevealWiringProblems(good));
+    }
+
+    // ── 判据本体（纯函数：文本进、问题出） ────────────────────────────
+
+    private const string LandedCall = "SetStatus(ProfileJump.LandedStatus(profileName), UiTokens.Muted);";
+    private const string MissingCall = "SetStatus(ProfileJump.MissingStatus(profileName), UiTokens.BadText);";
+
+    /// <summary>
+    /// <c>RevealProfile</c> 的两处接线判据（第二百六十八轮）：正文进、问题清单出（空清单 = 过得去）。
+    /// <para>
+    /// 与 <see cref="WiringProblems"/> 同一做法：判据是纯函数，注入才喂得进去。
+    /// </para>
+    /// </summary>
+    private static List<string> RevealWiringProblems(string reveal)
+    {
+        var problems = new List<string>();
+
+        // ① 回执是完整的一次 SetStatus 调用，不是只把文案算出来。
+        var found = reveal.IndexOf("if (found)", StringComparison.Ordinal);
+        var call = reveal.IndexOf(LandedCall, StringComparison.Ordinal);
+        var missing = reveal.IndexOf("ProfileJump.MissingStatus(", StringComparison.Ordinal);
+        if (call < 0)
+        {
+            problems.Add("「落到了那一行」那一支没有调 SetStatus(ProfileJump.LandedStatus(...))："
+                + "回执只是文案，不是接线——用户看不出这一行是跳过来的还是上次留下的。");
+        }
+        else if (found < 0 || call < found)
+        {
+            problems.Add("回执不在「找到了」那一支里：找不到那一行时也会说「已定位到」。");
+        }
+        else if (missing >= 0 && call > missing)
+        {
+            problems.Add("回执落在「找不到」那一支之后：两句话的顺序反了——先判落没落到，再说落到了什么。");
+        }
+
+        // ② 「筛选有没有生效」取自 ListFilter.IsActive，不就地拼条件。
+        var args = Regex.Match(reveal, @"ProfileJump\.ShouldClearFilter\((?<args>[^\n]*)\)");
+        if (!args.Success)
+        {
+            problems.Add("RevealProfile 没有调 ProfileJump.ShouldClearFilter：要不要清筛选没有唯一落点。");
+        }
+        else if (args.Groups["args"].Value.Split(',')[0].Trim() != "ListFilter.IsActive(_filter.Text)")
+        {
+            problems.Add("ShouldClearFilter 的第一个实参不是 ListFilter.IsActive(...) 的结果："
+                + "就地拼「框里有没有字」会让只有空格的筛选框被当成「筛了」，第二百六十三轮那个缺陷换个形状回来。");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
     /// 页面名不许在 <see cref="ProfileJump"/> 里写成第二份字面量：那一句里的「项目设置」必须来自
     /// <see cref="PageNames.Projects"/>。判法是「源码里不许出现带引号的页面名」——改名字时这一条会红，
     /// 而只改 <see cref="PageNames"/> 不改这里时，上面那条断言仍然绿（它比的是同一个常量）。

@@ -249,6 +249,9 @@ internal static class Program
         Section("从任务详情跳过来时清单没读出来，重试读成功后落回那一行（失败 → 跳过来 → 重试仍失败 → 修好再重试 → 落到那一行，真实控件）", nameof(RunProfileJumpRetry));
         RunProfileJumpRetry(services, dataRoot);
 
+        Section("从任务详情跳过来时筛选框里的词还在不在（那一行在筛选结果里 → 词还在；被筛掉 → 清空后落到那一行，真实控件）", nameof(RunProfileJumpFilterKeep));
+        RunProfileJumpFilterKeep(services, dataRoot);
+
         Section("任务页读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunTaskLoadFailure));
         RunTaskLoadFailure(services, dataRoot);
 
@@ -3520,6 +3523,202 @@ internal static class Program
             host?.Dispose();
         }
     }
+
+    /// <summary>
+    /// 从任务详情跳过来时，筛选框里用户敲的那个词还在不在（第二百六十八轮，简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百六十七轮把「要不要清筛选」从一句 <c>if</c> 收成
+    /// <see cref="ProfileJump.ShouldClearFilter"/> 的四格真值表，判住的是<b>纯函数</b>与<b>源码形状</b>。
+    /// 可那一条改的是<b>用户可感的行为</b>——敲了一个词、从任务详情跳过去改那一份配置，回来时那个词还在不在。
+    /// 纯函数绿不等于控件上真的发生：Linux 上这一跳的点击跑不起来，只能在 wine 的真实控件上跑。
+    /// </para>
+    /// <para>
+    /// <b>两段各判什么</b>：① 筛选框里的词<b>命中</b>那一行（清单只剩一行）→ 跳过去之后<b>词还在</b>、
+    /// 那一行被选中、状态行给 <see cref="ProfileJump.LandedStatus"/> 回执；② 筛选框里的词把那一行
+    /// <b>筛掉</b>（清单里只剩另一份）→ 跳过去之后筛选框被清空（清单回到全部配置）、那一行被选中、
+    /// 状态行同样给回执。<b>两段都不是「读源码看它写了什么」</b>：判的是控件上的
+    /// 「筛选框文本 / 选中行 / 状态行」三处读数。
+    /// </para>
+    /// <para>
+    /// <b>为什么清单行数是判据的一部分</b>：只判「筛选框里的字还在」骗得过人——把词留在框里却不再按它筛，
+    /// 字也在。所以两段都先要求「筛选真的生效」（清单只剩一行），再判跳过去之后那个词有没有被清。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判真机上切页之后那一行滚到哪、键盘落在哪（随 G-D5）；也不判
+    /// 「筛选框里那个词该不该留」——那是产品判断，落在 <see cref="ProfileJump.ShouldClearFilter"/>。
+    /// </para>
+    /// </summary>
+    private static void RunProfileJumpFilterKeep(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var compat = services.GetRequiredService<CompatService>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        var jobs = services.GetRequiredService<JobRunner>();
+        var credentials = services.GetRequiredService<CredentialStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort.json"));
+
+        // 两份名字互不包含的配置：关键词命中其中一份时，另一份必须被筛掉——
+        // 否则「筛选框里的词还在」与「筛选框被清空」在清单行数上看不出区别，两段判的就不是同一件事。
+        var target = profiles.Save(new ProjectProfile
+        {
+            Name = "筛选保留甲",
+            WorkspaceRoot = dataRoot,
+            ApiProject = "Probe.Api/Probe.Api.csproj",
+            AllowedSourcePaths = ["Probe.Api/"],
+        }, isNew: true);
+        var other = profiles.Save(new ProjectProfile
+        {
+            Name = "筛选保留乙",
+            WorkspaceRoot = dataRoot,
+            ApiProject = "Probe.Api/Probe.Api.csproj",
+            AllowedSourcePaths = ["Probe.Api/"],
+        }, isNew: true);
+
+        Form? host = null;
+        ProjectsPage? page = null;
+        try
+        {
+            RunAction("配置页：关键词命中那一行时，跳过去之后筛选框里的词还在、那一行被选中并给回执（真实控件）", () =>
+            {
+                host = new Form { Width = 1100, Height = 700, Text = "跳配置筛选冒烟" };
+                page = new ProjectsPage(profiles, compat, cli, store, jobs, credentials, sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+
+                page.RefreshData();
+                Application.DoEvents();
+
+                var filter = FilterBox(page);
+                filter.Text = target.Name;
+                Application.DoEvents();
+
+                // 筛选真的生效：清单只剩那一行（另一份被筛掉）——否则这一段判不出「词还在不在」。
+                var filtered = ProfileList(page);
+                if (filtered.Items.Count != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"筛选「{target.Name}」后清单有 {filtered.Items.Count} 行，期望 1 行"
+                        + $"（另一份配置「{other.Name}」必须被筛掉，否则判不出筛选框有没有被清）。");
+                }
+
+                // 这一跳走的是壳在「任务详情点了『打开配置』」时调的那个入口。
+                var landed = page.RevealProfile(target.Id, target.Name);
+                Application.DoEvents();
+                if (!landed)
+                {
+                    throw new InvalidOperationException($"那一行就在筛选结果里，这一跳却报「没落到」（状态行「{StatusLabel(page).Text}」）。");
+                }
+                if (filter.Text != target.Name)
+                {
+                    throw new InvalidOperationException(
+                        $"那一行本来就在筛选结果里，跳过去之后筛选框却从「{target.Name}」变成了「{filter.Text}」："
+                        + "用户敲的词被白清了一次（第二百六十三轮那个缺陷换了个形状）。");
+                }
+                var kept = ProfileList(page);
+                if (kept.Items.Count != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"跳过去之后清单有 {kept.Items.Count} 行，期望仍是筛出来的 1 行：筛选框里的词还在，筛选却不再生效。");
+                }
+                var selected = kept.SelectedItems.Count == 1 ? kept.SelectedItems[0] : null;
+                if (selected?.Tag is not ProjectProfile landedProfile || landedProfile.Id != target.Id)
+                {
+                    throw new InvalidOperationException(
+                        $"跳过去之后选中的不是要改的那一份（选中「{(selected?.Tag as ProjectProfile)?.Name}」，期望「{target.Name}」）。");
+                }
+                var status = StatusLabel(page);
+                var expected = ProfileJump.LandedStatus(target.Name);
+                if (status.Text != expected)
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{expected}」（落到了那一行要给回执）。");
+                }
+                _lines.Add($"     词命中那一行：筛选框「{filter.Text}」仍在，清单 {kept.Items.Count} 行，选中「{landedProfile.Name}」，状态行「{status.Text}」");
+            });
+
+            RunAction("配置页：关键词把那一行筛掉时，跳过去之后筛选框被清空并落到那一行（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出配置页。");
+
+                var filter = FilterBox(page);
+                // 换一个命中另一份的词：那一行被筛掉，这一跳必须清空筛选才落得下去。
+                filter.Text = other.Name;
+                Application.DoEvents();
+
+                var filtered = ProfileList(page);
+                if (filtered.Items.Count != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"筛选「{other.Name}」后清单有 {filtered.Items.Count} 行，期望 1 行（要跳的那一份必须被筛掉）。");
+                }
+                if (filtered.SelectedItems.Count == 1 && filtered.SelectedItems[0].Tag is ProjectProfile visible && visible.Id == target.Id)
+                {
+                    throw new InvalidOperationException("要跳的那一份没有被筛掉：这一段就没法判「清空筛选」那一支。");
+                }
+
+                var landed = page.RevealProfile(target.Id, target.Name);
+                Application.DoEvents();
+                if (!landed)
+                {
+                    throw new InvalidOperationException($"那一行被筛选框挡着，清空筛选之后应当落得下去（状态行「{StatusLabel(page).Text}」）。");
+                }
+                if (filter.Text.Length != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"那一行被筛掉时这一跳应当清空筛选框，它现在留着「{filter.Text}」：清空筛选是这一跳要付的代价，不清就落不下去。");
+                }
+                var all = ProfileList(page);
+                var expectedRows = profiles.List().Count;
+                if (all.Items.Count != expectedRows)
+                {
+                    throw new InvalidOperationException(
+                        $"清空筛选后清单有 {all.Items.Count} 行，磁盘上有 {expectedRows} 个配置：筛选框被清空而清单没跟着回到全部。");
+                }
+                var selected = all.SelectedItems.Count == 1 ? all.SelectedItems[0] : null;
+                if (selected?.Tag is not ProjectProfile landedProfile || landedProfile.Id != target.Id)
+                {
+                    throw new InvalidOperationException(
+                        $"清空筛选之后选中的不是要改的那一份（选中「{(selected?.Tag as ProjectProfile)?.Name}」，期望「{target.Name}」）。");
+                }
+                var status = StatusLabel(page);
+                var expectedStatus = ProfileJump.LandedStatus(target.Name);
+                if (status.Text != expectedStatus)
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{expectedStatus}」（落到了那一行要给回执）。");
+                }
+                _lines.Add($"     词把那一行筛掉：筛选框已清空，清单 {all.Items.Count} 行，选中「{landedProfile.Name}」，状态行「{status.Text}」");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+            // 这两份配置只为本段存在：留着会让后面按 profiles.List().First() 取配置的段换一只壳去量
+            // （清单首行变了，那些屏量到的文字跟着变）。冒烟器自己造的坑自己填。
+            foreach (var id in new[] { target.Id, other.Id })
+            {
+                try
+                {
+                    var path = Path.Combine(store.ProfilesDir, id + ".json");
+                    if (File.Exists(path)) File.Delete(path);
+                }
+                catch (IOException)
+                {
+                    // 删不掉只影响后续段，不影响本段判定；不掩盖本段已经记下的失败。
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 配置页的筛选框：按占位文字定位（<see cref="ListFilter.ProfilePlaceholder"/> 是全仓唯一落点），
+    /// 不按控件顺序——顺序是布局细节，占位文字是这一格的承诺。
+    /// </summary>
+    private static TextBox FilterBox(Control root) =>
+        FindAll<TextBox>(root).FirstOrDefault(box => box.PlaceholderText == ListFilter.ProfilePlaceholder)
+        ?? throw new InvalidOperationException("配置页里找不到筛选框（占位文字取自 ListFilter.ProfilePlaceholder）。");
 
     /// <summary>配置页的配置清单（页面里唯一的 <c>ListView</c>）。</summary>
     private static ListView ProfileList(Control root) =>
