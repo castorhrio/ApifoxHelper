@@ -151,6 +151,117 @@ public class CheckResultsLayoutTests
         Assert.Equal("第二百四十八轮", row.Round);
     }
 
+    /// <summary>
+    /// 固定六块的高度各有名字，<see cref="CheckResultsLayout.FixedPanesHeight"/> 是它们的和而不是一个独立读数
+    /// （第二百四十九轮，简报 P0-1）。
+    /// <para>
+    /// <b>这一条挡的是什么</b>：上一轮 <c>FixedPanesHeight</c> 是字面量 570，而六块的高度散在
+    /// <c>CheckResultsDialog.cs</c> 里就地写死。改任一块底部高度 → 570 不跟着动 → 接口清单被悄悄挤掉一行，
+    /// 而 <c>DialogHeight_IsTheFormulaAtTheMeasuredRowCount</c> 照样绿（它只判 8 行那一点的取值）。
+    /// 现在六块各有常量、和由它们加出来，改任一块这个和与窗体高一起动。
+    /// </para>
+    /// <para>
+    /// <b>六个数的名字第二百四十九轮才认对</b>：上一轮记的是「顶部 39 + 31」，两个数没有名字，
+    /// 读的人自然会把 39 当成标题行——实测正好相反（筛选行 39px、标题行 31px）。两个数加起来一样，
+    /// 所以「和等于 570」这一条抓不到名字错；名字由冒烟段按内容认名（带下拉的那一行是筛选行）当场打出来。
+    /// 这里把两个数各自钉死，改错名字（把 31 与 39 换回来）这一条会红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void FixedPanesHeight_IsTheSumOfTheSixNamedPanes()
+    {
+        // 顶部两行（AutoSize，读数是量出来的）：标题行 31、筛选行 39。
+        Assert.Equal(31, CheckResultsLayout.HeadRowHeight);
+        Assert.Equal(39, CheckResultsLayout.FilterRowHeight);
+        // 底部四块：三块定高（由本文件给）+ 按钮行（AutoSize，读数是量出来的）。
+        Assert.Equal(124, CheckResultsLayout.ProblemsPaneHeight);
+        Assert.Equal(168, CheckResultsLayout.DetailPaneHeight);
+        Assert.Equal(148, CheckResultsLayout.ModelsPaneHeight);
+        Assert.Equal(60, CheckResultsLayout.ButtonRowHeight);
+        // 和是加出来的，不是抄来的：改任一块，这个和跟着动。
+        Assert.Equal(
+            CheckResultsLayout.HeadRowHeight + CheckResultsLayout.FilterRowHeight
+            + CheckResultsLayout.ProblemsPaneHeight + CheckResultsLayout.DetailPaneHeight
+            + CheckResultsLayout.ModelsPaneHeight + CheckResultsLayout.ButtonRowHeight,
+            CheckResultsLayout.FixedPanesHeight);
+        Assert.Equal(570, CheckResultsLayout.FixedPanesHeight);
+    }
+
+    /// <summary>
+    /// 底部三块定高的高度在 <c>CheckResultsDialog</c> 里只从口径取，124 / 168 / 148 三个字面量不得复活
+    /// （第二百四十九轮，简报 P0-1 的接线那一半）。
+    /// <para>
+    /// <b>判的是「有几处」不是「有没有」</b>（第二百四十五轮那一课）：三块各取一次常量，恰好三处；
+    /// 少一处说明有一块又写回了字面量，多一处说明有人把同一块设了两遍。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Dialog_TakesTheThreeFixedPaneHeightsFromTheCaliber()
+    {
+        Assert.Equal(3, Count(Dialog, @"Height = CheckResultsLayout\.(ProblemsPaneHeight|DetailPaneHeight|ModelsPaneHeight)"));
+        Assert.DoesNotContain("Height = 124", Dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("Height = 168", Dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("Height = 148", Dialog, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 过期提示那一行（<c>_stale</c>）的预算兜底（第二百四十九轮，简报 P2-1）：出现时顶部多一行、
+    /// 接口清单相应减一行，而<b>窗体高不变</b>。
+    /// <para>
+    /// <b>为什么是「减一行」而不是「减 17px」</b>：窗体高在构造时就定了，提示行是 <c>OnLoad</c> 里才
+    /// <c>Visible = true</c> 的——它出现时窗体不会长高，只能从接口清单里让。让出来的那一截是 17px，
+    /// 而清单按整行让（一行 21px），所以清单从 8 行掉到 7 行。
+    /// </para>
+    /// <para>
+    /// <b>两条门各判一支</b>：出现时 8 行放不下（否则「让一行」这句话是空的）、7 行放得下
+    /// （否则那一支真的挤没了）。上一轮这一支只登记在注释里、没有门，本轮把它兜住。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void StaleRow_IsBudgetedAsOneRowLessAtTheSameDialogHeight()
+    {
+        Assert.Equal(17, CheckResultsLayout.StaleRowHeight);
+        // 提示行比一个清单行矮：所以「多出来的这一截」不等于「少一行」，判据必须写成行数。
+        Assert.True(CheckResultsLayout.StaleRowHeight < CheckResultsLayout.RowHeight);
+        Assert.Equal(CheckResultsLayout.MainRows - 1, CheckResultsLayout.MainRowsWhenStale);
+        Assert.Equal(7, CheckResultsLayout.MainRowsWhenStale);
+
+        // ① 出现时仍按 8 行算就放不下：多出来的 17px 必须从清单里让。
+        Assert.True(
+            CheckResultsLayout.DialogHeightFor(CheckResultsLayout.MainRows, stale: true) > CheckResultsLayout.DialogHeight,
+            "过期提示出现时按 8 行算出来的窗体高没有超过产品窗体高——「让一行」这句话就没有依据了。");
+        // ② 让出一行之后放得下：同一个窗体高装得下 7 行。
+        Assert.True(
+            CheckResultsLayout.DialogHeightFor(CheckResultsLayout.MainRowsWhenStale, stale: true) <= CheckResultsLayout.DialogHeight,
+            "过期提示出现时让出一行之后仍装不下——这一支的预算（StaleRowHeight / MainRowsWhenStale）需要重定。");
+        // ③ 提示不出现那一支不受影响：产品窗体高就是它。
+        Assert.Equal(CheckResultsLayout.DialogHeight, CheckResultsLayout.DialogHeightFor(CheckResultsLayout.MainRows, stale: false));
+    }
+
+    /// <summary>
+    /// 量测段真的把「固定六块实测」与口径对账、也真的量了过期提示那一支（第二百四十九轮）。
+    /// <para>
+    /// <b>为什么判这一段</b>：顶部两行与按钮行是 <c>AutoSize</c>，代码里没有一处能设它们——
+    /// 它们的读数只能在这里量。少了这一句，<c>FixedPanesHeight</c> 就又变回一个没人核对的数。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheMeasurement_ReconcilesTheFixedPanesAndMeasuresTheStaleBranch()
+    {
+        var segment = MethodSlice(Repo.SmokeProgram,
+            "private static void RunCheckResultsShown(IServiceProvider services, string dataRoot)");
+        // 固定六块实测合计与口径逐字对账。
+        Assert.Contains("CheckResultsLayout.FixedPanesHeight", segment, StringComparison.Ordinal);
+        // 过期提示那一支：行高与行数都取口径，不抄第二份。
+        Assert.Contains("CheckResultsLayout.StaleRowHeight", segment, StringComparison.Ordinal);
+        Assert.Contains("CheckResultsLayout.MainRowsWhenStale", segment, StringComparison.Ordinal);
+        // 顶部两行按内容认名：39 与 31 这两个数此前没有名字，读的人会把它们读反。
+        Assert.Contains("PaneName", segment, StringComparison.Ordinal);
+        // 过期那一支走产品自己的递增路径，不是把 Visible 掰开。
+        Assert.Contains("t.Revision++", segment, StringComparison.Ordinal);
+        Assert.DoesNotContain("_stale.Visible", segment, StringComparison.Ordinal);
+    }
+
     /// <summary>共享编译：这条算式与测试工程是同一份，不是测试里抄的第二份。</summary>
     [Fact]
     public void CheckResultsLayout_IsSharedCompiledIntoTheTests()

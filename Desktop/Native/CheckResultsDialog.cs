@@ -134,6 +134,8 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         _counts.AutoSize = false;
         _counts.Dock = DockStyle.Fill;
         _counts.TextAlign = ContentAlignment.MiddleRight;
+        // 顶部两行（标题行 / 筛选行）都是 AutoSize：高度由字体与内容决定，代码里没有一处能「设」它们。
+        // 它们的读数（39 / 31px）记在 CheckResultsLayout.HeadRowHeight / FilterRowHeight，进 FixedPanesHeight 那个和。
         var headRow = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 2, Padding = new Padding(0, 0, 0, UiTokens.Sm), Margin = new Padding(0) };
         headRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         headRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -156,7 +158,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         var problemsInner = Ui.Hairline(_problems);
         problemsInner.Dock = DockStyle.Fill;
         problemsInner.Height = 96;
-        _problemsHost = new Panel { Dock = DockStyle.Bottom, Height = 124, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
+        _problemsHost = new Panel { Dock = DockStyle.Bottom, Height = CheckResultsLayout.ProblemsPaneHeight, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
         _problemsHost.Controls.Add(problemsInner);
         _problemsHost.Controls.Add(problemsCaption);
 
@@ -165,7 +167,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         var detailInner = Ui.Hairline(_detail);
         detailInner.Dock = DockStyle.Fill;
         detailInner.Height = 140;
-        var detailHost = new Panel { Dock = DockStyle.Bottom, Height = 168, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
+        var detailHost = new Panel { Dock = DockStyle.Bottom, Height = CheckResultsLayout.DetailPaneHeight, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
         detailHost.Controls.Add(detailInner);
         detailHost.Controls.Add(detailCaption);
 
@@ -178,7 +180,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         // 筛选行形状取工厂（§6「列表筛选」）：这一屏没有筛选下拉，走只有关键词框的那一支；
         // 计数在表头行（与「检查时间」同排），故 counts 传 null。
         var modelsFilterRow = Ui.FilterRow(_modelKeyword, counts: null);
-        _modelsHost = new Panel { Dock = DockStyle.Bottom, Height = 148, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
+        _modelsHost = new Panel { Dock = DockStyle.Bottom, Height = CheckResultsLayout.ModelsPaneHeight, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, 0) };
         _modelsHost.Controls.Add(modelsInner);
         _modelsHost.Controls.Add(_modelsHint);
         _modelsHost.Controls.Add(modelsFilterRow);
@@ -189,6 +191,9 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
         CancelButton = closeButton;
+        // 按钮行是 AutoSize：它的高由按钮高 + 上下内边距决定，代码里没有一处能「设」它。
+        // 它的读数（60px）记在 CheckResultsLayout.ButtonRowHeight，与顶部两行一起进 FixedPanesHeight 那个和；
+        // 冒烟段 RunCheckResultsShown 把实测的六块与那个和逐字对账（第二百四十九轮，简报 P0-1）。
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, 0, UiTokens.Md) };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);

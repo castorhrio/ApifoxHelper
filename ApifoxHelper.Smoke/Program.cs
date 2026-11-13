@@ -6364,48 +6364,76 @@ internal static class Program
         var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "检查结果显示冒烟" });
         tasks.Write(task.Id, TaskFiles.Diff, CheckResultsFixture());
 
-        RunAction("差异检查结果：真的显示出来之后，七块停靠区高度加起来等于客户区、接口清单装得下八行、两张清单都不出横向滚动条（真实控件量）", () =>
+        // 过期提示那一支（第二百四十九轮，简报 P2-1）：同一份夹具，只把任务版本推上去。
+        // 递增走产品自己的路径（CheckService / SupplementService 同一处 `t.Revision++`），于是
+        // task.Revision > result.TaskRevision 成立，_stale 那一行真的出现——不是把 Visible 掰开。
+        var staleTask = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "检查结果过期提示冒烟" });
+        tasks.Write(staleTask.Id, TaskFiles.Diff, CheckResultsFixture());
+        tasks.UpdateAsync(staleTask.Id, t => t.Revision++).GetAwaiter().GetResult();
+        var staleTaskNow = tasks.Get(staleTask.Id);
+
+        RunAction("差异检查结果：真的显示出来之后，七块停靠区高度加起来等于客户区、固定六块与 CheckResultsLayout 对账、接口清单装得下八行、两张清单都不出横向滚动条；过期提示出现时顶部多一行、接口清单让出一行（真实控件量）", () =>
         {
+            // 七块停靠区按产品自己的停靠方式认（接口清单 Fill、顶部两行 Top、底部四块 Bottom）：
+            // 认不出就点名，不按控件顺序猜。两支（提示不出现 / 出现）走同一份认法，不各写一遍。
+            static (Panel ListHost, List<Control> Tops, List<Control> Bottoms, ListView Endpoints, ListView Models) Docked(CheckResultsDialog dialog)
+            {
+                var docked = dialog.Controls.Cast<Control>().ToList();
+                var listHost = docked.OfType<Panel>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                    ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的接口清单宿主：停靠分法变了，本段量测口径需要重定。");
+                var tops = docked.Where(control => control.Dock == DockStyle.Top).ToList();
+                var bottoms = docked.Where(control => control.Dock == DockStyle.Bottom).ToList();
+                if (tops.Count != 2)
+                {
+                    throw new InvalidOperationException($"顶部停靠区有 {tops.Count} 块，期望 2 块（标题行 + 筛选行）：本段量测口径需要重定。");
+                }
+                if (bottoms.Count != 4)
+                {
+                    throw new InvalidOperationException($"底部停靠区有 {bottoms.Count} 块，期望 4 块（按钮行 + 模型清单 + 条目详情 + 问题清单）：本段量测口径需要重定。");
+                }
+
+                // 接口清单按整个表头序列认（这一屏有两张清单，只数列数会撞车）。
+                var endpointList = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                        candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                            .SequenceEqual(["接口", "名称", "状态", "阻断"]))
+                    ?? throw new InvalidOperationException("这一屏找不到表头为「接口 / 名称 / 状态 / 阻断」的接口清单：列增删或改名了，本段量测口径需要重定。");
+                var modelList = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                        candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                            .SequenceEqual(["模型", "映射", "状态", "用于接口", "范围外影响"]))
+                    ?? throw new InvalidOperationException("这一屏找不到表头为「模型 / 映射 / 状态 / 用于接口 / 范围外影响」的模型清单：列增删或改名了，本段量测口径需要重定。");
+                return (listHost, tops, bottoms, endpointList, modelList);
+            }
+
+            // 接口清单这一刻装得下几行：表头先吃掉一截——只按「清单高 / 行高」算会把表头那 24px 也算成一行
+            // （第二百四十七轮在探测那一屏撞过同一处：清单 147px、7 × 21 = 147px，滚动条照样在）。
+            // 表头高由「第 N 行底边 − N × 行高」现算。
+            static (int Rows, int RowHeight, int HeaderHeight, int Capacity) Capacity(ListView list)
+            {
+                var rows = list.Items.Count;
+                var rowHeight = rows > 0 ? Math.Max(1, list.Items[0].Bounds.Height) : Math.Max(1, list.Font.Height);
+                var lastBottom = rows > 0 ? list.Items[^1].Bounds.Bottom : 0;
+                var headerHeight = rows > 0 ? Math.Max(0, lastBottom - rows * rowHeight) : 0;
+                return (rows, rowHeight, headerHeight, Math.Max(0, list.ClientSize.Height - headerHeight) / rowHeight);
+            }
+
+            // 顶部两行按内容认名（都是 TableLayoutPanel，按类型分不开）：带下拉的那一行是筛选行，另一行是标题行。
+            // 第二百四十九轮加这一句是因为「39 + 31」这两个数此前没有名字，读的人自然会把 39 当成标题行——
+            // 实测正好相反（筛选行 39px、标题行 31px），而两个数加起来一样，任何对账门都抓不到这个错。
+            static string PaneName(Control pane) =>
+                pane.Controls.Cast<Control>().Any(control => control is ComboBox) ? "筛选行" : "标题行";
+
             using var dialog = new CheckResultsDialog(tasks, task);
             dialog.Show();
             Application.DoEvents();
-
-            // 七块停靠区按产品自己的停靠方式认（接口清单 Fill、顶部两行 Top、底部四块 Bottom）：
-            // 认不出就点名，不按控件顺序猜。
-            var docked = dialog.Controls.Cast<Control>().ToList();
-            var listHost = docked.SingleOrDefault(control => control.Dock == DockStyle.Fill)
-                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的接口清单宿主：停靠分法变了，本段量测口径需要重定。");
-            var tops = docked.Where(control => control.Dock == DockStyle.Top).ToList();
-            var bottoms = docked.Where(control => control.Dock == DockStyle.Bottom).ToList();
-            if (tops.Count != 2)
-            {
-                throw new InvalidOperationException($"顶部停靠区有 {tops.Count} 块，期望 2 块（标题行 + 筛选行）：本段量测口径需要重定。");
-            }
-            if (bottoms.Count != 4)
-            {
-                throw new InvalidOperationException($"底部停靠区有 {bottoms.Count} 块，期望 4 块（按钮行 + 模型清单 + 条目详情 + 问题清单）：本段量测口径需要重定。");
-            }
-
-            // 接口清单按整个表头序列认（这一屏有两张清单，只数列数会撞车）。
-            var endpointList = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
-                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
-                        .SequenceEqual(["接口", "名称", "状态", "阻断"]))
-                ?? throw new InvalidOperationException("这一屏找不到表头为「接口 / 名称 / 状态 / 阻断」的接口清单：列增删或改名了，本段量测口径需要重定。");
-            var modelList = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
-                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
-                        .SequenceEqual(["模型", "映射", "状态", "用于接口", "范围外影响"]))
-                ?? throw new InvalidOperationException("这一屏找不到表头为「模型 / 映射 / 状态 / 用于接口 / 范围外影响」的模型清单：列增删或改名了，本段量测口径需要重定。");
+            var (listHost, tops, bottoms, endpointList, modelList) = Docked(dialog);
 
             var client = dialog.ClientSize;
             var sum = listHost.Height + tops.Sum(control => control.Height) + bottoms.Sum(control => control.Height);
+            // 固定六块（顶部两行 + 底部四块）的实测合计：第二百四十九轮起与 CheckResultsLayout.FixedPanesHeight 对账。
+            // 顶部两行与按钮行是 AutoSize，代码里没有一处能设它们——它们的读数只能在这里量。
+            var fixedPanes = tops.Sum(control => control.Height) + bottoms.Sum(control => control.Height);
 
-            var realRows = endpointList.Items.Count;
-            var rowHeight = realRows > 0 ? Math.Max(1, endpointList.Items[0].Bounds.Height) : Math.Max(1, endpointList.Font.Height);
-            var lastBottom = realRows > 0 ? endpointList.Items[^1].Bounds.Bottom : 0;
-            // 表头先吃掉一截：只按「清单高 / 行高」算会把表头那 24px 也算成一行（第二百四十七轮在探测那一屏
-            // 撞过同一处：清单 147px、7 × 21 = 147px，滚动条照样在）。表头高由「第 N 行底边 − N × 行高」现算。
-            var headerHeight = realRows > 0 ? Math.Max(0, lastBottom - realRows * rowHeight) : 0;
-            var capacity = Math.Max(0, endpointList.ClientSize.Height - headerHeight) / rowHeight;
+            var (realRows, rowHeight, headerHeight, capacity) = Capacity(endpointList);
             var vertical = HasScrollBar(endpointList, WsVscroll);
             var horizontal = HasScrollBar(endpointList, WsHscroll);
             var endpointColumns = endpointList.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
@@ -6416,17 +6444,39 @@ internal static class Program
             var modelVisible = modelList.ClientSize.Width;
             var modelHorizontal = HasScrollBar(modelList, WsHscroll);
 
+            // 过期提示那一支（第二百四十九轮，简报 P2-1）：同一个窗体高，出现提示时顶部多一行、接口清单让出一行。
+            using var staleDialog = new CheckResultsDialog(tasks, staleTaskNow);
+            staleDialog.Show();
+            Application.DoEvents();
+            var (staleListHost, staleTops, staleBottoms, staleEndpointList, _) = Docked(staleDialog);
+            var staleClient = staleDialog.ClientSize;
+            var staleSum = staleListHost.Height + staleTops.Sum(control => control.Height) + staleBottoms.Sum(control => control.Height);
+            var staleFixedPanes = staleTops.Sum(control => control.Height) + staleBottoms.Sum(control => control.Height);
+            // 提示行多出来的那一截 = 出现时固定区合计 − 不出现时固定区合计。它必须等于 StaleRowHeight：
+            // 差 0 说明那一行没出现，差别的数说明它长成了别的样子。
+            var staleExtra = staleFixedPanes - fixedPanes;
+            var (staleRows, staleRowHeight, staleHeaderHeight, staleCapacity) = Capacity(staleEndpointList);
+
             _lines.Add(
                 $"     差异检查结果：{DpiContext(dialog)}、窗体客户区 {client.Width}×{client.Height}px；" +
-                $"七块停靠区 顶部 {string.Join(" + ", tops.Select(control => control.Height + "px"))} + 接口清单 {listHost.Height}px + " +
+                $"七块停靠区 顶部 {string.Join(" + ", tops.Select(control => PaneName(control) + " " + control.Height + "px"))} + 接口清单 {listHost.Height}px + " +
                 $"底部 {string.Join(" + ", bottoms.Select(control => control.Height + "px"))} = {sum}px" +
                 (sum == client.Height ? "（等于客户区高）" : $"（与客户区高差 {sum - client.Height}px）") +
+                $"；固定六块实测合计 {fixedPanes}px 对 CheckResultsLayout.FixedPanesHeight {CheckResultsLayout.FixedPanesHeight}px" +
                 $"；接口清单 {realRows} 行、行高 {rowHeight}px、清单高 {endpointList.ClientSize.Height}px、约装 {capacity} 行、" +
-                $"第 {realRows} 行底边 {lastBottom}px（表头占 {headerHeight}px）；" +
+                $"第 {realRows} 行底边 {(realRows > 0 ? endpointList.Items[^1].Bounds.Bottom : 0)}px（表头占 {headerHeight}px）；" +
                 $"接口清单列宽 [{string.Join(", ", endpointColumns)}] 合计 {endpointColumnSum}px 对可视宽 {endpointVisible}px；" +
                 $"模型清单列宽 [{string.Join(", ", modelColumns)}] 合计 {modelColumnSum}px 对可视宽 {modelVisible}px；" +
                 $"控件自己报的滚动条状态：接口清单 竖向{(vertical ? "在" : "不在")}、横向{(horizontal ? "在" : "不在")}；" +
                 $"模型清单 横向{(modelHorizontal ? "在" : "不在")}");
+            _lines.Add(
+                $"     差异检查结果（过期提示出现）：窗体客户区 {staleClient.Width}×{staleClient.Height}px；" +
+                $"七块停靠区 顶部 {string.Join(" + ", staleTops.Select(control => control.Height + "px"))} + 接口清单 {staleListHost.Height}px + " +
+                $"底部 {string.Join(" + ", staleBottoms.Select(control => control.Height + "px"))} = {staleSum}px" +
+                (staleSum == staleClient.Height ? "（等于客户区高）" : $"（与客户区高差 {staleSum - staleClient.Height}px）") +
+                $"；固定六块实测合计 {staleFixedPanes}px（比提示不出现时多 {staleExtra}px，CheckResultsLayout.StaleRowHeight {CheckResultsLayout.StaleRowHeight}px）；" +
+                $"接口清单 {staleRows} 行、行高 {staleRowHeight}px、清单高 {staleEndpointList.ClientSize.Height}px、约装 {staleCapacity} 行" +
+                $"（表头占 {staleHeaderHeight}px），判据是 {CheckResultsLayout.MainRowsWhenStale} 行");
 
             // 判据只在设计档成立：125% / 200% 档窗体被虚拟屏截断，那一刻的行数属于「量不到」而不是「放不下」。
             if (DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())) return;
@@ -6436,6 +6486,18 @@ internal static class Program
                 throw new InvalidOperationException(
                     $"七块停靠区的高度加起来是 {sum}px，客户区高 {client.Height}px（差 {sum - client.Height}px）：" +
                     "停靠分法漏了一块或叠了一块，这一屏的某一块在真实窗口里会被压掉。");
+            }
+
+            // 第二百四十九轮（简报 P0-1）：固定六块的实测读数必须与 CheckResultsLayout.FixedPanesHeight 逐字相等。
+            // 这一条挡的是「改一块底部高度而不改常量」——那时窗体高不跟着动，接口清单被悄悄挤掉一行，
+            // 而 DialogHeight_IsTheFormulaAtTheMeasuredRowCount 照样绿（它只判 8 行那一点的取值）。
+            if (fixedPanes != CheckResultsLayout.FixedPanesHeight)
+            {
+                throw new InvalidOperationException(
+                    $"固定六块（顶部两行 + 底部四块）实测合计 {fixedPanes}px，CheckResultsLayout.FixedPanesHeight 是 " +
+                    $"{CheckResultsLayout.FixedPanesHeight}px（差 {fixedPanes - CheckResultsLayout.FixedPanesHeight}px）：" +
+                    "改了一块的高度而没改常量（或反过来）。顶部两行与按钮行是 AutoSize，它们的读数只能在这里量——" +
+                    "红了先看是哪一块变了，再把常量改成实测值，别把算式改成迁就旧读数。");
             }
 
             if (capacity < CheckResultsLayout.MainRows)
@@ -6457,6 +6519,33 @@ internal static class Program
                 throw new InvalidOperationException(
                     $"模型清单出了横向滚动条：列宽合计 {modelColumnSum}px 超过清单可视宽 {modelVisible}px——「范围外影响」那一列在真实那一屏上被藏。");
             }
+
+            // 第二百四十九轮（简报 P2-1）：过期提示那一支的三条门。
+            // ① 提示行真的出现了，且高度就是 StaleRowHeight（差 0 = 那一行没出现，量到的不是这一支）。
+            if (staleExtra != CheckResultsLayout.StaleRowHeight)
+            {
+                throw new InvalidOperationException(
+                    $"过期提示出现时固定六块比不出现时多 {staleExtra}px，CheckResultsLayout.StaleRowHeight 是 " +
+                    $"{CheckResultsLayout.StaleRowHeight}px：差 0 说明那一行根本没出现（夹具没把任务版本推上去），" +
+                    "差别的数说明它长成了别的样子——两种都不能读成「这一支量到了」。");
+            }
+
+            // ② 同一个窗体高：提示行出现时窗体不长高，只能从接口清单里让。
+            if (staleClient.Height != client.Height)
+            {
+                throw new InvalidOperationException(
+                    $"过期提示出现时窗体客户区高 {staleClient.Height}px，不出现时 {client.Height}px：" +
+                    "窗体高在构造时就定了，提示行出现时不该改变窗体高——它只能从接口清单里让。");
+            }
+
+            // ③ 让出来的那一截正好是一行：仍装得下 MainRowsWhenStale 行。
+            if (staleCapacity < CheckResultsLayout.MainRowsWhenStale)
+            {
+                throw new InvalidOperationException(
+                    $"过期提示出现时接口清单只装得下 {staleCapacity} 行（清单高 {staleEndpointList.ClientSize.Height}px、" +
+                    $"行高 {staleRowHeight}px），判据是 {CheckResultsLayout.MainRowsWhenStale} 行：" +
+                    "提示行多出来的那一截把清单挤掉了不止一行——这一支的预算（StaleRowHeight / MainRowsWhenStale）需要重定。");
+            }
         });
     }
 
@@ -6467,6 +6556,12 @@ internal static class Program
     /// 行数少于判据时量到的容量会被行数截住（清单不会为了空行撑高），所以夹具行数必须多于判据行数。
     /// 语义是真的（状态、阻断、模型映射都按产品自己的字段填），几何才是真的。
     /// </para>
+    /// <para>
+    /// <b><c>TaskRevision = 0</c> 是第二百四十九轮改的</b>：新建任务的 <c>Revision</c> 就是 0，
+    /// 而 <c>CheckService</c> 把检查结果记成 <c>TaskRevision = task.Revision</c>——所以「刚检查完」这一支
+    /// 两个数相等（0 = 0，过期提示不出现）。过期提示那一支把任务版本推一档（1 &gt; 0），
+    /// 那一行才真的出现；此前写 1 时推一档是 1 &gt; 1，那一行不会出现，量到的还是同一支。
+    /// </para>
     /// </summary>
     private static CheckResult CheckResultsFixture()
     {
@@ -6474,7 +6569,7 @@ internal static class Program
         return new CheckResult
         {
             ComputedAt = DateTimeOffset.Now,
-            TaskRevision = 1,
+            TaskRevision = 0,
             StructureSource = "swagger",
             SnapshotAt = DateTimeOffset.Now,
             SnapshotComplete = true,
