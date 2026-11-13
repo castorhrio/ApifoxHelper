@@ -244,32 +244,55 @@ public class AcceptanceChecklistTests
     }
 
     /// <summary>
-    /// G-D3 的「GUI 证据」格必须收敛成单一句式：以「最近一次真跑：」开头（第一百八十轮，简报 P1-1）。
+    /// 某一节 <c>#### X</c> 小节的正文（从该标题行到下一个 <c>#### </c> / <c>### </c> 之前）。
+    /// 第二百五十四轮把长读数从格子里移出去之后，「移到了哪一段」就成了新的判定对象——
+    /// 只判格子里没有那一笔，等于允许有人把历史账直接删掉。
+    /// </summary>
+    private static string DetailSection(string heading)
+    {
+        var lines = SectionLines();
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == heading);
+        Assert.True(start >= 0, $"docs/NOTES.md 验收表那一节里缺「{heading}」小节：格子里的指向没有落点。");
+        var end = Array.FindIndex(lines, start + 1,
+            l => l.StartsWith("#### ", StringComparison.Ordinal) || l.StartsWith("### ", StringComparison.Ordinal));
+        return string.Join("\n", lines[start..(end < 0 ? lines.Length : end)]);
+    }
+
+    /// <summary>
+    /// G-D3 的「GUI 证据」格必须只留<b>一句代表当前源码</b>的读数（口径自第二百七十轮换过一次，简报 P0-1；
+    /// 原名 <c>Checklist_StatusGateGuiEvidence_NamesTheLastRealRunInOneSentence</c>，判的是「最近一次真跑：」开头）。
     /// <para>
-    /// <b>补的是哪个缺口</b>：第一百七十九轮把「第一百七十九轮在当前源码上复跑核对」补进这一格时，
-    /// 没有删掉原来那句「第一百七十七轮三档复跑含本段」——于是同一格里并列两句话，
-    /// <b>读者要自己判断哪个是权威读数</b>。这与 <c>HtmlWrapTests.RegisteredGap_NamesTheLastRealBrowserRun</c>
-    /// 的口径不一致：那一族要求「挂账必须写明最近一次真跑是哪一轮」，写法是单一句式。
+    /// <b>为什么要换</b>：第一百八十轮立这一条时，那一格只有一笔权威读数（「最近一次真跑：第 N 轮」）加一笔
+    /// 出处，单一句式确实收住了。到第二百七十轮，那一格里并列的是<b>三笔</b>——「最近一次真跑」第二百四十三轮
+    /// 246、「读数出处」第一百七十七轮 180、以及全仓当前那一笔 257。<b>「最近一次真跑」这个词组本身在骗人</b>：
+    /// 它读起来像当前读数，指的却是某一历史轮次那一次跑的结果。G-D4 那一格早已改成
+    /// 「当前源码最近一次三档复跑为第 N 轮 …」，本条按同一形状换过来。
     /// </para>
     /// <para>
-    /// <b>判什么</b>：① 这一格以「最近一次真跑：」开头（权威读数只有一个入口）；
-    /// ② 旧读数不许被顺手删掉——第一百七十七轮的 180 通过 / 0 失败 ×3 与 <c>RunDialogStatusSweep</c>
-    /// 仍在同一格里（收敛是「重排成一句」，不是「删掉出处」）。<b>不判</b>轮次数字本身对不对
-    /// （那是 <c>NativeDialogSmokeTests.Notes_RecordsThatTheThreeTierRerunIncludesTheDialogStatusSweep</c> 的事）。
+    /// <b>判什么</b>：① 那一格以「当前源码最近一次三档复跑为第」开头；② 格子里不再出现「最近一次真跑」
+    /// 那一种把历史读数写成权威读数的句式；③ <b>移出的是位置不是内容</b>——那一格指向的详细口径小节里，
+    /// 被移走的两笔（第二百四十三轮 246、第一百七十七轮 180 与 <c>RunDialogStatusSweep</c>）必须还在。
+    /// <b>不判</b>轮次数字本身对不对（那是 <c>ReadingConsistencyTests.ReadingRecord_SourceIsTheCurrentSource</c>
+    /// 与 <c>NativeDialogSmokeTests.Notes_RecordsThatTheThreeTierRerunIncludesTheDialogStatusSweep</c> 的事）。
     /// </para>
     /// </summary>
     [Fact]
-    public void Checklist_StatusGateGuiEvidence_NamesTheLastRealRunInOneSentence()
+    public void Checklist_StatusGateGuiEvidence_NamesTheCurrentSourceReadingInOneSentence()
     {
         var row = Rows().Single(r => r.Item.StartsWith("G-D3", StringComparison.Ordinal));
 
-        Assert.True(row.Gui.StartsWith("最近一次真跑：", StringComparison.Ordinal),
-            $"G-D3 的 GUI 证据格没有以「最近一次真跑：」开头：{row.Gui}。"
-            + "同一格并列两句话时，读者要自己判断哪个是权威读数——收敛成单一句式，旧读数放进「读数出处」。");
+        Assert.True(row.Gui.StartsWith("当前源码最近一次三档复跑为第", StringComparison.Ordinal),
+            $"G-D3 的 GUI 证据格没有以「当前源码最近一次三档复跑为第 …」开头：{row.Gui}。"
+            + "那一格是答辩现场被读的那一列，同一格里并列多笔读数时读者分不出哪一笔代表当前源码——"
+            + "留一句当前读数，其余移进「G-D3 状态完备：详细口径」。");
+        Assert.DoesNotContain("最近一次真跑", row.Gui, StringComparison.Ordinal);
 
-        // 收敛不是删掉出处：第一百七十七轮那次的读数与段名必须还在同一格里。
-        Assert.Contains("第一百七十七轮", row.Gui, StringComparison.Ordinal);
-        Assert.Contains("RunDialogStatusSweep", row.Gui, StringComparison.Ordinal);
+        // 收敛不是删账：那一格必须指向详细口径小节，而那两笔历史读数必须还在小节里。
+        Assert.Contains("见「G-D3 状态完备：详细口径」", row.Gui, StringComparison.Ordinal);
+        var detail = DetailSection("#### G-D3 状态完备：详细口径");
+        Assert.Contains("第二百四十三轮", detail, StringComparison.Ordinal);
+        Assert.Contains("第一百七十七轮", detail, StringComparison.Ordinal);
+        Assert.Contains("RunDialogStatusSweep", detail, StringComparison.Ordinal);
     }
 
     /// <summary>

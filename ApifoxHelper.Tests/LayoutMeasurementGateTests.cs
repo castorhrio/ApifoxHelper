@@ -280,7 +280,71 @@ public class LayoutMeasurementGateTests
     public void NoMeasurementSegment_Reasons_SayWhyTheIdentityIsNotAFakeGate()
     {
         var problems = ReasonProblems(NoMeasurementSegment);
+        // 第二百五十六轮那一节（NOTES 顶部）承诺「停」这个决定要落在仓里——本轮起真的读它一遍。
+        problems.AddRange(FakeGateBoundaryProblems(FakeGateRegistration()));
         Assert.Empty(problems);
+    }
+
+    // ---------- 「假门防护」与「表 ↔ 源码对账」的边界（第二百七十轮，简报 P0-2）----------
+
+    /// <summary>NOTES 顶部那一行的起始字面（唯一取法；那一行本身就是这一族的收口登记）。</summary>
+    private const string FakeGateMarker = "**假门防护这一族：收尾登记";
+
+    /// <summary>
+    /// 从 <c>docs/NOTES.md</c> 读出第二百五十六轮那一行。
+    /// <para>
+    /// <b>本轮为什么第一次去读它</b>：那一行末尾写着「判这一行在不在……是
+    /// <see cref="NoMeasurementSegment_Reasons_SayWhyTheIdentityIsNotAFakeGate"/>」——而第二百五十六轮到
+    /// 第二百六十九轮之间，那一条门<b>只看登记表 <see cref="NoMeasurementSegment"/>，从不读 NOTES</b>。
+    /// 那句承诺当时没有实物：把那一行整段删掉，本族所有门照旧全绿。这正是这一族一直在防的形状
+    /// （写在纸上的判据没人跑），本轮把它接上，并顺手把「表 ↔ 源码对账」的边界一起判住。
+    /// </para>
+    /// </summary>
+    private static string FakeGateRegistration()
+    {
+        var notes = Repo.Source("docs", "NOTES.md");
+        var line = notes.Split('\n').FirstOrDefault(l => l.Contains(FakeGateMarker, StringComparison.Ordinal));
+        Assert.True(line is not null,
+            $"docs/NOTES.md 顶部找不到「{FakeGateMarker}」那一行：第二百五十六轮「这一族收口」那个决定"
+            + "又只活在 commit message 里了——那一行自己写着「判这一行在不在」的是本文件，它得真的可判。");
+        return line;
+    }
+
+    /// <summary>
+    /// 那一行必须回答的两件事（判据本体：登记行进、问题清单出）：
+    /// ① <b>停</b>——第二百五十六轮那句「本轮是这一族的最后一轮」；
+    /// ② <b>边界</b>——第二百七十轮划开的「表 ↔ 源码对账」，且区分口径必须写成
+    ///    「判据在判自己」与「判据在判被承诺的实物」两个短语都在。
+    /// <para>
+    /// <b>为什么 ② 要两个短语都在</b>：只写「那一族不属本族」是一句<b>可以被自证的空话</b>——
+    /// 下一轮任何人给自己那条恒等式门补一句「我这是对账不是恒等式」就过关了。
+    /// 两个短语把判法钉住：门判的对象是<b>判据自己</b>还是<b>被承诺的实物</b>，读的人一眼能验。
+    /// </para>
+    /// </summary>
+    private static List<string> FakeGateBoundaryProblems(string registration)
+    {
+        var problems = new List<string>();
+
+        if (!registration.Contains("这一族的最后一轮", StringComparison.Ordinal))
+        {
+            problems.Add("那一行没写「本轮是这一族的最后一轮」：收口决定被写丢了，下一轮读不到「该停在哪」。");
+        }
+
+        if (!registration.Contains("表 ↔ 源码对账", StringComparison.Ordinal))
+        {
+            problems.Add("那一行没点「表 ↔ 源码对账」这一族（第二百五十九轮起的 "
+                + "ProfileJumpTests.LandingButtonTable_CoversEveryButtonOnTheConfigPage 那一种）："
+                + "两族边界没人划，下一轮既可能以「同族」为名撤掉对账门，也可能以「再补一处」为名补恒等式门。");
+        }
+
+        if (!registration.Contains("判据在判自己", StringComparison.Ordinal)
+            || !registration.Contains("判据在判被承诺的实物", StringComparison.Ordinal))
+        {
+            problems.Add("那一行没把区分口径写成「判据在判自己」与「判据在判被承诺的实物」两个短语："
+                + "只说「不属本族」不给判法，任何一条门都能自称是对账门而过关。");
+        }
+
+        return problems;
     }
 
     /// <summary>
@@ -324,6 +388,23 @@ public class LayoutMeasurementGateTests
         });
         Assert.Single(empty);
         Assert.Contains("空着", empty[0], StringComparison.Ordinal);
+
+        // ⑤ 前提：仓里现在那一行两处都答过（⑥⑦ 之所以能红，只可能来自注入的破坏）。
+        Assert.Empty(FakeGateBoundaryProblems(FakeGateRegistration()));
+
+        // ⑥ 第二百五十六轮那一行的原样（第二百七十轮之前）：「停」写着，两族的边界一个字没划。
+        var noBoundary = FakeGateBoundaryProblems(
+            "**假门防护这一族：收尾登记（第二百五十六轮，简报 P0-2）**（判据）：本轮是这一族的最后一轮，"
+            + "下一轮若再出现「找恒等式 / 补形状门」的 commit，应判为重复路径并停在这里。");
+        Assert.Contains(noBoundary, p => p.Contains("表 ↔ 源码对账", StringComparison.Ordinal));
+        Assert.Contains(noBoundary, p => p.Contains("两个短语", StringComparison.Ordinal));
+        Assert.DoesNotContain(noBoundary, p => p.Contains("收口决定被写丢", StringComparison.Ordinal));
+
+        // ⑦ 只补半句「不属本族」、不给区分口径：仍然报——那种登记下一轮能自证。
+        var half = FakeGateBoundaryProblems(
+            "本轮是这一族的最后一轮；表 ↔ 源码对账 不属本族。");
+        Assert.Single(half);
+        Assert.Contains("判据在判自己", half[0], StringComparison.Ordinal);
     }
 
     /// <summary>一条「没有量测段」的理由至少要有的字数。<b>40 是下限，不是目标</b>：一句话答不完那个问题。</summary>

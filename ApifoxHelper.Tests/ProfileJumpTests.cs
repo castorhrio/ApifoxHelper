@@ -78,6 +78,42 @@ public class ProfileJumpTests
         Assert.Equal(expected, ProfileJump.CanJump(profileId));
 
     /// <summary>
+    /// 点名配置时那对括号的真值表（第二百七十轮，简报 P0-3）：名字里已经带「」时外层换『』，
+    /// 其余一字不动——名字本身是用户起的，界面不许替它改字，也不许把两对括号套成一读就歧义的形状。
+    /// </summary>
+    [Theory]
+    [InlineData("示例配置", "「示例配置」")]
+    [InlineData("夏天「正式版」", "『夏天「正式版」』")]
+    [InlineData("带」的名字", "『带」的名字』")]
+    [InlineData("", "「」")]
+    public void QuoteName_NestsTheMarksOnlyWhenTheNameAlreadyCarriesThem(string name, string expected) =>
+        Assert.Equal(expected, ProfileJump.QuoteName(name));
+
+    /// <summary>
+    /// 那对括号是<b>一处</b>落的（第二百七十轮的接线机械检查）：三句点名配置的话都从
+    /// <see cref="ProfileJump.QuoteName"/> 取，源码里不许再出现就地拼的 <c>「{profileName}」</c>。
+    /// <para>
+    /// <b>为什么这一条值得判</b>：三句话各拼各的括号时，「名字里带引号」这一支只会修掉其中一句——
+    /// 屏幕上同一轮里一句用「」一句用『』，而那正是这一轮要消除的歧义本身。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheThreeSentences_TakeTheBracketsFromQuoteName()
+    {
+        // ① 三句话各调一次，一处不多一处不少（多出来的是第二套文案，少了的是那句话退化回就地拼）。
+        var calls = Regex.Matches(JumpSource, @"\{QuoteName\(profileName\)").Count;
+        Assert.Equal(3, calls);
+        // ② 三句话的签名各一处，与上面那三个调用对上号——谁也没退回就地拼。
+        Assert.Equal(3, Regex.Matches(JumpSource, @"public static string \w+Status\(string profileName\)").Count);
+        // ③ 就地拼的那一对只许出现在 QuoteName 自己的定义里；别处再长出一处，就是第二套写法。
+        Assert.Single(Regex.Matches(JumpSource, @"「\{profileName"));
+        // ④ 换的是外层记号，不是名字：用户起的字一个都不许丢。
+        var kept = ProfileJump.QuoteName("夏天「正式版」");
+        Assert.Contains("夏天", kept, StringComparison.Ordinal);
+        Assert.Contains("正式版", kept, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 找不到那一行时说的那句话：点名是哪一个配置、说清发生了什么、给出下一步，且页面名取自
     /// <see cref="PageNames"/>（改一处不改另一处就会指着一个不存在的页面——第二百五十七轮那一族）。
     /// </summary>
@@ -158,7 +194,7 @@ public class ProfileJumpTests
         Assert.DoesNotContain("没读出来", text, StringComparison.Ordinal);
         Assert.EndsWith("。", text, StringComparison.Ordinal);
         // ③ 不点名按钮：落到那一行之后下一步不止一个（判据本体在 LandingProblems，下面那条注入验它抓得住）。
-        Assert.Empty(LandingProblems(text, "示例配置"));
+        Assert.Empty(LandingProblems(text));
         // ④ 名字换了，那句话跟着换——不是一句写死的文案。
         Assert.NotEqual(text, ProfileJump.LandedStatus("另一个配置"));
         // ⑤ 三句话不许退化成同一句：三种情形、三个下一步。
@@ -177,8 +213,15 @@ public class ProfileJumpTests
     /// <b>现在判什么</b>：① 句子里不含配置页上任何一颗按钮的字面（表在 <see cref="LandingButtonLabels"/>，
     /// 第二百六十九轮起那张表与配置页源码<b>双向对账</b>，见
     /// <see cref="LandingButtonTable_CoversEveryButtonOnTheConfigPage"/>）；
-    /// ② 除配置名那一对「」之外，句子里不再有别的「」——这一条是<b>兜底</b>：将来新增一颗按钮、
-    /// 名字没进上面那张表，只要它被「」括起来指路，这里仍会红。
+    /// ② 除<b>第一对括号</b>之外，句子里不再有别的括号——这一条是<b>兜底</b>：将来新增一颗按钮、
+    /// 名字没进上面那张表，只要它被括号括起来指路，这里仍会红。
+    /// </para>
+    /// <para>
+    /// <b>第二百七十轮把 ② 的剥法换了</b>（简报 P0-3）：原来剥的是 <c>「{profileName}」</c> 这一串字面，
+    /// 而配置名是用户自己起的——名字里带「」时那一串能把<b>按钮那一对</b>一起吃掉
+    /// （名字 <c>示例」。可点「导出</c> 配上句子 <c>已定位到配置「示例」。可点「导出」。</c>，
+    /// 旧判法剥完什么括号都不剩，那颗被指路的按钮就此绿过去）。剥「第一对」不需要知道名字是什么：
+    /// 那句文案里第一个被括号括起来的就是配置名，后面再出现括号，指的就不是它。
     /// </para>
     /// <para>
     /// <b>为什么「不点名按钮」值得一条判据</b>：落到那一行之后「编辑」与「连接与写入探测」都随选中启用，
@@ -186,7 +229,7 @@ public class ProfileJumpTests
     /// 那种「只有一个下一步」的情形不同——那两句必须点名，这一句必须不点名。
     /// </para>
     /// </summary>
-    private static List<string> LandingProblems(string text, string profileName)
+    private static List<string> LandingProblems(string text)
     {
         var problems = new List<string>();
         // ① 配置页上真实存在的按钮字面（表在 LandingButtonLabels，与配置页源码双向对账）。
@@ -198,38 +241,73 @@ public class ProfileJumpTests
             }
         }
 
-        // ② 除配置名那一对「」之外不许再有别的引号括起的内容（兜底：新增按钮没进上面那张表也抓得住）。
-        var stripped = text.Replace($"「{profileName}」", "", StringComparison.Ordinal);
-        if (stripped.Contains('「', StringComparison.Ordinal) || stripped.Contains('」', StringComparison.Ordinal))
+        // ② 除点名配置那一对括号之外不许再有别的括号（兜底：新增按钮没进上面那张表也抓得住）。
+        var stripped = StripFirstQuotedSpan(text);
+        if (stripped.IndexOfAny(QuoteMarks) >= 0)
         {
-            problems.Add($"「{text}」里除配置名「{profileName}」之外还有别的「」：那句话是一句陈述，不该再指别的东西。");
+            problems.Add($"「{text}」里除点名配置那一对括号之外还有别的引号括起的内容：那句话是一句陈述，不该再指别的东西。");
         }
 
         return problems;
     }
 
+    /// <summary>中文引用记号的四个字符（「」与嵌套用的『』都算，见 <see cref="ProfileJump.QuoteName"/>）。</summary>
+    private static readonly char[] QuoteMarks = ['「', '」', '『', '』'];
+
     /// <summary>
-    /// 上面那条判据<b>自己</b>被抓得住（第二百六十六轮，简报 P0-2 的假注入自验）。
+    /// 剥掉<b>第一对</b>括号：从第一个开号（「 或 『）到它之后最近的闭号（」 或 』）。
+    /// 没有开号、或开了没闭，原样返回——那种句子交给 ② 自己去红，不在这里替它圆场。
+    /// </summary>
+    private static string StripFirstQuotedSpan(string text)
+    {
+        var open = text.IndexOfAny(['「', '『']);
+        if (open < 0) return text;
+        // 配对剥：「 配 」、『 配 』。不配对就会把名字里那对内层括号当成外层那一对的闭号——
+        // 第二百七十轮产品侧正是靠换记号消歧义的，判法得跟着认这个配对。
+        var closing = text[open] == '「' ? '」' : '』';
+        var close = text.IndexOf(closing, open + 1);
+        return close < 0 ? text : text.Remove(open, close - open + 1);
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住（第二百六十六轮，简报 P0-2 的假注入自验；第二百七十轮补第 ⑤ 发）。
     /// <para>
     /// 本仓第二百零九轮的教训是「判据自己没被跑过」比「没有判据」更贵：一条永远为真的断言
-    /// 与没有断言在报告里长得一样。这里拿四发注入各喂一次——点名「重试」、点名「编辑」、
-    /// 用「」指一个不在表里的按钮、以及合规的那一句（不报）。
+    /// 与没有断言在报告里长得一样。这里拿五发注入各喂一次——点名「重试」、点名「编辑」、
+    /// 用括号指一个不在表里的按钮、合规的那一句（不报）、以及「配置名里带引号」那一发
+    /// （合规那一句不报 + 旧剥法会绿过去的那一句必须报）。
     /// </para>
     /// </summary>
     [Fact]
     public void LandingDetector_ReportsTheBreaksItMustCatch()
     {
         // ① 点名「重试」：那句话把用户往一颗按钮上引。
-        Assert.Contains(LandingProblems("已定位到配置「示例配置」，点「重试」再试一次。", "示例配置"),
+        Assert.Contains(LandingProblems("已定位到配置「示例配置」，点「重试」再试一次。"),
             p => p.Contains(ProfileLoadState.RetryLabel, StringComparison.Ordinal));
         // ② 点名「编辑」：不带引号也算点名。
-        Assert.Contains(LandingProblems("已定位到配置「示例配置」，可直接编辑。", "示例配置"),
+        Assert.Contains(LandingProblems("已定位到配置「示例配置」，可直接编辑。"),
             p => p.Contains("编辑", StringComparison.Ordinal));
-        // ③ 用「」指一个不在表里的按钮：兜底那一条抓得住。
-        Assert.Contains(LandingProblems("已定位到配置「示例配置」，可点「导出」继续。", "示例配置"),
-            p => p.Contains("别的「」", StringComparison.Ordinal));
+        // ③ 用括号指一个不在表里的按钮：兜底那一条抓得住。
+        Assert.Contains(LandingProblems("已定位到配置「示例配置」，可点「导出」继续。"),
+            p => p.Contains("别的引号括起的内容", StringComparison.Ordinal));
         // ④ 合规的那一句：一处都不报。
-        Assert.Empty(LandingProblems(ProfileJump.LandedStatus("示例配置"), "示例配置"));
+        Assert.Empty(LandingProblems(ProfileJump.LandedStatus("示例配置")));
+
+        // ⑤ 配置名本身带「」（第二百七十轮，简报 P0-3）。先确认产品侧换了外层记号、这句仍然合规：
+        var nested = ProfileJump.LandedStatus("夏天「正式版」");
+        Assert.Contains("『", nested, StringComparison.Ordinal);
+        Assert.Empty(LandingProblems(nested));
+
+        //    再来一发专门验「换了剥法」这件事本身抓得住：这一句里名字里的那对括号
+        //    恰好能把按钮那一对一起吃掉——旧的按 <c>「{profileName}」</c> 字面 Replace 剥完什么都不剩（绿），
+        //    剥「第一对」则留着按钮那一对（红）。「已定位到配置「示例」。可点「导出」。」+ 那个名字，
+        //    正是旧判法会放过去、而屏幕上确实在指路的那一句。
+        const string nameWithBrackets = "示例」。可点「导出";
+        var spoofable = "已定位到配置「示例」。可点「导出」。";
+        Assert.DoesNotContain("「", spoofable.Replace($"「{nameWithBrackets}」", "", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        Assert.Contains(LandingProblems(spoofable),
+            p => p.Contains("别的引号括起的内容", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -306,10 +384,27 @@ public class ProfileJumpTests
     /// <summary>
     /// 配置页上真实存在的按钮字面——<b>从源码里抽</b>，不在这里抄第二份。
     /// <para>
-    /// 取法：<c>ProjectsPage</c> 类体里每一处 <c>Ui.Ghost(…)</c> / <c>Ui.Primary(…)</c> 的实参，
+    /// <b>取法</b>：<c>ProjectsPage</c> 类体里每一处 <c>Ui.Ghost(…)</c> / <c>Ui.Primary(…)</c> 的实参，
     /// 字面量直接取，常量名顺着 <c>const string X = …</c> 跟下去（最多三跳：
     /// <c>ProfileLoadState.RetryLabel</c> → <c>LoadFailureState.RetryLabel</c> → <c>"重试"</c>）。
     /// 跟不下去就<b>抛</b>，不静默跳过——静默跳过等于「新按钮没进表」这件事永远不红。
+    /// </para>
+    /// <para>
+    /// <b>扫不到的形状（第二百七十轮写清，简报 P1-1）</b>：只有 <c>Ui.Ghost(单行实参)</c> 与
+    /// <c>Ui.Primary(单行实参)</c> 两种。这三种形状抽不到——
+    /// ① 不经工厂的 <c>new Button { Text = "…" }</c>（本文件里没有，别的类里也不该算进这一屏）；
+    /// ② 实参里带换行或嵌套括号的（<c>[^)]*</c> 在第一个 <c>)</c> 处截断，那种写法会解析成半截实参，
+    ///    再由 <see cref="ResolveLabel"/> 抛出来）；
+    /// ③ 文字来自拼接或插值（<c>Ui.Ghost("打开" + suffix)</c>）——<see cref="ResolveLabel"/> 认不出即抛。
+    /// <b>三种都不是静默漏判</b>：② ③ 抛的是「实参解析不出来」，① 会让两侧对账少一颗（表里那颗页上没有）
+    /// 或由 <c>LandingButtonTable_…</c> 那条 <c>page.Count &gt;= 4</c> 地板以「取法退化了」红。
+    /// </para>
+    /// <para>
+    /// <b>类体范围是有意的</b>：<c>ProjectsPage.cs</c> 这一个文件里还有 <c>ProfileDialog</c> 那一个类
+    /// （「保存」「取消」「浏览…」「模块与模板…」都在它里面）——那些按钮属于<b>编辑对话框</b>，
+    /// 不在「落到那一行」这句话能指着的地方，所以 <see cref="SourceSlice"/> 按类头取体、不把它们算进来。
+    /// <b>地板为什么留在门里</b>：抽取器只管「抽到什么」，「抽出来的少到不可信」是一句判定，
+    /// 写在 <see cref="LandingButtonTable_CoversEveryButtonOnTheConfigPage"/> 里才与那条对账门同处一眼可见。
     /// </para>
     /// </summary>
     private static List<string> ConfigPageButtonLabels()

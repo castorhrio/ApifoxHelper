@@ -538,6 +538,29 @@ PowerShell 副本，只会多出第二处要维护的顺序（顺序一旦分家
 或 `.winecheck/` 下真长出 `defense-day.ps1`（乃至第二份 `.ps1`）而登记没跟着改，即红。
 **它不判这几支 bash 在真 Windows 的 Git Bash 里跑不跑得动**——那一条随 G-D5 一起到真机那天量。
 
+## 什么时候要复跑三档冒烟（第二百七十轮登记，简报 P1-2）
+
+**一句话判据**：改了仓内**任何一支产品 `.cs`**（含 `Desktop/Native/` 与 `ApifoxHelper.Smoke/`）
+→ `reading.txt` 的 `source=` 与当前源码对不上 → `ReadingConsistencyTests.ReadingRecord_SourceIsTheCurrentSource` 红
+→ 复跑 `PUBLISH=1 bash .winecheck/demo.sh`，三档跑完它自己写回 `source=` / `date=` / 各档读数。
+**纯文档改动与纯测试改动不动指纹**，不需要复跑。
+
+**为什么是这个范围**：`demo.sh` 里 `source_fingerprint()` 算的是「仓内全部 `.cs`，剪掉 `ApifoxHelper.Tests/`、
+剪掉 `bin` / `obj`」的逐文件 sha1 再求和。剪掉测试工程是刻意的——测试不编进冒烟产物，改了它不该要求重发冒烟器；
+剪掉 `bin` / `obj` 是因为产物不是源码。这两条性质由
+`ReadingConsistencyTests.SourceFingerprint_ChangesWithOneByteAndIgnoresBinObjAndTests` 判，
+「C# 那一份与 shell 那五行是不是同一个算法」由同文件
+`SourceFingerprint_AgreesWithTheShellOneWhenBashIsHere` 判。
+
+**读数会怎么变**：`section=` 那一族与每档总数只在冒烟器**加了新段**时才变；只改产品源码而不动冒烟段时，
+复跑写回的只有 `date=` 与 `source=` 两行，总数照旧。第二百七十轮那一跑就是这个形状
+（`source=` 变了、三档仍各 257 通过 / 0 失败 ×3、段集合一字未动）。
+
+**这一节是登记说明，不是判据**：判「读数说的是哪一版源码」的仍是上面那两条门，本轮**不为这一段补新门**——
+它答的是「改代码的人要不要复跑」这个问题，读的对象是人；给它补一条「这段散文在不在」的门，
+判的是字面而不是行为，正落在 `docs/NOTES.md`「假门防护这一族：收尾登记」那一行划出的范围里（第二百五十六轮收口、
+第二百七十轮划界）。删掉这一节的代价由上面那条红替所有人记住：改完产品源码没复跑，`dotnet test` 当场点名那一条命令。
+
 ## 已知限制（不要拿它当 Windows 真机证据）
 
 - wine 的字体度量与 GDI 绘制不是 Windows 实现：**观感、DPI 缩放、字体替换的结论不能替代真机复核**。

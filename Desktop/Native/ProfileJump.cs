@@ -13,7 +13,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// <b>这一份是什么</b>：五件事的唯一落点——按钮文字（<see cref="ButtonLabel"/>）、
 /// 「这一跳有没有落点」（<see cref="CanJump"/>）、「跳过去找不到那一行时说什么」（<see cref="MissingStatus"/>）、
 /// 「跳过去时配置清单本身没读出来时说什么」（<see cref="LoadFailedStatus"/>）、
-/// 「落到了那一行时说什么」（<see cref="LandedStatus"/>）。
+/// 「落到了那一行时说什么」（<see cref="LandedStatus"/>）；这三句话点名配置时用的那对括号
+/// 也由 <see cref="QuoteName"/> 一处给（第二百七十轮）。
 /// 界面层不就地拼这几处文字，也不自己判「配置 Id 空不空」。
 /// </para>
 /// <para>
@@ -50,6 +51,25 @@ public static class ProfileJump
     public static bool CanJump(string? profileId) => !string.IsNullOrWhiteSpace(profileId);
 
     /// <summary>
+    /// 把配置名括起来（第二百七十轮）：名字里已经带「」时改用『』，不让一对引号套在另一对里面。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：下面三句话都以 <c>「{名字}」</c> 点名配置，而配置名是用户自己起的
+    /// ——起名带「」完全可能。那时屏幕上出现 <c>已定位到配置「「夏天」版」。</c> 这一类句子，
+    /// 两对括号读成一对，<b>回执到底在说哪一份没人看得出来</b>；判「这句话有没有再指别的东西」的那条兜底
+    /// 也会被名字里的引号骗过去（它数的是引号，不是名字）。中文嵌套引用的既有记号是『』，按它走：
+    /// 名字里带「」的那一种换外层记号，其余一字不动。
+    /// </para>
+    /// <para>
+    /// <b>三句话都从这里取那对括号</b>：点名是「哪一份配置」这件事只有一种写法，界面上才不会
+    /// 同一轮里一句用「」一句用『』。
+    /// </para>
+    /// </summary>
+    public static string QuoteName(string profileName) =>
+        profileName.Contains('「', StringComparison.Ordinal) || profileName.Contains('」', StringComparison.Ordinal)
+            ? $"『{profileName}』"
+            : $"「{profileName}」";
+
+    /// <summary>
     /// 跳过去在配置清单里找不到那一行（配置已被删除）时，落在配置页状态行上的那句话：
     /// 说清发生了什么，并给出下一步。
     /// <para>
@@ -62,7 +82,7 @@ public static class ProfileJump
     /// </para>
     /// </summary>
     public static string MissingStatus(string profileName) =>
-        $"这个任务绑定的配置「{profileName}」已不存在（可能已被删除）；可在「{PageNames.Projects}」页新建配置后重新创建任务。";
+        $"这个任务绑定的配置{QuoteName(profileName)}已不存在（可能已被删除）；可在「{PageNames.Projects}」页新建配置后重新创建任务。";
 
     /// <summary>
     /// 跳过去时配置清单<b>本身没读出来</b>（<see cref="ProfileLoadState"/> 的失败态）时，
@@ -85,7 +105,7 @@ public static class ProfileJump
     /// </para>
     /// </summary>
     public static string LoadFailedStatus(string profileName) =>
-        $"这个任务绑定的配置「{profileName}」这次没读出来（配置清单读取失败）；点「{ProfileLoadState.RetryLabel}」再读一次，读出来后会定位到它。";
+        $"这个任务绑定的配置{QuoteName(profileName)}这次没读出来（配置清单读取失败）；点「{ProfileLoadState.RetryLabel}」再读一次，读出来后会定位到它。";
 
     /// <summary>
     /// 这一跳真的落到了那一行时，落在配置页状态行上的那句话（第二百六十五轮）。
@@ -101,7 +121,7 @@ public static class ProfileJump
     /// 与 <see cref="MissingStatus"/> 那种「只有一个下一步」的情形不同。
     /// </para>
     /// </summary>
-    public static string LandedStatus(string profileName) => $"已定位到配置「{profileName}」。";
+    public static string LandedStatus(string profileName) => $"已定位到配置{QuoteName(profileName)}。";
 
     /// <summary>
     /// 跳过去时<b>要不要清空筛选框</b>（第二百六十七轮）：先在当前筛选下找那一行，找到了就不动筛选框。

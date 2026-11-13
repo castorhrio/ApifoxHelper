@@ -293,6 +293,88 @@ public class ReadingConsistencyTests
         var numbers = Regex.Matches(text, @"\d+").Select(x => int.Parse(x.Value)).ToList();
         return numbers.Count == 0 ? null : numbers.Sum();
     }
+
+    // ---------- 验收表「GUI 证据」那一格的读数口径（第二百七十轮，简报 P0-1）----------
+
+    /// <summary>
+    /// 验收表每一格的「GUI 证据」只许给出<b>一个</b>代表当前源码的读数（第二百七十轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：G-D3 那一格此前写着「最近一次真跑：第二百四十三轮……246 通过 / 0 失败 ×3」，
+    /// 同一格里又留着「读数出处：第一百七十七轮……180 通过 / 0 失败 ×3」，而全仓当前那一笔是 257——
+    /// <b>三笔并列、没有一笔声称自己代表当前源码</b>。被追问「三个数哪个对」时答不上来的不是代码，是这一格。
+    /// </para>
+    /// <para>
+    /// <b>本仓此前的门为什么抓不住</b>：<see cref="CurrentSourceReading_IsTheSameNumberInReadmeAndNotes"/>
+    /// 与 <see cref="EveryThreeTierReading_IsAttributedToARoundOrTheCurrentSource"/> 认的是
+    /// 「当前源码」与「第…轮」两种句式，而 <c>最近一次真跑：第二百四十三轮</c> 里既有轮次、又不声称是当前
+    /// 读数——两条门都判不到它。<b>这一条补的正是那一种句式</b>：GUI 证据格里不许再出现
+    /// 「最近一次真跑：第 N 轮」，要么写成「当前源码最近一次三档复跑为第 N 轮 …」，要么把那笔移进
+    /// 「X：详细口径」小节、格子里只留一句指向。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那一笔数字对不对（<see cref="ReadingRecord_SourceIsTheCurrentSource"/> 判
+    /// <c>reading.txt</c> 的 <c>source=</c> 是不是当前源码）；不判详细口径小节里能并列几笔历史读数
+    /// （那是历史账，本来就该各不相同）；也不判表格以外的正文——只有<b>验收表那一列</b>是答辩现场念出来的东西。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryGuiEvidenceCell_NamesTheCurrentSourceReadingOrPointsToTheDetailSection() =>
+        Assert.Empty(GuiEvidenceCellProblems(GuiEvidenceCells(Repo.Source("docs", "NOTES.md"))));
+
+    /// <summary>
+    /// 验收表里可勾选行的「条目名 + GUI 证据」两列（第 5 列）。取法与
+    /// <c>AcceptanceChecklistTests</c> 同一形状：五列、首格是勾选框，列数不对的行不归这一族管。
+    /// </summary>
+    private static List<(string Item, string Gui)> GuiEvidenceCells(string notes) => notes
+        .ReplaceLineEndings("\n").Split('\n')
+        .Select(line => line.Trim())
+        .Where(line => line.StartsWith('|'))
+        .Select(line => line.Trim('|').Split('|').Select(cell => cell.Trim()).ToList())
+        .Where(cells => cells.Count == 5 && (cells[0] == "[x]" || cells[0] == "[ ]"))
+        .Select(cells => (Item: cells[1], Gui: cells[4]))
+        .ToList();
+
+    /// <summary>「最近一次真跑：第 N 轮」那一种句式（中文数字与阿拉伯数字都算）。</summary>
+    private static readonly Regex StaleGuiReading = new(
+        @"最近一次真跑：第[一二三四五六七八九十百千零〇\d]+轮", RegexOptions.Compiled);
+
+    /// <summary>判据本体：格子进、问题出（空清单 = 每一格都只认一个当前读数）。</summary>
+    private static List<string> GuiEvidenceCellProblems(IEnumerable<(string Item, string Gui)> cells) => cells
+        .Where(cell => StaleGuiReading.IsMatch(cell.Gui))
+        .Select(cell => $"「{cell.Item}」的 GUI 证据格写着「{StaleGuiReading.Match(cell.Gui).Value}…」：那一格里没有一处读数声称自己代表当前源码，"
+            + "读者只能自己猜哪一个才是现在的数。改成「当前源码最近一次三档复跑为第 N 轮 …」，"
+            + "或把那笔历史读数移进「X：详细口径」小节、格子里只留一句指向。")
+        .ToList();
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住（第二百七十轮）：三发各喂一次——旧形状那一发必须报出自己那一格，
+    /// 当前源码句式与「只留指向」两发不许报。
+    /// </summary>
+    [Fact]
+    public void GuiEvidenceCellDetector_ReportsTheBreaksItMustCatch()
+    {
+        // ① 旧形状：第二百七十轮之前 G-D3 那一格的原样（同一格两笔并列、没有一笔声称是当前源码）。
+        var stale = GuiEvidenceCellProblems(new[]
+        {
+            ("G-D3 状态完备", "最近一次真跑：第二百四十三轮（三档各跑一次，246 通过 / 0 失败 ×3）；读数出处：第一百七十七轮（180 通过 / 0 失败 ×3）。"),
+        });
+        Assert.Single(stale);
+        Assert.Contains("G-D3 状态完备", stale[0], StringComparison.Ordinal);
+        Assert.Contains("当前源码", stale[0], StringComparison.Ordinal);
+
+        // ② 当前源码句式：不报（这一句自己就写着它是谁的读数）。
+        Assert.Empty(GuiEvidenceCellProblems(new[]
+        {
+            ("G-D4 中文排版", "当前源码最近一次三档复跑为第二百七十轮 257 通过 / 0 失败 ×3、逐屏对账 0 处对不上。"),
+        }));
+
+        // ③ 只留指向：不报（历史读数移进详细口径小节之后，格子里不再有那一句式）。
+        Assert.Empty(GuiEvidenceCellProblems(new[]
+        {
+            ("G-D3 状态完备", "当前源码最近一次三档复跑为第二百七十轮 257 通过 / 0 失败 ×3；此前各次读数见「G-D3 状态完备：详细口径」。"),
+        }));
+    }
+
     // ---------- 逐屏对账表的段数（第一百九十四轮，简报 P1-2）----------
 
     /// <summary>逐屏对账表所在的一节（<c>docs/NOTES.md</c>「降级答辩脚本」）。</summary>
