@@ -22,6 +22,14 @@ namespace ApifoxHelper.Tests;
 /// 新增一屏只要引用了口径文件就自动进入断言范围，漏接即红。
 /// </para>
 /// <para>
+/// <b>「回到同一个入口」允许一层包装</b>（第二百六十五轮）：配置页那颗「重试」读成功之后还要做一件事——
+/// 落回用户从任务详情跳过来想找的那一行（<c>ProjectsPage.RetryLoad</c>）。于是点击目标不再是
+/// <c>LoadProfiles</c> 本身，而是「先捕获挂起的那一跳、再调同一个 <c>LoadProfiles</c>、读成功后落回去」的包装。
+/// 这一条因此改成<b>先解析、再判</b>：包装只许有一层，且包装体里<b>只许调一个</b> <c>Load*</c> 入口——
+/// 在包装里再写一份读取逻辑，就是「两条路各读一份」，那正是这一条要拦的东西。
+/// 解析本身由 <see cref="RetryWrapper_IsResolvedOnlyWhenItDelegatesToOneReadEntry"/> 拿三发注入当场验。
+/// </para>
+/// <para>
 /// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheFiveScreens"/> 把「发现到哪几屏」
 /// 钉成封闭清单——发现正则写坏（比如口径文件改名）会让清单变空，那条用例先红，
 /// 不会出现「一条都没发现、于是全部通过」的假绿。
@@ -125,21 +133,84 @@ public class LoadFailureRetryCoverageTests
             var field = RetryField(screen);
             var target = RetryTarget(screen, field);
 
-            // ① 重试回到的是一个读取入口（Load*），不是另写一份读取逻辑、也不是「重开窗口」。
-            Assert.Matches(@"^Load\w+$", target);
-            // ② 那个入口在本屏有定义（不是调一个不存在的方法）。
-            Assert.Matches(@"private\s+(?:async\s+)?(?:void|Task)\s+" + Regex.Escape(target) + @"\(", screen.Text);
-
-            // ③ 首次读取走的是同一个入口：打开这一屏（或这一页出现）时调的就是它。
-            //    只认「打开」这一条路（OnLoad / OnPageShown）——RefreshData 是刷新入口，
-            //    它调什么不能替「打开时读的是哪个方法」作证。
+            // 首次读取走的是哪个入口：只认「打开」这一条路（OnLoad / OnPageShown）——
+            // RefreshData 是刷新入口，它调什么不能替「打开时读的是哪个方法」作证。
             var anchor = InitialReadAnchors.FirstOrDefault(a => screen.Text.Contains(a, StringComparison.Ordinal));
             Assert.True(anchor is not null, $"{screen.Name}：找不到首次读取入口（OnLoad / OnPageShown）。");
             var initial = Body(screen.Text, anchor!);
+
+            // 重试点下去最终读的是哪个入口：直接就是它，或经一层只调一个读取入口的包装。
+            var (entry, problem) = ResolveReadEntry(screen.Text, target, initial);
+            Assert.True(problem is null, $"{screen.Name}：{problem}");
+
+            // ① 重试最终回到的是一个读取入口（Load*），不是另写一份读取逻辑、也不是「重开窗口」。
+            Assert.Matches(@"^Load\w+$", entry);
+            // ② 那个入口在本屏有定义（不是调一个不存在的方法）。
+            Assert.Matches(@"private\s+(?:async\s+)?(?:void|Task)\s+" + Regex.Escape(entry) + @"\(", screen.Text);
+            // ③ 首次读取走的是同一个入口：打开这一屏（或这一页出现）时调的就是它。
             Assert.True(
-                initial.Contains(target + "();", StringComparison.Ordinal),
-                $"{screen.Name}：打开这一屏时没有走 {target}()——「重试」与打开时读的不是同一个入口，两条路会各自漂移。");
+                initial.Contains(entry + "();", StringComparison.Ordinal),
+                $"{screen.Name}：打开这一屏时没有走 {entry}()——「重试」与打开时读的不是同一个入口，两条路会各自漂移。");
         }
+    }
+
+    /// <summary>
+    /// 上面那条「重试回到同一个读取入口」的解析<b>自己</b>被抓得住（第二百六十五轮）：三发注入各报一处，
+    /// 合规形状不报。本仓的教训是「判据自己没被跑过」比「没有判据」更贵（第二百零九轮那两处假变异）。
+    /// </summary>
+    [Fact]
+    public void RetryWrapper_IsResolvedOnlyWhenItDelegatesToOneReadEntry()
+    {
+        const string initial = "public void OnPageShown()\n    {\n        LoadProfiles();\n    }";
+
+        // ① 直接就是读取入口：原样返回，不报。
+        Assert.Equal(("LoadProfiles", (string?)null), ResolveReadEntry(initial, "LoadProfiles", initial));
+
+        // ② 一层包装、体里只调一个读取入口：解析到那个入口，不报。
+        var wrapper = initial + "\n    private void RetryLoad()\n    {\n        var pending = _pendingReveal;\n"
+            + "        LoadProfiles();\n        if (pending is not { } target) return;\n"
+            + "        RevealProfile(target.Id, target.Name);\n    }";
+        Assert.Equal(("LoadProfiles", (string?)null), ResolveReadEntry(wrapper, "RetryLoad", initial));
+
+        // ③ 包装里调了两个读取入口：报出来（两条路各读一份）。
+        var two = initial + "\n    private void RetryLoad()\n    {\n        LoadProfiles();\n        LoadProfilesAgain();\n    }";
+        var (_, twoProblem) = ResolveReadEntry(two, "RetryLoad", initial);
+        Assert.NotNull(twoProblem);
+        Assert.Contains("2 个读取入口", twoProblem!, StringComparison.Ordinal);
+
+        // ④ 包装里一个读取入口都没调（自己写了一份读取逻辑）：同样报出来。
+        var none = initial + "\n    private void RetryLoad()\n    {\n        _list.Items.Clear();\n    }";
+        var (_, noneProblem) = ResolveReadEntry(none, "RetryLoad", initial);
+        Assert.NotNull(noneProblem);
+        Assert.Contains("0 个读取入口", noneProblem!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 「重试」点下去最终读的是哪个入口：文本进、结论出（问题为空 = 过得去）。
+    /// <para>
+    /// 两种合法形状：① 直接就是首次读取调的那个入口；② 一层包装——读完之后还要做一件事
+    /// （配置页那颗「重试」读成功之后要落回用户从任务详情跳过来想找的那一行）。
+    /// 包装<b>只许有一层</b>、体里<b>只许调一个</b> <c>Load*</c> 入口：在包装里再写一份读取逻辑，
+    /// 就是「两条路各读一份」，那正是这一条要拦的东西。
+    /// </para>
+    /// </summary>
+    private static (string Entry, string? Problem) ResolveReadEntry(string text, string target, string initial)
+    {
+        if (initial.Contains(target + "();", StringComparison.Ordinal)) return (target, null);
+
+        var start = text.IndexOf("private void " + target + "()", StringComparison.Ordinal);
+        if (start < 0)
+            return (target, $"「重试」点下去调的 {target} 既不是首次读取的入口，本屏也没有它的定义。");
+        var end = text.IndexOf("\n    }", start, StringComparison.Ordinal);
+        var wrapper = end < 0 ? text[start..] : text[start..end];
+        var calls = Regex.Matches(wrapper, @"(?<![\w.])Load\w+\(")
+            .Select(m => m.Value[..^1])
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (calls.Count != 1)
+            return (target, $"{target} 是「重试」的包装，但体里调了 {calls.Count} 个读取入口"
+                + $"（{string.Join("、", calls)}）——包装里再写一份读取逻辑，两条路会各自漂移。");
+        return (calls[0], null);
     }
 
     [Fact]

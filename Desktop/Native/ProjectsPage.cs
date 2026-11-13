@@ -51,6 +51,12 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private readonly Button _probeButton;
     // 选中保留：列表在切页、刷新与保存后都会重建，按配置 Id 恢复选中与键盘焦点（与任务页同一口径）。
     private string? _selectedId;
+    // 挂起的那一跳（第二百六十五轮）：清单读不出来时记住「用户想找哪一份配置」，那颗「重试」读成功之后
+    // 落回它——否则用户点完重试还得自己再找一遍，等于把「先记住名字、再在另一页找回来」又做了一次。
+    // 赋值只有一处（RevealProfile 的读取失败态那一支），清空只有一处（LoadProfiles 读成功那一支）：
+    // 读成功即意味着这一跳要么正被「重试」那条路消费（它在调用前先捕获），要么用户是从别处读到的
+    // （切页、刷新、保存返回）——后者再落回一个旧目标就是替用户跳。两处落点由 ProfileJumpTests 判住。
+    private (string Id, string Name)? _pendingReveal;
     private const int ProfileNameColumnWidth = 180;
     // 列排序状态（ListSort 口径，与任务页同一规则）：未排序时按配置名称升序（ProfileStore.List 的顺序）。
     private int _sortColumn = ListSort.None;
@@ -124,8 +130,9 @@ internal sealed class ProjectsPage : UserControl, INativePage
         // 空态按钮是独立实例：同一控件不能同时挂在工具栏与空态面板上；动作与工具栏同一入口，不复制逻辑。
         _emptyCreate.Click += (_, _) => ShowDialog(null);
         _emptyClear.Click += (_, _) => ClearListFilter();
-        // 重试回到同一个读取入口（LoadProfiles），不复制一份读取逻辑：失败后点它等于再读一次。
-        _emptyRetry.Click += (_, _) => LoadProfiles();
+        // 重试回到同一个读取入口（LoadProfiles），不复制一份读取逻辑：失败后点它等于再读一次；
+        // 读成功且有一跳挂着时，再落回那一行（RetryLoad 一处，见该方法注释）。
+        _emptyRetry.Click += (_, _) => RetryLoad();
         var emptyActions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = UiTokens.Bg };
         emptyActions.Controls.Add(_emptyCreate);
         emptyActions.Controls.Add(_emptyClear);
@@ -234,6 +241,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
         // 不先清筛选——清筛选会经 TextChanged 再读一次，而这一屏此刻的下一步是那颗「重试」，不是隐式重读。
         if (_loadFailed)
         {
+            // 记住这一跳：那颗「重试」读成功之后要落回这一行（LoadFailedStatus 那句话里承诺的就是它）。
+            _pendingReveal = (profileId, profileName);
             SetStatus(ProfileJump.LoadFailedStatus(profileName), UiTokens.BadText);
             return false;
         }
@@ -244,6 +253,8 @@ internal sealed class ProjectsPage : UserControl, INativePage
             {
                 Ui.SelectItem(item);
                 _list.Focus();
+                // 回执：选中在配置页上还有另一个来源（上次留下的选中），两种来源在屏幕上长得一样。
+                SetStatus(ProfileJump.LandedStatus(profileName), UiTokens.Muted);
                 return true;
             }
         }
@@ -322,6 +333,10 @@ internal sealed class ProjectsPage : UserControl, INativePage
             RestoreSelection(selectedId);
             // 读成功即退出失败态：清单区回到「有行」或「还没有配置」两态之一。
             _loadFailed = false;
+            // 挂起的那一跳到此为止（清空只有这一处）：读成功了，要么是「重试」那条路（它在调用前已捕获，
+            // 下面自己落回去），要么用户是从别处读到的（切页、刷新、保存返回）——后者再落回一个旧目标
+            // 就是替用户跳，而用户并没有点那颗「重试」。
+            _pendingReveal = null;
             _empty.Visible = profiles.Count == 0;
             _list.Visible = profiles.Count > 0;
             RefreshEmptyState();
@@ -336,6 +351,22 @@ internal sealed class ProjectsPage : UserControl, INativePage
         {
             ShowLoadFailure(ProfileLoadState.FailureStatus(Redactor.Redact(ex.Message)));
         }
+    }
+
+    /// <summary>
+    /// 失败态那颗「重试」的唯一动作（第二百六十五轮）：再读一次；读成功且有一跳挂着时，落回那一行。
+    /// <para>
+    /// <b>先捕获再读</b>：读成功那一支会把挂起的那一跳清掉（见 <see cref="LoadProfiles"/>），
+    /// 捕获的那一份才是「用户点重试之前想找的那一份」。读还是失败时什么都不做——那一跳继续挂着，
+    /// 下一次重试仍会落回它（用户没有第二次机会的话，<see cref="ProfileLoadState.RetryVisible"/> 也不会留着那颗按钮）。
+    /// </para>
+    /// </summary>
+    private void RetryLoad()
+    {
+        var pending = _pendingReveal;
+        LoadProfiles();
+        if (_loadFailed || pending is not { } target) return;
+        RevealProfile(target.Id, target.Name);
     }
 
     /// <summary>

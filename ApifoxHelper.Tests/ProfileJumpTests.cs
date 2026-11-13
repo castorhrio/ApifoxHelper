@@ -14,10 +14,10 @@ namespace ApifoxHelper.Tests;
 /// 「先记住名字、再在另一页找回来」，而任务详情已经把那个名字摆在眼前了。
 /// </para>
 /// <para>
-/// <b>这一族判什么</b>：① 四件事的唯一落点（按钮文字 / 有没有落点 / 找不到时说什么 /
-/// 清单没读出来时说什么）都在 <see cref="ProfileJump"/>，界面层不就地拼；② 三处接线各在它该在的地方
-/// （任务详情摆按钮并发请求、壳把请求接到另一页、配置页按 Id 选中那一行）；③ 按钮的可用状态只有一个落点
-/// （详情区动作的单一门控）；④ 判据自己被抓得住（注入各报一处）。
+/// <b>这一族判什么</b>：① 五件事的唯一落点（按钮文字 / 有没有落点 / 找不到时说什么 /
+/// 清单没读出来时说什么 / 落到了那一行时说什么）都在 <see cref="ProfileJump"/>，界面层不就地拼；
+/// ② 三处接线各在它该在的地方（任务详情摆按钮并发请求、壳把请求接到另一页、配置页按 Id 选中那一行）；
+/// ③ 按钮的可用状态只有一个落点（详情区动作的单一门控）；④ 判据自己被抓得住（注入各报一处）。
 /// </para>
 /// <para>
 /// <b>第二百六十四轮补的那一条</b>：「找不到那一行」有两种原因——清单读出来了、里面没有这一行
@@ -26,9 +26,19 @@ namespace ApifoxHelper.Tests;
 /// 点同一屏那颗「重试」再读一次。现在两句话各说各的原因、各给各的下一步，各有一条真值表。
 /// </para>
 /// <para>
+/// <b>第二百六十五轮补的那一条</b>：<see cref="ProfileJump.LoadFailedStatus"/> 把用户指到那颗「重试」上，
+/// 可重试读成功之后那一跳此前就<b>丢了</b>——清单回来了，用户还得自己再找一遍那一行，等于把
+/// 「先记住名字、再在另一页找回来」这件事又做了一次。现在失败态下这一跳被记住（<c>ProjectsPage</c> 的
+/// <c>_pendingReveal</c>），那颗「重试」读成功之后落回那一行，并由 <see cref="ProfileJump.LandedStatus"/>
+/// 在状态行上给一句回执——否则用户看不出这一行被选中是「跳过来的」还是「上次留下的」。
+/// 这一条判的是「那句话里的承诺 ↔ 界面上真的做到」：赋值一处、清空一处、先捕获再读、读成功后落回。
+/// </para>
+/// <para>
 /// <b>它不判什么</b>：不判「该不该跳」——那是产品判断；也不判真机上切页之后那一行滚到哪、键盘落在哪
 /// （随 G-D5 真机复核）。本仓没有 Windows 运行时，这一跳的<b>点击</b>本身在 Linux 上跑不起来，
-/// 所以这里判的是「三处接线都在、且都走同一份口径」，不是「点下去真的换了页」。
+/// 所以这里判的是「三处接线都在、且都走同一份口径」，不是「点下去真的换了页」——**那半截由
+/// <c>ApifoxHelper.Smoke</c> 的「从任务详情跳过来时清单没读出来，重试读成功后落回那一行」那一段
+/// 在 wine 里用真实控件跑**（模拟器，不是真机）。
 /// </para>
 /// </summary>
 public class ProfileJumpTests
@@ -120,6 +130,107 @@ public class ProfileJumpTests
         Assert.NotEqual(text, ProfileJump.LoadFailedStatus("另一个配置"));
         // ⑤ 两句话不许退化成同一句：原因不同，下一步也不同。
         Assert.NotEqual(ProfileJump.MissingStatus("示例配置"), text);
+    }
+
+    /// <summary>
+    /// 落到那一行时的回执（第二百六十五轮）：点名是哪一个配置、是一句陈述而不是指路、不点名按钮。
+    /// <para>
+    /// <b>为什么要有这一句</b>：落点本身是「那一行被选中、键盘在清单上」，可<b>选中</b>在配置页上还有
+    /// 另一个来源——上次留下的选中（<c>RestoreSelection</c>）。两种来源在屏幕上长得一样，用户看不出
+    /// 「这一行是我从任务详情跳过来要改的那一份」还是「上次停在这里的那一份」。
+    /// </para>
+    /// <para>
+    /// <b>它不点名按钮</b>：落到那一行之后「编辑」与「连接与写入探测」都随选中启用，下一步不止一个，
+    /// 指名其中一个反而把另一个藏起来——与 <see cref="ProfileJump.MissingStatus"/> 那种「只有一个下一步」
+    /// 的情形不同。这一条与那两条一起构成真值表：三句话若退化成同一句，必有一条红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LandedStatus_ConfirmsTheLandingWithoutNamingAButton()
+    {
+        var text = ProfileJump.LandedStatus("示例配置");
+
+        // ① 点名是哪一个配置（用户要知道落到了哪一份上）。
+        Assert.Contains("示例配置", text, StringComparison.Ordinal);
+        // ② 说的是「落到了」，不是「找不到」也不是「没读出来」。
+        Assert.Contains("已定位到", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("已不存在", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("没读出来", text, StringComparison.Ordinal);
+        Assert.EndsWith("。", text, StringComparison.Ordinal);
+        // ③ 不点名按钮：落到那一行之后下一步不止一个。
+        Assert.DoesNotContain(ProfileLoadState.RetryLabel, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("「", text.Replace("「示例配置」", "", StringComparison.Ordinal), StringComparison.Ordinal);
+        // ④ 名字换了，那句话跟着换——不是一句写死的文案。
+        Assert.NotEqual(text, ProfileJump.LandedStatus("另一个配置"));
+        // ⑤ 三句话不许退化成同一句：三种情形、三个下一步。
+        Assert.NotEqual(ProfileJump.MissingStatus("示例配置"), text);
+        Assert.NotEqual(ProfileJump.LoadFailedStatus("示例配置"), text);
+    }
+
+    /// <summary>
+    /// 「读出来后会定位到它」这半句是<b>承诺</b>，不是修辞（第二百六十五轮）：那句话里写了什么，
+    /// 界面就得真的做到什么——否则它比不说更糟（用户以为点完重试就回到那一行，然后发现还得自己找）。
+    /// <para>
+    /// 判的是「承诺 ↔ 接线」两侧：① 那句话里确实有这个承诺；② 配置页在读取失败态下真的记住了这一跳；
+    /// ③ 那颗「重试」读成功之后真的落回那一行；④ 落回去之后真的给回执。
+    /// 只判其中一侧都会让另一侧静默失效：删掉接线而留着那句话，用户读到的是一句空话。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LoadFailedStatus_PromiseIsBackedByThePendingJump()
+    {
+        // ① 那句话里写了这个承诺。
+        Assert.Contains("定位到", ProfileJump.LoadFailedStatus("示例配置"), StringComparison.Ordinal);
+
+        // ② 配置页在读取失败态那一支里记住这一跳（别处记住等于替用户跳）。
+        var reveal = SourceSlice.BodyOf(ProjectsPage, "public bool RevealProfile(string profileId, string profileName)");
+        const string remember = "_pendingReveal = (profileId, profileName);";
+        Assert.Contains(remember, reveal, StringComparison.Ordinal);
+        Assert.True(
+            reveal.IndexOf("if (_loadFailed)", StringComparison.Ordinal) < reveal.IndexOf(remember, StringComparison.Ordinal)
+            && reveal.IndexOf(remember, StringComparison.Ordinal) < reveal.IndexOf("ProfileJump.LoadFailedStatus(", StringComparison.Ordinal),
+            "记住这一跳必须落在读取失败态那一支里（别处记住等于替用户跳）。");
+
+        // ③ 那颗「重试」读成功之后落回那一行：先捕获再读，读成功后走同一个 RevealProfile 入口。
+        var retry = SourceSlice.BodyOf(ProjectsPage, "private void RetryLoad()");
+        Assert.True(
+            retry.IndexOf("var pending = _pendingReveal;", StringComparison.Ordinal) < retry.IndexOf("LoadProfiles();", StringComparison.Ordinal),
+            "必须先捕获再读：读成功那一支会把挂起的那一跳清掉，捕获的那一份才是用户点重试之前想找的那一份。");
+        Assert.Contains("if (_loadFailed || pending is not { } target) return;", retry, StringComparison.Ordinal);
+        Assert.Contains("RevealProfile(target.Id, target.Name);", retry, StringComparison.Ordinal);
+        // 不另写一份选中逻辑：落回那一行走的是同一个入口。
+        Assert.DoesNotContain("Ui.SelectItem(", retry, StringComparison.Ordinal);
+        // 那颗「重试」按钮点下去走的就是这一条路（不是直接再读一次）。
+        Assert.Contains("_emptyRetry.Click += (_, _) => RetryLoad();", ProjectsPage, StringComparison.Ordinal);
+
+        // ④ 落回去之后给回执（否则用户看不出这一行是「跳过来的」还是「上次留下的」）。
+        Assert.Contains("ProfileJump.LandedStatus(profileName)", reveal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 挂起的那一跳：<b>赋值一处、清空一处</b>（第二百六十五轮）。
+    /// <para>
+    /// 赋值只有一处（读取失败态那一支），清空只有一处（<c>LoadProfiles</c> 读成功那一支）——
+    /// 读成功即意味着这一跳要么正被「重试」那条路消费（它在调用前先捕获），要么用户是从别处读到的
+    /// （切页、刷新、保存返回）。第二处赋值会让「谁记住的」说不清；第二处清空会让「重试读成功后
+    /// 落不回去」变成一条只在某些路径上出现的 bug。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PendingJump_HasOneAssignmentAndOneClear()
+    {
+        Assert.Single(Regex.Matches(ProjectsPage, @"_pendingReveal = \(profileId, profileName\);"));
+        Assert.Single(Regex.Matches(ProjectsPage, @"_pendingReveal = null;"));
+
+        // 清空落在「读成功」之后：失败态那一支不许清——那一跳还要留给下一次重试。
+        var load = SourceSlice.BodyOf(ProjectsPage, "private void LoadProfiles()");
+        Assert.Contains("_pendingReveal = null;", load, StringComparison.Ordinal);
+        Assert.True(
+            load.IndexOf("_loadFailed = false;", StringComparison.Ordinal) < load.IndexOf("_pendingReveal = null;", StringComparison.Ordinal),
+            "清空必须落在「读成功」之后（失败态那一支不许清——那一跳还要留给下一次重试）。");
+        // 失败态那一支（ShowLoadFailure）不碰它。
+        var failure = SourceSlice.BodyOf(ProjectsPage, "private void ShowLoadFailure(string status)");
+        Assert.DoesNotContain("_pendingReveal", failure, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -243,6 +354,18 @@ public class ProfileJumpTests
         // ⑤ 按钮可用状态长出第二处赋值。
         var twice = good with { Tasks = good.Tasks.Replace("_gapButton.Enabled = scanReady;", "_openProfileButton.Enabled = true;\n        _gapButton.Enabled = scanReady;", StringComparison.Ordinal) };
         Assert.Contains(WiringProblems(twice.Tasks, twice.Projects, twice.Shell), p => p.Contains("单一落点", StringComparison.Ordinal));
+
+        // ⑥ 读取失败态不再记住这一跳（「读出来后会定位到它」成了空话）。
+        var forgetful = good with { Projects = good.Projects.Replace("_pendingReveal = (profileId, profileName);", "// 不记了", StringComparison.Ordinal) };
+        Assert.Contains(WiringProblems(forgetful.Tasks, forgetful.Projects, forgetful.Shell), p => p.Contains("_pendingReveal", StringComparison.Ordinal));
+
+        // ⑦ 落到那一行时不给回执（用户看不出这一行是跳过来的还是上次留下的）。
+        var silent = good with { Projects = good.Projects.Replace("ProfileJump.LandedStatus(profileName)", "null", StringComparison.Ordinal) };
+        Assert.Contains(WiringProblems(silent.Tasks, silent.Projects, silent.Shell), p => p.Contains("LandedStatus", StringComparison.Ordinal));
+
+        // ⑧ 那颗「重试」直接再读一次（挂起的那一跳没人消费）。
+        var unconsumed = good with { Projects = good.Projects.Replace("_emptyRetry.Click += (_, _) => RetryLoad();", "_emptyRetry.Click += (_, _) => LoadProfiles();", StringComparison.Ordinal) };
+        Assert.Contains(WiringProblems(unconsumed.Tasks, unconsumed.Projects, unconsumed.Shell), p => p.Contains("RetryLoad", StringComparison.Ordinal));
     }
 
     // ── 判据本体（纯函数：文本进、问题出） ────────────────────────────
@@ -281,6 +404,14 @@ public class ProfileJumpTests
                 + "读取失败态下清单是空的，落到 MissingStatus 就会把「读不出来」说成「已不存在」。");
         if (!projects.Contains("Ui.SelectItem(", StringComparison.Ordinal))
             problems.Add("配置页没有走 Ui.SelectItem 唯一入口选中那一行。");
+        if (!projects.Contains("_pendingReveal = (profileId, profileName);", StringComparison.Ordinal))
+            problems.Add("配置页在读取失败态下没有记住这一跳（_pendingReveal）——"
+                + "LoadFailedStatus 那句「读出来后会定位到它」就成了空话。");
+        if (!projects.Contains("ProfileJump.LandedStatus(", StringComparison.Ordinal))
+            problems.Add("配置页落到那一行时没有用 ProfileJump.LandedStatus 给回执"
+                + "（选中在配置页上还有「上次留下的选中」这个来源，两种来源在屏幕上长得一样）。");
+        if (!projects.Contains("_emptyRetry.Click += (_, _) => RetryLoad();", StringComparison.Ordinal))
+            problems.Add("失败态那颗「重试」没有走 RetryLoad（挂起的那一跳没人消费，读成功后落不回去）。");
 
         return problems;
     }

@@ -105,7 +105,12 @@ public class ProfileLoadFailureTests
         var page = Repo.Source("Desktop", "Native", "ProjectsPage.cs");
         // 按钮文字取自单一落点，动作回到同一个读取入口（不复制一份读取逻辑）。
         Assert.Matches(@"(?m)^\s*private readonly Button _emptyRetry = Ui\.Ghost\(ProfileLoadState\.RetryLabel\);", page);
-        Assert.Matches(@"(?m)^\s*_emptyRetry\.Click \+= \(_, _\) => LoadProfiles\(\);", page);
+        // 第二百六十五轮起经一层包装 RetryLoad：先捕获挂起的那一跳、再调同一个 LoadProfiles，
+        // 读成功后落回那一行（「重试回到同一个读取入口」由 LoadFailureRetryCoverageTests 判住）。
+        Assert.Matches(@"(?m)^\s*_emptyRetry\.Click \+= \(_, _\) => RetryLoad\(\);", page);
+        var retry = Slice(page, "private void RetryLoad()", "private void ShowLoadFailure(");
+        // 包装里只调一个读取入口：再写一份读取逻辑就是「两条路各读一份」。
+        Assert.Single(Regex.Matches(retry, @"\bLoadProfiles\("));
         Assert.Matches(@"(?m)^\s*emptyActions\.Controls\.Add\(_emptyRetry\);", page);
         // 三态门控：失败时只显示「重试」，另两颗按钮一起收掉。
         var refresh = Slice(page, "private void RefreshEmptyState()", "private static string?[] FilterFields(");

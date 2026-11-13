@@ -10,9 +10,10 @@ namespace ApifoxHelper.Desktop.Native;
 /// 再在另一页找回来」——而任务详情已经把那个名字摆在眼前了。
 /// </para>
 /// <para>
-/// <b>这一份是什么</b>：四件事的唯一落点——按钮文字（<see cref="ButtonLabel"/>）、
+/// <b>这一份是什么</b>：五件事的唯一落点——按钮文字（<see cref="ButtonLabel"/>）、
 /// 「这一跳有没有落点」（<see cref="CanJump"/>）、「跳过去找不到那一行时说什么」（<see cref="MissingStatus"/>）、
-/// 「跳过去时配置清单本身没读出来时说什么」（<see cref="LoadFailedStatus"/>）。
+/// 「跳过去时配置清单本身没读出来时说什么」（<see cref="LoadFailedStatus"/>）、
+/// 「落到了那一行时说什么」（<see cref="LandedStatus"/>）。
 /// 界面层不就地拼这几处文字，也不自己判「配置 Id 空不空」。
 /// </para>
 /// <para>
@@ -21,6 +22,13 @@ namespace ApifoxHelper.Desktop.Native;
 /// 「这份配置已不存在」；第三种下清单是空的，而空的原因是<b>磁盘上那份清单没读出来</b>，
 /// 与「配置被删了」是两件事。用同一句话盖住两种原因，等于把「读不出来」说成「不存在」——
 /// 用户会去新建一份配置，而真正该做的是点本页那颗「重试」再读一次。
+/// </para>
+/// <para>
+/// <b>为什么「没读出来」之后还要有第三句</b>（第二百六十五轮）：<see cref="LoadFailedStatus"/> 把用户
+/// 指到那颗「重试」上，可重试读成功之后，那一跳此前就<b>丢了</b>——清单回来了，用户却还得自己再找一遍
+/// 那一行，等于把「先记住名字、再在另一页找回来」这件事又做了一次。现在失败态下这一跳被记住
+/// （<c>ProjectsPage</c> 的挂起字段），重试读成功之后落回那一行，并由 <see cref="LandedStatus"/>
+/// 在状态行上确认「落到了」——否则用户看不出这一行被选中是「跳过来的」还是「上次留下的」。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判「该不该跳」——那是产品判断；也不判真机上切页之后那一行滚到哪、
@@ -70,7 +78,28 @@ public static class ProfileJump
     /// 按钮字面取自 <see cref="ProfileLoadState.RetryLabel"/>（全仓只有一处「重试」）：
     /// 这句话指名的入口必须是界面上真实存在的那一个（第四十二轮纪律）。
     /// </para>
+    /// <para>
+    /// <b>「读出来后会定位到它」这半句是承诺，不是修辞</b>（第二百六十五轮）：配置页在失败态下把这一跳
+    /// 记下来，那颗「重试」读成功之后落回那一行（见 <see cref="LandedStatus"/>）。这句话里写了什么，
+    /// 界面就得真的做到什么——否则它比不说更糟：用户会以为点完重试就回到那一行，然后发现还得自己找。
+    /// </para>
     /// </summary>
     public static string LoadFailedStatus(string profileName) =>
-        $"这个任务绑定的配置「{profileName}」这次没读出来（配置清单读取失败）；点「{ProfileLoadState.RetryLabel}」再读一次。";
+        $"这个任务绑定的配置「{profileName}」这次没读出来（配置清单读取失败）；点「{ProfileLoadState.RetryLabel}」再读一次，读出来后会定位到它。";
+
+    /// <summary>
+    /// 这一跳真的落到了那一行时，落在配置页状态行上的那句话（第二百六十五轮）。
+    /// <para>
+    /// <b>为什么要有这一句</b>：落点本身是「那一行被选中、键盘在清单上」，可<b>选中</b>这件事在配置页上
+    /// 还有另一个来源——上次留下的选中（<c>RestoreSelection</c>）。两种来源在屏幕上长得一样，
+    /// 用户看不出「这一行是我从任务详情跳过来要改的那一份」还是「上次停在这里的那一份」。
+    /// 状态行说一句「已定位到配置「X」」，这一跳才算有回执。
+    /// </para>
+    /// <para>
+    /// <b>它不点名按钮</b>：落到那一行之后，本页的「编辑」与「连接与写入探测」都随选中启用
+    /// （<c>RefreshDetailActions</c> 那一族），下一步不止一个，指名其中一个反而把另一个藏起来。
+    /// 与 <see cref="MissingStatus"/> 那种「只有一个下一步」的情形不同。
+    /// </para>
+    /// </summary>
+    public static string LandedStatus(string profileName) => $"已定位到配置「{profileName}」。";
 }
