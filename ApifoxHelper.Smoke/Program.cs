@@ -246,6 +246,9 @@ internal static class Program
         Section("配置页读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunProfileLoadFailure));
         RunProfileLoadFailure(services, dataRoot);
 
+        Section("从任务详情跳过来时清单没读出来，重试读成功后落回那一行（失败 → 跳过来 → 重试仍失败 → 修好再重试 → 落到那一行，真实控件）", nameof(RunProfileJumpRetry));
+        RunProfileJumpRetry(services, dataRoot);
+
         Section("任务页读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunTaskLoadFailure));
         RunTaskLoadFailure(services, dataRoot);
 
@@ -3316,6 +3319,190 @@ internal static class Program
                     throw new InvalidOperationException(
                         "筛选状态下读取失败，行动按钮不是「重试」：可见的是 " + string.Join("、", visible.Select(b => "「" + b.Text + "」")));
                 }
+            });
+        }
+        finally
+        {
+            // 坏文件必须清掉：留着它，后面每一段读配置都会失败（冒烟器自己造的坑自己填）。
+            try
+            {
+                if (File.Exists(broken)) File.Delete(broken);
+            }
+            catch (IOException)
+            {
+                // 删不掉只影响后续段，不影响本段判定；不掩盖本段已经记下的失败。
+            }
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 「从任务详情跳过来时清单没读出来，重试读成功后落回那一行」（第二百六十六轮）。
+    /// <para>
+    /// <b>补的是哪半截</b>：第二百六十五轮把这一跳的承诺（<see cref="ProfileJump.LoadFailedStatus"/> 里那句
+    /// 「读出来后会定位到它」）接成了代码，但只判了源码形状——「点下去真的落到了那一行」在 Linux 上
+    /// 一次都没跑过。这一段用真实控件把整条路走一遍：弄坏磁盘 → 从任务详情跳过来（调产品入口
+    /// <see cref="ProjectsPage.RevealProfile"/>）→ 状态行说「没读出来」→ 磁盘仍坏时点「重试」→ 仍在失败态
+    /// 且那一跳还挂着 → 修好磁盘再点「重试」→ 清单回来、目标那一行被选中、状态行说「已定位到」。
+    /// </para>
+    /// <para>
+    /// <b>为什么「重试仍失败」那一段不能省</b>：那一跳是在<b>读成功</b>那一支被消费掉的。若哪天有人把
+    /// 「清空挂起的那一跳」挪到读取入口的开头，磁盘仍坏时点一次「重试」就会把它悄悄清掉——用户修好磁盘
+    /// 再点一次，清单回来了却落不到那一行，而屏幕上没有任何一处说得出「为什么这次没落回去」。
+    /// 这一段就是那一处的现场。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判真机上切页之后那一行滚到哪、键盘落在哪（随 G-D5 真机复核）；
+    /// 这一段跑在 wine + Xvfb 里，是模拟器，不是真机。
+    /// </para>
+    /// </summary>
+    private static void RunProfileJumpRetry(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var compat = services.GetRequiredService<CompatService>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        var jobs = services.GetRequiredService<JobRunner>();
+        var credentials = services.GetRequiredService<CredentialStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort.json"));
+        // 坏文件落在配置目录里：ProfileStore.List 枚举 *.json 后逐份反序列化，坏 JSON 即抛。
+        var broken = Path.Combine(store.ProfilesDir, "broken.json");
+        // 跳过去要落到的那一份：取磁盘上真实存在的一份，不另造一个只活在内存里的 Id。
+        var target = profiles.List().First();
+
+        Form? host = null;
+        ProjectsPage? page = null;
+        try
+        {
+            RunAction("配置页：清单没读出来时从任务详情跳过来，状态行说「没读出来」并记住这一跳（真实控件）", () =>
+            {
+                host = new Form { Width = 1100, Height = 700, Text = "跳配置冒烟" };
+                page = new ProjectsPage(profiles, compat, cli, store, jobs, credentials, sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+
+                // 先正常读一次：清单里有行——否则「跳过去找不到」可能只是初始状态。
+                page.RefreshData();
+                Application.DoEvents();
+                if (ProfileList(page).Items.Count == 0)
+                {
+                    throw new InvalidOperationException("正常读取后配置清单是空的：冒烟数据根里没有配置，这一跳无从对照。");
+                }
+
+                // 弄坏磁盘上的配置目录，再走产品路径的读取入口（工具栏「刷新」调的就是 RefreshData）。
+                File.WriteAllText(broken, "这不是 JSON");
+                page.RefreshData();
+                Application.DoEvents();
+
+                // 这一跳走的是壳在「任务详情点了『打开配置』」时调的那个入口。
+                var landed = page.RevealProfile(target.Id, target.Name);
+                Application.DoEvents();
+                if (landed)
+                {
+                    throw new InvalidOperationException("清单没读出来时这一跳却报「落到了」：清单是空的，没有可落的那一行。");
+                }
+                var status = StatusLabel(page);
+                var expected = ProfileJump.LoadFailedStatus(target.Name);
+                if (status.Text != expected)
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{expected}」（说「这次没读出来」，并指名同一屏那颗「重试」）。");
+                }
+                if (status.Text.Contains("已不存在", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"状态行把「读不出来」说成了「已不存在」：「{status.Text}」。");
+                }
+                if (ProfileList(page).Items.Count != 0)
+                {
+                    throw new InvalidOperationException($"读取失败后清单还留着 {ProfileList(page).Items.Count} 行旧数据。");
+                }
+                if (!ButtonOf(page, ProfileLoadState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("读取失败态下「重试」按钮不可见：那句话指名的入口在屏上找不到。");
+                }
+                _lines.Add($"     跳过来（清单没读出来）：状态行「{status.Text}」");
+            });
+
+            RunAction("配置页：磁盘仍坏时点「重试」留在失败态，那一跳不被悄悄清掉（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出配置页。");
+                Click(page, ProfileLoadState.RetryLabel);
+                Application.DoEvents();
+                if (ProfileList(page).Items.Count != 0)
+                {
+                    throw new InvalidOperationException($"磁盘仍坏，重试后清单却有 {ProfileList(page).Items.Count} 行。");
+                }
+                var (title, _) = EmptyStateLabels(page);
+                if (title.Text != ProfileLoadState.FailureTitle)
+                {
+                    throw new InvalidOperationException($"磁盘仍坏，重试后标题变成「{title.Text}」，期望仍是「{ProfileLoadState.FailureTitle}」。");
+                }
+                if (!ButtonOf(page, ProfileLoadState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍坏，重试后「重试」按钮却不见了：用户没有第二次机会。");
+                }
+                // 那一跳此刻必须还挂着——它由下一段（修好磁盘再点一次）当场证明。
+            });
+
+            RunAction("配置页：修好磁盘后点「重试」落回那一行并给回执（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出配置页。");
+                File.Delete(broken);
+                var expected = profiles.List().Count;
+                Click(page, ProfileLoadState.RetryLabel);
+                Application.DoEvents();
+
+                var list = ProfileList(page);
+                if (list.Items.Count != expected)
+                {
+                    throw new InvalidOperationException($"修好磁盘后重试，清单有 {list.Items.Count} 行，磁盘上有 {expected} 个配置。");
+                }
+                // 落回那一行：选中就是「从任务详情跳过来要改的那一份」，不是清单第一行。
+                var selected = list.SelectedItems.Count == 1 ? list.SelectedItems[0] : null;
+                if (selected is null)
+                {
+                    throw new InvalidOperationException("修好磁盘后重试，清单回来了却没有选中任何一行：那一跳丢了。");
+                }
+                if (selected.Tag is not ProjectProfile landedProfile || landedProfile.Id != target.Id)
+                {
+                    throw new InvalidOperationException(
+                        $"修好磁盘后重试，选中的不是跳过来要改的那一份（选中「{(selected.Tag as ProjectProfile)?.Name}」，期望「{target.Name}」）。");
+                }
+                var status = StatusLabel(page);
+                var expectedStatus = ProfileJump.LandedStatus(target.Name);
+                if (status.Text != expectedStatus)
+                {
+                    throw new InvalidOperationException($"落回那一行后状态行是「{status.Text}」，期望「{expectedStatus}」（否则用户看不出这一行是跳过来的还是上次留下的）。");
+                }
+                if (ButtonOf(page, ProfileLoadState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」按钮仍可见：失败态没有随成功读取退出。");
+                }
+                _lines.Add($"     修好磁盘后重试：清单 {list.Items.Count} 行，选中「{landedProfile.Name}」，状态行「{status.Text}」");
+            });
+
+            RunAction("配置页：清单读出来了但没有那一行时说的是「已不存在」，不是「没读出来」（真实控件）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有产出配置页。");
+                var landed = page.RevealProfile("no-such-profile-id", "不存在的配置");
+                Application.DoEvents();
+                if (landed)
+                {
+                    throw new InvalidOperationException("清单里没有那一行，这一跳却报「落到了」。");
+                }
+                var status = StatusLabel(page);
+                var expected = ProfileJump.MissingStatus("不存在的配置");
+                if (status.Text != expected)
+                {
+                    throw new InvalidOperationException($"状态行是「{status.Text}」，期望「{expected}」（清单读出来了、里面没有这一行，与「没读出来」是两件事）。");
+                }
+                if (status.Text.Contains("没读出来", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"清单读出来了却把原因说成「没读出来」：「{status.Text}」。");
+                }
+                _lines.Add($"     跳到不存在的配置：状态行「{status.Text}」");
             });
         }
         finally

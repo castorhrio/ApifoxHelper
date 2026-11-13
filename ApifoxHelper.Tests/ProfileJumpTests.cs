@@ -157,14 +157,78 @@ public class ProfileJumpTests
         Assert.DoesNotContain("已不存在", text, StringComparison.Ordinal);
         Assert.DoesNotContain("没读出来", text, StringComparison.Ordinal);
         Assert.EndsWith("。", text, StringComparison.Ordinal);
-        // ③ 不点名按钮：落到那一行之后下一步不止一个。
-        Assert.DoesNotContain(ProfileLoadState.RetryLabel, text, StringComparison.Ordinal);
-        Assert.DoesNotContain("「", text.Replace("「示例配置」", "", StringComparison.Ordinal), StringComparison.Ordinal);
+        // ③ 不点名按钮：落到那一行之后下一步不止一个（判据本体在 LandingProblems，下面那条注入验它抓得住）。
+        Assert.Empty(LandingProblems(text, "示例配置"));
         // ④ 名字换了，那句话跟着换——不是一句写死的文案。
         Assert.NotEqual(text, ProfileJump.LandedStatus("另一个配置"));
         // ⑤ 三句话不许退化成同一句：三种情形、三个下一步。
         Assert.NotEqual(ProfileJump.MissingStatus("示例配置"), text);
         Assert.NotEqual(ProfileJump.LoadFailedStatus("示例配置"), text);
+    }
+
+    /// <summary>
+    /// 「落到那一行」那句话<b>不点名按钮</b>的判据本体（第二百六十六轮，简报 P0-2）。
+    /// <para>
+    /// <b>换掉了什么</b>：此前判的是「除了配置名，句里不该再有「」」——它想判「不点名按钮」，
+    /// 判法却是数引号。配置名哪天改用别的引号、或名字本身带引号字符，这条断言会以<b>错误的方式</b>
+    /// 红或绿：红的时候看不出是文案错了还是判据脆，绿的时候可能句子里正指着一颗按钮。
+    /// </para>
+    /// <para>
+    /// <b>现在判什么</b>：① 句子里不含配置页上任何一颗按钮的字面（「重试」取自
+    /// <see cref="ProfileLoadState.RetryLabel"/>，其余三颗是配置页工具栏与选中态上的按钮）；
+    /// ② 除配置名那一对「」之外，句子里不再有别的「」——这一条是<b>兜底</b>：将来新增一颗按钮、
+    /// 名字没进上面那张表，只要它被「」括起来指路，这里仍会红。
+    /// </para>
+    /// <para>
+    /// <b>为什么「不点名按钮」值得一条判据</b>：落到那一行之后「编辑」与「连接与写入探测」都随选中启用，
+    /// 下一步不止一个；指名其中一个反而把另一个藏起来。这与 <see cref="ProfileJump.MissingStatus"/>
+    /// 那种「只有一个下一步」的情形不同——那两句必须点名，这一句必须不点名。
+    /// </para>
+    /// </summary>
+    private static List<string> LandingProblems(string text, string profileName)
+    {
+        var problems = new List<string>();
+        // ① 配置页上真实存在的按钮字面（「重试」走常量，其余三颗是工具栏与选中态上的按钮）。
+        foreach (var label in new[] { ProfileLoadState.RetryLabel, "编辑", "连接与写入探测", "新建配置" })
+        {
+            if (text.Contains(label, StringComparison.Ordinal))
+            {
+                problems.Add($"「{text}」点名了按钮「{label}」：落到那一行之后下一步不止一个，指名其中一个会把另一个藏起来。");
+            }
+        }
+
+        // ② 除配置名那一对「」之外不许再有别的引号括起的内容（兜底：新增按钮没进上面那张表也抓得住）。
+        var stripped = text.Replace($"「{profileName}」", "", StringComparison.Ordinal);
+        if (stripped.Contains('「', StringComparison.Ordinal) || stripped.Contains('」', StringComparison.Ordinal))
+        {
+            problems.Add($"「{text}」里除配置名「{profileName}」之外还有别的「」：那句话是一句陈述，不该再指别的东西。");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住（第二百六十六轮，简报 P0-2 的假注入自验）。
+    /// <para>
+    /// 本仓第二百零九轮的教训是「判据自己没被跑过」比「没有判据」更贵：一条永远为真的断言
+    /// 与没有断言在报告里长得一样。这里拿四发注入各喂一次——点名「重试」、点名「编辑」、
+    /// 用「」指一个不在表里的按钮、以及合规的那一句（不报）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LandingDetector_ReportsTheBreaksItMustCatch()
+    {
+        // ① 点名「重试」：那句话把用户往一颗按钮上引。
+        Assert.Contains(LandingProblems("已定位到配置「示例配置」，点「重试」再试一次。", "示例配置"),
+            p => p.Contains(ProfileLoadState.RetryLabel, StringComparison.Ordinal));
+        // ② 点名「编辑」：不带引号也算点名。
+        Assert.Contains(LandingProblems("已定位到配置「示例配置」，可直接编辑。", "示例配置"),
+            p => p.Contains("编辑", StringComparison.Ordinal));
+        // ③ 用「」指一个不在表里的按钮：兜底那一条抓得住。
+        Assert.Contains(LandingProblems("已定位到配置「示例配置」，可点「导出」继续。", "示例配置"),
+            p => p.Contains("别的「」", StringComparison.Ordinal));
+        // ④ 合规的那一句：一处都不报。
+        Assert.Empty(LandingProblems(ProfileJump.LandedStatus("示例配置"), "示例配置"));
     }
 
     /// <summary>

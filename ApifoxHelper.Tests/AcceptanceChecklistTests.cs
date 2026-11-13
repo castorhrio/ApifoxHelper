@@ -1597,6 +1597,111 @@ public class AcceptanceChecklistTests
         }
     }
 
+    // ── 跨方法隐式不变量登记（第二百六十六轮，简报 P0-3） ──────────────
+
+    private const string ImplicitInvariantHeading = "## 跨方法隐式不变量登记（可机械核对）";
+
+    /// <summary>
+    /// 跨方法的隐式不变量<b>登记在文档里</b>，不只活在方法注释里（第二百六十六轮，简报 P0-3）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>ProjectsPage.RevealProfile</c> 依赖「清空筛选是同步重建的」——
+    /// <c>ClearListFilter()</c> 只给筛选框赋值，重建发生在 <c>TextChanged</c> 里那次 <c>LoadProfiles()</c> 上，
+    /// 它是同步的，所以清空那一句返回时 <c>_list.Items</c> 已是重建后的那一份。这条假设此前<b>只写在方法注释里</b>：
+    /// 改成异步的人编译通过、现有用例可能全绿，只有真机上点「从任务详情跳配置」（且那一行正被筛掉）时
+    /// 才会出现「已不存在」的错误提示。注释不会红，所以把它落到下一轮改代码的人会去搜的地方。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：<c>docs/NOTES.md</c> 有「跨方法隐式不变量登记」一节，且每一条登记行四项齐全——
+    /// ① 落点（反引号里点到 <c>ProjectsPage.RevealProfile</c>）、② 依赖什么（含「同步」）、
+    /// ③ 破坏后在哪失效（含「必须同时改」）、④ 为什么现在不加门。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判代码真的同步</b>——那是形状门，这一族第二百五十六轮已收口；
+    /// 这一条是<b>登记门</b>，判的是「话在不在」，不是「话对不对」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ImplicitInvariants_AreRegisteredWithLocationAndFailureMode()
+    {
+        Assert.Empty(ImplicitInvariantProblems(Repo.Source("docs", "NOTES.md")));
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：四发注入各喂一次，每一发都必须报出自己那一处。
+    /// <para>
+    /// 第一发是「整节被删」，第二发是「登记行丢了『同步』」，第三发是「丢了『必须同时改』」，
+    /// 第四发是合规文本（一处都不报）。本仓第二百零九轮的教训是「判据自己没被跑过」比「没有判据」更贵。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ImplicitInvariantDetector_ReportsTheBreaksItMustCatch()
+    {
+        const string good = "- `Desktop/Native/ProjectsPage.RevealProfile` · 依赖 `LoadProfiles()` 是**同步**重建 · "
+            + "破坏后：会静默遍历到旧清单——**改异步的人必须同时改这里** · 为什么现在不加门：那是形状门，这一族已收口。\n";
+
+        // ① 整节被删。
+        Assert.Contains(ImplicitInvariantProblems("# 别的文档\n"), p => p.Contains("缺", StringComparison.Ordinal));
+
+        // ② 登记行丢了「同步」：依赖什么说不清。
+        var noSync = ImplicitInvariantHeading + "\n\n" + good.Replace("**同步**", "**重建**", StringComparison.Ordinal);
+        Assert.Contains(ImplicitInvariantProblems(noSync), p => p.Contains("同步", StringComparison.Ordinal));
+
+        // ③ 登记行丢了「必须同时改」：破坏后在哪失效说不清。
+        var noWarning = ImplicitInvariantHeading + "\n\n" + good.Replace("**改异步的人必须同时改这里**", "**会出错**", StringComparison.Ordinal);
+        Assert.Contains(ImplicitInvariantProblems(noWarning), p => p.Contains("必须同时改", StringComparison.Ordinal));
+
+        // ④ 合规文本：一处都不报。
+        Assert.Empty(ImplicitInvariantProblems(ImplicitInvariantHeading + "\n\n" + good));
+    }
+
+    /// <summary>
+    /// 上面那条登记门的判据本体（纯函数：文本进、问题出）。空清单 = 过得去。
+    /// </summary>
+    private static List<string> ImplicitInvariantProblems(string notes)
+    {
+        var problems = new List<string>();
+        var lines = notes.Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimEnd() == ImplicitInvariantHeading);
+        if (start < 0)
+        {
+            problems.Add($"docs/NOTES.md 缺「{ImplicitInvariantHeading}」一节：跨方法的隐式不变量只活在方法注释里，"
+                + "改代码的人搜文档搜不到它。");
+            return problems;
+        }
+
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        var body = lines[start..(end < 0 ? lines.Length : end)];
+        var entries = body.Where(l => l.StartsWith("- ", StringComparison.Ordinal)).ToList();
+        if (entries.Count == 0)
+        {
+            problems.Add($"「{ImplicitInvariantHeading}」一节里一条登记都没有：空的一节比没有更糟，"
+                + "它让「已经登记过了」这句话看起来成立。");
+            return problems;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (!entry.Contains("ProjectsPage.RevealProfile", StringComparison.Ordinal))
+            {
+                problems.Add($"登记行没有点到落点（`ProjectsPage.RevealProfile`）：「{entry}」");
+            }
+            if (!entry.Contains("同步", StringComparison.Ordinal))
+            {
+                problems.Add($"登记行没有写清依赖什么（缺「同步」）：「{entry}」");
+            }
+            if (!entry.Contains("必须同时改", StringComparison.Ordinal))
+            {
+                problems.Add($"登记行没有写清破坏后在哪失效（缺「必须同时改」）：「{entry}」");
+            }
+            if (!entry.Contains("为什么现在不加门", StringComparison.Ordinal))
+            {
+                problems.Add($"登记行没有写清为什么现在不加门：「{entry}」");
+            }
+        }
+
+        return problems;
+    }
+
     /// <summary>
     /// 把定位锚当正则试一次（只按<b>整行</b>匹配，与那一页写的「行首匹配」同一读法）。
     /// 锚点写的是字面文字时它多半不是合法正则（或根本不该当正则），那种情形由调用方先按字面找过；

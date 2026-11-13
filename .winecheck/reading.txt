@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-13
-source=bdc498a0d7abda4de0d19b400688eee94371a589
-tier=96 passed=251 failed=0 exit=0
-tier=120 passed=251 failed=0 exit=0
-tier=192 passed=251 failed=0 exit=0
+source=5f06e5fa7e6c506da01817ba4771e10cebfb534b
+tier=96 passed=255 failed=0 exit=0
+tier=120 passed=255 failed=0 exit=0
+tier=192 passed=255 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -26,6 +26,7 @@ section=RunDecisionsInteraction tier=96 passed=6 failed=0
 section=RunContractsInteraction tier=96 passed=5 failed=0
 section=RunProfileFormLayout tier=96 passed=8 failed=0
 section=RunProfileLoadFailure tier=96 passed=5 failed=0
+section=RunProfileJumpRetry tier=96 passed=4 failed=0
 section=RunTaskLoadFailure tier=96 passed=5 failed=0
 section=RunReportsLoadFailure tier=96 passed=4 failed=0
 section=RunDecisionsLoadFailure tier=96 passed=6 failed=0
@@ -57,6 +58,7 @@ section=RunDecisionsInteraction tier=120 passed=6 failed=0
 section=RunContractsInteraction tier=120 passed=5 failed=0
 section=RunProfileFormLayout tier=120 passed=8 failed=0
 section=RunProfileLoadFailure tier=120 passed=5 failed=0
+section=RunProfileJumpRetry tier=120 passed=4 failed=0
 section=RunTaskLoadFailure tier=120 passed=5 failed=0
 section=RunReportsLoadFailure tier=120 passed=4 failed=0
 section=RunDecisionsLoadFailure tier=120 passed=6 failed=0
@@ -88,6 +90,7 @@ section=RunDecisionsInteraction tier=192 passed=6 failed=0
 section=RunContractsInteraction tier=192 passed=5 failed=0
 section=RunProfileFormLayout tier=192 passed=8 failed=0
 section=RunProfileLoadFailure tier=192 passed=5 failed=0
+section=RunProfileJumpRetry tier=192 passed=4 failed=0
 section=RunTaskLoadFailure tier=192 passed=5 failed=0
 section=RunReportsLoadFailure tier=192 passed=4 failed=0
 section=RunDecisionsLoadFailure tier=192 passed=6 failed=0
