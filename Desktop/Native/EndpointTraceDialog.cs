@@ -65,7 +65,10 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        DpiScale.Apply(this, new Size(920, 640));
+        // 窗体高由「接口清单要给几行」算出来（第二百五十轮，简报 P0-1）：算式在 EndpointTraceLayout 一处，
+        // 这里不再写 640 那个字面量——字面量与「放不放得下」之间没有算式绑住，改行数或改任一块开销，
+        // 两边不会一起动，而门在原来那一点上照样全绿（第二百四十四 / 二百四十七 / 二百四十八轮同一课）。
+        DpiScale.Apply(this, new Size(EndpointTraceLayout.DialogWidth, EndpointTraceLayout.DialogHeight));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 
@@ -113,7 +116,9 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         var detailGrid = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, ColumnCount = 1, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Sm) };
         detailGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddCaptionRow(detailGrid, "选中接口的追踪明细：读取的方法、未解析的调用、外部调用与预算");
-        AddBoxRow(detailGrid, Ui.Hairline(_detail), 190);
+        // 追踪明细那个文本框的定高取口径（第二百五十轮）：190 不再就地写死，
+        // 改它时 DetailPaneHeight / FixedPanesHeight / DialogHeight 一起动。
+        AddBoxRow(detailGrid, Ui.Hairline(_detail), EndpointTraceLayout.DetailBoxHeight);
 
         var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 3, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));

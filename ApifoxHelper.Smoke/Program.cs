@@ -294,6 +294,9 @@ internal static class Program
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
+        Section("接口追踪明细真的显示出来（五块停靠区高度对客户区、接口清单装得下十二行、清单不出横向滚动条，真实控件量）", nameof(RunEndpointTraceShown));
+        RunEndpointTraceShown(services, dataRoot);
+
         Section("完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）", nameof(RunFullJourney));
         RunFullJourney(services, dataRoot);
 
@@ -6548,6 +6551,169 @@ internal static class Program
             }
         });
     }
+
+
+    /// <summary>
+    /// 接口追踪明细这一屏「真的显示出来」（第二百五十轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一屏在 <see cref="MeasuredScreens"/> 里标的是「未量」——冒烟器只在
+    /// 按钮行高度那一段 <c>new</c> 它一次 + 建句柄，<b>从不显示</b>；而一张没显示过的窗体
+    /// <c>ClientSize</c> 的高是 0，量到的数不能读成「放得下」。本段真的 <c>Show()</c> 出来，
+    /// 第一次量到五块停靠区的高度、接口清单这一刻装得下几行、清单出不出横向滚动条。
+    /// </para>
+    /// <para>
+    /// <b>判据与 <c>RunCheckResultsShown</c> 同一形状</b>（第二百四十八 / 二百四十九轮那一族）：
+    /// ① 五块停靠区高度加起来等于客户区高；② 固定四块（顶部两行 + 底部两块）的实测合计与
+    /// <see cref="EndpointTraceLayout.FixedPanesHeight"/> 逐字相等；③ 接口清单装得下
+    /// <see cref="EndpointTraceLayout.MainRows"/> 行；④ 清单不出横向滚动条。
+    /// 顶部两行按内容认名（带关键词框的那一行是筛选行），不按控件顺序猜——这一屏的 43 / 31
+    /// 与差异检查结果那一屏的 31 / 39 正好相反，按顺序猜会读反。
+    /// </para>
+    /// </summary>
+    private static void RunEndpointTraceShown(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "接口追踪明细显示冒烟" });
+        tasks.Write(task.Id, TaskFiles.Evidence, EndpointTraceFixture());
+
+        RunAction("接口追踪明细：真的显示出来之后，五块停靠区高度加起来等于客户区、固定四块与 EndpointTraceLayout 对账、接口清单装得下十二行、清单不出横向滚动条（真实控件量）", () =>
+        {
+            // 五块停靠区按产品自己的停靠方式认（接口清单 Fill、顶部两行 Top、底部两块 Bottom）：
+            // 认不出就点名，不按控件顺序猜。
+            static (Panel ListHost, List<Control> Tops, List<Control> Bottoms, ListView Endpoints) Docked(EndpointTraceDialog dialog)
+            {
+                var docked = dialog.Controls.Cast<Control>().ToList();
+                var listHost = docked.OfType<Panel>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                    ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的接口清单宿主：停靠分法变了，本段量测口径需要重定。");
+                var tops = docked.Where(control => control.Dock == DockStyle.Top).ToList();
+                var bottoms = docked.Where(control => control.Dock == DockStyle.Bottom).ToList();
+                if (tops.Count != 2)
+                {
+                    throw new InvalidOperationException($"顶部停靠区有 {tops.Count} 块，期望 2 块（标题行 + 筛选行）：本段量测口径需要重定。");
+                }
+                if (bottoms.Count != 2)
+                {
+                    throw new InvalidOperationException($"底部停靠区有 {bottoms.Count} 块，期望 2 块（追踪明细 + 按钮行）：本段量测口径需要重定。");
+                }
+
+                var endpointList = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                        candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                            .SequenceEqual(["接口", "读取方法", "未解析调用", "外部调用", "预算"]))
+                    ?? throw new InvalidOperationException("这一屏找不到表头为「接口 / 读取方法 / 未解析调用 / 外部调用 / 预算」的接口清单：列增删或改名了，本段量测口径需要重定。");
+                return (listHost, tops, bottoms, endpointList);
+            }
+
+            // 接口清单这一刻装得下几行：表头先吃掉一截——只按「清单高 / 行高」算会把表头那 24px 也算成一行
+            // （第二百四十七轮在探测那一屏撞过同一处）。表头高由「第 N 行底边 − N × 行高」现算。
+            static (int Rows, int RowHeight, int HeaderHeight, int Capacity) Capacity(ListView list)
+            {
+                var rows = list.Items.Count;
+                var rowHeight = rows > 0 ? Math.Max(1, list.Items[0].Bounds.Height) : Math.Max(1, list.Font.Height);
+                var lastBottom = rows > 0 ? list.Items[^1].Bounds.Bottom : 0;
+                var headerHeight = rows > 0 ? Math.Max(0, lastBottom - rows * rowHeight) : 0;
+                return (rows, rowHeight, headerHeight, Math.Max(0, list.ClientSize.Height - headerHeight) / rowHeight);
+            }
+
+            // 顶部两行按内容认名（都是 TableLayoutPanel，按类型分不开）：带关键词框的那一行是筛选行。
+            // 关键词框在 Ui.FilterRow 里经 Ui.Field 包了一层宿主，所以按**递归**找 TextBox——
+            // 只看直接子控件会把两行都认成标题行（第二百五十轮第一次跑就是这么打出来的：两行都叫「标题行」）。
+            static string PaneName(Control pane) =>
+                FindAll<TextBox>(pane).Any() ? "筛选行" : "标题行";
+
+            using var dialog = new EndpointTraceDialog(tasks, task);
+            dialog.Show();
+            Application.DoEvents();
+            var (listHost, tops, bottoms, endpointList) = Docked(dialog);
+
+            var client = dialog.ClientSize;
+            var sum = listHost.Height + tops.Sum(control => control.Height) + bottoms.Sum(control => control.Height);
+            // 固定四块（顶部两行 + 底部两块）的实测合计：与 EndpointTraceLayout.FixedPanesHeight 对账。
+            // 顶部两行与按钮行是 AutoSize，代码里没有一处能设它们——它们的读数只能在这里量。
+            var fixedPanes = tops.Sum(control => control.Height) + bottoms.Sum(control => control.Height);
+
+            var (realRows, rowHeight, headerHeight, capacity) = Capacity(endpointList);
+            var horizontal = HasScrollBar(endpointList, WsHscroll);
+            var columns = endpointList.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
+            var columnSum = columns.Sum();
+            var visible = endpointList.ClientSize.Width;
+
+            _lines.Add(
+                $"     接口追踪明细：{DpiContext(dialog)}、窗体客户区 {client.Width}×{client.Height}px；" +
+                $"五块停靠区 顶部 {string.Join(" + ", tops.Select(control => PaneName(control) + " " + control.Height + "px"))} + 接口清单 {listHost.Height}px + " +
+                $"底部 {string.Join(" + ", bottoms.Select(control => control.Height + "px"))} = {sum}px" +
+                (sum == client.Height ? "（等于客户区高）" : $"（与客户区高差 {sum - client.Height}px）") +
+                $"；固定四块实测合计 {fixedPanes}px 对 EndpointTraceLayout.FixedPanesHeight {EndpointTraceLayout.FixedPanesHeight}px" +
+                $"；接口清单 {realRows} 行、行高 {rowHeight}px、清单高 {endpointList.ClientSize.Height}px、约装 {capacity} 行、" +
+                $"第 {realRows} 行底边 {(realRows > 0 ? endpointList.Items[^1].Bounds.Bottom : 0)}px（表头占 {headerHeight}px）；" +
+                $"清单列宽 [{string.Join(", ", columns)}] 合计 {columnSum}px 对可视宽 {visible}px；" +
+                $"控件自己报的滚动条状态：横向{(horizontal ? "在" : "不在")}");
+
+            // 判据只在设计档成立：125% / 200% 档窗体被虚拟屏截断，那一刻的行数属于「量不到」而不是「放不下」。
+            if (DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())) return;
+
+            if (sum != client.Height)
+            {
+                throw new InvalidOperationException(
+                    $"五块停靠区的高度加起来是 {sum}px，客户区高 {client.Height}px（差 {sum - client.Height}px）：" +
+                    "停靠分法漏了一块或叠了一块，这一屏的某一块在真实窗口里会被压掉。");
+            }
+
+            // 固定四块的实测读数必须与 EndpointTraceLayout.FixedPanesHeight 逐字相等：挡的是
+            // 「改一块高度而不改常量」——那时窗体高不跟着动，接口清单被悄悄挤掉一行，而算式那一条照样绿。
+            if (fixedPanes != EndpointTraceLayout.FixedPanesHeight)
+            {
+                throw new InvalidOperationException(
+                    $"固定四块（顶部两行 + 底部两块）实测合计 {fixedPanes}px，EndpointTraceLayout.FixedPanesHeight 是 " +
+                    $"{EndpointTraceLayout.FixedPanesHeight}px（差 {fixedPanes - EndpointTraceLayout.FixedPanesHeight}px）：" +
+                    "改了一块的高度而没改常量（或反过来）。顶部两行与按钮行是 AutoSize，它们的读数只能在这里量——" +
+                    "红了先看是哪一块变了，再把常量改成实测值，别把算式改成迁就旧读数。");
+            }
+
+            if (capacity < EndpointTraceLayout.MainRows)
+            {
+                throw new InvalidOperationException(
+                    $"接口清单这一刻只装得下 {capacity} 行（清单高 {endpointList.ClientSize.Height}px、行高 {rowHeight}px），" +
+                    $"判据是 {EndpointTraceLayout.MainRows} 行：这一屏的主内容就是这张清单，装不下就等于「追踪明细看不见」，" +
+                    "不能读成「放得下」。");
+            }
+
+            if (horizontal)
+            {
+                throw new InvalidOperationException(
+                    $"接口清单出了横向滚动条：列宽合计 {columnSum}px 超过清单可视宽 {visible}px——「预算」那一列在真实那一屏上被藏。");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 接口追踪明细这一屏的夹具（第二百五十轮）：16 个接口的追踪数据，其中 4 个超预算、6 个有未解析调用、
+    /// 8 个有外部调用、每个都带一条证据。
+    /// <para>
+    /// <b>为什么是 16 行</b>：本段要量的是「主清单这一刻装得下几行」——行数少于判据（12）时量到的容量会被
+    /// 行数截住（清单不会为了空行撑高），所以夹具行数必须多于判据行数。语义是真的（读取方法、未解析调用、
+    /// 外部调用、预算超限都按产品自己的字段填），几何才是真的。
+    /// </para>
+    /// </summary>
+    private static EvidenceStore EndpointTraceFixture() => new()
+    {
+        Items = [],
+        Coverage =
+        [
+            .. Enumerable.Range(1, 16).Select(i => new EndpointCoverage
+            {
+                EndpointKey = $"GET /api/probe/{i}",
+                MethodsRead = [$"ProbeController.Query{i}", $"ProbeService.Load{i}"],
+                Unresolved = i % 3 == 0
+                    ? [new UnresolvedCall { Expression = $"Resolve<ProbeHandler{i}>()", Reason = "泛型实参在调用点才确定", Candidates = [$"ProbeHandler{i}"] }]
+                    : [],
+                ExternalCalls = i % 2 == 0 ? [$"HttpClient.GetAsync(\"/api/remote/{i}\")"] : [],
+                BudgetExceeded = i % 4 == 0,
+                EvidenceIds = [$"ev-{i:000}"],
+            }),
+        ],
+    };
 
     /// <summary>
     /// 差异检查结果这一屏的夹具（第二百四十八轮）：12 个接口、6 个模型、2 条问题。

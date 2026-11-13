@@ -137,8 +137,8 @@ internal static class MeasuredScreens
         // ── 未量：冒烟器只 new 一次 + 建句柄，从不显示 ──
         new("契约检查结果", "RunCheckResultsShown", ["CheckResultsDialog"], true, "第二百四十八轮",
             "docs/NOTES.md 第二百四十八轮：真的 Show() 出来之后量到接口清单只剩 140px（扣掉表头装得下 5 行），窗体高改按「接口清单要给几行」算"),
-        new("接口追踪明细", "RunActionRowFit", ["EndpointTraceDialog"], false, "第二百四十三轮",
-            "docs/NOTES.md 第二百四十三轮：同一句挂账；本屏只在按钮行高度那一段被构造（那一段不显示窗体）"),
+        new("接口追踪明细", "RunEndpointTraceShown", ["EndpointTraceDialog"], true, "第二百五十轮",
+            "docs/NOTES.md 第二百五十轮：真的 Show() 出来之后量到接口清单宿主 286px、清单本体 276px（扣掉表头装得下 12 行），窗体高改按「接口清单要给几行」算"),
         new("手工填写说明", "Cases", ["ManualDraftDialog"], false, "第二百四十三轮",
             "docs/NOTES.md 第二百四十三轮：同一句挂账——这一屏至今只被构造过，没有一段真的把它显示出来"),
         new("扫描警告", "Cases", ["ScanWarningsDialog"], false, "第二百四十三轮",
