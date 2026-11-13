@@ -96,7 +96,9 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        DpiScale.Apply(this, new Size(1000, 720));
+        // 窗体高按「接口清单要给几行」算（CheckResultsLayout）：720 时接口清单只剩 140px、扣掉表头装得下 5 行，
+        // 而这一屏的主内容就是那张清单（第二百四十八轮 wine 96 档实测）。
+        DpiScale.Apply(this, new Size(1000, CheckResultsLayout.DialogHeight));
         BackColor = UiTokens.Panel;
         Font = UiTokens.Body.Value;
 

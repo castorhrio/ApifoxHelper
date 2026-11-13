@@ -291,6 +291,9 @@ internal static class Program
         Section("连接与写入探测真的显示出来（四块停靠区高度对客户区、结果区装得下七项探测结果、清单不出横向滚动条，真实控件量）", nameof(RunCapabilitiesShown));
         RunCapabilitiesShown(services, dataRoot);
 
+        Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
+        RunCheckResultsShown(services, dataRoot);
+
         Section("完整旅程单次运行（配置 → 任务 → 扫描 → 规则提取 → 审阅 → 回写 → 核对 → 报告）", nameof(RunFullJourney));
         RunFullJourney(services, dataRoot);
 
@@ -6329,6 +6332,181 @@ internal static class Program
                     $"结果清单出了横向滚动条：列宽合计 {columnSum}px 超过清单可视宽 {visible}px——「详情」那一列在真实那一屏上被藏。");
             }
         });
+    }
+
+
+    /// <summary>
+    /// 差异检查结果这一屏「真的显示出来」之后量一次（第二百四十八轮，简报 P0-1，具名 pass：layout + harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百四十六轮把「哪些屏真的显示过」登记成表并配了门，登记里这一屏
+    /// （<c>CheckResultsDialog</c>）标的是<b>未量</b>——它至今只被 <c>Cases</c> 里 <c>new</c> 一次 + 建句柄，
+    /// 而一张没显示过的窗体 <c>ClientSize</c> 的高是 0，量到的数不能读成「放得下」。第二百四十七轮
+    /// commit message 把这一屏明确挂账成「计划中的新切片…一行未写——留给下一轮，不冒充已做」。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：真的 <c>Show()</c> 出来（任务目录里先落一份检查结果，走产品自己的读取路径），
+    /// 然后读三件事——① 七块停靠区（顶部两行 + 底部四块 + 填满的接口清单）的高度加起来是不是等于客户区高；
+    /// ② 接口清单这一刻装得下几行（这一屏的主内容就是这张清单）；③ 两张清单的列宽合计对可视宽
+    /// （出不出横向滚动条）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判观感（字体、留白随 G-D5 真机复核），不判检查本身跑不跑得通
+    /// （那要真实 Apifox），也不判「这一屏该不该这么分」——量的是现状。判据只在设计档成立：
+    /// 125% / 200% 档窗体被虚拟屏截断，那一刻的行数属于「量不到」而不是「放不下」（与 <c>RunCapabilitiesShown</c>
+    /// 同一取舍）。<b>这一跑是 wine + Xvfb 模拟器，不是真机。</b>
+    /// </para>
+    /// </summary>
+    private static void RunCheckResultsShown(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "检查结果显示冒烟" });
+        tasks.Write(task.Id, TaskFiles.Diff, CheckResultsFixture());
+
+        RunAction("差异检查结果：真的显示出来之后，七块停靠区高度加起来等于客户区、接口清单装得下八行、两张清单都不出横向滚动条（真实控件量）", () =>
+        {
+            using var dialog = new CheckResultsDialog(tasks, task);
+            dialog.Show();
+            Application.DoEvents();
+
+            // 七块停靠区按产品自己的停靠方式认（接口清单 Fill、顶部两行 Top、底部四块 Bottom）：
+            // 认不出就点名，不按控件顺序猜。
+            var docked = dialog.Controls.Cast<Control>().ToList();
+            var listHost = docked.SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的接口清单宿主：停靠分法变了，本段量测口径需要重定。");
+            var tops = docked.Where(control => control.Dock == DockStyle.Top).ToList();
+            var bottoms = docked.Where(control => control.Dock == DockStyle.Bottom).ToList();
+            if (tops.Count != 2)
+            {
+                throw new InvalidOperationException($"顶部停靠区有 {tops.Count} 块，期望 2 块（标题行 + 筛选行）：本段量测口径需要重定。");
+            }
+            if (bottoms.Count != 4)
+            {
+                throw new InvalidOperationException($"底部停靠区有 {bottoms.Count} 块，期望 4 块（按钮行 + 模型清单 + 条目详情 + 问题清单）：本段量测口径需要重定。");
+            }
+
+            // 接口清单按整个表头序列认（这一屏有两张清单，只数列数会撞车）。
+            var endpointList = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["接口", "名称", "状态", "阻断"]))
+                ?? throw new InvalidOperationException("这一屏找不到表头为「接口 / 名称 / 状态 / 阻断」的接口清单：列增删或改名了，本段量测口径需要重定。");
+            var modelList = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["模型", "映射", "状态", "用于接口", "范围外影响"]))
+                ?? throw new InvalidOperationException("这一屏找不到表头为「模型 / 映射 / 状态 / 用于接口 / 范围外影响」的模型清单：列增删或改名了，本段量测口径需要重定。");
+
+            var client = dialog.ClientSize;
+            var sum = listHost.Height + tops.Sum(control => control.Height) + bottoms.Sum(control => control.Height);
+
+            var realRows = endpointList.Items.Count;
+            var rowHeight = realRows > 0 ? Math.Max(1, endpointList.Items[0].Bounds.Height) : Math.Max(1, endpointList.Font.Height);
+            var lastBottom = realRows > 0 ? endpointList.Items[^1].Bounds.Bottom : 0;
+            // 表头先吃掉一截：只按「清单高 / 行高」算会把表头那 24px 也算成一行（第二百四十七轮在探测那一屏
+            // 撞过同一处：清单 147px、7 × 21 = 147px，滚动条照样在）。表头高由「第 N 行底边 − N × 行高」现算。
+            var headerHeight = realRows > 0 ? Math.Max(0, lastBottom - realRows * rowHeight) : 0;
+            var capacity = Math.Max(0, endpointList.ClientSize.Height - headerHeight) / rowHeight;
+            var vertical = HasScrollBar(endpointList, WsVscroll);
+            var horizontal = HasScrollBar(endpointList, WsHscroll);
+            var endpointColumns = endpointList.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
+            var endpointColumnSum = endpointColumns.Sum();
+            var endpointVisible = endpointList.ClientSize.Width;
+            var modelColumns = modelList.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
+            var modelColumnSum = modelColumns.Sum();
+            var modelVisible = modelList.ClientSize.Width;
+            var modelHorizontal = HasScrollBar(modelList, WsHscroll);
+
+            _lines.Add(
+                $"     差异检查结果：{DpiContext(dialog)}、窗体客户区 {client.Width}×{client.Height}px；" +
+                $"七块停靠区 顶部 {string.Join(" + ", tops.Select(control => control.Height + "px"))} + 接口清单 {listHost.Height}px + " +
+                $"底部 {string.Join(" + ", bottoms.Select(control => control.Height + "px"))} = {sum}px" +
+                (sum == client.Height ? "（等于客户区高）" : $"（与客户区高差 {sum - client.Height}px）") +
+                $"；接口清单 {realRows} 行、行高 {rowHeight}px、清单高 {endpointList.ClientSize.Height}px、约装 {capacity} 行、" +
+                $"第 {realRows} 行底边 {lastBottom}px（表头占 {headerHeight}px）；" +
+                $"接口清单列宽 [{string.Join(", ", endpointColumns)}] 合计 {endpointColumnSum}px 对可视宽 {endpointVisible}px；" +
+                $"模型清单列宽 [{string.Join(", ", modelColumns)}] 合计 {modelColumnSum}px 对可视宽 {modelVisible}px；" +
+                $"控件自己报的滚动条状态：接口清单 竖向{(vertical ? "在" : "不在")}、横向{(horizontal ? "在" : "不在")}；" +
+                $"模型清单 横向{(modelHorizontal ? "在" : "不在")}");
+
+            // 判据只在设计档成立：125% / 200% 档窗体被虚拟屏截断，那一刻的行数属于「量不到」而不是「放不下」。
+            if (DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())) return;
+
+            if (sum != client.Height)
+            {
+                throw new InvalidOperationException(
+                    $"七块停靠区的高度加起来是 {sum}px，客户区高 {client.Height}px（差 {sum - client.Height}px）：" +
+                    "停靠分法漏了一块或叠了一块，这一屏的某一块在真实窗口里会被压掉。");
+            }
+
+            if (capacity < CheckResultsLayout.MainRows)
+            {
+                throw new InvalidOperationException(
+                    $"接口清单这一刻只装得下 {capacity} 行（清单高 {endpointList.ClientSize.Height}px、行高 {rowHeight}px），" +
+                    $"判据是 {CheckResultsLayout.MainRows} 行：这一屏的主内容就是这张清单，装不下就等于「检查结果看不见」，" +
+                    "不能读成「放得下」。");
+            }
+
+            if (horizontal)
+            {
+                throw new InvalidOperationException(
+                    $"接口清单出了横向滚动条：列宽合计 {endpointColumnSum}px 超过清单可视宽 {endpointVisible}px——「阻断」那一列在真实那一屏上被藏。");
+            }
+
+            if (modelHorizontal)
+            {
+                throw new InvalidOperationException(
+                    $"模型清单出了横向滚动条：列宽合计 {modelColumnSum}px 超过清单可视宽 {modelVisible}px——「范围外影响」那一列在真实那一屏上被藏。");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 差异检查结果这一屏的夹具（第二百四十八轮）：12 个接口、6 个模型、2 条问题。
+    /// <para>
+    /// <b>为什么是 12 行</b>：真实项目上这一屏动辄几十上百个接口，而本段要量的是「主清单这一刻装得下几行」——
+    /// 行数少于判据时量到的容量会被行数截住（清单不会为了空行撑高），所以夹具行数必须多于判据行数。
+    /// 语义是真的（状态、阻断、模型映射都按产品自己的字段填），几何才是真的。
+    /// </para>
+    /// </summary>
+    private static CheckResult CheckResultsFixture()
+    {
+        var statuses = new[] { "new", "structure", "docs", "unchanged", "blocked", "sourceOnly" };
+        return new CheckResult
+        {
+            ComputedAt = DateTimeOffset.Now,
+            TaskRevision = 1,
+            StructureSource = "swagger",
+            SnapshotAt = DateTimeOffset.Now,
+            SnapshotComplete = true,
+            Endpoints =
+            [
+                .. Enumerable.Range(1, 12).Select(i => new EndpointCheck
+                {
+                    Key = $"GET /api/probe/{i}",
+                    Method = "GET",
+                    Path = $"/api/probe/{i}",
+                    InSource = true,
+                    InSwagger = true,
+                    InRemote = i % 3 != 0,
+                    RemoteId = i % 3 != 0 ? 9000 + i : null,
+                    RemoteName = i % 3 != 0 ? $"探针查询 {i}" : null,
+                    Status = statuses[(i - 1) % statuses.Length],
+                    Blockers = i % 5 == 0 ? ["响应契约未确认"] : [],
+                }),
+            ],
+            Models =
+            [
+                .. Enumerable.Range(1, 6).Select(i => new ModelCheck
+                {
+                    Name = $"ProbeModel{i}",
+                    MappingState = i % 2 == 0 ? "mapped" : "candidate",
+                    Candidates = i % 2 == 0 ? [] : [9000 + i],
+                    Status = i % 3 == 0 ? "changed" : "unchanged",
+                    UsedBy = [$"GET /api/probe/{i}"],
+                }),
+            ],
+            Problems = ["分支概览读取失败：CLI 返回非零退出码。", "远端有、源中没有（范围内）：GET /api/probe/99"],
+        };
     }
 
     /// <summary>这一刻这条清单上有没有那一根滚动条：读控件自己的窗口样式位，不按行数猜。</summary>

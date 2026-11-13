@@ -135,8 +135,8 @@ internal static class MeasuredScreens
             "docs/NOTES.md 第二百四十七轮：真的 Show() 出来之后量到结果区只剩 82px、清单本体 39px（装得下 1 行），窗体高改按「结果区要给几行」算"),
 
         // ── 未量：冒烟器只 new 一次 + 建句柄，从不显示 ──
-        new("契约检查结果", "Cases", ["CheckResultsDialog"], false, "第二百四十三轮",
-            "docs/NOTES.md 第二百四十三轮：同一句挂账——只构造不显示的屏，ClientSize 的高是 0，量到的数不能读成「放得下」"),
+        new("契约检查结果", "RunCheckResultsShown", ["CheckResultsDialog"], true, "第二百四十八轮",
+            "docs/NOTES.md 第二百四十八轮：真的 Show() 出来之后量到接口清单只剩 140px（扣掉表头装得下 5 行），窗体高改按「接口清单要给几行」算"),
         new("接口追踪明细", "RunActionRowFit", ["EndpointTraceDialog"], false, "第二百四十三轮",
             "docs/NOTES.md 第二百四十三轮：同一句挂账；本屏只在按钮行高度那一段被构造（那一段不显示窗体）"),
         new("手工填写说明", "Cases", ["ManualDraftDialog"], false, "第二百四十三轮",
