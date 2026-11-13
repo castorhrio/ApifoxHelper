@@ -174,8 +174,9 @@ public class ProfileJumpTests
     /// 红或绿：红的时候看不出是文案错了还是判据脆，绿的时候可能句子里正指着一颗按钮。
     /// </para>
     /// <para>
-    /// <b>现在判什么</b>：① 句子里不含配置页上任何一颗按钮的字面（「重试」取自
-    /// <see cref="ProfileLoadState.RetryLabel"/>，其余三颗是配置页工具栏与选中态上的按钮）；
+    /// <b>现在判什么</b>：① 句子里不含配置页上任何一颗按钮的字面（表在 <see cref="LandingButtonLabels"/>，
+    /// 第二百六十九轮起那张表与配置页源码<b>双向对账</b>，见
+    /// <see cref="LandingButtonTable_CoversEveryButtonOnTheConfigPage"/>）；
     /// ② 除配置名那一对「」之外，句子里不再有别的「」——这一条是<b>兜底</b>：将来新增一颗按钮、
     /// 名字没进上面那张表，只要它被「」括起来指路，这里仍会红。
     /// </para>
@@ -188,8 +189,8 @@ public class ProfileJumpTests
     private static List<string> LandingProblems(string text, string profileName)
     {
         var problems = new List<string>();
-        // ① 配置页上真实存在的按钮字面（「重试」走常量，其余三颗是工具栏与选中态上的按钮）。
-        foreach (var label in new[] { ProfileLoadState.RetryLabel, "编辑", "连接与写入探测", "新建配置" })
+        // ① 配置页上真实存在的按钮字面（表在 LandingButtonLabels，与配置页源码双向对账）。
+        foreach (var label in LandingButtonLabels)
         {
             if (text.Contains(label, StringComparison.Ordinal))
             {
@@ -229,6 +230,159 @@ public class ProfileJumpTests
             p => p.Contains("别的「」", StringComparison.Ordinal));
         // ④ 合规的那一句：一处都不报。
         Assert.Empty(LandingProblems(ProfileJump.LandedStatus("示例配置"), "示例配置"));
+    }
+
+    /// <summary>
+    /// 「落到那一行」那句话不许点名的按钮字面（第二百六十九轮，简报 P1-1）。
+    /// <para>
+    /// <b>为什么把它从方法体里提出来</b>：第二百六十六轮这张表是写在 <see cref="LandingProblems"/> 里的
+    /// 一个数组字面量，注释写着「配置页上真实存在的按钮」——那是一句<b>承诺</b>，不是判据。
+    /// 配置页后来多了「刷新」与「清空筛选」两颗按钮，表没跟着长，于是
+    /// 「已定位到配置「X」，点「刷新」看看」这种句子照样绿：判据看不见它要判的东西。
+    /// 本仓第二百零九轮的教训是「承诺应有门」，故第二百六十九轮把表提成字段，并让
+    /// <see cref="LandingButtonTable_CoversEveryButtonOnTheConfigPage"/> 拿配置页源码与它双向对账。
+    /// </para>
+    /// <para>
+    /// <b>「新建配置」为什么是字面量而不是常量</b>：它在 <c>ProjectsPage</c> 里是 <c>private const</c>，
+    /// 测试工程取不到。取不到正好——这一格由那条双向门去核（页上那颗按钮的字面解析出来必须等于这一串），
+    /// 而不是靠引用同一个常量把「表与页一致」变成一句恒等式。
+    /// </para>
+    /// </summary>
+    private static readonly string[] LandingButtonLabels =
+    [
+        ProfileLoadState.RetryLabel,
+        "编辑",
+        "连接与写入探测",
+        "刷新",
+        "新建配置",
+        ListFilter.ClearActionLabel,
+    ];
+
+    /// <summary>
+    /// 那张按钮表与配置页<b>双向对账</b>（第二百六十九轮，简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="LandingProblems"/> 的注释写着「配置页上真实存在的按钮」，
+    /// 而这句话此前<b>没有任何东西判</b>——页上新增一颗按钮，表不跟着长，判据就静默地少判一颗；
+    /// 反过来表里留着一颗页上已经没有的按钮，判据会以「点名了按钮」的名义红一句没人看得懂的话。
+    /// 两个方向都要判，所以叫双向。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那句话该不该点名按钮（那是产品判断，由
+    /// <see cref="LandedStatus_ConfirmsTheLandingWithoutNamingAButton"/> 的文案真值表判），
+    /// 也不判按钮的可用状态（那一条在 <c>RefreshDetailActions</c> 的单一落点门里）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LandingButtonTable_CoversEveryButtonOnTheConfigPage()
+    {
+        var page = ConfigPageButtonLabels();
+        Assert.True(page.Count >= 4,
+            $"从配置页源码里只抽出 {page.Count} 颗按钮（{string.Join(" / ", page)}）：取法退化了，"
+            + "这时「表与页一致」是一句空话。");
+        Assert.Empty(ButtonTableProblems(page, LandingButtonLabels));
+    }
+
+    /// <summary>
+    /// 上面那条双向门<b>自己</b>被抓得住（第二百六十九轮）：三发注入各报一处，合规那一份不报。
+    /// </summary>
+    [Fact]
+    public void ButtonTableDetector_ReportsTheBreaksItMustCatch()
+    {
+        var page = new[] { "新建配置", "编辑", "刷新" };
+        var table = new[] { "新建配置", "编辑", "刷新" };
+
+        // ① 页上多了一颗、表没跟着长：判据看不见它（这正是第二百六十九轮补的那一处）。
+        var missing = ButtonTableProblems([.. page, "清空筛选"], table);
+        Assert.Contains(missing, p => p.Contains("清空筛选", StringComparison.Ordinal) && p.Contains("表里没有", StringComparison.Ordinal));
+
+        // ② 表里留着一颗页上已经没有的按钮：判据在判一颗不存在的东西。
+        var stale = ButtonTableProblems(page, [.. table, "导出配置"]);
+        Assert.Contains(stale, p => p.Contains("导出配置", StringComparison.Ordinal) && p.Contains("页上没有", StringComparison.Ordinal));
+
+        // ③ 合规的那一对：一处都不报（上面两条若把判据改成恒真，这一条会红）。
+        Assert.Empty(ButtonTableProblems(page, table));
+    }
+
+    /// <summary>
+    /// 配置页上真实存在的按钮字面——<b>从源码里抽</b>，不在这里抄第二份。
+    /// <para>
+    /// 取法：<c>ProjectsPage</c> 类体里每一处 <c>Ui.Ghost(…)</c> / <c>Ui.Primary(…)</c> 的实参，
+    /// 字面量直接取，常量名顺着 <c>const string X = …</c> 跟下去（最多三跳：
+    /// <c>ProfileLoadState.RetryLabel</c> → <c>LoadFailureState.RetryLabel</c> → <c>"重试"</c>）。
+    /// 跟不下去就<b>抛</b>，不静默跳过——静默跳过等于「新按钮没进表」这件事永远不红。
+    /// </para>
+    /// </summary>
+    private static List<string> ConfigPageButtonLabels()
+    {
+        var body = SourceSlice.BodyOf(ProjectsPage, "internal sealed class ProjectsPage : UserControl, INativePage");
+        var labels = new List<string>();
+        foreach (Match call in Regex.Matches(body, @"Ui\.(?:Ghost|Primary)\((?<arg>[^)]*)\)"))
+        {
+            labels.Add(ResolveLabel(call.Groups["arg"].Value.Trim()));
+        }
+
+        return labels.Distinct(StringComparer.Ordinal).OrderBy(label => label, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// 把一个按钮实参解析成字面（<c>"编辑"</c> → 编辑；<c>ListFilter.ClearActionLabel</c> → 清空筛选）。
+    /// 解析不出来即抛：那说明配置页上多了一种本门不认识的写法，先扩这里，别让它静默漏过去。
+    /// </summary>
+    private static string ResolveLabel(string argument)
+    {
+        if (argument.Length >= 2 && argument[0] == '"' && argument[^1] == '"')
+        {
+            return argument[1..^1];
+        }
+
+        var name = argument;
+        for (var hop = 0; hop < 3; hop++)
+        {
+            var dot = name.IndexOf('.', StringComparison.Ordinal);
+            var (file, member) = dot < 0 ? ("ProjectsPage", name) : (name[..dot], name[(dot + 1)..]);
+            var source = file == "ProjectsPage" ? ProjectsPage : Repo.Source("Desktop", "Native", file + ".cs");
+            var declared = Regex.Match(source, @"const string " + Regex.Escape(member) + @" = (?<value>[^;]+);");
+            if (!declared.Success)
+            {
+                throw new InvalidOperationException(
+                    $"配置页上的按钮实参「{argument}」解析不出来（在 {file}.cs 里找不到 const string {member}）："
+                    + "先扩 ResolveLabel，再让这张表与页对账——静默跳过等于这颗按钮永远不进表。");
+            }
+
+            var value = declared.Groups["value"].Value.Trim();
+            if (value.Length >= 2 && value[0] == '"' && value[^1] == '"') return value[1..^1];
+            name = value;
+        }
+
+        throw new InvalidOperationException($"配置页上的按钮实参「{argument}」跟了三跳还没落到字面量上：常量链太深或成了环。");
+    }
+
+    /// <summary>
+    /// 按钮表与配置页的对账判据本体（第二百六十九轮）：两侧进、问题清单出（空清单 = 对得上）。
+    /// <para>
+    /// 与 <see cref="LandingProblems"/>、<see cref="RevealWiringProblems"/> 同一做法——判据是纯函数，
+    /// 注入才喂得进去。
+    /// </para>
+    /// </summary>
+    private static List<string> ButtonTableProblems(IEnumerable<string> pageLabels, IEnumerable<string> tableLabels)
+    {
+        var page = pageLabels.ToHashSet(StringComparer.Ordinal);
+        var table = tableLabels.ToHashSet(StringComparer.Ordinal);
+        var problems = new List<string>();
+
+        foreach (var label in page.Except(table).OrderBy(l => l, StringComparer.Ordinal))
+        {
+            problems.Add($"配置页上有一颗「{label}」，而 LandingButtonLabels 表里没有它："
+                + "那句话点名这颗按钮时判据看不见——新增按钮请登记，登记完这条门才会替你判。");
+        }
+
+        foreach (var label in table.Except(page).OrderBy(l => l, StringComparer.Ordinal))
+        {
+            problems.Add($"LandingButtonLabels 表里有「{label}」，而配置页上没有这颗按钮："
+                + "表在判一颗不存在的东西，红的时候没人看得懂它在说什么。");
+        }
+
+        return problems;
     }
 
     /// <summary>
@@ -342,7 +496,7 @@ public class ProfileJumpTests
         Assert.True(clear > decide, "清空筛选必须落在 ShouldClearFilter 那一支里。");
         Assert.True(secondSearch > clear, "清空筛选之后必须再找一次，否则那一跳落不下去。");
         // 清空筛选只有一处（唯一路径）：多一处就是「两条路各清一次」。
-        Assert.Equal(1, Regex.Matches(body, @"ClearListFilter\(\);").Count);
+        Assert.Single(Regex.Matches(body, @"ClearListFilter\(\);"));
     }
 
     /// <summary>

@@ -7,11 +7,11 @@
 # 这份记的是 wine + Xvfb 模拟器的读数，不是 Windows 真机结果（G-D5 仍 [ ]，到期日 2026-11-20）。
 script=demo.sh
 tool=wine + Xvfb
-date=2026-11-13
-source=5f06e5fa7e6c506da01817ba4771e10cebfb534b
-tier=96 passed=255 failed=0 exit=0
-tier=120 passed=255 failed=0 exit=0
-tier=192 passed=255 failed=0 exit=0
+date=2026-11-14
+source=5a4dbd5703d008c26052bf34f94a832c198fbe59
+tier=96 passed=257 failed=0 exit=0
+tier=120 passed=257 failed=0 exit=0
+tier=192 passed=257 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -27,6 +27,7 @@ section=RunContractsInteraction tier=96 passed=5 failed=0
 section=RunProfileFormLayout tier=96 passed=8 failed=0
 section=RunProfileLoadFailure tier=96 passed=5 failed=0
 section=RunProfileJumpRetry tier=96 passed=4 failed=0
+section=RunProfileJumpFilterKeep tier=96 passed=2 failed=0
 section=RunTaskLoadFailure tier=96 passed=5 failed=0
 section=RunReportsLoadFailure tier=96 passed=4 failed=0
 section=RunDecisionsLoadFailure tier=96 passed=6 failed=0
@@ -59,6 +60,7 @@ section=RunContractsInteraction tier=120 passed=5 failed=0
 section=RunProfileFormLayout tier=120 passed=8 failed=0
 section=RunProfileLoadFailure tier=120 passed=5 failed=0
 section=RunProfileJumpRetry tier=120 passed=4 failed=0
+section=RunProfileJumpFilterKeep tier=120 passed=2 failed=0
 section=RunTaskLoadFailure tier=120 passed=5 failed=0
 section=RunReportsLoadFailure tier=120 passed=4 failed=0
 section=RunDecisionsLoadFailure tier=120 passed=6 failed=0
@@ -91,6 +93,7 @@ section=RunContractsInteraction tier=192 passed=5 failed=0
 section=RunProfileFormLayout tier=192 passed=8 failed=0
 section=RunProfileLoadFailure tier=192 passed=5 failed=0
 section=RunProfileJumpRetry tier=192 passed=4 failed=0
+section=RunProfileJumpFilterKeep tier=192 passed=2 failed=0
 section=RunTaskLoadFailure tier=192 passed=5 failed=0
 section=RunReportsLoadFailure tier=192 passed=4 failed=0
 section=RunDecisionsLoadFailure tier=192 passed=6 failed=0
