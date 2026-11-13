@@ -128,7 +128,8 @@ public class PageNamesTests
             var actual = Regex.Matches(source, Regex.Escape(name)).Count;
             Assert.True(actual == count,
                 $"{file} 里 {name} 出现 {actual} 处，登记的是 {count} 处——"
-                + "新加/删掉一处引导文案要回来改 PageNamesTests.GuideSites 这个数。");
+                + "新加/删掉一处引导文案要回来改 PageNamesTests.GuideSites 这个数。"
+                + "若新增页面/对话框，先在这里登记次数（这一行就是登记处，别在别处另开一份）。");
         }
     }
 

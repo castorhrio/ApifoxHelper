@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.RegularExpressions;
 using ApifoxHelper.Desktop.Native;
 using Xunit;
@@ -181,6 +182,33 @@ public class EmptyStateActionTests
         Assert.Contains(Literal(page, "NewTaskLabel"), Literal(page, "EmptyHint"));
     }
 
+    // ---------- 判据自己被抓得住（第二百五十八轮，简报 P1-1） ----------
+
+    [Fact]
+    public void Resolve_UnknownPageName_IsRedInsteadOfSilentlyTasks()
+    {
+        // 注入自验：写一个 PageNames 里没有的名字，必须当场红——上一轮的写法会把它静默还原成「检查任务」。
+        var thrown = Assert.ThrowsAny<Exception>(() => Resolve("", "\"先在「\" + PageNames.Projcts + \"」\""));
+        Assert.Contains("PageNames.Projcts", thrown.Message);
+        Assert.Contains("PageNames.Projects", thrown.Message);
+        Assert.Contains("PageNames.Tasks", thrown.Message);
+    }
+
+    [Fact]
+    public void Resolve_KnownPageNames_MapToTheSharedConstants()
+    {
+        // 两个已知名字走映射，且映射的就是 PageNames 里那一份（不是这里抄的第二份）。
+        Assert.Equal(PageNames.Projects, Resolve("", "PageNames.Projects"));
+        Assert.Equal(PageNames.Tasks, Resolve("", "PageNames.Tasks"));
+        // 登记表与 PageNames 的公开常量逐一对上：往 PageNames 里加一个页面名，这里会点名要它一起被认。
+        Assert.Equal(
+            typeof(PageNames).GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+                .Select(field => "PageNames." + field.Name)
+                .OrderBy(id => id, StringComparer.Ordinal),
+            PageNameIds());
+    }
+
     // ---------- 设计基线回写 ----------
 
     [Fact]
@@ -216,7 +244,18 @@ public class EmptyStateActionTests
         return Resolve(source, match.Groups["rhs"].Value);
     }
 
-    /// <summary>把常量右值还原成最终文字：字面量原样、<c>PageNames.X</c> 取页面名、同文件常量递归展开。</summary>
+    /// <summary>
+    /// 把常量右值还原成最终文字：字面量原样、<c>PageNames.X</c> 取页面名、同文件常量递归展开。
+    /// <para>
+    /// <b>第二百五十八轮（简报 P1-1）修的是这里的一处静默落点</b>：上一轮把页面名收进
+    /// <see cref="PageNames"/> 之后，这一句写成了 <c>id == "PageNames.Projects" ? Projects : Tasks</c>——
+    /// 于是 <c>PageNames.Projcts</c>（拼错）、<c>PageNames.Profiles</c>（旧名）、甚至
+    /// <c>PageNames.Whatever</c> 全都被<b>当成「检查任务」</b>还原出来。空态说明里点错一个页面名，
+    /// 这条断言不但不红，还会拿一个错的页面名去比「说明文字里有没有那个按钮的名字」——
+    /// 门钉住的是一种写法，不是一条规则（第一百六十轮同一课），而这一次它连「写错了」都判不出来。
+    /// 现在改成：<b>已知的页面名走映射，未知的当场断言红</b>，并把「已知的是哪几个」写进失败信息。
+    /// </para>
+    /// </summary>
     private static string Resolve(string source, string rhs)
     {
         var text = new StringBuilder();
@@ -230,13 +269,39 @@ public class EmptyStateActionTests
             var id = part.Groups["id"].Value;
             if (id.StartsWith("PageNames.", StringComparison.Ordinal))
             {
-                text.Append(id == "PageNames.Projects" ? PageNames.Projects : PageNames.Tasks);
+                text.Append(PageNameOf(id));
                 continue;
             }
             text.Append(Literal(source, id));
         }
         return text.ToString();
     }
+
+    /// <summary>
+    /// <c>PageNames.X</c> → 页面名。映射<b>不在这里抄第二份</b>：直接读 <see cref="PageNames"/> 的公开常量，
+    /// 于是「往 PageNames 里加一个页面名」不需要回来改这里，而「写了一个 PageNames 里没有的名字」当场红。
+    /// </summary>
+    private static string PageNameOf(string id)
+    {
+        var field = typeof(PageNames).GetField(
+            id["PageNames.".Length..], BindingFlags.Public | BindingFlags.Static);
+        if (field is null || !field.IsLiteral || field.FieldType != typeof(string))
+        {
+            Assert.Fail($"{id} 不是 PageNames 里的页面名常量——空态说明点名的页面必须真的存在"
+                + "（第四十六轮「文字不指向不存在的按钮」同族，只是这次指向的是页面）。"
+                + $"已知的是：{string.Join("、", PageNameIds())}。");
+        }
+        return (string)field!.GetRawConstantValue()!;
+    }
+
+    /// <summary><see cref="PageNames"/> 里登记的全部页面名标识（<c>PageNames.X</c> 形状，按序数排序）。</summary>
+    private static string[] PageNameIds() =>
+        typeof(PageNames)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+            .Select(field => "PageNames." + field.Name)
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToArray();
 
     /// <summary>取 [start, end) 之间的源码段：把「在重建里接线」的断言限定在方法体内。</summary>
     private static string Slice(string source, string start, string end)
