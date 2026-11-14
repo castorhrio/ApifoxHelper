@@ -307,7 +307,7 @@ internal static class Program
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
-        Section("勾选页的键盘流（真的按一次 Ctrl+A：打开即选中第一条、键盘真的在清单上、可见行里可同步的勾上而不可同步的没勾、藏起来的行一个都不动；「清空」按勾选数启停，真实键）", nameof(RunSelectKeyboard));
+        Section("勾选页的键盘流（真的按一次 Ctrl+A 与一次空格：打开即选中第一条、键盘真的在清单上、可见行里可同步的勾上而不可同步的没勾、藏起来的行一个都不动；空格翻焦点行、翻得回来、不可同步的行按空格照旧勾不上；「清空」按勾选数启停三态，真实键）", nameof(RunSelectKeyboard));
         RunSelectKeyboard(services, dataRoot);
 
         Section("接口追踪明细真的显示出来（五块停靠区高度对客户区、接口清单装得下十二行、清单不出横向滚动条，真实控件量）", nameof(RunEndpointTraceShown));
@@ -7148,6 +7148,125 @@ internal static class Program
                     $"筛到 {visibleKeys.Count} 行后按一次 Ctrl+A，计数行写着「{countLabel.Text}」，" +
                     $"应当是「已选择 {expectedVisible.Count} 个接口」：计数与勾选对不上。");
             }
+
+            // ④ 空格翻焦点行（第二百九十轮）：真的按一次裸空格。
+            // 第二百八十九轮把空格收进 ListChecks 并与鼠标共用同一个翻转点，但**冒烟器一次都没按过**——
+            // 那一条自己挂的账就是本段。这里先把关键词清空回到全部行、把勾选清掉，再让焦点回到第一条：
+            // 量的是「按空格翻不翻得动这一行」，不是「筛选之后还剩几行」。
+            keyword.Text = "";
+            Application.DoEvents();
+            clearButton.PerformClick();
+            Application.DoEvents();
+            var first = list.Items[0];
+            Ui.SelectItem(first);
+            list.Focus();
+            Application.DoEvents();
+            var firstKey = (first.Tag as EndpointCheck)?.Key ?? "";
+            if (!expectedAll.Contains(firstKey, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"清单第一条是「{firstKey}」，产品口径算出的可同步行里没有它：" +
+                    "本段拿它当「可同步的那一行」用，夹具或排序变了，这一段的口径需要重定。");
+            }
+            PressSpace(dialog, list);
+            if (!first.Checked)
+            {
+                throw new InvalidOperationException(
+                    $"焦点在第一条「{firstKey}」上按了一次空格，那一行没被勾上：" +
+                    "键盘上「只勾这一行」这只手势在界面上按不出来（第二百八十九轮接的线没生效，或被系统那一支吞掉了）。");
+            }
+            if (!countLabel.Text.StartsWith("已选择 1 个接口", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"按一次空格勾上第一条之后，计数行写着「{countLabel.Text}」，应当是「已选择 1 个接口」：计数没跟着勾选走。");
+            }
+            if (!clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "按一次空格勾上一行之后，「清空」仍是禁用的：有东西可清时它必须可用（与 Ctrl+A 那一态同一条判据）。");
+            }
+
+            // ④' 再按一次空格：翻回去。翻回来之后计数行与「清空」一起回到空选中那一态。
+            PressSpace(dialog, list);
+            if (first.Checked)
+            {
+                throw new InvalidOperationException(
+                    $"焦点仍在第一条「{firstKey}」上再按一次空格，那一行还是勾着的：空格只翻一次、翻不回去，用户按错了没法撤回。");
+            }
+            if (countLabel.Text != "尚未勾选接口")
+            {
+                throw new InvalidOperationException(
+                    $"再按一次空格取消勾选之后，计数行写着「{countLabel.Text}」，应当是「尚未勾选接口」：计数没跟着勾选走。");
+            }
+            if (clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "再按一次空格取消勾选之后一行都没勾了，「清空」却仍是可用的：它清的是已勾的那一批，清完就没有可清的东西。");
+            }
+
+            // ⑤ 不可同步的那一行按空格照旧勾不上（ItemCheck 的拒绝路径）。
+            // 期望值仍取产品自己的口径：SyncSelection.Selectable 说它不可同步，界面就不该让它勾上。
+            var blockedRow = list.Items.Cast<ListViewItem>().FirstOrDefault(item =>
+                    item.Tag is EndpointCheck check && !SyncSelection.Selectable(task.OfflineMode, check.Status))
+                ?? throw new InvalidOperationException(
+                    "清单里找不到一条不可同步的接口：夹具变了，本段量不到「按空格也勾不上」这一支。");
+            var blockedKey = (blockedRow.Tag as EndpointCheck)?.Key ?? "";
+            Ui.SelectItem(blockedRow);
+            list.Focus();
+            Application.DoEvents();
+            PressSpace(dialog, list);
+            if (blockedRow.Checked)
+            {
+                throw new InvalidOperationException(
+                    $"焦点在不可同步的「{blockedKey}」上按了一次空格，那一行被勾上了：" +
+                    "不可同步的行勾上即弹回（ItemCheck 的拒绝路径），空格这条入口绕过去了。");
+            }
+            if (countLabel.Text != "尚未勾选接口")
+            {
+                throw new InvalidOperationException(
+                    $"在不可同步的「{blockedKey}」上按空格之后，计数行写着「{countLabel.Text}」，应当是「尚未勾选接口」：勾不上的行不该进计数。");
+            }
+            if (clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "在不可同步的那一行上按空格之后一行都没勾上，「清空」却仍是可用的：没有可清的东西时它必须禁用。");
+            }
+
+            // ⑥ 「清空」的第三态（第二百九十轮，简报 P0-2）：筛到只剩不可同步的行，按一次 Ctrl+A
+            // 一行都勾不上，「清空」仍禁用。第二百八十七轮把这一态挂账为「在签名里表达不出来」——
+            // 它要的是「可见行里一个可同步的都没有」这个前提，只有真的把清单筛成那样才成立。
+            keyword.Text = "无变化";
+            Application.DoEvents();
+            var unsyncableVisible = list.Items.Cast<ListViewItem>()
+                .Select(item => item.Tag as EndpointCheck)
+                .Where(check => check is not null)
+                .ToList();
+            if (unsyncableVisible.Count == 0 || unsyncableVisible.Count >= diff.Endpoints.Count)
+            {
+                throw new InvalidOperationException(
+                    $"关键词「无变化」之后清单有 {unsyncableVisible.Count} 行（共 {diff.Endpoints.Count} 行）：筛选没生效，第六段量到的不是「只剩不可同步的行」。");
+            }
+            if (unsyncableVisible.Any(check => SyncSelection.Selectable(task.OfflineMode, check!.Status)))
+            {
+                throw new InvalidOperationException(
+                    "关键词「无变化」之后清单里还有可同步的行：这一段要的是「可见行里一个可同步的都没有」，夹具变了，口径需要重定。");
+            }
+            PressCtrlA(dialog);
+            if (list.Items.Cast<ListViewItem>().Any(item => item.Checked))
+            {
+                throw new InvalidOperationException(
+                    "可见行全是不可同步的接口，按一次 Ctrl+A 却勾上了行：全选可同步不该勾上任何一行。");
+            }
+            if (countLabel.Text != "尚未勾选接口")
+            {
+                throw new InvalidOperationException(
+                    $"可见行全是不可同步的接口，按一次 Ctrl+A 之后计数行写着「{countLabel.Text}」，应当是「尚未勾选接口」。");
+            }
+            if (clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "可见行全是不可同步的接口、一行都没勾上，「清空」却是可用的：没有可清的东西时它必须禁用（第三态）。");
+            }
         });
     }
 
@@ -7178,6 +7297,24 @@ internal static class Program
         SetForegroundWindow(dialog.Handle);
         Application.DoEvents();
         SendKeys.SendWait("^a");
+        Application.DoEvents();
+    }
+
+    /// <summary>
+    /// 真按一次裸空格（第二百九十轮）：经系统键入把空格送进清单，焦点先交给清单本身。
+    /// <para>
+    /// 与 <see cref="PressCtrlA"/> 同一做法、同一理由：修饰键与按键都经系统键入，
+    /// 手工拼一条 <c>WM_KEYDOWN</c> 证明不了「界面上按不按得出来」。焦点必须显式交给清单——
+    /// 前几段在关键词框里打过字，键盘此刻不在清单上，不交过去的话空格落在框里（打出一个空格）。
+    /// </para>
+    /// </summary>
+    private static void PressSpace(Form dialog, ListView list)
+    {
+        dialog.Activate();
+        SetForegroundWindow(dialog.Handle);
+        list.Focus();
+        Application.DoEvents();
+        SendKeys.SendWait(" ");
         Application.DoEvents();
     }
 

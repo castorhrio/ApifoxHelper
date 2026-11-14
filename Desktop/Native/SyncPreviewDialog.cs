@@ -349,6 +349,13 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         var caption = Ui.Caption("勾选要纳入同步的接口（无变化、阻断与仅源码不可同步）；生成计划只读远端、不写入。");
         caption.Dock = DockStyle.Top;
         caption.Padding = new Padding(UiTokens.Lg, UiTokens.Md, UiTokens.Lg, UiTokens.Sm);
+        // 键盘手势的可见提示（第二百九十轮，简报 P1-1）：这一页的三只手势——空格翻这一行（第二百八十九轮）、
+        // Ctrl+A 全选可同步（第二百八十四轮）、Ctrl+C 复制这一行的接口（第五十二轮）——都已接线，
+        // 而界面上一个字都没说：隐式手势对知道的人省事，对不知道的人等于不存在。
+        // 只补一句能读的话：不新增手势、不改作用域、不动可同步口径（三处判定仍各在自己的口径文件里）。
+        var keys = Ui.Caption("空格翻这一行，Ctrl+A 全选可同步，Ctrl+C 复制这一行的接口。");
+        keys.Dock = DockStyle.Top;
+        keys.Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm);
         // 筛选行取工厂（第六十八轮立的形状）：这一页只有关键词框、没有筛选下拉，故走 counts 可缺省的那一支，
         // 前两列留空、关键词框仍在第 4 列、末列吸收剩余宽度——不为它另起一种排布。
         // 底色随本页（Bg）：工厂给的是对话框的 Panel 底，这一页是页面底。
@@ -362,6 +369,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         // 停靠按集合倒序生效：说明行最先停靠（顶部），筛选行其次，清单填满剩余空间。
         page.Controls.Add(listHost);
         page.Controls.Add(filterRow);
+        page.Controls.Add(keys);
         page.Controls.Add(caption);
         return page;
     }

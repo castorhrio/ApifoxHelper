@@ -381,7 +381,7 @@ public class CaptionBrevityTests
         var captions = Captions();
         var screens = new (string File, int Floor)[]
         {
-            ("SyncPreviewDialog.cs", 6),   // 勾选页 1 + 预览页 3 + 底部区调用点 2
+            ("SyncPreviewDialog.cs", 7),   // 勾选页 2（说明行 + 键盘手势提示，第二百九十轮）+ 预览页 3 + 底部区调用点 2
             ("ReportsDialog.cs", 1),
             ("EvidenceDialog.cs", 1),      // 片段区说明行（共享常量）
         };
