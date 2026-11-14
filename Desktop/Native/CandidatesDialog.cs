@@ -227,6 +227,10 @@ internal sealed class CandidatesDialog : DpiAwareForm
     /// </summary>
     private void LoadAll()
     {
+        // 每读一次先收起那颗按钮：成功路径不经 ShowHint（那里是唯一的收起处），不先收就会把失败态那颗
+        // 「重试」留在已经正常的屏上——与差异确认 LoadAll 开头同一形状（先收起，失败那两支各自展开）。
+        // 第三百零四轮在真实控件上点过一次才看见：修好候选后清单与计数都回来了，按钮却还亮着。
+        _retry.Visible = false;
         DraftStore? store;
         try
         {

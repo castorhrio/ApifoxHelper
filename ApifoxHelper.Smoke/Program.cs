@@ -271,6 +271,15 @@ internal static class Program
         Section("任务日志读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunJournalLoadFailure));
         RunJournalLoadFailure(services, dataRoot);
 
+        Section("注释候选读取失败态（正常 → 候选坏 → 点一次换一种失败、原因跟着换 → 修好恢复 → 扫描结果坏 → 空态不给那颗按钮，真实控件）", nameof(RunCandidatesLoadFailure));
+        RunCandidatesLoadFailure(services, dataRoot);
+
+        Section("补充说明读取失败态（正常 → 检查结果坏 → 点一次换一种失败、原因跟着换 → 修好恢复 → 已保存补充坏且保存停用 → 尚未检查不给那颗按钮，真实控件）", nameof(RunSupplementsLoadFailure));
+        RunSupplementsLoadFailure(services, dataRoot);
+
+        Section("注释回写读取失败态（正常 → 未扫描时按钮停用 → 候选坏时提示指名那颗按钮且它可用 → 点一次换一种失败 → 修好后点一次计划回来，真实控件）", nameof(RunApplyPlanLoadFailure));
+        RunApplyPlanLoadFailure(services, dataRoot);
+
         Section("极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）", nameof(RunDetailBreak));
         RunDetailBreak(services, dataRoot);
 
@@ -4530,6 +4539,775 @@ internal static class Program
         }
         finally
         {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 注释候选对话框读取失败态的真实控件交互（第三百零四轮，控制仓简报 P0-3）。
+    /// <para>
+    /// <b>补的是哪一笔挂账</b>：第三百零三轮把这一屏的两种读取失败各接上那颗「重试」，并把内联在
+    /// <c>OnLoad</c> 的读取收进 <c>LoadAll</c>（「打开」与那颗按钮从此调同一个入口）。接的时候只加了
+    /// 源码切片门（<c>LoadFailureRetryCoverageTests</c> 那一族），<b>屏上一次都没有真的点过</b>——
+    /// 「点「重试」再读一次」这句话在 wine 上没有任何读数，那一轮的账写在这里。
+    /// </para>
+    /// <para>
+    /// 形状照差异确认那一族（第一百五十三轮）：正常 → 失败 → 重试仍失败 → 修好后重试恢复 → 非失败态不给那颗按钮。
+    /// 失败是真的：把任务目录里的 comment-drafts.json / symbols.json 写成不是 JSON 的字节，
+    /// 让 <c>TaskStore.Read</c> 抛它本来会抛的异常；不伪造异常、不调私有方法、不换实现。
+    /// </para>
+    /// </summary>
+    private static void RunCandidatesLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var scan = services.GetRequiredService<SourceScanService>();
+        var drafts = services.GetRequiredService<DraftService>();
+
+        CheckTask? task = null;
+        string? draftsPath = null;
+        string? symbolsPath = null;
+        string? goodDrafts = null;
+        string? jsonFailureSentence = null;
+        FileStream? hold = null;
+        CandidatesDialog? dialog = null;
+        try
+        {
+            RunAction("候选失败态：准备两条候选与一份扫描结果（真实服务落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe11.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "候选失败态配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe11.Api/Probe11.Api.csproj",
+                    AllowedSourcePaths = ["Probe11.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "候选失败态任务" });
+                var job = new JobContext(new JobInfo { Id = "job-smoke-scan-11", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+                Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+                var output = tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)
+                    ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+                var slots = output.Slots.Where(s => s.Status == "missing" && s.Editable).Take(2).ToList();
+                if (slots.Count < 2)
+                {
+                    throw new InvalidOperationException($"可生成候选的缺失位置只有 {slots.Count} 个，不足以验证两条候选。");
+                }
+                var json = "{\"format\":\"" + DraftService.ResultFormat + "\",\"candidates\":["
+                    + "{\"slotId\":\"" + slots[0].Id + "\",\"text\":\"按名称查询探针数据。\"},"
+                    + "{\"slotId\":\"" + slots[1].Id + "\",\"text\":\"探针名称。\"}]}";
+                var result = Task.Run(() => drafts.ImportResultAsync(task.Id, json, CancellationToken.None)).GetAwaiter().GetResult();
+                if (result.Imported != 2)
+                {
+                    throw new InvalidOperationException($"导入 {result.Imported} 条候选，期望 2 条：" + string.Join("；", result.Errors));
+                }
+                draftsPath = tasks.FilePath(task.Id, TaskFiles.Drafts);
+                symbolsPath = tasks.FilePath(task.Id, TaskFiles.Symbols);
+                goodDrafts = File.ReadAllText(draftsPath);
+                if (drafts.Load(task.Id).Candidates.Count != 2)
+                {
+                    throw new InvalidOperationException("落盘后从磁盘重读的候选不是 2 条。");
+                }
+                _lines.Add($"     两份磁盘副本各留了一份原文：候选 {goodDrafts.Length} 字、扫描结果 {new FileInfo(symbolsPath).Length} 字节，后面每一段都按它复原");
+            });
+
+            RunAction("候选失败态：正常打开时清单可见且不显示「重试」（真实控件）", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new CandidatesDialog(drafts, tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var list = CandidateList(dialog);
+                if (!list.Visible)
+                {
+                    throw new InvalidOperationException("正常打开时清单不可见（对话框停在提示态）。");
+                }
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"清单有 {list.Items.Count} 行，候选有 2 条。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("两份数据都读出来了，「重试」却亮着：它只在读取失败时才是下一步。");
+                }
+                if (!KeywordBox(dialog).Enabled || !StatusFilter(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("正常打开时筛选器是停用的：有候选可筛的那一档没走到。");
+                }
+                _lines.Add($"     正常打开：清单 {list.Items.Count} 行，计数行「{CandidateCountsLabel(dialog).Text}」，那颗按钮没亮");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("候选失败态：注释候选读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                if (task is null || draftsPath is null) throw new InvalidOperationException("上一段没有产出磁盘副本。");
+                File.WriteAllText(draftsPath, "这不是 JSON");
+                dialog = new CandidatesDialog(drafts, tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("候选读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                if (!hint.Text.StartsWith(LoadFailureState.Candidates.DraftsTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Candidates.DraftsTitle}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名「{LoadFailureState.RetryLabel}」：「{hint.Text}」。");
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                if (CandidateList(dialog).Visible)
+                {
+                    throw new InvalidOperationException("候选读不出来时清单仍可见：半份队列被留在屏上。");
+                }
+                if (KeywordBox(dialog).Enabled || StatusFilter(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("失败态下筛选器仍可用：清单里没有任何条目可筛。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     候选读不出来：提示「{hint.Text}」");
+            });
+
+            RunAction("候选失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || draftsPath is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 这一段的判据不能只看「还是不是失败」——成功路径只收起提示区、不清那格文字，
+                // 按文字判会把「重读成功」也读成「仍是失败」，一条永远为真的断言。这里换成换一种失败：
+                // 文件还在、却被独占占用，重读抛的是 IOException 而不是 JsonException。
+                // 失败态照旧、而句子里的原因必须跟着换——那一句换了就是真的又读了一遍。
+                hold = new FileStream(draftsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var hint = HintLabel(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.Candidates.DraftsTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"文件被占用时重试，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍读不出来，重试后「重试」却不见了：用户没有第二次机会。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("候选失败态：修好候选后点「重试」退出失败态、清单与计数回来（真实控件）", () =>
+            {
+                if (dialog is null || draftsPath is null || goodDrafts is null) throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                File.WriteAllText(draftsPath, goodDrafts);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                // 判可见性而不是判那格留着的旧文字：成功路径把提示区收起，旧句子不再出现在屏幕上。
+                var hint = HintLabel(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好候选后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                var list = CandidateList(dialog);
+                if (!list.Visible || list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"恢复后清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 2 行。");
+                }
+                if (CandidateCountsLabel(dialog).Text != QueueText.CandidateCountsLine(drafts.Load(task!.Id).Candidates))
+                {
+                    throw new InvalidOperationException("恢复后计数行与磁盘上的候选队列对不上：" + CandidateCountsLabel(dialog).Text);
+                }
+                if (!KeywordBox(dialog).Enabled || !StatusFilter(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("恢复后筛选器仍停用：有候选可筛的那一档没走到。");
+                }
+                _lines.Add($"     修好后重试：清单回到 {list.Items.Count} 行，计数行「{CandidateCountsLabel(dialog).Text}」，提示区收起");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("候选失败态：扫描结果读不出来时那句同时指名「重试」与任务页重新扫描（真实控件）", () =>
+            {
+                if (task is null || symbolsPath is null) throw new InvalidOperationException("上一段没有产出扫描结果的磁盘路径。");
+                File.WriteAllText(symbolsPath, "这不是 JSON");
+                dialog = new CandidatesDialog(drafts, tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Text.StartsWith(LoadFailureState.Candidates.SlotsTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"扫描结果读不出来时提示是「{hint.Text}」，期望以「{LoadFailureState.Candidates.SlotsTitle}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal)
+                    || !hint.Text.Contains(PageNames.Tasks, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"这一种失败的下一步有两处（再读一次、以及回「{PageNames.Tasks}」页重新扫描），提示只该把两处都指名：「{hint.Text}」。");
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("扫描结果读不出来时「重试」不可见或不可点。");
+                }
+                _lines.Add($"     扫描结果读不出来：提示「{hint.Text}」");
+            });
+
+            RunAction("候选失败态：修好扫描结果后点「重试」退出失败态（真实控件）", () =>
+            {
+                if (dialog is null || task is null || symbolsPath is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var job = new JobContext(new JobInfo { Id = "job-smoke-scan-11b", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+                Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+                // 两种失败点的是同一颗按钮、调的是同一个 LoadAll（第三百零三轮把两条路收成一处），
+                // 所以「点一次真的重读」那一条判据在第 4 段已经把它一并判过，这里只收结果。
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"重新扫描后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                var list = CandidateList(dialog);
+                if (!list.Visible || list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"重新扫描 + 重试之后清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 2 行。");
+                }
+                _lines.Add($"     重新扫描后重试：清单回到 {list.Items.Count} 行，提示区收起");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("候选失败态：没有候选时不给那颗按钮（再读一次读不出新东西，真实控件）", () =>
+            {
+                if (task is null || draftsPath is null) throw new InvalidOperationException("上一段没有产出磁盘路径。");
+                // 「没有候选」不是读取失败：文件本来可以不存在，Load 交出空队列。那一步的下一步在任务页生成，
+                // 亮着一颗做「再读一次」的按钮会把那句话指错地方（与差异确认「尚未检查」同一取舍）。
+                File.Delete(draftsPath);
+                dialog = new CandidatesDialog(drafts, tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith("还没有注释候选", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"候选队列为空时提示是「{hint.Text}」，期望以「还没有注释候选」开头。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「没有候选」不是失败态，却显示了「重试」：同一屏给了两个下一步。");
+                }
+                _lines.Add($"     空态：提示以「{hint.Text[..6]}」开头，那颗按钮没亮");
+            });
+        }
+        finally
+        {
+            // 句柄留着，后面每一段读这个任务都会失败；中途红的那一发也必须把它放开。
+            hold?.Dispose();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 补充说明对话框读取失败态的真实控件交互（第三百零四轮，控制仓简报 P0-3）。
+    /// <para>
+    /// 这一屏与差异确认读的是<b>同一份 diff.json</b>：第三百零三轮之前，一个给「点「重试」再读一次」、
+    /// 一个把用户支去「关闭后在「检查任务」页重新检查再试」——同一件事两种说法，其中一种屏上没有可点的入口。
+    /// 本段把接上之后的形状在真实控件上走一遍，并顺带核「已保存补充读不出来 → 保存停用」那一条约束
+    /// <b>没有因为多了那颗按钮而放松</b>。
+    /// </para>
+    /// </summary>
+    private static void RunSupplementsLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var supplementSaves = services.GetRequiredService<SupplementService>();
+
+        CheckTask? task = null;
+        string? diffPath = null;
+        string? supplementPath = null;
+        string? goodDiff = null;
+        string? jsonFailureSentence = null;
+        FileStream? hold = null;
+        SupplementsDialog? dialog = null;
+        try
+        {
+            RunAction("补充失败态：准备一份检查结果（真实落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe12.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "补充失败态配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe12.Api/Probe12.Api.csproj",
+                    AllowedSourcePaths = ["Probe12.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "补充失败态任务" });
+                tasks.Write(task.Id, TaskFiles.Diff, SupplementFixture());
+                diffPath = tasks.FilePath(task.Id, TaskFiles.Diff);
+                supplementPath = tasks.FilePath(task.Id, TaskFiles.Supplement);
+                goodDiff = File.ReadAllText(diffPath);
+                var reread = tasks.Read<CheckResult>(task.Id, TaskFiles.Diff)
+                    ?? throw new InvalidOperationException("diff.json 写进任务目录后读不回来。");
+                if (reread.Endpoints.Count != 2)
+                {
+                    throw new InvalidOperationException($"夹具读回 {reread.Endpoints.Count} 个接口，期望 2 个。");
+                }
+                _lines.Add($"     夹具：{reread.Endpoints.Count} 个接口、{goodDiff.Length} 字磁盘副本，第一个接口的编辑位 {SupplementEntries.EditorsFor(reread.Endpoints[0]).Count} 个");
+            });
+
+            RunAction("补充失败态：正常打开时清单与编辑位可见且不显示「重试」（真实控件）", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new SupplementsDialog(tasks, task, supplementSaves);
+                dialog.Show();
+                Application.DoEvents();
+                var list = SupplementList(dialog);
+                if (!list.Visible)
+                {
+                    throw new InvalidOperationException("正常打开时接口清单不可见（对话框停在提示态）。");
+                }
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"清单有 {list.Items.Count} 行，检查结果有 2 个接口。");
+                }
+                if (SupplementEditorBoxes(dialog).Length != 5)
+                {
+                    throw new InvalidOperationException($"第一个接口的编辑位输入框有 {SupplementEditorBoxes(dialog).Length} 个，期望 5 个。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("正常打开时「重试」却可见（失败态没有随成功读取退出）。");
+                }
+                _lines.Add($"     正常打开：清单 {list.Items.Count} 行、编辑位 5 个，那颗按钮没亮");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("补充失败态：检查结果读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                if (task is null || diffPath is null) throw new InvalidOperationException("上一段没有产出磁盘副本。");
+                File.WriteAllText(diffPath, "这不是 JSON");
+                dialog = new SupplementsDialog(tasks, task, supplementSaves);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("检查结果读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                if (!hint.Text.StartsWith(LoadFailureState.Supplements.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Supplements.Title}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名「{LoadFailureState.RetryLabel}」：「{hint.Text}」。");
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                if (SupplementList(dialog).Visible)
+                {
+                    throw new InvalidOperationException("检查结果读不出来时接口清单仍可见。");
+                }
+                if (ButtonOf(dialog, "保存本接口补充").Enabled)
+                {
+                    throw new InvalidOperationException("检查结果读不出来时「保存本接口补充」却可点：编辑位没有目标结构可对着写。");
+                }
+                if (KeywordBox(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("失败态下关键词框仍可用：清单里没有任何接口可筛。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     检查结果读不出来：提示「{hint.Text}」");
+            });
+
+            RunAction("补充失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || diffPath is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 与差异确认那一族同一取舍：成功路径只收起提示区、不清那格文字，按文字判「还是不是失败」
+                // 会把「重读成功」也读成失败。这里换成独占占用同一份 diff.json——失败照旧，原因换掉。
+                hold = new FileStream(diffPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var hint = HintLabel(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.Supplements.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"检查结果被占用时重试，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("仍读不出来，重试后「重试」却不见了：用户没有第二次机会。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("补充失败态：修好检查结果后点「重试」回到接口清单与编辑位（真实控件）", () =>
+            {
+                if (dialog is null || diffPath is null || goodDiff is null) throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                File.WriteAllText(diffPath, goodDiff);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好检查结果后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                var list = SupplementList(dialog);
+                if (!list.Visible || list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException($"恢复后清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 2 行。");
+                }
+                if (SupplementEditorBoxes(dialog).Length != 5)
+                {
+                    throw new InvalidOperationException("恢复后编辑位没有跟着回来。");
+                }
+                if (!ButtonOf(dialog, "保存本接口补充").Enabled)
+                {
+                    throw new InvalidOperationException("恢复后「保存本接口补充」仍停用：数据已经读出来了。");
+                }
+                if (!KeywordBox(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("恢复后关键词框仍停用：有接口可筛的那一档没走到。");
+                }
+                _lines.Add($"     修好后重试：清单回到 {list.Items.Count} 行、编辑位 5 个，保存入口回到可用，提示区收起");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("补充失败态：已保存补充读不出来时指名「重试」且说明保存停用（真实控件）", () =>
+            {
+                if (task is null || supplementPath is null) throw new InvalidOperationException("上一段没有产出 supplement.json 的路径。");
+                // 读不到既有补充时保存会用空补充覆盖其他接口的内容——这条约束不因为多了那颗按钮而放松。
+                File.WriteAllText(supplementPath, "这不是 JSON");
+                dialog = new SupplementsDialog(tasks, task, supplementSaves);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Text.StartsWith(LoadFailureState.Supplements.SavedTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"已保存补充读不出来时提示是「{hint.Text}」，期望以「{LoadFailureState.Supplements.SavedTitle}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.Supplements.SavedHint, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"提示没有说明保存已停用：「{hint.Text}」。");
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("已保存补充读不出来时「重试」不可见或不可点。");
+                }
+                if (ButtonOf(dialog, "保存本接口补充").Enabled)
+                {
+                    throw new InvalidOperationException("读不到既有补充时保存入口仍可点：那会用空补充覆盖其他接口的说明。");
+                }
+                _lines.Add($"     已保存补充读不出来：提示「{hint.Text}」，那颗按钮亮着而保存停用");
+            });
+
+            RunAction("补充失败态：修好已保存补充后点「重试」退出失败态（真实控件）", () =>
+            {
+                if (dialog is null || supplementPath is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                File.Delete(supplementPath);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好已保存补充后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                if (!ButtonOf(dialog, "保存本接口补充").Enabled)
+                {
+                    throw new InvalidOperationException("恢复后保存入口仍停用：补充读得出来了（没有条目就是可用形状）。");
+                }
+                _lines.Add("     已保存补充复原后重试：保存入口回到可用，提示区收起");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("补充失败态：尚未检查时不给那颗按钮（重试读不出检查结果，真实控件）", () =>
+            {
+                if (task is null || diffPath is null) throw new InvalidOperationException("上一段没有产出磁盘路径。");
+                File.Delete(diffPath);
+                dialog = new SupplementsDialog(tasks, task, supplementSaves);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith("尚未检查", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"没有检查结果时提示是「{hint.Text}」，期望以「尚未检查」开头。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「尚未检查」不是失败态，却显示了「重试」：同一屏给了两个下一步。");
+                }
+                _lines.Add($"     空态：提示以「{hint.Text[..4]}」开头，那颗按钮没亮");
+            });
+        }
+        finally
+        {
+            hold?.Dispose();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 注释回写对话框读取失败态的真实控件交互（第三百零四轮，控制仓简报 P0-3）。
+    /// <para>
+    /// 这一屏与前两屏<b>不是同一个形状</b>：第三百零三轮没有给它新增第二颗「重试」——屏上那颗
+    /// 「重新生成计划」点下去调的就是首次读取的那个入口（<c>LoadPlanAsync</c>），失败提示因此指名它。
+    /// 本段判的就是这两件事：<b>失败态下那颗被点名的按钮真的可用</b>，而<b>前置未满足时它保持禁用</b>
+    /// （重试读不出新东西，亮着一颗做用没有的按钮比不亮更坏）；外加一条「这一屏没有第二颗「重试」」。
+    /// </para>
+    /// <para>
+    /// 两条 catch 分得开：<c>UserException</c>（还没扫描、没有已接受候选）走「提示自己写下一步、按钮禁用」，
+    /// 其它异常（磁盘上的候选读不出来）才走失败态。本段两种都真造出来，不靠注释声称。
+    /// </para>
+    /// </summary>
+    private static void RunApplyPlanLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var scan = services.GetRequiredService<SourceScanService>();
+        var drafts = services.GetRequiredService<DraftService>();
+        var plans = services.GetRequiredService<CommentPlanService>();
+
+        const string regenerate = "重新生成计划";
+        CheckTask? task = null;
+        string? draftsPath = null;
+        string? goodDrafts = null;
+        string? jsonFailureSentence = null;
+        FileStream? hold = null;
+        ApplyPlanDialog? dialog = null;
+        try
+        {
+            RunAction("回写失败态：准备一份能生成计划的已接受候选（真实服务落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe13.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "回写失败态配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe13.Api/Probe13.Api.csproj",
+                    AllowedSourcePaths = ["Probe13.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "回写失败态任务" });
+                var job = new JobContext(new JobInfo { Id = "job-smoke-scan-13", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+                Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+                var output = tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)
+                    ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+                var slot = output.Slots.FirstOrDefault(s => s.Status == "missing" && s.Editable && s.Tag == "summary")
+                    ?? throw new InvalidOperationException("扫描没有产出可回写的 summary 缺口。");
+                var candidate = Task.Run(() => drafts.AddManualAsync(
+                    task.Id,
+                    new ManualCandidateRequest { SlotId = slot.Id, Text = "按名称查询探针数据。" },
+                    CancellationToken.None)).GetAwaiter().GetResult();
+                Task.Run(() => drafts.UpdateAsync(
+                    task.Id,
+                    candidate.Id,
+                    new CandidateUpdateRequest { ReviewState = "accepted" },
+                    CancellationToken.None)).GetAwaiter().GetResult();
+                draftsPath = tasks.FilePath(task.Id, TaskFiles.Drafts);
+                goodDrafts = File.ReadAllText(draftsPath);
+                _lines.Add($"     磁盘副本：已接受候选 {goodDrafts.Length} 字，可复原");
+            });
+
+            RunAction("回写失败态：正常打开时计划到达、那颗按钮按状态停用，且这一屏没有第二颗「重试」（真实控件）", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new ApplyPlanDialog(plans, tasks, task);
+                dialog.Show();
+                PumpUntil(dialog.PendingLoad);
+                Application.DoEvents();
+                var plan = dialog.Plan ?? throw new InvalidOperationException("对话框没有拿到注释计划。界面文案：" + LabelTexts(dialog));
+                if (plan.Files.Count == 0)
+                {
+                    throw new InvalidOperationException("拿到的计划没有可回写的文件（后面每一段的前提就没了）。");
+                }
+                if (plan.Status != "ready")
+                {
+                    throw new InvalidOperationException($"正常打开时计划状态是「{plan.Status}」，期望就绪（ready）。");
+                }
+                // 这一屏的「重新生成计划」按状态给可用性（ShowPlan 末尾那条口径）：就绪的计划不需要重来，
+                // 它在失败态才被点亮（下一组段判的就是那一次）。正常态亮着一颗做「重来」的按钮，
+                // 与「同一屏只有一个下一步」相悖，所以这里判的是它停着。
+                if (ButtonOf(dialog, regenerate).Enabled)
+                {
+                    throw new InvalidOperationException($"计划已就绪时「{regenerate}」却可点：就绪的计划没有要重来的东西。");
+                }
+                if (HintLabel(dialog).Visible)
+                {
+                    throw new InvalidOperationException("计划已经到达，提示区却还可见。");
+                }
+                // 唯一行动按钮：这一屏的重试语义由那颗已有按钮承担，屏上不该再出现一颗字面叫「重试」的按钮。
+                var literals = FindAll<Button>(dialog).Count(b => string.Equals(b.Text, LoadFailureState.RetryLabel, StringComparison.Ordinal));
+                if (literals != 0)
+                {
+                    throw new InvalidOperationException($"这一屏出现了 {literals} 颗「{LoadFailureState.RetryLabel}」按钮：同一屏两颗做同一件事的按钮。");
+                }
+                _lines.Add($"     正常打开：计划 {plan.Files.Count} 个文件（{plan.Status}），「{regenerate}」停着，屏上没有第二颗「{LoadFailureState.RetryLabel}」");
+            });
+
+            RunAction("回写失败态：还没扫描时那句自己写下一步、那颗按钮保持禁用（真实控件）", () =>
+            {
+                var freshProfile = profiles.Save(new ProjectProfile
+                {
+                    Name = "回写失败态未扫描配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe13.Api/Probe13.Api.csproj",
+                    AllowedSourcePaths = ["Probe13.Api/"],
+                }, isNew: true);
+                var fresh = tasks.Create(new CreateTaskRequest { ProfileId = freshProfile.Id, Name = "回写失败态未扫描任务" });
+                dialog?.Dispose();
+                dialog = new ApplyPlanDialog(plans, tasks, fresh);
+                dialog.Show();
+                PumpUntil(dialog.PendingLoad);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("前置未满足时提示区不可见：用户不知道这一屏为什么没有计划。");
+                }
+                if (hint.Text != "请先完成源码扫描。")
+                {
+                    throw new InvalidOperationException($"未扫描时的提示是「{hint.Text}」，期望服务层那一句「请先完成源码扫描。」。");
+                }
+                if (hint.Text.StartsWith(LoadFailureState.ApplyPlan.Title, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("前置未满足被说成了读取失败：那一屏的下一步是扫描，不是再读一次。");
+                }
+                if (ButtonOf(dialog, regenerate).Enabled)
+                {
+                    throw new InvalidOperationException($"「{regenerate}」在没扫描时可点：重试读不出新东西，亮着一颗做用没有的按钮比不亮更坏。");
+                }
+                _lines.Add($"     未扫描：提示「{hint.Text}」，那颗按钮停着");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("回写失败态：候选读不出来时提示指名那颗按钮且它回到可用（真实控件）", () =>
+            {
+                if (task is null || draftsPath is null) throw new InvalidOperationException("上一段没有产出磁盘副本。");
+                File.WriteAllText(draftsPath, "这不是 JSON");
+                dialog = new ApplyPlanDialog(plans, tasks, task);
+                dialog.Show();
+                PumpUntil(dialog.PendingLoad);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Text.StartsWith(LoadFailureState.ApplyPlan.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.ApplyPlan.Title}：」开头。");
+                }
+                if (!hint.Text.Contains(regenerate, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名界面上那颗「{regenerate}」：「{hint.Text}」。");
+                }
+                var entry = ButtonOf(dialog, regenerate);
+                if (!entry.Enabled || !entry.CanSelect)
+                {
+                    throw new InvalidOperationException($"提示指着「{regenerate}」，那颗按钮却按不下去：禁用移除了提示所指引的下一步。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     候选读不出来：提示「{hint.Text}」");
+            });
+
+            RunAction("回写失败态：点那颗按钮真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || draftsPath is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 前一段已经判到「失败态下那颗按钮按得下去」，这一段判的是「按下去真的又读了一遍」：
+                // 文件还在、却被独占占用，重读抛的是 IOException 而不是 JsonException——失败照旧、原因换掉。
+                // 那句一个字没变就说明屏上留着上一次的失败文案，重试没有走第二次读取。
+                hold = new FileStream(draftsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, regenerate);
+                PumpUntil(dialog.PendingLoad);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var hint = HintLabel(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.ApplyPlan.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"候选被占用时点「{regenerate}」，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, regenerate).Enabled)
+                {
+                    throw new InvalidOperationException($"仍读不出来，点过一次之后「{regenerate}」停用了：用户没有第二次机会。");
+                }
+                if (dialog.Plan is not null)
+                {
+                    throw new InvalidOperationException("候选还读不出来，界面上却已经有一份计划。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("回写失败态：修好候选后点那颗按钮退出失败态、计划与文件清单回来（真实控件）", () =>
+            {
+                if (dialog is null || draftsPath is null || goodDrafts is null) throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                File.WriteAllText(draftsPath, goodDrafts);
+                Click(dialog, regenerate);
+                PumpUntil(dialog.PendingLoad);
+                Application.DoEvents();
+                // 成功路径把提示区收起、不清那格旧文字：这里判可见性，不判那格留着的上一句。
+                var hint = HintLabel(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好候选后点「{regenerate}」，提示区仍可见：「{hint.Text}」。");
+                }
+                var plan = dialog.Plan ?? throw new InvalidOperationException("点过一次之后界面上没有计划。");
+                var list = FindFirst<ListView>(dialog) ?? throw new InvalidOperationException("找不到文件清单。");
+                if (!list.Visible || list.Items.Count != plan.Files.Count)
+                {
+                    throw new InvalidOperationException($"文件清单是 {(list.Visible ? list.Items.Count + " 行" : "不可见")}，计划有 {plan.Files.Count} 个文件。");
+                }
+                if (plan.Status != "ready" || ButtonOf(dialog, regenerate).Enabled)
+                {
+                    throw new InvalidOperationException(
+                        $"计划回到「{plan.Status}」后那颗按钮的可用性是 {ButtonOf(dialog, regenerate).Enabled}，期望随状态一起回到停用——可用性跟着计划状态走，不许停在失败态那一次。");
+                }
+                _lines.Add($"     修好后点过一次：计划回到 {plan.Files.Count} 个文件（{plan.Status}），清单同步 {list.Items.Count} 行，提示区收起");
+            });
+        }
+        finally
+        {
+            hold?.Dispose();
             dialog?.Dispose();
         }
     }
