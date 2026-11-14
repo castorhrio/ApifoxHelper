@@ -20,6 +20,13 @@ namespace ApifoxHelper.Desktop.Native;
 /// 装法分两处但各司其职：整行勾选装在 <c>Ui.List</c> 工厂的 <c>checkBoxes</c> 分支（每一张复选清单都自带），
 /// 全选装在 <c>Ui.WireSelectAll</c> 这个共用入口上——它只认键与修饰键，勾哪些行由调用方交进来的动作决定。
 /// </para>
+/// <para>
+/// <b>「翻这一行」的键盘入口（第二百八十九轮）</b>：同一件事此前只有鼠标一条入口——键盘上按空格翻行
+/// 靠的是 <c>ListView</c> 自带的系统实现，本仓既没有它的判定、也没有任何断言，而
+/// <c>docs/DESIGN.md</c> §6 与 <c>SyncSelect</c> 的注释里「逐行按空格」这句话一直指着一处没人接的默认行为。
+/// 现把空格收进本文件（<see cref="IsToggleRowGesture"/>），与鼠标那条入口共用同一个翻转点
+/// （<c>Ui.List</c> 工厂里的 <c>ToggleRow</c>）：两条入口、一件事、一处翻转。
+/// </para>
 /// </summary>
 public static class ListChecks
 {
@@ -28,6 +35,25 @@ public static class ListChecks
     /// </summary>
     public static bool ShouldToggle(bool leftClick, bool hitOnRow, bool hitOnCheckbox) =>
         leftClick && hitOnRow && !hitOnCheckbox;
+
+    /// <summary>
+    /// 裸空格判定（复选清单的「翻这一行」手势，第二百八十九轮）：调用方已确认按下空格，这里只看修饰键。
+    /// 只认裸键——带 Ctrl/Shift/Alt 的组合不属本手势、留给控件自身，不吞键，也不给既有组合键发明新语义
+    /// （与 <see cref="IsSelectAllGesture"/>、<see cref="ListCopy.IsCopyGesture"/>、
+    /// <see cref="ShellShortcuts.IsFindGesture"/> 同一纪律：那三处各在自己的口径文件里，本文件不重复它们）。
+    /// <para>
+    /// 为什么补这一只手势：勾选页的批量动作（Ctrl+A 与「全选可同步」）第二百八十四轮已接上，
+    /// 而「只勾这一行」在键盘上一直靠 <c>ListView</c> 的系统默认实现——本仓没有它的判定、没有它的接线、
+    /// 也没有任何断言，于是同一件事的两条入口（鼠标点行 / 键盘空格）落在两处实现上：
+    /// 鼠标那条走 <c>Ui.List</c> 工厂的翻转点，键盘那条走系统；系统那一支一旦被自绘、被
+    /// <c>ItemCheck</c> 的拒绝路径或某个修饰键改掉，界面上就是「点得动、按不动」，而全仓没有一条门会响。
+    /// </para>
+    /// <para>
+    /// 它不接管文本框里的空格：本判定只装在复选清单自己的按键通路上（<c>Ui.List</c> 的
+    /// <c>checkBoxes</c> 分支），焦点在关键词框里时空格仍是「打一个空格」。
+    /// </para>
+    /// </summary>
+    public static bool IsToggleRowGesture(bool shift, bool control, bool alt) => !shift && !control && !alt;
 
     /// <summary>
     /// 裸 Ctrl+A 判定（复选清单的「全选」手势）：调用方已确认按下 A，这里只看修饰键。

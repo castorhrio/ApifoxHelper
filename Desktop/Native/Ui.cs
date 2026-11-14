@@ -730,7 +730,8 @@ internal static class Ui
     /// 列表（DESIGN.md §6「列表行」）：自绘选中态——选中行 Bg 底 + 左侧 3px Accent 标记，
     /// 不用系统高亮蓝；未选行 Panel 底；逐子项语义色（Muted/Ok/Warn/Bad）保留（ListRows 判定）。
     /// 表头沿用系统绘制（与既有外观一致）；复选框列由本工厂绘制（自绘模式下系统不再画），
-    /// 勾选目标也由本工厂放大到整行（点行的任意处即勾选，落点判定在 ListChecks——系统自己会翻的那一格让开）。
+    /// 勾选目标也由本工厂放大到整行（点行的任意处即勾选，落点判定在 ListChecks——系统自己会翻的那一格让开）；
+    /// 键盘上的同一件事（空格翻焦点行）也装在这一支里，两条入口共用同一个翻转点 <c>ToggleRow</c>（第二百八十九轮）。
     /// Ctrl+C 复制焦点行的标识列原文也在这里装上——单元格自绘后文字不可选中，Ctrl+C 是列表里的
     /// 文字交出去的唯一通路（只读预览框原本就能选中复制），故剪贴板只在本工厂触达一次，页面与对话框不各装一套。
     /// 标识列默认首列（与 ListColumns 的「标识列（首列）」同一约定，绝大多数列表的名称格就在首列）；
@@ -779,11 +780,36 @@ internal static class Ui
                 var hit = list.HitTest(e.Location);
                 if (hit.Item is not ListViewItem row) return;
                 if (!ListChecks.ShouldToggle(e.Button == MouseButtons.Left, true, hit.Location == ListViewHitTestLocations.StateImage)) return;
-                row.Checked = !row.Checked;
+                ToggleRow(row);
+            };
+            // 键盘上的同一件事（第二百八十九轮）：空格翻焦点行。此前这一支靠 ListView 自带的系统实现——
+            // 本仓没有它的判定、没有接线、也没有任何断言，于是「点得动、按不动」这种偏差全仓没有一条门会响。
+            // 现与鼠标那条入口共用同一个翻转点（ToggleRow），认键与修饰键在 ListChecks 一处；
+            // 焦点行缺失（清单里没有焦点框）不动作，也不吞键——那一步的下一步不在清单上。
+            list.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode != Keys.Space || !ListChecks.IsToggleRowGesture(e.Shift, e.Control, e.Alt)) return;
+                if (list.FocusedItem is not ListViewItem row) return;
+                e.SuppressKeyPress = true;
+                ToggleRow(row);
             };
         }
         return list;
     }
+
+    /// <summary>
+    /// 复选清单「翻这一行」的唯一翻转点（第二百八十九轮）：鼠标点行与键盘空格两条入口都走这里。
+    /// <para>
+    /// 全原生界面这一句 <c>Checked = !Checked</c> 恰出现一次。两处各写一遍，两条入口迟早对不上——
+    /// 一条翻整行、一条翻当前格；或者一条走了 <c>ItemCheck</c> 的拒绝路径（不可同步的行勾上即弹回）、
+    /// 另一条绕过去了。翻转本身只有一行，但「谁有权翻」这件事必须只有一个落点。
+    /// </para>
+    /// <para>
+    /// 它不判该不该翻：落点判定在 <see cref="ListChecks.ShouldToggle"/>（鼠标）与
+    /// <see cref="ListChecks.IsToggleRowGesture"/>（键盘），本方法只翻。
+    /// </para>
+    /// </summary>
+    private static void ToggleRow(ListViewItem row) => row.Checked = !row.Checked;
 
     /// <summary>
     /// 复选清单的「全选」手势（Ctrl+A）接线（第二百八十四轮）：判定取 <see cref="ListChecks.IsSelectAllGesture"/>
