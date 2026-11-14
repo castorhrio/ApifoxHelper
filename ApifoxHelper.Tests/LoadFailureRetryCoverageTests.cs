@@ -424,19 +424,35 @@ public class LoadFailureRetryCoverageTests
     /// 那一句红），而名单里剩下六条若被谁偷偷改掉却没人删行，<c>stale</c> 那一句同样红。两侧都判，才留不下死条目。
     /// </para>
     /// <para>
-    /// 每一条的理由都是同一句：这一屏的下一步现在写的是「回「检查任务」页重新 X」，那一步确实在屏外
-    /// （作业入口在任务页），所以它不是「指引不可达」，是「可达但要重开一次窗口」。
-    /// 接法与本轮三屏一致：把读取收进一个 <c>Load*</c> 入口 + 那颗取自口径的「重试」。
+    /// <b>理由里点名的那个落点，本轮起要能在源码里找到</b>（第三百零六轮，简报 P1-2）：上面那一句
+    /// 「这一屏的下一步在屏外」此前只是一句被读到的散文。第三百零五轮删掉 <c>ScanResultsDialog</c> 那一行之后，
+    /// 剩下两条写的还是「同上」——「上」那一行已经不在了，理由指向一个不存在的东西，而名单照旧六条、
+    /// <c>stale</c> 那一句照旧绿。所以现在每条理由必须写成<b>「某页」页的「某入口」</b>这个相邻形状，
+    /// 由 <see cref="SendAwayExemptions_EveryReasonNamesAnEntryThatShips"/> 逐条到 <c>Desktop/Native</c> 里找：
+    /// 点名的文字必须是界面出厂的按钮/标签文字（不是某句提示里顺手写到的动词），点名的那一页必须有界面文件，
+    /// 被承诺在那一页上的就是紧接「某页」页的<b>那一颗</b>（其余点名如屏上那颗「关闭」只要求出厂过，
+    /// 不假定在哪一页）；那一屏的失败句里若已经指到某一页，理由也必须写同一页。
+    /// <b>它不判什么</b>：不判「这一屏该不该豁免」——那是产品判断，只有人读得出来；也不判理由的句子通不通
+    /// （句子的长度与空话由 <c>GateSourceConsistencyTests</c> 对另一张表判的那一条同族，这里不叠第二套）。
+    /// 按第二百八十二轮那五步判：① 断言里出现的名字是 <c>SendAwayExemptions.Reason</c>（登记侧）与
+    /// <c>Desktop/Native</c> 出厂的界面文字、两页的界面文件（实物侧）；② 后者不在被它判的那个对象里，答「不是」；
+    /// ③ 按第 ③ 步当<b>对账门</b>处理，不属第二百五十六轮收口那一族，照常随实物一起长。
     /// </para>
     /// </summary>
     private static readonly (string File, string Reason)[] SendAwayExemptions =
     [
-        ("EvidenceDialog.cs", "代码证据：读证据文件失败时同上，那一步现在写在任务页的「开始扫描」上"),
-        ("EndpointTraceDialog.cs", "接口追踪明细：读 coverage 失败时同上（第一百零八轮接入排序、第七十六轮接入关键词框，失败态这一族一直漏着）"),
-        ("ContractsDialog.cs", "响应契约：读契约清单失败时同上"),
-        ("PropagationDialog.cs", "生成文档核对：读 propagation.json 失败时写的是「请关闭后…重新核对再试」"),
-        ("CheckResultsDialog.cs", "检查结果：读 diff.json 失败时写的是「请关闭后…重新检查再试」（差异确认第一百五十二轮已接，这一屏没接）"),
-        ("SyncPreviewDialog.cs", "同步预览勾选页：读 diff.json 失败走 DisableSelect 那一句，同样把再读一次交给重开窗口"),
+        ("EvidenceDialog.cs", "代码证据：读 evidence.json 失败时这一屏没有做那次读取的入口，那一步在"
+            + "「检查任务」页的「开始扫描」上（扫描作业不在这一屏发起，对话框只读落盘产物）"),
+        ("EndpointTraceDialog.cs", "接口追踪明细：读的是同一份扫描产物，失败时这一屏同样没有入口，那一步在"
+            + "「检查任务」页的「开始扫描」上（第一百零八轮接了列排序、第七十六轮接了关键词框，失败态这一族一直漏着）"),
+        ("ContractsDialog.cs", "响应契约：读不出来时这一屏只剩「关闭」可点（提示出口把三颗审阅按钮一并禁用），"
+            + "那一步在「检查任务」页的「开始扫描」上——那三颗在审阅保存成功之后确实会重读一次清单，可失败态下点不动"),
+        ("PropagationDialog.cs", "生成文档核对：失败句里那个动词在界面上没有对应的那一颗按钮，屏外做这一步的是"
+            + "「检查任务」页的「核对传播」（这一屏自己没有重读一次的入口）"),
+        ("CheckResultsDialog.cs", "检查结果：读 diff.json 失败时屏上只剩「关闭」可点，屏外做这一步的是"
+            + "「检查任务」页的「开始检查」（差异确认第一百五十二轮已接，这一屏没接）"),
+        ("SyncPreviewDialog.cs", "同步预览勾选页：读 diff.json 失败走 DisableSelect 那一句，屏外做这一步的同样是"
+            + "「检查任务」页的「开始检查」，勾选页自己没有重读那一次的入口"),
     ];
 
     /// <summary>判定本体（纯函数：源码进、命中的说法出）——注入自测直接喂夹具，不必改磁盘。</summary>
@@ -480,5 +496,221 @@ public class LoadFailureRetryCoverageTests
         Assert.Empty(SendAwayHits("_hint.Text = \"读取失败：磁盘满。任务目录可能被占用或权限不足；点「重试」再读一次。\";"));
         Assert.Empty(SendAwayHits("_hint.Text = \"生成失败：磁盘满。可点「重新生成计划」重试。\";"));
         Assert.Empty(SendAwayHits("_hint.Text = \"已停止写入兼容探测。可重新运行或关闭本窗口。\";"));
+    }
+
+    // ---------- 豁免理由点名的那个落点，逐条到源码里找（第三百零六轮，简报 P1-2） ----------
+
+    /// <summary>
+    /// 两个主页面：<b>源码里的引用名</b> → <b>出厂的页面名</b> → <b>那一页的界面文件</b>。
+    /// <para>
+    /// 三样一起登记是因为理由指的是<b>一整个落点</b>：「在「检查任务」页的「开始扫描」上」这句话要同时成立，
+    /// 得有那么一页、那一页有那个界面文件、而那颗按钮就在那个文件里。分开判会出现一种中间状态——
+    /// 页面名对、按钮也在仓里，可它在别那一页上，用户照理由走过去找不到。
+    /// 新增第三个页面时这里必须跟着登记，否则理由点了那一页会红着要求登记，而不是静默放过。
+    /// </para>
+    /// </summary>
+    private static readonly (string Reference, string Page, string File)[] Pages =
+    [
+        ("PageNames.Projects", PageNames.Projects, "ProjectsPage.cs"),
+        ("PageNames.Tasks", PageNames.Tasks, "TasksPage.cs"),
+    ];
+
+    /// <summary>
+    /// 界面<b>出厂</b>的按钮 / 标签文字，两种形状（全 <c>Desktop/Native</c> 逐字读过之后定下的唯一取法）：
+    /// ① <c>Ui.Ghost("…")</c> / <c>Ui.Primary("…")</c> 的字面参数——工厂直接给出的那颗按钮；
+    /// ② <c>const string X = "…";</c> 的字面值——口径文件与页面里那份文字常量（两个页面名就在这形状里）。
+    /// <para>
+    /// <b>为什么不算第三种形状</b>：一句提示里出现的动词（「请关闭后重新扫描再试」里的「重新扫描」）不是屏幕上
+    /// 能被点着的东西。把它当成「落点」正是这一条要挡的写法——理由念起来像指了地方，而那一处根本不在界面上。
+    /// 取的都是<b>去注释后的代码</b>（<see cref="CodeScan"/> 那一份口径）：注释里点名一颗按钮是在说明理由，
+    /// 不是出厂一个文字。声明写成跨行时这里取不到，于是点名它的那条理由<b>红</b>——这一族宁可误红，
+    /// 不能把「界面里没有」读成「界面里有」。
+    /// </para>
+    /// </summary>
+    private static IReadOnlySet<string> ShippedLabels()
+    {
+        var labels = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var source in Repo.NativeSources())
+        {
+            foreach (Match m in Regex.Matches(source.Code, @"Ui\.(?:Ghost|Primary)\(\s*""([^""]+)"""))
+            {
+                labels.Add(m.Groups[1].Value);
+            }
+            foreach (Match m in Regex.Matches(source.Code, @"const string \w+ = ""([^""]+)"";"))
+            {
+                labels.Add(m.Groups[1].Value);
+            }
+        }
+        return labels;
+    }
+
+    /// <summary>文件名 → 去注释后的代码（不在仓里的名字交出 null，由判定本体报成「名单指着一屏不存在的界面」）。</summary>
+    private static Func<string, string?> NativeCodeByName()
+    {
+        var byName = Repo.NativeSources().ToDictionary(s => s.Name, s => s.Code, StringComparer.Ordinal);
+        return name => byName.GetValueOrDefault(name);
+    }
+
+    /// <summary>
+    /// 判定本体（纯函数：一份登记 + 一份源码取法 + 一份出厂文字进，问题出）——注入自测直接喂夹具，不改磁盘。
+    /// <para>判五件事：① 名单里那一屏得真的在 <c>Desktop/Native</c> 里；② 理由不许写「同上」（它指的是上一行，
+    /// 而上一行会被收掉）；③ 理由点名的每一处文字都必须是<b>界面出厂的</b>按钮 / 标签文字；④ 每一条理由都必须写成
+    /// 「某页」页的「某入口」那个相邻形状，紧接的那一颗必须真在那一页的界面文件里（点了 <see cref="Pages"/> 里没有的
+    /// 那一页，另报一处）；⑤ 反向：那一屏的失败句里已经点到某一页，理由必须写同一页——句子与登记不许各指一处。</para>
+    /// </summary>
+    internal static List<string> ReasonProblems(
+        IEnumerable<(string File, string Reason)> exemptions,
+        Func<string, string?> codeOf,
+        IReadOnlySet<string> labels)
+    {
+        var problems = new List<string>();
+        foreach (var (file, reason) in exemptions)
+        {
+            var code = codeOf(file);
+            if (code is null)
+            {
+                problems.Add($"豁免名单里的 {file} 在 Desktop/Native 找不到：名单指着一屏不存在的界面。");
+                continue;
+            }
+
+            if (reason.Contains("同上", StringComparison.Ordinal))
+            {
+                problems.Add($"{file}：理由写了「同上」——那指的是名单里上一行，而上一行随时会被收掉："
+                    + "第三百零五轮收掉 ScanResultsDialog 之后，剩下两条「同上」指的就是一个不存在的东西。");
+            }
+
+            var names = Regex.Matches(reason, @"「([^」]+)」").Cast<Match>().Select(m => m.Groups[1].Value).ToList();
+            foreach (var name in names)
+            {
+                if (!labels.Contains(name))
+                {
+                    problems.Add($"{file}：理由点名的「{name}」不是界面出厂的按钮 / 标签文字"
+                        + "（它既不是 Ui.Ghost / Ui.Primary 的字面参数，也不是任何 const string 的值）："
+                        + "一句提示里出现的那个动词，不是屏幕上能点着的东西。");
+                }
+            }
+
+            // 「那一步在哪」这句承诺要落成可判的形状：必须写成「某页」页的「某入口」，紧接的那一颗就是被承诺
+            // 在那一页上的入口。只说「这一屏没有入口」「只剩「关闭」可点」都挡不住这一条——那两句说的是这一屏，
+            // 不是那一步。
+            var claim = Regex.Match(reason, @"「([^」]+)」页的「([^」]+)」");
+            if (!claim.Success)
+            {
+                problems.Add($"{file}：理由没写成「某页」页的「某入口」那个形状——屏外那一步到底点哪一颗，下一轮只能靠猜。");
+                continue;
+            }
+
+            var claimedRow = Pages.FirstOrDefault(p => p.Page == claim.Groups[1].Value);
+            if (claimedRow.Page is null)
+            {
+                problems.Add($"{file}：理由点了「{claim.Groups[1].Value}」页，而 Pages 里没有这一页——新增页面要在这里连文件一起登记。");
+                continue;
+            }
+
+            var entry = claim.Groups[2].Value;
+            var pageCode = codeOf(claimedRow.File);
+            if (pageCode is null)
+            {
+                problems.Add($"{file}：理由说那一步在「{claimedRow.Page}」页上，可 {claimedRow.File} 不在仓里。");
+            }
+            else if (!pageCode.Contains("\"" + entry + "\"", StringComparison.Ordinal))
+            {
+                problems.Add($"{file}：理由说「{entry}」在「{claimedRow.Page}」页上，可那一页的 {claimedRow.File} 里没有这个文字"
+                    + "——用户照理由走过去找不到那颗按钮。");
+            }
+
+            // 反向：那一屏的失败句已经指到某一页，理由必须写同一页——句子与登记不许各指一处。
+            var hits = code.Split('\n').Where(line => SendAwayHits(line).Count > 0).ToList();
+            foreach (var pageRow in Pages)
+            {
+                if (hits.Any(h => h.Contains(pageRow.Reference, StringComparison.Ordinal)) && !names.Contains(pageRow.Page))
+                {
+                    problems.Add($"{file}：那一屏的失败句点的是「{pageRow.Page}」页（句子里写的 {pageRow.Reference}），"
+                        + "理由却没写这一页——界面指一处、登记指另一处，下一轮照着理由去找就找不到。");
+                }
+            }
+        }
+        return problems;
+    }
+
+    [Fact]
+    public void SendAwayExemptions_EveryReasonNamesAnEntryThatShips()
+    {
+        var problems = ReasonProblems(SendAwayExemptions, NativeCodeByName(), ShippedLabels());
+        Assert.True(problems.Count == 0,
+            "豁免理由里点名的落点在源码里找不到（DESIGN.md §7「禁用不得移除下一步」的对面那一半："
+            + "欠着的屏至少要说清那一步真的在哪）：" + string.Join("；", problems));
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：六发注入各报一处，合规形状不报（本仓那句老话——
+    /// 「判据自己没被跑过」比「没有判据」更贵）。夹具是两份假源码 + 一份出厂文字，磁盘一个字不动。
+    /// </summary>
+    [Fact]
+    public void SendAwayReasonDetector_ReportsTheNamesItMustCatch()
+    {
+        var labels = new HashSet<string>(StringComparer.Ordinal)
+        {
+            PageNames.Projects, PageNames.Tasks, "开始扫描", "核对传播", "开始检查", "新建配置", "关闭",
+        };
+        var codeOf = FixtureCode(
+            ("TasksPage.cs", """
+                        _scanButton = Ui.Ghost("开始扫描");
+                        _checkButton = Ui.Ghost("核对传播");
+                        _remoteCheckButton = Ui.Ghost("开始检查");
+             """),
+            ("ProjectsPage.cs", "        _newProfile = Ui.Ghost(\"新建配置\");"),
+            // 那一屏的失败句已经指到「检查任务」页（页 ↔ 反向那一判都从这里取）。
+            ("EvidenceDialog.cs", "        ShowHint(\"读取代码证据失败。请关闭后在「\" + PageNames.Tasks + \"」页重新扫描再试。\");"),
+            // 那一屏的失败句没有指任何一页：注入 ①—④ 用它，好让每一发只报该报的那一处。
+            ("ContractsDialog.cs", "        ShowHint(\"读取响应契约失败。请关闭后重新扫描再试。\");"));
+
+        // 合规三条：① 句子指「检查任务」页、理由写同一页且那颗入口真在 TasksPage.cs 里；② 句子没指页、理由指了页；
+        // ③ 理由先点名屏上那颗「关闭」、再写「某页」页的「某入口」——页名那一组必须是「不带」的」，
+        //    写成 .+? 会跨过下一个「」一路吃到最近的「某页」页，把那颗「关闭」当成页名（本轮真门当场抓出来的）。
+        var ok = new[]
+        {
+            ("EvidenceDialog.cs", "代码证据：这一屏没有做那次读取的入口，那一步在「检查任务」页的「开始扫描」上"),
+            ("ContractsDialog.cs", "响应契约：这一屏同样没有入口，那一步在「检查任务」页的「开始扫描」上"),
+            ("ContractsDialog.cs", "响应契约：这一屏只剩「关闭」可点，那一步在「检查任务」页的「开始扫描」上"),
+        };
+        Assert.Empty(ReasonProblems(ok, codeOf, labels));
+
+        // ① 「同上」：指的是上一行，而上一行会被收掉。
+        var dangling = new[] { ("ContractsDialog.cs", "代码证据：那一步同上在「检查任务」页的「开始扫描」上") };
+        Assert.Contains(ReasonProblems(dangling, codeOf, labels), p => p.Contains("同上", StringComparison.Ordinal));
+
+        // ② 没写成那个形状：只说「屏上没有入口」，没说那一步点哪一颗。
+        var unnamed = new[] { ("ContractsDialog.cs", "代码证据：这一屏没有入口，回任务页重扫一次就行") };
+        Assert.Contains(ReasonProblems(unnamed, codeOf, labels), p => p.Contains("没写成", StringComparison.Ordinal));
+
+        // ③ 点名的是提示句里的一个动词，界面上没有那一处（同一发里「那一页的文件里没有这个文字」也报出来：
+        //     那颗既没出厂、也不可能在任务页里——两条都是这一发要挡的）。
+        var verb = new[] { ("ContractsDialog.cs", "代码证据：那一步在「检查任务」页的「重新扫描全部接口」上") };
+        Assert.Contains(ReasonProblems(verb, codeOf, labels), p => p.Contains("不是界面出厂的按钮", StringComparison.Ordinal));
+
+        // ④ 页 ↔ 入口错位：那颗按钮在任务页，理由却说它在配置页。
+        var wrongPage = new[] { ("ContractsDialog.cs", "代码证据：那一步在「项目设置」页的「开始扫描」上") };
+        Assert.Contains(ReasonProblems(wrongPage, codeOf, labels), p => p.Contains("ProjectsPage.cs 里没有这个文字", StringComparison.Ordinal));
+
+        // ⑤ 反向：句子指「检查任务」页，理由改指「项目设置」页——两处各指一处。
+        var mismatch = new[] { ("EvidenceDialog.cs", "代码证据：那一步在「项目设置」页的「新建配置」上") };
+        Assert.Contains(ReasonProblems(mismatch, codeOf, labels), p => p.Contains("理由却没写这一页", StringComparison.Ordinal));
+
+        // ⑥ 名单里那一屏根本不存在。
+        var ghost = new[] { ("NoSuchDialog.cs", "不存在：那一步在「检查任务」页的「开始扫描」上") };
+        Assert.Contains(ReasonProblems(ghost, codeOf, labels), p => p.Contains("在 Desktop/Native 找不到", StringComparison.Ordinal));
+
+        // ⑦ 点了 Pages 里没有登记的那一页：新增第三个页面而这里没跟着登记，理由指的那一页就没有界面文件可对，
+        //     这一发要红着要求人把 Pages 一起改，而不是静默放过（同发里「界面上没出厂」那条也一并报出来）。
+        var newPage = new[] { ("ContractsDialog.cs", "代码证据：那一步在「分析报表」页的「开始扫描」上") };
+        Assert.Contains(ReasonProblems(newPage, codeOf, labels), p => p.Contains("Pages 里没有这一页", StringComparison.Ordinal));
+    }
+
+    /// <summary>注入夹具：文件名 → 那段假源码（磁盘一个字不动，取法与真门同一个委托形状）。</summary>
+    private static Func<string, string?> FixtureCode(params (string Name, string Code)[] files)
+    {
+        var byName = files.ToDictionary(f => f.Name, f => f.Code, StringComparer.Ordinal);
+        return name => byName.GetValueOrDefault(name);
     }
 }
