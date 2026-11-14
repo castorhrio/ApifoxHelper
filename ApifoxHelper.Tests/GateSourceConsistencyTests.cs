@@ -361,6 +361,110 @@ public class GateSourceConsistencyTests
             $"Main 里注册了 {string.Join(" / ", dangling)}，冒烟器里没有这个方法：注册表指向不存在的段。");
     }
 
+    // ── 第二百九十八轮（简报 P1-1）：豁免登记里的理由也要被判 ──────────────
+
+    /// <summary>
+    /// 豁免登记里那几句理由的<b>禁词表</b>：单独出现即红。
+    /// <para>
+    /// 这三句是「说了等于没说」的典型——它们只否定了「这一屏属于本族」，没有说出<b>为什么</b>。
+    /// 下一轮想绕开 <see cref="Pairs"/> 时，最省事的写法正是往 <see cref="Exemptions"/> 里塞一行
+    /// 「不属于本族」：登记有了、理由栏也非空，而读的人推不出任何东西。
+    /// </para>
+    /// </summary>
+    private static readonly string[] EmptyReasonPhrases = ["不属于", "无同源", "不需要"];
+
+    /// <summary>理由的最短长度：短到看不出为什么的，按「没写理由」处理。</summary>
+    private const int MinReasonLength = 30;
+
+    /// <summary>
+    /// <b>豁免登记里的理由必须是有内容的</b>：每条 <c>Reason</c> ① 长度 ≥ <see cref="MinReasonLength"/>；
+    /// ② 不得只写「不属于 / 无同源 / 不需要」这一类空话。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="Pairs"/> 有 <c>Shared</c> / <c>Forbidden</c> 双判（两边必须出现同一个
+    /// 表达式、两边都不许出现那个字面量），而 <see cref="Exemptions"/> 的 <c>Reason</c> 此前<b>只被登记、
+    /// 没被判</b>——上面那条覆盖率门只判「理由长度 ≥ 20」，二十个字写一句「不属于本族，不需要同源表达式」
+    /// 就够长。于是「豁免」这条路比「进 Pairs」便宜得多，而它本该更贵：进 Pairs 要真的把两边接上，
+    /// 豁免只要一句话。
+    /// </para>
+    /// <para>
+    /// <b>它判的是被承诺的实物，不是判据自己</b>（按 <c>docs/NOTES.md</c> 第二百七十轮那五步法判过）：
+    /// ① 断言里出现的名字是 <c>Exemptions</c> 与 <c>Exemption.Reason</c>；② 逐个问「这个名字的定义是不是
+    /// 就在被它判的那个对象里」——<c>Reason</c> 的<b>值</b>是写给读者的一句承诺（「这一屏为什么不需要同源判据」），
+    /// 它指向的是<b>冒烟器里那一段的真实职责</b>，不是一条恒等式；③ 因此它答「不是」，按第 ③ 步当对账门处理；
+    /// ④ 与 <c>AcceptanceChecklistTests.DodExemption_IsRegisteredWithSourceAndDate</c>、
+    /// <c>LayoutMeasurementGateTests.NoMeasurementSegment_Reasons_SayWhyTheIdentityIsNotAFakeGate</c> 同一形状
+    /// （判的是「登记里被承诺的那一句在不在、有没有内容」）；⑤ 结论写进本轮 commit message。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判理由写得对不对（「这一屏真的不该进 Pairs 吗」只有人读得出来），
+    /// 也不判 <c>Sections</c> 指向的段在不在——那由上面那条覆盖率门判。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Exemptions_EveryReasonIsSubstantive()
+    {
+        Assert.Empty(ExemptionReasonProblems(Exemptions));
+    }
+
+    /// <summary>
+    /// 上面那段判据<b>自己</b>被抓得住：三发注入各报一处，合规登记不报。
+    /// <para>
+    /// 本仓的教训是「判据自己没被跑过」比「没有判据」更贵（第二百零九轮那两处假变异、
+    /// 第二百四十三轮 M4 那一发假绿）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ExemptionReasonDetector_ReportsTheBreaksItMustCatch()
+    {
+        // 合规：现有登记一条都不报（判据不是空转的）。
+        Assert.Empty(ExemptionReasonProblems(Exemptions));
+
+        // ① 空话理由：长度够，但只否定了「属于本族」，没说出为什么。
+        var empty = new[] { new Exemption(["RunEndToEnd"], "这一屏不属于本族，也不需要同源表达式，所以登记在这里就够了。") };
+        Assert.Contains(ExemptionReasonProblems(empty), p => p.Contains("空话", StringComparison.Ordinal));
+
+        // ② 太短：短到看不出为什么。
+        var shortReason = new[] { new Exemption(["RunEndToEnd"], "不属于本族。") };
+        Assert.Contains(ExemptionReasonProblems(shortReason), p => p.Contains("太短", StringComparison.Ordinal));
+
+        // ③ 空白：登记了但一个字没写。
+        var blank = new[] { new Exemption(["RunEndToEnd"], "   ") };
+        Assert.Contains(ExemptionReasonProblems(blank), p => p.Contains("没写理由", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 豁免理由的问题清单（纯函数：一份登记进、问题出）。判据不读文件，注入当场可验。
+    /// </summary>
+    private static List<string> ExemptionReasonProblems(IEnumerable<Exemption> exemptions)
+    {
+        var problems = new List<string>();
+        foreach (var exemption in exemptions)
+        {
+            var sections = string.Join(" / ", exemption.Sections);
+            var reason = exemption.Reason ?? "";
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                problems.Add($"豁免 {sections} 没写理由：只登记不写理由，下一个人会以为这一屏漏了。");
+                continue;
+            }
+            if (reason.Trim().Length < MinReasonLength)
+            {
+                problems.Add($"豁免 {sections} 的理由太短（{reason.Trim().Length} 字，至少要 {MinReasonLength} 字）："
+                    + "短到看不出为什么，等于没写。");
+            }
+            foreach (var phrase in EmptyReasonPhrases)
+            {
+                if (reason.Contains(phrase, StringComparison.Ordinal))
+                {
+                    problems.Add($"豁免 {sections} 的理由是空话（出现「{phrase}」）："
+                        + "它只否定了「这一屏属于本族」，没说出这一屏到底判的是什么——"
+                        + "下一轮想绕开 Pairs 时，最省事的写法正是这一句。");
+                }
+            }
+        }
+        return problems;
+    }
+
     /// <summary>方法体（按大括号配平取，与本仓其它门同一套取法）。</summary>
     private static string MethodBody(string source, string signature)
     {

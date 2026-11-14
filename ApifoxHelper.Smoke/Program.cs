@@ -7169,6 +7169,65 @@ internal static class Program
                     "点过「清空」之后一行都没勾了，「生成同步预览」却仍是可用的：它按已勾数量启停。");
             }
 
+            // ①-4 勾不动的那一行说一句为什么（第二百九十八轮）：勾选页的不可同步行此前是静默弹回的——
+            // 勾选框闪一下就回去，状态行、提示行、计数行一个字都不变，用户看到的与「勾上了又被谁取消」
+            // 分不开。这一段量三件事：① 那一行勾不上（勾选框回到未勾）；② 状态行上真的出现了那一句
+            // （期望值取产品口径 SyncSelection.RejectMessage，界面若自己拼一句就是第二份文案）；
+            // ③ 接着勾上一行可同步的，那一句自己收掉、计数行跟着走——只收自己写的那一句。
+            var statusHost = FindAll<StatusLineHost>(dialog).FirstOrDefault()
+                ?? throw new InvalidOperationException("勾选页找不到状态行宿主：本段口径需要重定。");
+            var statusLabel = statusHost.Label;
+            var rejectedRow = list.Items.Cast<ListViewItem>().FirstOrDefault(item =>
+                    item.Tag is EndpointCheck candidate && !SyncSelection.Selectable(task.OfflineMode, candidate.Status))
+                ?? throw new InvalidOperationException("勾选页清单里找不到一行不可同步的接口：夹具与这一屏对不上，本段量不到「勾不动」。");
+            var rejectedCheck = (EndpointCheck)rejectedRow.Tag!;
+            var expectedReject = SyncSelection.RejectMessage(rejectedCheck.Key, task.OfflineMode, rejectedCheck.Status)
+                ?? throw new InvalidOperationException(
+                    $"产品口径说「{rejectedCheck.Key}」（{rejectedCheck.Status}）可同步，而清单把它画成了不可同步：两处判据漂了。");
+            rejectedRow.Checked = true;
+            Application.DoEvents();
+            if (rejectedRow.Checked)
+            {
+                throw new InvalidOperationException(
+                    $"「{rejectedCheck.Key}」（{rejectedCheck.Status}）这一行勾上了：不可同步的行必须弹回，否则点「生成同步预览」会把它写进计划。");
+            }
+            if (statusLabel.Text != expectedReject)
+            {
+                throw new InvalidOperationException(
+                    $"勾一次不可同步的「{rejectedCheck.Key}」之后状态行写着「{statusLabel.Text}」，" +
+                    $"产品口径那一句是「{expectedReject}」：勾不动的那一行必须说一句为什么，" +
+                    "静默弹回与「勾上了又被谁取消」在界面上分不开。");
+            }
+            var acceptedRow = list.Items.Cast<ListViewItem>().FirstOrDefault(item =>
+                    item.Tag is EndpointCheck candidate && SyncSelection.Selectable(task.OfflineMode, candidate.Status))
+                ?? throw new InvalidOperationException("勾选页清单里找不到一行可同步的接口：夹具与这一屏对不上，本段量不到「勾得上」。");
+            acceptedRow.Checked = true;
+            Application.DoEvents();
+            if (!acceptedRow.Checked)
+            {
+                throw new InvalidOperationException(
+                    $"「{(acceptedRow.Tag as EndpointCheck)?.Key}」这一行勾不上：可同步的行必须勾得上。");
+            }
+            if (statusLabel.Text.Length != 0)
+            {
+                throw new InvalidOperationException(
+                    $"勾上一行可同步的接口之后状态行还留着「{statusLabel.Text}」：" +
+                    "那一句「勾不上」讲的是上一次点的那一行，勾上了就该收掉——留着会让人以为这一行也没勾上。");
+            }
+            if (!countLabel.Text.StartsWith("已选择 1 个接口", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"勾上一行之后计数行写着「{countLabel.Text}」，应当是「已选择 1 个接口」：计数没跟着勾选走。");
+            }
+            // 还原成「一行都没勾」：后面各段（Ctrl+A、空格、第三态）都从空态开始。
+            acceptedRow.Checked = false;
+            Application.DoEvents();
+            if (countLabel.Text != "尚未勾选接口")
+            {
+                throw new InvalidOperationException(
+                    $"取消那一行之后计数行写着「{countLabel.Text}」，应当是「尚未勾选接口」：后面各段的前提是空态。");
+            }
+
             // ② 真的按一次 Ctrl+A：可见行里可同步的勾上、不可同步的没勾。
             PressKey(dialog, null, "^a");
             var checkedAll = list.Items.Cast<ListViewItem>()

@@ -64,6 +64,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     private readonly SyncSelect _select = new();
     // 重建清单期间不把行上的勾选回写进 SyncSelect（回写是幂等的，但每行都刷一次计数是 O(n²)）。
     private bool _rebuilding;
+    // 状态行上那一句「勾不上」的原文（第二百九十八轮）：只用来认「这一句是不是我写的」——
+    // 勾上任何一行时把它收掉，而状态行上别人的消息（作业进度、失败原因）一个字不碰。
+    private string? _rejectMessage;
     private readonly Label _selectedCount = Ui.StatusText("尚未勾选接口");
     private readonly Button _selectAllButton;
     private readonly Button _clearButton;
@@ -192,18 +195,25 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _selectList.ItemCheck += (_, e) =>
         {
             // 不可同步的接口（无变化/阻断/仅源码/离线）勾选立即弹回；口径见 SyncSelection。
-            if (e.NewValue != CheckState.Unchecked
-                && _selectList.Items[e.Index].Tag is EndpointCheck check
-                && !SyncSelection.Selectable(_task.OfflineMode, check.Status))
-            {
-                e.NewValue = CheckState.Unchecked;
-            }
+            if (e.NewValue == CheckState.Unchecked) return;
+            if (_selectList.Items[e.Index].Tag is not EndpointCheck check) return;
+            if (SyncSelection.Selectable(_task.OfflineMode, check.Status)) return;
+            e.NewValue = CheckState.Unchecked;
+            // 勾不动的那一行说一句为什么（第二百九十八轮）：弹回此前是静默的——勾选框闪一下就回去，
+            // 状态行、提示行、计数行一个字都不变，用户看到的与「勾上了又被谁取消」分不开。
+            // 那句话由 SyncSelection.RejectMessage 一处给（与 Selectable 同源），本处只把它交给状态行。
+            _rejectMessage = SyncSelection.RejectMessage(check.Key, _task.OfflineMode, check.Status);
+            if (_rejectMessage is not null) SetStatus(_rejectMessage, UiTokens.WarnText);
         };
         _selectList.ItemChecked += (_, e) =>
         {
             // 勾选状态的唯一写入口：界面只在 ItemChecked 里调它，不自己维护第二份。
             if (_rebuilding) return;
             if (e.Item.Tag is EndpointCheck check) _select.Set(check.Key, e.Item.Checked);
+            // 勾上了就把上一句「勾不上」收掉——只收自己写的那一句（状态行上别人的消息一个字不碰）。
+            // 判据是「这一行真的勾上了」而不是「ItemChecked 来过一次」：勾不动的那一行自己也会走一次
+            // ItemChecked（Checked 仍是 false），在那里收掉等于刚写上去就抹掉，用户一个字都看不到。
+            if (e.Item.Checked) ClearRejectMessage();
             RefreshSelectionCount();
         };
 
@@ -695,7 +705,20 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     private void ClearSelection()
     {
         _select.Clear();
+        ClearRejectMessage();
         ApplyChecks();
+    }
+
+    /// <summary>
+    /// 收掉状态行上那一句「勾不上」（第二百九十八轮）：<b>只收自己写的那一句</b>——
+    /// 状态行上别人的消息（作业进度、失败原因、计划过期）一个字不碰，判据是「当前文字逐字等于我写的那一句」。
+    /// 勾选真的变了（勾上一行、全选、清空）时调用：那一句讲的是上一次点的那一行，勾选一动它就过期了。
+    /// </summary>
+    private void ClearRejectMessage()
+    {
+        if (_rejectMessage is null) return;
+        if (_status.Text == _rejectMessage) SetStatus("", UiTokens.Text);
+        _rejectMessage = null;
     }
 
     /// <summary>
@@ -707,6 +730,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     {
         if (_diff is null || _busy) return;
         _select.SelectAllSyncable(_diff, _decisions, _task.OfflineMode);
+        ClearRejectMessage();
         ApplyChecks();
     }
 
