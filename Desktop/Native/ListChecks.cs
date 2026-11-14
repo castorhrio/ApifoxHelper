@@ -12,6 +12,14 @@ namespace ApifoxHelper.Desktop.Native;
 /// 而自绘框与系统命中区之间哪怕有位差，用户看着框点下去也仍然翻得动——目标只会更大，不会更碎。
 /// 行以外（列头、清单外空白）不动作，与第三十九轮「命中哪行激活哪行、双击空白区不动作」同一纪律；
 /// 右键不勾选——右键不是点选手势，界面上也没有上下文菜单可给它翻（第五十二、五十三轮挂账）。
+/// <para>
+/// 本文件同时是<b>批量「全选」手势</b>（Ctrl+A）的判定落点（第二百八十四轮）：两只手势判的是同一件事的两头——
+/// 一只翻单行、一只翻可见的一批，且都在<b>复选清单</b>上，故同住一处，不另起一份口径文件：
+/// 同一个 Ctrl 修饰键在两个文件里各拆一遍，两份迟早漂（本仓另外两只 Ctrl 手势——筛选框找一找、
+/// 清单复制——判定各在自己的手势文件里，本文件也不重复它们）。
+/// 装法分两处但各司其职：整行勾选装在 <c>Ui.List</c> 工厂的 <c>checkBoxes</c> 分支（每一张复选清单都自带），
+/// 全选装在 <c>Ui.WireSelectAll</c> 这个共用入口上——它只认键与修饰键，勾哪些行由调用方交进来的动作决定。
+/// </para>
 /// </summary>
 public static class ListChecks
 {
@@ -20,4 +28,24 @@ public static class ListChecks
     /// </summary>
     public static bool ShouldToggle(bool leftClick, bool hitOnRow, bool hitOnCheckbox) =>
         leftClick && hitOnRow && !hitOnCheckbox;
+
+    /// <summary>
+    /// 裸 Ctrl+A 判定（复选清单的「全选」手势）：调用方已确认按下 A，这里只看修饰键。
+    /// 只认 Ctrl——带 Shift/Alt 的组合不属本手势、留给控件自身，不吞键，也不给既有组合键发明新语义
+    /// （与列表的复制手势、Enter 手势同一纪律：那两处判定各在自己的口径文件里，本文件不重复它们）。
+    /// <para>
+    /// 为什么补这一只手势：同步预览的接口勾选页是「生成计划前选哪些接口」的唯一入口，清单是整份检查结果的
+    /// 接口（方案 §4.2 记录千级接口分支），而这一页的批量动作此前只有一颗「全选可同步」按钮——
+    /// 键盘用户要勾一批只能逐行按空格。资源管理器里同一个动作就是 Ctrl+A，而 <see cref="SyncSelect"/>
+    /// 的类注释早就写着那颗按钮的作用域「与资源管理器 Ctrl+A 同序」：<b>那句话指着一个界面上按不出来的键</b>。
+    /// 本手势补的就是它，作用域与那颗按钮逐字相同（只作用于可见行），动作也交给同一处
+    /// （<see cref="SyncSelect.SelectAllSyncable"/>），不另写一份「勾哪些行」的判定。
+    /// </para>
+    /// <para>
+    /// 它不接管文本框里的 Ctrl+A：本判定只装在复选清单自己的按键通路上（<c>Ui.WireSelectAll</c>），
+    /// 焦点在关键词框里时 Ctrl+A 仍是「选中框里的全部文字」——<see cref="ShellShortcuts.ReservedEditingKeys"/>
+    /// 把 Ctrl+A 列为壳不得占用的编辑键，正是这一条。
+    /// </para>
+    /// </summary>
+    public static bool IsSelectAllGesture(bool shift, bool control, bool alt) => control && !shift && !alt;
 }

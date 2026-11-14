@@ -210,6 +210,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _selectAllButton = Ui.Ghost("全选可同步");
         _selectAllButton.Enabled = false;
         _selectAllButton.Click += (_, _) => SelectAllSyncable();
+        // 同一个动作的键盘入口（第二百八十四轮）：Ctrl+A 与这颗按钮调的是同一个方法，作用域因此逐字相同
+        // （只作用于可见行）。认键与修饰键在 Ui.WireSelectAll 一处，本对话框不就地写 Keys.A。
+        Ui.WireSelectAll(_selectList, SelectAllSyncable);
         _clearButton = Ui.Ghost("清空");
         _clearButton.Enabled = false;
         _clearButton.Click += (_, _) => ClearSelection();
@@ -644,10 +647,14 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         ApplyChecks();
     }
 
-    /// <summary>「全选可同步」：只作用于可见行（屏幕上只有 3 行时点「全选」却勾上 40 个，用户看不见自己勾了什么）。</summary>
+    /// <summary>
+    /// 「全选可同步」：只作用于可见行（屏幕上只有 3 行时点「全选」却勾上 40 个，用户看不见自己勾了什么）。
+    /// 按钮与 Ctrl+A 两条入口都走这里，门控也在这里判一次——按钮在作业执行期间是停用的，
+    /// 手势若绕过这一句，同一条纪律就有两个答案（第二百八十四轮）。
+    /// </summary>
     private void SelectAllSyncable()
     {
-        if (_diff is null) return;
+        if (_diff is null || _busy) return;
         _select.SelectAllSyncable(_diff, _decisions, _task.OfflineMode);
         ApplyChecks();
     }

@@ -786,6 +786,32 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 复选清单的「全选」手势（Ctrl+A）接线（第二百八十四轮）：判定取 <see cref="ListChecks.IsSelectAllGesture"/>
+    /// 单一口径，动作由调用方交进来——同步预览交的是「全选可同步」那颗按钮调用的同一个方法，
+    /// 于是手势与按钮是同一件事的两条入口，不各写一份「勾哪些行」（作用域仍只在 <see cref="SyncSelect"/> 一处）。
+    /// <para>
+    /// 为什么入口在这一侧而不是对话框里就地写：认键与修饰键的判定必须只有一份——同一个 Ctrl 修饰键
+    /// 在两个文件里拆两遍，两份迟早漂（与 <see cref="ListCopy.IsCopyGesture"/>、
+    /// <see cref="ShellShortcuts.IsFindGesture"/> 同一纪律）。本入口只认键与修饰键，
+    /// 不碰勾选状态、不重建清单、不写数据；勾哪些行仍由 <see cref="SyncSelect"/> 一处说了算。
+    /// </para>
+    /// <para>
+    /// 只装在复选清单上（形参就是清单，不是文本框）：文本框里的 Ctrl+A 仍是「选中框里的全部文字」——
+    /// <see cref="ShellShortcuts.ReservedEditingKeys"/> 把 Ctrl+A 列为壳不得占用的编辑键，正是这一条；
+    /// 焦点在关键词框里时那个 Ctrl+A 仍是编辑框自己的，本入口不接管任何文本框。
+    /// </para>
+    /// </summary>
+    public static void WireSelectAll(ListView list, Action selectAll)
+    {
+        list.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode != Keys.A || !ListChecks.IsSelectAllGesture(e.Shift, e.Control, e.Alt)) return;
+            e.SuppressKeyPress = true;
+            selectAll();
+        };
+    }
+
+    /// <summary>
     /// 计数格（docs/DESIGN.md §3「等宽栈：计数、进度、ID、路径、差异文本必须等宽」）：等宽字体只在这里出厂。
     /// <para>
     /// 补的是哪一处缺口：这条规则此前只有检查结果对话框执行了（<c>AddCount</c> 里设 Mono），
