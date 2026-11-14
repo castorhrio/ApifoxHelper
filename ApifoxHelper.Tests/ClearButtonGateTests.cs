@@ -131,9 +131,10 @@ public class ClearButtonGateTests
     [Fact]
     public void Dialog_KeepsTheTwoBatchButtonsOnTheirOwnRules()
     {
-        // 本轮只动「清空」：另两颗按钮的启停口径一字未改（全选按数据可用、生成按已勾数量）。
+        // 第二百八十七轮只动「清空」：另两颗按钮的启停口径当时一字未改（全选按数据可用、生成按已勾数量）。
+        // 第二百九十五轮把「全选可同步」也收进它自己那一处判定（`RefreshSelectAllButton`，见
+        // `SelectAllButtonGateTests`）——「生成同步预览」仍按已勾数量启停，这一条不变。
         var code = CodeScan.Text(Repo.Source("Desktop", "Native", File));
-        Assert.Contains("_selectAllButton.Enabled = !busy && _diff is not null;", code, StringComparison.Ordinal);
         Assert.Contains("_generateButton.Enabled = !busy && _select.CheckedCount > 0;", code, StringComparison.Ordinal);
         // 可同步口径与两个批量动作的作用域不在本轮：全选仍只作用于可见行。
         Assert.Contains("_select.SelectAllSyncable(_diff, _decisions, _task.OfflineMode);", code, StringComparison.Ordinal);

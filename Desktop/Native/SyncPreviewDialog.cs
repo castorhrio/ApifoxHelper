@@ -641,8 +641,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
             if (target is not null) Ui.SelectItem(target);
             else Ui.SelectFirstOnOpen(_selectList);
         }
-        _selectAllButton.Text = "全选可同步（" + _select.VisibleSyncableCount(diff, _decisions, _task.OfflineMode) + "）";
-        _selectAllButton.Enabled = true;
+        // 「全选可同步」不在这里写死可用：可见行里一个可同步的都没有时它没有可勾的东西（第二百九十五轮），
+        // 文字里的数字与启停由 RefreshSelectAllButton 一处给（与「清空」同一形状）。
+        RefreshSelectAllButton();
         // 「清空」不在这里写死 true：重建之后勾选可能一个都没有（第二百八十七轮），
         // 启停由方法末尾的 RefreshSelectionCount → RefreshClearButton 一处给。
         _visibleCount.Text = "接口 " + diff.Endpoints.Count + " · 可同步 "
@@ -718,6 +719,29 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     }
 
     /// <summary>
+    /// 「全选可同步」的启停（第二百九十五轮）：口径与 <see cref="SyncSelect.CanSelectAll"/> 同源——
+    /// 可见行里一个可同步的都没有时，这颗按钮没有可勾的东西，如实禁用（按钮文字里的那个 0 就是它）。
+    /// <para>
+    /// <b>为什么单独一个方法</b>：与「清空」同一形状——这颗按钮的可用性有两个触发时刻
+    /// （清单重建、作业开始/结束），两处各写一遍「有数据 ∧ 不在忙 ∧ 有东西可勾」就是两份判定，
+    /// 迟早一处漏掉一个条件。收在一处，两处都调它；按钮文字也在这里给，于是「文字里的 N」与
+    /// 「启停看的是不是同一个 N」不可能对不上。
+    /// </para>
+    /// <para>
+    /// <b>它不改什么</b>：不改可同步口径（仍取 <see cref="SyncSelection"/>）、不改两个批量动作的作用域
+    /// （「全选可同步」仍只作用于可见行）、不改勾选状态那一份（仍只在 <see cref="SyncSelect"/>）。
+    /// 手势那一侧不受影响：Ctrl+A 走 <see cref="SelectAllSyncable"/>，它自己的门控（无数据 / 忙）一字未动，
+    /// 可见行里没有可同步的行时它本来也勾不上任何一行。
+    /// </para>
+    /// </summary>
+    private void RefreshSelectAllButton()
+    {
+        var count = _diff is null ? 0 : _select.VisibleSyncableCount(_diff, _decisions, _task.OfflineMode);
+        _selectAllButton.Text = "全选可同步（" + count + "）";
+        _selectAllButton.Enabled = !_busy && _diff is not null && SyncSelect.CanSelectAll(count);
+    }
+
+    /// <summary>
     /// 「清空」的启停（第二百八十七轮）：口径与 <see cref="SyncSelect.CanClear"/> 同源——一行都没勾时它没有可清的东西，
     /// 如实禁用（与「生成同步预览」按已勾数量启停同一形状，第四十轮「空选中分支如实禁用」同一条判据）。
     /// <para>
@@ -758,8 +782,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        _selectAllButton.Enabled = !busy && _diff is not null;
-        // 「清空」比「全选可同步」多一个条件：真有东西可清（第二百八十七轮，判定在 RefreshClearButton 一处）。
+        // 两颗批量按钮的启停各在一处判定（第二百八十七轮「清空」、第二百九十五轮「全选可同步」）：
+        // 忙的时候两条入口一起闭，不忙时再问「有没有可动的东西」。
+        RefreshSelectAllButton();
         RefreshClearButton();
         _keyword.Enabled = ListFilter.KeywordEnabled(_diff is not null, busy);
         _actionKeyword.Enabled = ListFilter.KeywordEnabled(_plan is { Actions.Count: > 0 }, busy);

@@ -67,6 +67,30 @@ public sealed class SyncSelect
     /// </summary>
     public bool CanClear => _checked.Count > 0;
 
+    /// <summary>
+    /// 「全选可同步」此刻有没有可勾的东西（第二百九十五轮）：可见行里一个可同步的都没有时，
+    /// 这颗按钮应当如实禁用——与 <see cref="CanClear"/> 同一形状。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百八十七轮把「清空」按已勾数启停之后，同一行上三颗批量按钮里
+    /// 只剩「全选可同步（N）」还按「数据是否可用」启停——把关键词敲成只命中不可同步的行
+    /// （或筛到零行），按钮上写着「全选可同步（0）」却仍是亮的，点下去什么也不会发生、
+    /// 计数行也不会变一个字。第四十轮对同一形状判过（「查看代码证据」残留启用、点击静默无响应），
+    /// 第二百八十七轮对「清空」判过第二次，本处是同一行上的第三颗。
+    /// </para>
+    /// <para>
+    /// <b>为什么参数是「可见行里的可同步数」而不是「已勾数」</b>：这颗按钮的作用域是<b>可见行</b>
+    /// （与资源管理器 Ctrl+A 同序，见类注释），所以「有没有可勾的东西」问的是可见行里还剩几个可同步的，
+    /// 不是已经勾了几个——勾了 5 个、筛到只剩不可同步的行时，这颗按钮仍然没有可勾的东西。
+    /// 计数由调用方按 <see cref="VisibleSyncableCount"/> 算好交进来（按钮文字里的那个 N 就是它），
+    /// 本判定不另算一份，也不读关键词。
+    /// </para>
+    /// <para>
+    /// 它不判「忙不忙」「有没有数据」：那两项与「清空」一样由界面那一处判定一起给
+    /// （<c>SyncPreviewDialog.RefreshSelectAllButton</c>），本文件只答「有没有可勾的东西」。
+    /// </para>
+    /// </summary>
+    public static bool CanSelectAll(int visibleSyncableCount) => visibleSyncableCount > 0;
+
     /// <summary>可见行：关键词只改可见行，不改勾选（空关键词返回数据源顺序的副本）。</summary>
     public List<EndpointCheck> Visible(CheckResult diff) =>
         ListFilter.Apply(diff.Endpoints, Query, SearchFields);

@@ -307,7 +307,7 @@ internal static class Program
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
-        Section("勾选页的键盘流（真的按一次 Ctrl+A 与一次空格：打开即选中第一条、键盘真的在清单上、可见行里可同步的勾上而不可同步的没勾、藏起来的行一个都不动；空格翻焦点行、翻得回来、不可同步的行按空格照旧勾不上；「清空」按勾选数启停三态，真实键）", nameof(RunSelectKeyboard));
+        Section("勾选页的键盘流（真的按一次 Ctrl+A 与一次空格：打开即选中第一条、键盘真的在清单上、可见行里可同步的勾上而不可同步的没勾、藏起来的行一个都不动；空格翻焦点行、翻得回来、不可同步的行按空格照旧勾不上；「清空」按勾选数启停三态、「全选可同步（N）」按可见行里可同步的行数启停三态（打开时可用且 N 对得上、筛到只剩几行时 N 跟着走、可见行全不可同步时禁用且 N 是 0），真的点一次「全选可同步」勾上的正是可见行里可同步的那一批、计数行与「生成同步预览」跟着走，真实键与真实点击）", nameof(RunSelectKeyboard));
         RunSelectKeyboard(services, dataRoot);
 
         Section("勾选页往返（真的点一次「查看已有计划」再点一次「重新选择接口」：勾选含被关键词筛掉的那些一个不丢、计数行与「生成同步预览」跟着回来、键盘回到清单上、空格仍翻得动焦点行，真实控件）", nameof(RunSelectRoundTrip));
@@ -7011,7 +7011,16 @@ internal static class Program
     /// 不是把处理函数直接调一遍（那样什么也证明不了）。
     /// </para>
     /// <para>
+    /// <b>第二百九十六轮加的一段</b>：「全选可同步」那颗按钮<b>真的被点了一次</b>（<c>PerformClick</c>，
+    /// WinForms 的点击链路，不是直接调事件处理器）。第二百九十五轮把「按钮上那个数」与「可见行里可同步的行数」
+    /// 对上了，但<b>那颗按钮一次都没被点过</b>——它的 <c>Click</c> 接在 <c>SelectAllSyncable</c> 上，
+    /// 接错了（勾上全部行、勾完不刷新计数、勾完不放行下一步）上面那两条断言照样全绿。
+    /// 这一段量的是「点下去真的勾上哪几行、计数行与「生成同步预览」跟不跟得上」，点完再点「清空」回到空态，
+    /// 后面各段的前提不变。
+    /// </para>
+    /// <para>
     /// <b>判什么</b>：① 打开即选中第一条接口、键盘真的在清单上（不是落在别的控件上）；
+    /// ①''' 真的点一次「全选可同步」，勾上的正是可见行里可同步的那一批、计数行与「生成同步预览」跟着走；
     /// ② 真的按一次 Ctrl+A，可见行里可同步的被勾上、不可同步的没勾，计数行跟着走；
     /// ③ 作用域只到可见行——筛到只剩几行时按 Ctrl+A，藏起来的那几行一个都不动。
     /// 期望值取产品自己的口径（<see cref="SyncSelection"/>），界面与它对不上就是界面错了。
@@ -7053,6 +7062,9 @@ internal static class Program
                 ?? throw new InvalidOperationException("勾选页找不到勾选计数那一行：本段口径需要重定。");
             var clearButton = FindAll<Button>(dialog).FirstOrDefault(button => button.Text == "清空")
                 ?? throw new InvalidOperationException("勾选页找不到「清空」那颗按钮：本段口径需要重定。");
+            // 「全选可同步（N）」那颗按钮按前缀认：它文字里的 N 随可见行变，逐字认会随夹具漂。
+            var selectAllButton = FindAll<Button>(dialog).FirstOrDefault(button => button.Text.StartsWith("全选可同步", StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("勾选页找不到「全选可同步」那颗按钮：本段口径需要重定。");
 
             // ① 打开即选中第一条接口、键盘真的在清单上。
             if (list.Items.Count != diff.Endpoints.Count)
@@ -7080,6 +7092,78 @@ internal static class Program
                 throw new InvalidOperationException(
                     "打开勾选页时一行都没勾，「清空」却是可用的：点下去什么也不会发生、计数行也不会变一个字——" +
                     "空选中分支应当如实禁用（与第四十轮「查看代码证据」残留启用同一条判据）。");
+            }
+
+            // ①'' 「全选可同步（N）」此刻应当可用，且文字里的 N 就是可见行里可同步的行数（第二百九十五轮）。
+            // 这一态量的是「按钮上那个数与它实际会勾的那一批是同一个数」：N 若与 Ctrl+A 勾上的行数对不上，
+            // 用户看到的就是一个说了不算的按钮。
+            if (!selectAllButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "打开勾选页时可见行里有可同步的接口，「全选可同步」却是禁用的：有东西可勾时它必须可用。");
+            }
+            if (selectAllButton.Text != "全选可同步（" + expectedAll.Count + "）")
+            {
+                throw new InvalidOperationException(
+                    $"打开勾选页时「全选可同步」写着「{selectAllButton.Text}」，可见行里可同步的是 {expectedAll.Count} 行：" +
+                    "按钮上那个数与它实际会勾的那一批必须是同一个数。");
+            }
+
+            // ①''' 真的点一次「全选可同步」那颗按钮（第二百九十六轮）：鼠标那一支。
+            // 上一轮把「按钮上那个数」与「可见行里可同步的行数」对上了，但**那颗按钮一次都没被点过**——
+            // 它的 Click 接在 SelectAllSyncable 上，接错了（勾上全部行、勾完不刷新计数、勾完不放行下一步）
+            // 上面那两条断言照样全绿。这一段量的是「点下去真的勾上哪几行、计数行与下一步跟不跟得上」。
+            var generateButton = FindAll<Button>(dialog).FirstOrDefault(button => button.Text == "生成同步预览")
+                ?? throw new InvalidOperationException("勾选页找不到「生成同步预览」那颗按钮：本段口径需要重定。");
+            if (generateButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "打开勾选页时一行都没勾，「生成同步预览」却是可用的：它按已勾数量启停，没有可生成的东西时必须禁用。");
+            }
+            selectAllButton.PerformClick();
+            Application.DoEvents();
+            var checkedByButton = list.Items.Cast<ListViewItem>()
+                .Where(item => item.Checked)
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            var expectedByButton = expectedAll.OrderBy(key => key, StringComparer.Ordinal).ToList();
+            if (!expectedByButton.SequenceEqual(checkedByButton, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"点一次「全选可同步」后勾上了 {checkedByButton.Count} 行（{string.Join("、", checkedByButton)}），" +
+                    $"产品口径算出可见行里可同步的是 {expectedByButton.Count} 行（{string.Join("、", expectedByButton)}）：" +
+                    "按钮上写着几行，点下去就得勾上那几行——两个答案必须逐字相同。");
+            }
+            if (!countLabel.Text.StartsWith("已选择 " + expectedByButton.Count + " 个接口", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"点一次「全选可同步」后计数行写着「{countLabel.Text}」，应当是「已选择 {expectedByButton.Count} 个接口」：计数没跟着按钮走。");
+            }
+            if (!generateButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    $"点一次「全选可同步」勾上了 {expectedByButton.Count} 行，「生成同步预览」却仍是禁用的：" +
+                    "有东西可生成时它必须可用，否则用户勾完这一批却走不到下一步。");
+            }
+            if (selectAllButton.Text != "全选可同步（" + expectedByButton.Count + "）")
+            {
+                throw new InvalidOperationException(
+                    $"点一次「全选可同步」之后按钮写着「{selectAllButton.Text}」，可见行里可同步的是 {expectedByButton.Count} 行：" +
+                    "点这一下不改可见行，按钮上那个数不该跟着变。");
+            }
+            // 点「清空」回到空态：后面各段（Ctrl+A、空格、第三态）都从「一行都没勾」开始。
+            clearButton.PerformClick();
+            Application.DoEvents();
+            if (list.Items.Cast<ListViewItem>().Any(item => item.Checked))
+            {
+                throw new InvalidOperationException(
+                    "点过「清空」之后清单里还有勾着的行：后面各段的前提是「一行都没勾」，这一段的口径需要重定。");
+            }
+            if (generateButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "点过「清空」之后一行都没勾了，「生成同步预览」却仍是可用的：它按已勾数量启停。");
             }
 
             // ② 真的按一次 Ctrl+A：可见行里可同步的勾上、不可同步的没勾。
@@ -7137,6 +7221,14 @@ internal static class Program
                 .ToList();
             var expectedVisible = expectedAll.Where(key => visibleKeys.Contains(key, StringComparer.Ordinal))
                 .OrderBy(key => key, StringComparer.Ordinal).ToList();
+            // 筛到只剩几行之后，按钮上那个数必须跟着可见行走（第二百九十五轮）：它只作用于可见行，
+            // 数字若还写着全部行里的可同步数，用户会以为点下去能勾上屏幕外的行。
+            if (selectAllButton.Text != "全选可同步（" + expectedVisible.Count + "）")
+            {
+                throw new InvalidOperationException(
+                    $"筛到 {visibleKeys.Count} 行后「全选可同步」写着「{selectAllButton.Text}」，" +
+                    $"可见行里可同步的是 {expectedVisible.Count} 行：按钮上那个数没跟着筛选走。");
+            }
             var actualVisible = checkedVisible.OrderBy(key => key, StringComparer.Ordinal).ToList();
             if (!expectedVisible.SequenceEqual(actualVisible, StringComparer.Ordinal))
             {
@@ -7313,6 +7405,21 @@ internal static class Program
             {
                 throw new InvalidOperationException(
                     "可见行全是不可同步的接口、一行都没勾上，「清空」却是可用的：没有可清的东西时它必须禁用（第三态）。");
+            }
+            // ⑥' 「全选可同步」的第三态（第二百九十五轮）：可见行里一个可同步的都没有，它没有可勾的东西，
+            // 应当如实禁用、文字里的数如实是 0——此前它按「数据是否可用」启停，这一态下写着「（0）」却仍是亮的，
+            // 点下去什么也不会发生（与第四十轮「查看代码证据」残留启用、第二百八十七轮「清空」同一条判据）。
+            if (selectAllButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    $"可见行全是不可同步的接口，「全选可同步」却是可用的（文字「{selectAllButton.Text}」）：" +
+                    "点下去一行也勾不上、计数行也不会变一个字——没有可勾的东西时它必须禁用。");
+            }
+            if (selectAllButton.Text != "全选可同步（0）")
+            {
+                throw new InvalidOperationException(
+                    $"可见行全是不可同步的接口，「全选可同步」写着「{selectAllButton.Text}」，应当是「全选可同步（0）」：" +
+                    "按钮上那个数必须如实是可见行里可同步的行数。");
             }
         });
     }

@@ -189,7 +189,12 @@ public class SelectAllGestureTests
         var body = Slice(source, "private void SelectAllSyncable()", "private void RefreshSelectionCount()");
         Assert.Contains("_diff is null || _busy", body, StringComparison.Ordinal);
         var busy = Slice(source, "private void SetBusy(bool busy)", "private void RefreshPlanActionButtons()");
-        Assert.Contains("_selectAllButton.Enabled = !busy && _diff is not null;", busy, StringComparison.Ordinal);
+        // 第二百九十五轮起这颗按钮的启停收进 RefreshSelectAllButton 一处（与「清空」同一形状）：
+        // 忙时两条入口一起闭这一条不变，认的是那次调用，而不是就地写一行赋值。
+        Assert.Contains("RefreshSelectAllButton();", busy, StringComparison.Ordinal);
+        Assert.DoesNotContain("_selectAllButton.Enabled", busy, StringComparison.Ordinal);
+        var judge = Slice(source, "private void RefreshSelectAllButton()", "private void RefreshClearButton()");
+        Assert.Contains("_selectAllButton.Enabled = !_busy && _diff is not null && SyncSelect.CanSelectAll(count);", judge, StringComparison.Ordinal);
     }
 
     // ---------- 设计基线回写 ----------

@@ -283,7 +283,9 @@ public class SyncSelectSortTests
         // 表头标记在清单重建之后刷新（EndUpdate 之后），筛到零行那一支之前。
         Assert.Matches(@"(?m)^\s*_selectList\.EndUpdate\(\);\s*\n\s*_rebuilding = false;\s*\n\s*\}\s*\n\s*RefreshSelectSortHeaders\(\);", populate);
         var refresh = populate.IndexOf("RefreshSelectSortHeaders();", StringComparison.Ordinal);
-        var counts = populate.IndexOf("_selectAllButton.Text =", StringComparison.Ordinal);
+        // 第二百九十五轮起「全选可同步」的文字与启停收进 RefreshSelectAllButton 一处，
+        // 重建路径上认的是那次调用（它仍在表头标记之后，与计数刷新同一段）。
+        var counts = populate.IndexOf("RefreshSelectAllButton();", StringComparison.Ordinal);
         Assert.True(refresh >= 0 && counts > refresh, "表头标记要在按钮与计数刷新之前（那一屏的其余赋值都在其后）。");
     }
 
