@@ -48,6 +48,11 @@ internal sealed class SupplementsDialog : DpiAwareForm
     private readonly string[] _titles;
 
     private readonly Label _counts = Ui.Mono();
+    /// <summary>
+    /// 读取失败态的唯一行动按钮（第三百零三轮）：文字取自 <see cref="LoadFailureState.RetryLabel"/>，
+    /// 不就地写「重试」；点下去调的是与「打开」同一个 <see cref="LoadAll"/>，两条路不各读一份。
+    /// </summary>
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
     private readonly ListView _list = Ui.List();
     private readonly TextBox _keyword = Ui.Input();
     private readonly Panel _editorsHost = new() { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Lg, UiTokens.Lg, UiTokens.Sm) };
@@ -109,6 +114,9 @@ internal sealed class SupplementsDialog : DpiAwareForm
         _saveButton.Click += (_, _) => SaveCurrent();
         _discardButton = Ui.Ghost("放弃修改");
         _discardButton.Click += (_, _) => DiscardEdits();
+        // 读取失败态的唯一行动入口（第三百零三轮）：与「打开」调同一个 LoadAll，两条路不各读一份。
+        _retry.Click += (_, _) => LoadAll();
+        _retry.Visible = false;
 
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
@@ -119,20 +127,24 @@ internal sealed class SupplementsDialog : DpiAwareForm
         _counts.Dock = DockStyle.Fill;
         _counts.TextAlign = ContentAlignment.MiddleRight;
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 5, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 6, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _discardButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         closeButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         actionRow.Controls.Add(_saveButton, 0, 0);
         actionRow.Controls.Add(_discardButton, 1, 0);
         // 第 2 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
         // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
         actionRow.Controls.Add(_counts, 3, 0);
-        actionRow.Controls.Add(closeButton, 4, 0);
+        // 「重试」与「关闭」同属右边那一组（与报告、差异确认、任务日志、注释候选同一落法），失败态才显示。
+        actionRow.Controls.Add(_retry, 4, 0);
+        actionRow.Controls.Add(closeButton, 5, 0);
 
         var statusGrid = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, ColumnCount = 1, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Xs) };
         statusGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -176,13 +188,29 @@ internal sealed class SupplementsDialog : DpiAwareForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 读检查结果与已保存补充并呈现。<b>「打开」与那颗「重试」调的都是这一个入口</b>（第三百零三轮）：
+    /// 两条路各读一份，失败态与正常态就会各自漂移。
+    /// <para>
+    /// 这一屏此前两种读取失败都只给一句「请关闭后…再试」——屏上没有可点的入口去做那件事，
+    /// 与报告 / 差异确认（第一百五十二轮）、任务日志（第一百五十七轮）、注释候选（第三百零三轮）
+    /// 同一族。其中「读取检查结果失败」与差异确认读的是<b>同一份 diff.json</b>，两处却一个给「点「重试」
+    /// 再读一次」、一个把用户支去重开窗口，属同壳不同行为。
+    /// 「尚未检查」与「检查结果里没有接口」是空态不是失败：<b>不</b>给那颗按钮，那句话自己指着任务页。
+    /// </para>
+    /// </summary>
+    private void LoadAll()
+    {
         try
         {
             _result = _tasks.Read<CheckResult>(_task.Id, TaskFiles.Diff);
         }
         catch (Exception ex)
         {
-            ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在「" + PageNames.Tasks + "」页重新检查再试。", UiTokens.BadText);
+            ShowFailure(LoadFailureState.Supplements.Title, ex, LoadFailureState.Supplements.Hint);
             return;
         }
         if (_result is null)
@@ -197,8 +225,9 @@ internal sealed class SupplementsDialog : DpiAwareForm
         catch (Exception ex)
         {
             _supplement = null;
-            // 读取不到已保存补充时不提供保存动作，避免用空补充覆盖其他接口的既有内容。
-            ShowHint("读取已保存补充失败：" + Redactor.Redact(ex.Message) + "。为避免覆盖已有补充，保存已停用；请关闭后重试。", UiTokens.BadText);
+            // 读取不到已保存补充时不提供保存动作，避免用空补充覆盖其他接口的既有内容——这条约束
+            // 不因为多了那颗「重试」而放松（与差异确认的 SavedHint 同一形状）。
+            ShowFailure(LoadFailureState.Supplements.SavedTitle, ex, LoadFailureState.Supplements.SavedHint);
             return;
         }
         if (_result.Endpoints.Count == 0)
@@ -206,9 +235,10 @@ internal sealed class SupplementsDialog : DpiAwareForm
             ShowHint("检查结果中没有接口，没有可补充的位置。", UiTokens.Muted);
             return;
         }
-        // 有数据可筛：关键词框可用（口径见 ListFilter.KeywordEnabled）。
+        // 有数据可筛：关键词框可用（口径见 ListFilter.KeywordEnabled）；读成功即退出失败态，那颗「重试」收起。
         _keyword.Enabled = ListFilter.KeywordEnabled(true);
         _hint.Visible = false;
+        _retry.Visible = false;
         PopulateList();
     }
 
@@ -244,6 +274,18 @@ internal sealed class SupplementsDialog : DpiAwareForm
         _saveButton.Enabled = false;
         _discardButton.Enabled = false;
         _counts.Text = "";
+        // 提示出口对读取失败与空态通用，那颗「重试」默认不亮：只有 ShowFailure 展开它。
+        _retry.Visible = false;
+    }
+
+    /// <summary>
+    /// 读取失败态：一句原因（脱敏后）+ 屏上一个真的能点的入口。文案取 <see cref="LoadFailureState"/> 一份，
+    /// 界面不就地拼（第三百零三轮，与注释候选、报告、差异确认、任务日志同一形状）。
+    /// </summary>
+    private void ShowFailure(string title, Exception ex, string hint)
+    {
+        ShowHint(LoadFailureState.FailureMessage(title, Redactor.Redact(ex.Message), hint), UiTokens.BadText);
+        _retry.Visible = true;
     }
 
     /// <summary>

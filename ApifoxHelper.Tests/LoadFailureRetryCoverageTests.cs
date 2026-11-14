@@ -30,9 +30,12 @@ namespace ApifoxHelper.Tests;
 /// 解析本身由 <see cref="RetryWrapper_IsResolvedOnlyWhenItDelegatesToOneReadEntry"/> 拿三发注入当场验。
 /// </para>
 /// <para>
-/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheFiveScreens"/> 把「发现到哪几屏」
+/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheEightScreens"/> 把「发现到哪几屏」
 /// 钉成封闭清单——发现正则写坏（比如口径文件改名）会让清单变空，那条用例先红，
 /// 不会出现「一条都没发现、于是全部通过」的假绿。
+/// <b>但这一族只看得见已经接入口径文件的屏</b>（第三百零三轮）：一屏从不引用 <c>LoadFailureState</c>，
+/// 就从不被它看见——本轮接入的三屏正是这么漏着的。那层盲区由对面那一道兜住，
+/// <see cref="NoScreen_SendsTheUserAwayToReopenTheWindow"/> 判的是那几句<b>话本身</b>，不认引用。
 /// </para>
 /// </summary>
 public class LoadFailureRetryCoverageTests
@@ -67,6 +70,24 @@ public class LoadFailureRetryCoverageTests
             .Where(s => StateMarkers.Any(s.Contains))
             .OrderBy(s => s.Name, StringComparer.Ordinal)
             .ToList();
+
+    /// <summary>
+    /// 不新增第二颗「重试」、而是<b>让失败提示指名屏上那颗已有入口</b>的屏（第三百零三轮：ApplyPlanDialog）。
+    /// <para>
+    /// 为什么它不进那几个按按钮形状判的循环：这一屏的第一次读取就是「生成计划」，而这一屏本来就有一颗
+    /// 「重新生成计划」——点下去调的正是 <c>OnLoad</c> 调的那一个入口。再摆一颗「重试」等于同屏两颗做同一件
+    /// 事的按钮，违反 §1.3「唯一行动按钮」；口径文件为此留了 <c>LoadFailureState.RetryHint</c> 这一支
+    /// （「读取项目列表」「读取分支」那两颗按钮早就这么判）。它改由
+    /// <see cref="NamedEntryScreen_RetryIsTheButtonTheHintNames"/> 单独判三件事：提示句指名的那颗按钮确实存在、
+    /// 点的是同一个读取入口、失败态确实把它交回可用。<b>它不进封闭清单以外的第三条路</b>——
+    /// <see cref="Discovery_CoversExactlyTheEightScreens"/> 判两组之和必须等于发现到的全部屏。
+    /// </para>
+    /// </summary>
+    private static readonly string[] NamedEntryScreens = ["ApplyPlanDialog.cs"];
+
+    /// <summary>按「屏上有一颗取自口径的「重试」按钮」这一形状判的那几屏。</summary>
+    private static IReadOnlyList<NativeSource> ButtonScreens() =>
+        FailureScreens().Where(s => !NamedEntryScreens.Contains(s.Name)).ToList();
 
     /// <summary>这一屏的「重试」按钮字段名（按钮文字必须取自口径文件，不就地写「重试」）。</summary>
     private static string RetryField(NativeSource screen)
@@ -104,12 +125,27 @@ public class LoadFailureRetryCoverageTests
     // ---------- 发现：范围本身要钉住，否则「一条都没发现」也是绿的 ----------
 
     [Fact]
-    public void Discovery_CoversExactlyTheFiveScreens()
+    public void Discovery_CoversExactlyTheEightScreens()
     {
         // 封闭清单：新增一屏带失败态时，这里会红——提醒把新屏的接线一并补上（而不是悄悄漏掉）。
         // 第一百五十七轮新增第五屏 JournalDialog.cs（任务日志对话框的读取失败态）。
+        // 第三百零三轮补到八屏：CandidatesDialog（注释候选）、SupplementsDialog（补充说明）此前只在失败时
+        // 给一句「请关闭后重试」，屏上没有可点的入口；ApplyPlanDialog 走「指名已有按钮」那一支（见 NamedEntryScreens）。
         var names = FailureScreens().Select(s => s.Name).ToArray();
-        Assert.Equal(["DecisionsDialog.cs", "JournalDialog.cs", "ProjectsPage.cs", "ReportsDialog.cs", "TasksPage.cs"], names);
+        Assert.Equal(
+            [
+                "ApplyPlanDialog.cs", "CandidatesDialog.cs", "DecisionsDialog.cs", "JournalDialog.cs",
+                "ProjectsPage.cs", "ReportsDialog.cs", "SupplementsDialog.cs", "TasksPage.cs",
+            ],
+            names);
+
+        // 两个形状必须把这八屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
+        // 少了这一句，往 NamedEntryScreens 里写一个不存在的文件名会静默少判一屏。
+        var partition = ButtonScreens().Select(s => s.Name)
+            .Concat(NamedEntryScreens)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(names, partition);
     }
 
     // ---------- 接线：每一屏都必须有「重试」，且回到同一个读取入口 ----------
@@ -117,7 +153,7 @@ public class LoadFailureRetryCoverageTests
     [Fact]
     public void EveryFailureScreen_HasOneRetryButtonFromTheSharedLabel()
     {
-        foreach (var screen in FailureScreens())
+        foreach (var screen in ButtonScreens())
         {
             var field = RetryField(screen);
             // 按钮要真的挂到屏上：造出来不 Add 等于没有（页面挂进空态动作行，对话框挂进动作行网格）。
@@ -128,7 +164,7 @@ public class LoadFailureRetryCoverageTests
     [Fact]
     public void EveryFailureScreen_RetryCallsTheSameLoadEntryAsTheInitialRead()
     {
-        foreach (var screen in FailureScreens())
+        foreach (var screen in ButtonScreens())
         {
             var field = RetryField(screen);
             var target = RetryTarget(screen, field);
@@ -220,7 +256,7 @@ public class LoadFailureRetryCoverageTests
         // ① 页面：可见性由口径文件的同一份判定给出（RetryVisible），不就地写 if；
         // ② 对话框：读成功时收起（false）、失败时按条件置位（true / canRetry），不留在常显。
         // 两种都不成立的屏（按钮造出来就常显、或只置 true 从不收起）在这里红。
-        foreach (var screen in FailureScreens())
+        foreach (var screen in ButtonScreens())
         {
             var field = RetryField(screen);
             var assignments = Regex.Matches(screen.Text, Regex.Escape(field) + @"\.Visible = ([^;]+);")
@@ -258,5 +294,130 @@ public class LoadFailureRetryCoverageTests
         var profile = Repo.Source("Desktop", "Native", "ProfileLoadState.cs");
         Assert.Empty(Regex.Matches(profile, "\"重试\""));
         Assert.Contains("LoadFailureState.RetryLabel", profile);
+    }
+
+    // ---------- 「不新增按钮、而是让提示指名已有入口」那一支（第三百零三轮） ----------
+
+    /// <summary>
+    /// <see cref="NamedEntryScreens"/> 那一支单独判，形状与上面那几条一一对得上，只是那颗按钮是屏上本来就有的。
+    /// <para>
+    /// 判四件事：① 按钮文字有一处常量落点、按钮从它出厂；② 失败提示经 <c>RetryHint</c> 把同一个名字交进去；
+    /// ③ 那颗按钮点下去调的正是首次读取（<c>OnLoad</c>）调的那一个入口；④ 读取失败那一支确实把它交回可用，
+    /// 而「前置未满足」那一支不点亮它（重试读不出新东西时，亮着一颗做用没有的按钮比不亮更坏）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那句话在屏幕上放不放得下（随 G-D5），也不判「这一屏该不该再多一颗按钮」——
+    /// 那是 §1.3 那句「唯一行动按钮」的判断，写在口径文件的注释里。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NamedEntryScreen_RetryIsTheButtonTheHintNames()
+    {
+        const string file = "ApplyPlanDialog.cs";
+        var screen = Repo.NativeSources().Single(s => s.Name == file);
+        var text = screen.Text;
+
+        // ① 按钮文字有一处常量落点。
+        Assert.Matches(@"(?m)^\s*private const string RegenerateLabel = ""[^""]+"";$", text);
+        Assert.Matches(@"(?m)^\s*_regenButton = Ui\.Ghost\(RegenerateLabel\);", text);
+
+        // ② 失败提示把同一个名字交进去，而不是自己拼一句「请关闭后…」。
+        Assert.Contains("LoadFailureState.ApplyPlan.Hint(RegenerateLabel)", text, StringComparison.Ordinal);
+
+        // ③ 那颗按钮调的就是首次读取的入口，两条路不各读一份。
+        Assert.Matches(@"(?m)^\s*_regenButton\.Click \+= \(_, _\) => PendingLoad = LoadPlanAsync\(\);$", text);
+        Assert.Matches(@"(?m)^\s*(?:private|internal)\s+(?:async\s+)?(?:void|Task)\s+LoadPlanAsync\(", text);
+        Assert.Contains("PendingLoad = LoadPlanAsync();", Body(text, InitialReadAnchors[0]), StringComparison.Ordinal);
+
+        // ④ 失败态把它交回可用，而这一条由 ShowHint 的那一个参数决定——两处必须连着看。
+        Assert.Contains(
+            "_regenButton.Enabled = canRetry;",
+            Body(text, "private void ShowHint(string message, Color color, bool canRetry = false)"),
+            StringComparison.Ordinal);
+        var load = Body(text, "internal async Task LoadPlanAsync()");
+        Assert.Contains("canRetry: true", load, StringComparison.Ordinal);
+        // 前置未满足（没扫描 / 没有已接受候选）那一支不传 canRetry：那句话自己写了下一步在别处。
+        Assert.Contains("ShowHint(ex.Message, UiTokens.WarnText);", load, StringComparison.Ordinal);
+    }
+
+    // ---------- 盲区对面的一道：不把用户支去「重开窗口」 ----------
+
+    /// <summary>
+    /// 把用户支去重开窗口的几种说法。发现口径是<b>那几种说法本身</b>，不是「有没有引用口径文件」。
+    /// <para>
+    /// 为什么要单独一份名单：<see cref="StateMarkers"/> 那一族只看得见<b>已经接入</b>重试口径的屏——
+    /// 一屏从不引用 <c>LoadFailureState</c>，就从不被那一族看见。第三百零三轮逐字读过才确认全原生界面
+    /// 还有三处失败提示写的是「请关闭后…」。这一条判的就是那一句句子里的东西。
+    /// </para>
+    /// </summary>
+    private static readonly string[] SendAwayPhrases = ["请关闭后", "关闭本窗口重新打开", "关闭后重试"];
+
+    /// <summary>
+    /// 还欠着的屏（封闭豁免名单，第三百零三轮立起这一条时逐字现读）。
+    /// <para>
+    /// <b>为什么允许豁免存在</b>：本轮接入的是三屏（注释候选、补充说明、注释回写）。同一族另有七屏——
+    /// 一次改十屏等于把十次「读法接线 + 按钮行加一列 + 落点与键盘归属」叠成一轮，改坏了没有一发红会指得清
+    /// 是哪一屏。<b>但欠账不能只活在散文中</b>（本仓第一百九十九轮那句「散文不会红」）：这一张名单是封闭的，
+    /// 名单里每一个文件<b>现在仍然</b>必须命中那几种说法之一——收掉一屏却不删这一行，
+    /// <see cref="NoScreen_SendsTheUserAwayToReopenTheWindow"/> 当场红；新写第八处同样红（它不在名单里）。
+    /// </para>
+    /// <para>
+    /// 每一条的理由都是同一句：这一屏的下一步现在写的是「回「检查任务」页重新 X」，那一步确实在屏外
+    /// （作业入口在任务页），所以它不是「指引不可达」，是「可达但要重开一次窗口」。
+    /// 接法与本轮三屏一致：把读取收进一个 <c>Load*</c> 入口 + 那颗取自口径的「重试」。
+    /// </para>
+    /// </summary>
+    private static readonly (string File, string Reason)[] SendAwayExemptions =
+    [
+        ("ScanResultsDialog.cs", "注释缺口：读 symbols.json 失败时只说「请关闭后重新扫描再试」，屏上没有再读一次的入口"),
+        ("EvidenceDialog.cs", "代码证据：读证据文件失败时同上，那一步现在写在任务页的「开始扫描」上"),
+        ("EndpointTraceDialog.cs", "接口追踪明细：读 coverage 失败时同上（第一百零八轮接入排序、第七十六轮接入关键词框，失败态这一族一直漏着）"),
+        ("ContractsDialog.cs", "响应契约：读契约清单失败时同上"),
+        ("PropagationDialog.cs", "生成文档核对：读 propagation.json 失败时写的是「请关闭后…重新核对再试」"),
+        ("CheckResultsDialog.cs", "检查结果：读 diff.json 失败时写的是「请关闭后…重新检查再试」（差异确认第一百五十二轮已接，这一屏没接）"),
+        ("SyncPreviewDialog.cs", "同步预览勾选页：读 diff.json 失败走 DisableSelect 那一句，同样把再读一次交给重开窗口"),
+    ];
+
+    /// <summary>判定本体（纯函数：源码进、命中的说法出）——注入自测直接喂夹具，不必改磁盘。</summary>
+    internal static List<string> SendAwayHits(string code) => SendAwayPhrases.Where(code.Contains).ToList();
+
+    [Fact]
+    public void NoScreen_SendsTheUserAwayToReopenTheWindow()
+    {
+        var exempt = SendAwayExemptions.Select(x => x.File).ToArray();
+        var offenders = Repo.NativeSources()
+            .Where(s => !exempt.Contains(s.Name))
+            .Select(s => (s.Name, Hits: SendAwayHits(CodeOnly(s.Text))))
+            .Where(x => x.Hits.Count > 0)
+            .Select(x => $"{x.Name}：{string.Join("、", x.Hits)}")
+            .ToList();
+        Assert.True(offenders.Count == 0,
+            "这些界面文件把「再读一次」交给用户手动重开窗口，而屏上没有可点的入口（DESIGN.md §7「禁用不得移除下一步」）："
+            + string.Join("；", offenders)
+            + "。接法两条：加那颗取自口径的「重试」，或让提示句指名屏上那颗已有入口（LoadFailureState.RetryHint）。");
+
+        // 豁免不许过期：名单里每一个文件现在仍然要命中。收掉一屏忘了删这一行，这里红。
+        var stale = SendAwayExemptions
+            .Where(x => SendAwayHits(CodeOnly(Repo.NativeSources().Single(s => s.Name == x.File).Text)).Count == 0)
+            .Select(x => x.File)
+            .ToList();
+        Assert.True(stale.Count == 0,
+            "这些文件已经不再写「请关闭后…」了，却还留在豁免名单里：" + string.Join("、", stale)
+            + "。收掉一屏就删掉那一行——留在名单里，下一轮就看不见还剩几屏没接。");
+    }
+
+    [Fact]
+    public void SendAwayDetector_ReportsThePhrasesItMustCatch()
+    {
+        // 三种说法各报一次。
+        Assert.Equal(["请关闭后"], SendAwayHits("_hint.Text = \"读取失败：磁盘满。请关闭后在任务页重试。\";"));
+        Assert.Equal(["关闭后重试"], SendAwayHits("_hint.Text = \"读取失败：磁盘满。关闭后重试。\";"));
+        Assert.Equal(["关闭本窗口重新打开"], SendAwayHits("_hint.Text = \"生成失败：磁盘满。可关闭本窗口重新打开。\";"));
+
+        // 合规写法不报：① 指名屏上那颗「重试」；② 指名另一颗已有入口；
+        // ③ 「可重新运行或关闭本窗口」——它先给了屏上真有的那颗「重新运行」，没有把用户支走。
+        Assert.Empty(SendAwayHits("_hint.Text = \"读取失败：磁盘满。任务目录可能被占用或权限不足；点「重试」再读一次。\";"));
+        Assert.Empty(SendAwayHits("_hint.Text = \"生成失败：磁盘满。可点「重新生成计划」重试。\";"));
+        Assert.Empty(SendAwayHits("_hint.Text = \"已停止写入兼容探测。可重新运行或关闭本窗口。\";"));
     }
 }

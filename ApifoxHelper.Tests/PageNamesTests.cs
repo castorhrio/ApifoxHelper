@@ -52,10 +52,13 @@ public class PageNamesTests
         ("DecisionsDialog.cs", "PageNames.Tasks", 1),
         ("PropagationDialog.cs", "PageNames.Tasks", 2),
         ("CheckResultsDialog.cs", "PageNames.Tasks", 3),
-        ("SupplementsDialog.cs", "PageNames.Tasks", 2),
+        ("SupplementsDialog.cs", "PageNames.Tasks", 1),
         ("CandidatesDialog.cs", "PageNames.Tasks", 2),
         ("BuildLogDialog.cs", "PageNames.Tasks", 2),
         ("SyncPreviewDialog.cs", "PageNames.Tasks", 2),
+        // 失败态口径文件（第三百零三轮）：注释候选与补充说明那两句「仍读不到时回哪一页」现在从这一份交出，
+        // 界面文件不再各写一遍——指路的文字换了落点，登记跟着走，否则这一格就停在旧位置上骗下一轮。
+        ("LoadFailureState.cs", "PageNames.Tasks", 2),
     ];
 
     /// <summary>

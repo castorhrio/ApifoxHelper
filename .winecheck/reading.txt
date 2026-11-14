@@ -8,7 +8,7 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-15
-source=d093c769f2f6165a772acefce219a9167350fa96
+source=43cca74f583bdbe55983b2b85b636fa0dbeebdc1
 tier=96 passed=260 failed=0 exit=0
 tier=120 passed=260 failed=0 exit=0
 tier=192 passed=260 failed=0 exit=0

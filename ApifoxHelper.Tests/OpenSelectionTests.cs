@@ -135,22 +135,30 @@ public class OpenSelectionTests
     // ---------- 接线：两个审阅视图在打开时落一次，重建路径不落 ----------
 
     [Theory]
-    [InlineData("CandidatesDialog.cs")]
-    [InlineData("ContractsDialog.cs")]
-    public void ReviewQueues_LandOnTheFirstRowWhenTheyOpen(string file)
+    // 读取入口一栏：响应契约的读取自第九十一轮起就写在 OnLoad 里；注释候选自第三百零三轮起把它收进
+    // LoadAll——「打开」与那颗「重试」共用同一个入口（口径见 LoadFailureState），落点跟着在那一个体里。
+    [InlineData("CandidatesDialog.cs", "LoadAll")]
+    [InlineData("ContractsDialog.cs", "OnLoad")]
+    public void ReviewQueues_LandOnTheFirstRowWhenTheyOpen(string file, string readEntry)
     {
         var onLoad = MethodBody(file, "OnLoad");
+        // 打开走的就是被断言的那一个方法：不是它，就只许一句委托（委托两次等于开第二条读取路）。
+        var open = readEntry == "OnLoad" ? onLoad : MethodBody(file, readEntry);
+        if (readEntry != "OnLoad")
+        {
+            Assert.Single(Regex.Matches(onLoad, Regex.Escape(readEntry) + @"\(\);"));
+        }
         // 打开时落一次，且经唯一入口。
-        Assert.Single(Regex.Matches(onLoad, @"(?m)^\s*Ui\.SelectFirstOnOpen\(_list\);$"));
+        Assert.Single(Regex.Matches(open, @"(?m)^\s*Ui\.SelectFirstOnOpen\(_list\);$"));
         // 落点在清单重建之后：先 ApplyFilter 把行填进去，再落点（顺序反了就是在一张空清单上落点）。
-        var filter = onLoad.IndexOf("ApplyFilter();", StringComparison.Ordinal);
-        var land = onLoad.IndexOf("Ui.SelectFirstOnOpen(_list);", StringComparison.Ordinal);
+        var filter = open.IndexOf("ApplyFilter();", StringComparison.Ordinal);
+        var land = open.IndexOf("Ui.SelectFirstOnOpen(_list);", StringComparison.Ordinal);
         Assert.True(filter >= 0 && land > filter, $"{file}:应在 ApplyFilter 之后落点。");
         // 打开时这一处只落选中：不取键盘、不自己索引、不自己滚动（各有自己的唯一入口）。
-        Assert.DoesNotContain("KeepKeyboardOnQueue", onLoad, StringComparison.Ordinal);
-        AssertNoFirstRowIndexing(onLoad, $"{file} 的 OnLoad");
-        Assert.DoesNotContain("EnsureVisible", onLoad, StringComparison.Ordinal);
-        Assert.DoesNotContain(".Focus(", onLoad, StringComparison.Ordinal);
+        Assert.DoesNotContain("KeepKeyboardOnQueue", open, StringComparison.Ordinal);
+        AssertNoFirstRowIndexing(open, $"{file} 的 {readEntry}");
+        Assert.DoesNotContain("EnsureVisible", open, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Focus(", open, StringComparison.Ordinal);
     }
 
     [Theory]

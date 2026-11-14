@@ -22,9 +22,18 @@ namespace ApifoxHelper.Desktop.Native;
 /// 两张清单各有一个关键词框（文件清单第七十九轮、跳过清单第一百一十二轮，口径见 <see cref="ListFilter"/>）：
 /// 输入即筛选、只改可见行，计数行仍按整份计划统计；同一页两个框，Enter 与 Esc 看焦点各接一次，
 /// Ctrl+F 只交给文件清单那个框（与同步预览两页各一个框同一取舍）。
+/// 状态表（第三百零三轮补齐失败态）：生成计划失败 = 一句原因 + 这一屏那颗「重新生成计划」回到可用，
+/// 点它就是再读一次（与报告、差异确认、任务日志、注释候选、补充说明同一口径，不叫用户重开窗口）；
+/// 前置未满足（没扫描、没有已接受候选）不是失败态，那句说什么就只说什么，按钮保持禁用。
 /// </summary>
 internal sealed class ApplyPlanDialog : DpiAwareForm
 {
+    /// <summary>
+    /// 「重新生成计划」那颗按钮的文字。失败提示要指名它（<see cref="LoadFailureState.RetryHint"/>），
+    /// 两处必须是同一串字面——按钮改名而提示还指着旧名字，用户就照着一句不存在的话去找入口。
+    /// </summary>
+    private const string RegenerateLabel = "重新生成计划";
+
     private readonly TaskStore _tasks;
     private readonly CommentPlanService _plans;
     private readonly CheckTask _task;
@@ -181,7 +190,7 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
         _patchButton = Ui.Ghost("导出补丁");
         _patchButton.Enabled = false;
         _patchButton.Click += (_, _) => ExportPatch();
-        _regenButton = Ui.Ghost("重新生成计划");
+        _regenButton = Ui.Ghost(RegenerateLabel);
         _regenButton.Enabled = false;
         _regenButton.Click += (_, _) => PendingLoad = LoadPlanAsync();
         var closeButton = Ui.Ghost("关闭");
@@ -276,6 +285,9 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
         {
             if (IsDisposed) return;
             SetBusy(false);
+            // 前置未满足（没扫描、缺少扫描清单、没有已接受候选）不是读取失败：那三句话自己写的就是下一步
+            // （先扫描、先接受候选），在这里重试读不出新东西，那颗按钮因此保持禁用
+            // （§7「禁用 = 控件禁用 + 一句话说明缺什么」，与差异确认的「尚未检查」同一取舍）。
             ShowHint(ex.Message, UiTokens.WarnText);
             return;
         }
@@ -283,7 +295,12 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
         {
             if (IsDisposed) return;
             SetBusy(false);
-            ShowHint("生成注释回写预览失败：" + Redactor.Redact(ex.Message) + "。请关闭后重试；仍失败时重新扫描。", UiTokens.BadText);
+            // 读取失败 = 一句原因 + 屏上一个真的能点的入口。此前这句写的是「请关闭后重试；仍失败时重新扫描」，
+            // 而这一屏那颗「重新生成计划」在失败态被停用了：提示指的那一步在屏上按不出来（§7「禁用不得移除下一步」）。
+            ShowHint(
+                LoadFailureState.FailureMessage(LoadFailureState.ApplyPlan.Title, Redactor.Redact(ex.Message), LoadFailureState.ApplyPlan.Hint(RegenerateLabel)),
+                UiTokens.BadText,
+                canRetry: true);
             return;
         }
         if (IsDisposed) return;
@@ -641,7 +658,13 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
         _regenButton.Enabled = !busy;
     }
 
-    private void ShowHint(string message, Color color)
+    /// <summary>
+    /// 整屏不可用时的提示出口。<paramref name="canRetry"/> 决定那颗「重新生成计划」是否回到可用：
+    /// 读取失败时它是这一屏唯一的重试入口（提示句里指名的就是它），前置未满足时重试读不出新东西、保持禁用。
+    /// 这一屏不新增第二颗「重试」按钮——同一屏两颗做同一件事的按钮违反「唯一行动按钮」（口径见
+    /// <see cref="LoadFailureState.RetryHint"/>）。
+    /// </summary>
+    private void ShowHint(string message, Color color, bool canRetry = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
@@ -656,7 +679,7 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
         _skippedHost.Visible = false;
         _applyButton.Enabled = false;
         _patchButton.Enabled = false;
-        _regenButton.Enabled = false;
+        _regenButton.Enabled = canRetry;
         _planStatus.Text = "";
     }
 

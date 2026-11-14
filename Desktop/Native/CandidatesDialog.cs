@@ -44,6 +44,11 @@ internal sealed class CandidatesDialog : DpiAwareForm
     private readonly Button _undoButton;
     private readonly Button _importButton;
     private readonly Button _evidenceButton;
+    /// <summary>
+    /// 读取失败态的唯一行动按钮（第三百零三轮）：文字取自 <see cref="LoadFailureState.RetryLabel"/>，
+    /// 不就地写「重试」；点下去调的是与「打开」同一个 <see cref="LoadAll"/>，两条路不各读一份。
+    /// </summary>
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
     private readonly Label _status = Ui.StatusLine();
     // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
     // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
@@ -122,6 +127,10 @@ internal sealed class CandidatesDialog : DpiAwareForm
         _importButton = Ui.Ghost("导入编码助手结果");
         _importButton.Click += (_, _) => ImportResult();
 
+        // 读取失败态的唯一行动入口（第三百零三轮）：与「打开」调同一个 LoadAll，两条路不各读一份。
+        _retry.Click += (_, _) => LoadAll();
+        _retry.Visible = false;
+
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
@@ -161,7 +170,7 @@ internal sealed class CandidatesDialog : DpiAwareForm
         _statusHost.Dock = DockStyle.Fill;
         AddCaptionRow(detailGrid, _statusHost);
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 9, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 10, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -171,11 +180,13 @@ internal sealed class CandidatesDialog : DpiAwareForm
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _deferButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _rejectButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _saveTextButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _undoButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _importButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         closeButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         actionRow.Controls.Add(_acceptButton, 0, 0);
         actionRow.Controls.Add(_deferButton, 1, 0);
@@ -185,8 +196,10 @@ internal sealed class CandidatesDialog : DpiAwareForm
         actionRow.Controls.Add(_importButton, 5, 0);
         // 第 6 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
         // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
-        actionRow.Controls.Add(_evidenceButton, 7, 0);
-        actionRow.Controls.Add(closeButton, 8, 0);
+        // 「重试」与「关闭」同属右边那一组（与报告、差异确认、任务日志三屏同一落法），失败态才显示。
+        actionRow.Controls.Add(_retry, 7, 0);
+        actionRow.Controls.Add(_evidenceButton, 8, 0);
+        actionRow.Controls.Add(closeButton, 9, 0);
 
         // 停靠按集合倒序生效：筛选行最先停靠（顶部），其次按钮行（最底部）、详情区，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -198,6 +211,22 @@ internal sealed class CandidatesDialog : DpiAwareForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 读候选与扫描结果并呈现。<b>「打开」与那颗「重试」调的都是这一个入口</b>（第三百零三轮）：
+    /// 两条路各读一份，失败态与正常态就会各自漂移。
+    /// <para>
+    /// 这一屏此前两种读取失败都只给一句「请关闭后重试」「请重新扫描后再审阅候选」——屏上没有任何可点的
+    /// 入口去做那件事，与报告 / 差异确认（第一百五十二轮）、任务日志（第一百五十七轮）修掉的是同一族缺陷，
+    /// 违反 DESIGN.md §7「禁用不得移除下一步」。现两种失败各给一颗「重试」。
+    /// 两种空态（没有候选、规则提取没生成候选）<b>不</b>给那颗按钮：那一步的下一步是回任务页生成，
+    /// 那句话自己指着它，再读一次读不出新东西。
+    /// </para>
+    /// </summary>
+    private void LoadAll()
+    {
         DraftStore? store;
         try
         {
@@ -205,7 +234,7 @@ internal sealed class CandidatesDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            ShowHint("读取注释候选失败：" + Redactor.Redact(ex.Message) + "。请关闭后重试；仍失败时重新扫描再打开。", UiTokens.BadText);
+            ShowFailure(LoadFailureState.Candidates.DraftsTitle, ex, LoadFailureState.Candidates.DraftsHint);
             return;
         }
         if (store.Candidates.Count == 0)
@@ -223,7 +252,7 @@ internal sealed class CandidatesDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            ShowHint("读取扫描结果失败：" + Redactor.Redact(ex.Message) + "。请重新扫描后再审阅候选。", UiTokens.BadText);
+            ShowFailure(LoadFailureState.Candidates.SlotsTitle, ex, LoadFailureState.Candidates.SlotsHint);
             return;
         }
         _store = store;
@@ -292,6 +321,19 @@ internal sealed class CandidatesDialog : DpiAwareForm
         _answersCaption.Text = CandidateEdit.AnswersCaptionNoSelection;
         _overwrite.Enabled = false;
         _overwrite.Checked = false;
+        // 提示出口对三种状态通用（读取失败 / 空态 / 筛到零行），那颗「重试」默认不亮：
+        // 只有读取失败那一支经 ShowFailure 展开它——空态与筛到零行的下一步不在「再读一次」上。
+        _retry.Visible = false;
+    }
+
+    /// <summary>
+    /// 读取失败态：一句原因（脱敏后）+ 屏上一个真的能点的入口。文案与那颗按钮的文字同取
+    /// <see cref="LoadFailureState"/> 一份，界面不就地拼（第三百零三轮）。
+    /// </summary>
+    private void ShowFailure(string title, Exception ex, string hint)
+    {
+        ShowHint(LoadFailureState.FailureMessage(title, Redactor.Redact(ex.Message), hint), UiTokens.BadText);
+        _retry.Visible = true;
     }
 
     /// <summary>

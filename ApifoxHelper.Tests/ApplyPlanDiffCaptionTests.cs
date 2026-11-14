@@ -69,7 +69,9 @@ public class ApplyPlanDiffCaptionTests
         var source = Repo.Source("Desktop", "Native", File);
         Assert.Single(Regex.Matches(source, @"(?m)^\s*_diffCaption = "));
         Assert.Empty(Regex.Matches(source, @"_diffCaption\.(Visible|Text)\s*="));
-        foreach (var body in new[] { MethodBody(source, "private void ShowHint(string message, Color color)"), MethodBody(source, "private void ShowDiff()") })
+        // 锚点里的签名带 canRetry：第三百零三轮给 ShowHint 加了那一个参数（读取失败时把这一屏那颗
+        // 「重新生成计划」交回可用）。仍取整串、不放宽成前缀——签名再变，这一条会点名它，不会静默取到别处。
+        foreach (var body in new[] { MethodBody(source, "private void ShowHint(string message, Color color, bool canRetry = false)"), MethodBody(source, "private void ShowDiff()") })
         {
             Assert.DoesNotContain("_diffCaption", body, StringComparison.Ordinal);
         }
