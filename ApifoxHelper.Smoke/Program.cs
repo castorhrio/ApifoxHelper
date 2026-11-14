@@ -310,6 +310,9 @@ internal static class Program
         Section("勾选页的键盘流（真的按一次 Ctrl+A 与一次空格：打开即选中第一条、键盘真的在清单上、可见行里可同步的勾上而不可同步的没勾、藏起来的行一个都不动；空格翻焦点行、翻得回来、不可同步的行按空格照旧勾不上；「清空」按勾选数启停三态，真实键）", nameof(RunSelectKeyboard));
         RunSelectKeyboard(services, dataRoot);
 
+        Section("勾选页往返（真的点一次「查看已有计划」再点一次「重新选择接口」：勾选含被关键词筛掉的那些一个不丢、计数行与「生成同步预览」跟着回来、键盘回到清单上、空格仍翻得动焦点行，真实控件）", nameof(RunSelectRoundTrip));
+        RunSelectRoundTrip(services, dataRoot);
+
         Section("接口追踪明细真的显示出来（五块停靠区高度对客户区、接口清单装得下十二行、清单不出横向滚动条，真实控件量）", nameof(RunEndpointTraceShown));
         RunEndpointTraceShown(services, dataRoot);
         Section("手工填写说明真的显示出来（三块停靠区高度对客户区、固定四块与 ManualDraftLayout 对账、输入区实测高与算式对账、装得下十行，真实控件量）", nameof(RunManualDraftShown));
@@ -7311,6 +7314,237 @@ internal static class Program
                 throw new InvalidOperationException(
                     "可见行全是不可同步的接口、一行都没勾上，「清空」却是可用的：没有可清的东西时它必须禁用（第三态）。");
             }
+        });
+    }
+
+    /// <summary>
+    /// 勾选页 ↔ 预览页往返（第二百九十二轮）：真的点一次「查看已有计划」再点一次「重新选择接口」。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一对按钮是勾选页与预览页之间唯一的往返路径，而它此前只有<b>源码形状</b>上的门
+    /// （<c>SelectPageKeyboardTests.ComingBackFromThePlanPage_HandsTheKeyboardBack</c> 读 <c>ShowSelectPage</c>
+    /// 的方法体），<b>一次都没被真的点过</b>——「回来之后勾选还在不在、计数行跟不跟得上、键盘回不回清单、
+    /// 空格还翻不翻得动」这四件事，全仓没有一条读数。而这一页的勾选状态按接口键记在 <c>SyncSelect</c>
+    /// （单一来源），往返正是那条「清单只是呈现」的承诺唯一会被跨页检验的时刻：回来时若有人顺手重建清单
+    /// 而不从 <c>SyncSelect</c> 恢复，勾选就静默丢光，而 Linux 侧全绿。
+    /// </para>
+    /// <para>
+    /// <b>为什么先筛一下再往返</b>：勾选里有一部分行被关键词筛掉了（看不见）。往返之后它们必须还在——
+    /// 「筛选只改可见行、不改勾选」这条口径在同一个页面内由上一段量过，跨页往返是它的第二个前提。
+    /// </para>
+    /// <para>
+    /// <b>本段不写入、不生成计划</b>：计划夹具直接写进任务目录（与列宽那一段同一做法），
+    /// 点「查看已有计划」走的是产品自己的 <c>ShowPlan</c> 路径，不直接调内部方法。
+    /// </para>
+    /// </summary>
+    private static void RunSelectRoundTrip(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "勾选页往返冒烟" });
+        var diff = CheckResultsFixture();
+        tasks.Write(task.Id, TaskFiles.Diff, diff);
+        // 计划夹具：只为让「查看已有计划」那颗按钮可用（它按任务目录里有没有计划文件启停）。
+        // 本段不执行、不核对、不写入——往返量的是勾选页那一侧的状态，不是计划本身。
+        tasks.Write(task.Id, TaskFiles.Plan, new SyncPlan
+        {
+            Id = "plan-round-trip",
+            TaskId = task.Id,
+            Hash = "5c1d9a0e7b3f2468",
+            TaskRevision = task.Revision,
+            Status = "awaitingConfirm",
+            ProjectId = "128",
+            ProjectName = "往返冒烟项目",
+            CliVersion = "2.2.6",
+            CreatedAt = DateTimeOffset.Now,
+            Actions =
+            [
+                new PlanAction
+                {
+                    ActionId = "a1",
+                    ResourceKey = "GET /api/probe/1",
+                    Kind = "updateEndpoint",
+                    RemoteId = 9001,
+                    Validation = "passed",
+                    Changes = ["新增字段"],
+                    State = "pending",
+                },
+            ],
+        });
+        // 期望值取产品自己的口径：界面若与它对不上，就是界面错了而不是夹具错了。
+        var expectedAll = SyncSelection.SyncableKeys(false, diff, new DecisionStore());
+
+        RunAction("勾选页往返：真的点一次「查看已有计划」再点一次「重新选择接口」——勾选（含被关键词筛掉的那些）一个不丢、计数行与「生成同步预览」跟着回来、键盘回到清单上、空格仍翻得动焦点行（真实控件）", () =>
+        {
+            using var dialog = new SyncPreviewDialog(
+                tasks,
+                services.GetRequiredService<SyncPlanService>(),
+                services.GetRequiredService<SyncExecutor>(),
+                services.GetRequiredService<JobRunner>(),
+                task);
+            dialog.Show();
+            Application.DoEvents();
+
+            // 勾选页的接口清单按表头认（这一页与预览页各有一张清单，只按类型认会撞车）。
+            var list = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["接口", "名称", "状态", "待确认"]))
+                ?? throw new InvalidOperationException("勾选页找不到表头为「接口 / 名称 / 状态 / 待确认」的接口清单：列增删或改名了，本段口径需要重定。");
+            var keyword = SelectPageKeyword(dialog, list);
+            var countLabel = FindAll<Label>(dialog).FirstOrDefault(label => label.Text == "尚未勾选接口" || label.Text.StartsWith("已选择 ", StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("勾选页找不到勾选计数那一行：本段口径需要重定。");
+            var generateButton = FindAll<Button>(dialog).FirstOrDefault(button => button.Text == "生成同步预览")
+                ?? throw new InvalidOperationException("勾选页找不到「生成同步预览」那颗按钮：入口改名或删除了，本段口径需要重定。");
+            var viewPlan = FindAll<Button>(dialog).FirstOrDefault(button => button.Text == "查看已有计划")
+                ?? throw new InvalidOperationException("勾选页找不到「查看已有计划」那颗按钮：入口改名或删除了，本段口径需要重定。");
+            var back = FindAll<Button>(dialog).FirstOrDefault(button => button.Text == "重新选择接口")
+                ?? throw new InvalidOperationException("预览页找不到「重新选择接口」那颗按钮：入口改名或删除了，本段口径需要重定。");
+
+            // ① 先勾一批（借上一段量过的那只手势）：勾上的必须与产品口径逐字相同。
+            PressKey(dialog, null, "^a");
+            var checkedBefore = list.Items.Cast<ListViewItem>()
+                .Where(item => item.Checked)
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            var expectedKeys = expectedAll.OrderBy(key => key, StringComparer.Ordinal).ToList();
+            if (!expectedKeys.SequenceEqual(checkedBefore, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"按一次 Ctrl+A 后勾上了 {checkedBefore.Count} 行，产品口径算出可同步的是 {expectedKeys.Count} 行：" +
+                    "往返之前的前提不成立，本段量不到「回来之后还在不在」。");
+            }
+
+            // ② 再筛一下：一部分勾选被筛到看不见（往返之后它们必须还在）。
+            keyword.Text = "probe/1";
+            Application.DoEvents();
+            var visibleKeys = list.Items.Cast<ListViewItem>()
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .ToList();
+            if (visibleKeys.Count == 0 || visibleKeys.Count >= diff.Endpoints.Count)
+            {
+                throw new InvalidOperationException(
+                    $"关键词「probe/1」之后清单有 {visibleKeys.Count} 行（共 {diff.Endpoints.Count} 行）：筛选没生效，本段量不到「勾选里有看不见的那些」。");
+            }
+            var hiddenChecked = checkedBefore.Count(key => !visibleKeys.Contains(key, StringComparer.Ordinal));
+            if (hiddenChecked == 0)
+            {
+                throw new InvalidOperationException(
+                    "筛过之后勾选里没有一行是看不见的：本段要的是「往返之后连看不见的那些也还在」，夹具变了，口径需要重定。");
+            }
+            var countBefore = countLabel.Text;
+
+            // ③ 去预览页：点产品自己那颗「查看已有计划」（不直接调内部方法）。
+            if (!viewPlan.Enabled)
+            {
+                throw new InvalidOperationException("任务目录里已有计划，「查看已有计划」却是禁用的：本段走不到预览页。");
+            }
+            viewPlan.PerformClick();
+            Application.DoEvents();
+            if (!back.Visible)
+            {
+                throw new InvalidOperationException("点过「查看已有计划」之后「重新选择接口」没出现：预览页没打开，本段量不到往返。");
+            }
+            if (generateButton.Visible)
+            {
+                throw new InvalidOperationException("预览页上「生成同步预览」仍可见：两页应当互斥（勾选页隐藏、预览页显示）。");
+            }
+            if (list.Visible)
+            {
+                throw new InvalidOperationException("预览页上勾选页的接口清单仍可见：两页应当互斥。");
+            }
+
+            // ④ 回来：点「重新选择接口」。
+            back.PerformClick();
+            Application.DoEvents();
+            if (!list.Visible)
+            {
+                throw new InvalidOperationException("点过「重新选择接口」之后勾选页的接口清单没回来：往返走不回去。");
+            }
+            if (back.Visible)
+            {
+                throw new InvalidOperationException("回到勾选页之后「重新选择接口」仍可见：它只在预览页上有意义。");
+            }
+            if (!generateButton.Visible)
+            {
+                throw new InvalidOperationException("回到勾选页之后「生成同步预览」不可见：勾选页的下一步入口没回来。");
+            }
+
+            // ⑤ 勾选一个不丢：可见行逐行对得上「往返之前勾着 ∩ 现在可见」，而计数行仍数着全部
+            //    （含被关键词筛掉、清单里根本没有的那些）——后者才是「勾选按接口键记在 SyncSelect」的证据。
+            //    只比清单行会读错：清单是筛选后的呈现，看不见的那些本来就不在行里。
+            var visibleAfter = list.Items.Cast<ListViewItem>()
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .ToList();
+            var expectedVisibleChecked = checkedBefore
+                .Where(key => visibleAfter.Contains(key, StringComparer.Ordinal))
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            var checkedAfter = list.Items.Cast<ListViewItem>()
+                .Where(item => item.Checked)
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            if (!expectedVisibleChecked.SequenceEqual(checkedAfter, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"往返之前勾着 {checkedBefore.Count} 行，其中现在可见的 {expectedVisibleChecked.Count} 行（{string.Join("、", expectedVisibleChecked)}）；" +
+                    $"回来之后清单里勾着 {checkedAfter.Count} 行（{string.Join("、", checkedAfter)}）：" +
+                    "可见行的勾选必须逐行对上——回来时若重建清单而不从 SyncSelect 恢复，勾选就静默丢光。");
+            }
+            if (countBefore != "已选择 " + checkedBefore.Count + " 个接口")
+            {
+                throw new InvalidOperationException(
+                    $"往返之前勾着 {checkedBefore.Count} 行，计数行却写着「{countBefore}」：" +
+                    "本段拿计数行当「看不见的那些还在」的证据，口径需要重定。");
+            }
+            if (countLabel.Text != countBefore)
+            {
+                throw new InvalidOperationException(
+                    $"往返之前计数行写着「{countBefore}」、回来之后写着「{countLabel.Text}」：勾选没变，计数行也不该变" +
+                    "（它数的是 SyncSelect 里那一批，含被关键词筛掉、清单里看不见的那些）。");
+            }
+            if (!generateButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    $"回来之后勾着 {checkedBefore.Count} 行，「生成同步预览」却是禁用的：有东西可生成时它必须可用。");
+            }
+
+            // ⑥ 键盘回到清单上，空格仍翻得动焦点行（往返之后键盘路径还活着）。
+            if (!list.Focused)
+            {
+                throw new InvalidOperationException(
+                    "回到勾选页之后键盘不在接口清单上：方向键动的是别的控件、空格翻不动那一行、Ctrl+A 也到不了清单。");
+            }
+            if (list.FocusedItem is not { } focused)
+            {
+                throw new InvalidOperationException("回到勾选页之后清单里没有焦点行：空格没有落点。");
+            }
+            var focusedKey = (focused.Tag as EndpointCheck)?.Key ?? "";
+            if (!expectedAll.Contains(focusedKey, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"往返之后焦点行是「{focusedKey}」，产品口径算出的可同步行里没有它：" +
+                    "本段拿它当「翻得动的那一行」用，夹具或落点变了，口径需要重定。");
+            }
+            var wasChecked = focused.Checked;
+            PressKey(dialog, list, " ");
+            if (focused.Checked == wasChecked)
+            {
+                throw new InvalidOperationException(
+                    $"往返之后焦点在「{focusedKey}」上按了一次空格，那一行的勾选状态没变（{wasChecked}）：" +
+                    "键盘上「只勾这一行」这只手势在往返之后按不出来了。");
+            }
+            // 计数行数的是 SyncSelect 里那一批（含看不见的），所以加减的基数是往返之前勾着的总数。
+            var expectedCount = wasChecked ? checkedBefore.Count - 1 : checkedBefore.Count + 1;
+            if (countLabel.Text != "已选择 " + expectedCount + " 个接口")
+            {
+                throw new InvalidOperationException(
+                    $"往返之后按一次空格，计数行写着「{countLabel.Text}」，应当是「已选择 {expectedCount} 个接口」：计数没跟着勾选走。");
+            }
+            _lines.Add(
+                $"     往返：勾选 {checkedBefore.Count} 行（其中可见 {expectedVisibleChecked.Count} 行、被关键词筛掉 {checkedBefore.Count - expectedVisibleChecked.Count} 行）；"
+                + $"计数行「{countBefore}」往返前后逐字相同；回来之后键盘在清单上，空格把「{focusedKey}」翻成 {focused.Checked}，计数行「{countLabel.Text}」");
         });
     }
 

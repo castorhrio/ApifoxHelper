@@ -251,11 +251,24 @@ public class SyncPreviewPanesTests
 
     /// <summary>
     /// 计划夹具经 TaskStore 写，文件名取 <c>TaskFiles.Plan</c> 一份——冒烟器里不许出现第二个「plan.json」。
+    /// <para>
+    /// <b>第二百九十二轮把「一处」改成「两处，且逐处点名」</b>：新增的「勾选页往返」那一段也要
+    /// 「任务目录里已有计划」这个前提（它点的是产品自己那颗「查看已有计划」，不直接调内部方法），
+    /// 于是冒烟器里第二次写计划夹具。判据<b>没有放松</b>——仍是逐字计数（第三处出现即红），
+    /// 只是把两处各自钉到它所在的那一段里：一处是列宽实测（24 个动作 + 24 条未纳入），
+    /// 一处是往返（1 个动作）。两处都必须经 <c>TaskFiles.Plan</c> 写、都不许就地拼「plan.json」。
+    /// </para>
     /// </summary>
     [Fact]
     public void ThePlanFixture_GoesThroughTheStoreAndNamesTheFileOnce()
     {
-        Assert.Equal(1, Count(Repo.SmokeProgram, @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
+        Assert.Equal(2, Count(Repo.SmokeProgram, @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
+        Assert.Equal(1, Count(
+            MethodSlice(Repo.SmokeProgram, "private static void RunListColumnFit(IServiceProvider services, string dataRoot)"),
+            @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
+        Assert.Equal(1, Count(
+            MethodSlice(Repo.SmokeProgram, "private static void RunSelectRoundTrip(IServiceProvider services, string dataRoot)"),
+            @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
         Assert.DoesNotContain("\"plan.json\"", Repo.SmokeProgram, StringComparison.Ordinal);
     }
 
