@@ -30,7 +30,7 @@ namespace ApifoxHelper.Tests;
 /// 解析本身由 <see cref="RetryWrapper_IsResolvedOnlyWhenItDelegatesToOneReadEntry"/> 拿三发注入当场验。
 /// </para>
 /// <para>
-/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheEightScreens"/> 把「发现到哪几屏」
+/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheNineScreens"/> 把「发现到哪几屏」
 /// 钉成封闭清单——发现正则写坏（比如口径文件改名）会让清单变空，那条用例先红，
 /// 不会出现「一条都没发现、于是全部通过」的假绿。
 /// <b>但这一族只看得见已经接入口径文件的屏</b>（第三百零三轮）：一屏从不引用 <c>LoadFailureState</c>，
@@ -80,7 +80,7 @@ public class LoadFailureRetryCoverageTests
     /// （「读取项目列表」「读取分支」那两颗按钮早就这么判）。它改由
     /// <see cref="NamedEntryScreen_RetryIsTheButtonTheHintNames"/> 单独判三件事：提示句指名的那颗按钮确实存在、
     /// 点的是同一个读取入口、失败态确实把它交回可用。<b>它不进封闭清单以外的第三条路</b>——
-    /// <see cref="Discovery_CoversExactlyTheEightScreens"/> 判两组之和必须等于发现到的全部屏。
+    /// <see cref="Discovery_CoversExactlyTheNineScreens"/> 判两组之和必须等于发现到的全部屏。
     /// </para>
     /// </summary>
     private static readonly string[] NamedEntryScreens = ["ApplyPlanDialog.cs"];
@@ -125,21 +125,22 @@ public class LoadFailureRetryCoverageTests
     // ---------- 发现：范围本身要钉住，否则「一条都没发现」也是绿的 ----------
 
     [Fact]
-    public void Discovery_CoversExactlyTheEightScreens()
+    public void Discovery_CoversExactlyTheNineScreens()
     {
         // 封闭清单：新增一屏带失败态时，这里会红——提醒把新屏的接线一并补上（而不是悄悄漏掉）。
         // 第一百五十七轮新增第五屏 JournalDialog.cs（任务日志对话框的读取失败态）。
         // 第三百零三轮补到八屏：CandidatesDialog（注释候选）、SupplementsDialog（补充说明）此前只在失败时
         // 给一句「请关闭后重试」，屏上没有可点的入口；ApplyPlanDialog 走「指名已有按钮」那一支（见 NamedEntryScreens）。
+        // 第三百零五轮补到九屏：ScanResultsDialog（注释缺口）读的是同一份 symbols.json，接法与第三百零三轮那两屏一致。
         var names = FailureScreens().Select(s => s.Name).ToArray();
         Assert.Equal(
             [
                 "ApplyPlanDialog.cs", "CandidatesDialog.cs", "DecisionsDialog.cs", "JournalDialog.cs",
-                "ProjectsPage.cs", "ReportsDialog.cs", "SupplementsDialog.cs", "TasksPage.cs",
+                "ProjectsPage.cs", "ReportsDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs", "TasksPage.cs",
             ],
             names);
 
-        // 两个形状必须把这八屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
+        // 两个形状必须把这九屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
         // 少了这一句，往 NamedEntryScreens 里写一个不存在的文件名会静默少判一屏。
         var partition = ButtonScreens().Select(s => s.Name)
             .Concat(NamedEntryScreens)
@@ -340,6 +341,61 @@ public class LoadFailureRetryCoverageTests
         Assert.Contains("ShowHint(ex.Message, UiTokens.WarnText);", load, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 「扫描产物读不出来」那一句在两屏只有一份字面（第三百零五轮，接上注释缺口时补的两侧对账）。
+    /// <para>
+    /// <b>判的是哪件事</b>：注释缺口（<c>ScanResultsDialog</c>）与注释候选的「扫描结果读不出来」那一支
+    /// 读的是同一份 symbols.json，<b>同一件事在两屏不许有两种说法，更不许其中一种屏上没有入口</b>
+    /// （第三百零三轮就是靠「那句话本身」才发现这一族的盲区的）。本轮把那句文案收成口径文件里的一对共用常量，
+    /// 于是这里两侧对账：口径侧那两句字面各只出现一次 ↔ 界面侧引用这对常量的屏恰好是那两屏。
+    /// </para>
+    /// <para>
+    /// <b>两个方向都判</b>：有人把自己那处改回就地拼一句 → 界面侧少一屏，红；第三屏也开始念这句却没人登记 →
+    /// 界面侧多一屏，红；谁把口径侧那句话抄成第二份 → 字面出现两次，红。
+    /// 按第二百八十二轮那五步判：断言里的名字是 <c>LoadFailureState.Slots*</c>（定义在口径文件）与
+    /// <c>Desktop/Native</c> 各屏的源码文本（在口径文件之外），第 ② 步答「不是」，第 ③ 步按<b>对账门</b>处理。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SharedScanCopy_HasOneLiteralAndTheTwoScreensThatReadSymbols()
+    {
+        const string title = "读取扫描结果失败";
+        const string hintTail = "扫描结果仍读不到时回「";
+
+        var shared = Repo.Source("Desktop", "Native", "LoadFailureState.cs");
+        Assert.Equal(1, Count(shared, title));
+        Assert.Equal(1, Count(shared, hintTail));
+        // 两份成员是委托，不是第三份字面（委托写反成自引用会编译不过，这里判的是它指向上面那一对）。
+        Assert.Contains("SlotsTitle = LoadFailureState.SlotsTitle;", shared, StringComparison.Ordinal);
+        Assert.Contains("SlotsHint = LoadFailureState.SlotsHint;", shared, StringComparison.Ordinal);
+
+        var callers = Repo.NativeSources()
+            .Where(s => s.Name != "LoadFailureState.cs")
+            .Where(s => s.Code.Contains("SlotsTitle", StringComparison.Ordinal)
+                        || s.Code.Contains("SlotsHint", StringComparison.Ordinal))
+            .Select(s => s.Name)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal(["CandidatesDialog.cs", "ScanResultsDialog.cs"], callers);
+
+        // 两屏都不把那句话抄第二份（抄了就有两份会各自漂，而其中一份可能根本没有入口）。
+        foreach (var screen in Repo.NativeSources().Where(s => callers.Contains(s.Name)))
+        {
+            Assert.DoesNotContain(title, screen.Code, StringComparison.Ordinal);
+            Assert.DoesNotContain(hintTail, screen.Code, StringComparison.Ordinal);
+        }
+    }
+
+    private static int Count(string text, string value)
+    {
+        var count = 0;
+        for (var i = text.IndexOf(value, StringComparison.Ordinal); i >= 0; i = text.IndexOf(value, i + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+        return count;
+    }
+
     // ---------- 盲区对面的一道：不把用户支去「重开窗口」 ----------
 
     /// <summary>
@@ -362,6 +418,12 @@ public class LoadFailureRetryCoverageTests
     /// <see cref="NoScreen_SendsTheUserAwayToReopenTheWindow"/> 当场红；新写第八处同样红（它不在名单里）。
     /// </para>
     /// <para>
+    /// <b>第三百零五轮收掉第一条</b>：注释缺口（<c>ScanResultsDialog</c>）读的是同一份 symbols.json，
+    /// 接法与上面那句完全一致（读取收进 <c>LoadAll</c> + 那颗取自口径的「重试」），于是那一行从名单里删掉、
+    /// 名单由七条缩到六条。这一行不是删了就完事——删的同一轮它必须真的不再命中禁词（否则 <c>offenders</c>
+    /// 那一句红），而名单里剩下六条若被谁偷偷改掉却没人删行，<c>stale</c> 那一句同样红。两侧都判，才留不下死条目。
+    /// </para>
+    /// <para>
     /// 每一条的理由都是同一句：这一屏的下一步现在写的是「回「检查任务」页重新 X」，那一步确实在屏外
     /// （作业入口在任务页），所以它不是「指引不可达」，是「可达但要重开一次窗口」。
     /// 接法与本轮三屏一致：把读取收进一个 <c>Load*</c> 入口 + 那颗取自口径的「重试」。
@@ -369,7 +431,6 @@ public class LoadFailureRetryCoverageTests
     /// </summary>
     private static readonly (string File, string Reason)[] SendAwayExemptions =
     [
-        ("ScanResultsDialog.cs", "注释缺口：读 symbols.json 失败时只说「请关闭后重新扫描再试」，屏上没有再读一次的入口"),
         ("EvidenceDialog.cs", "代码证据：读证据文件失败时同上，那一步现在写在任务页的「开始扫描」上"),
         ("EndpointTraceDialog.cs", "接口追踪明细：读 coverage 失败时同上（第一百零八轮接入排序、第七十六轮接入关键词框，失败态这一族一直漏着）"),
         ("ContractsDialog.cs", "响应契约：读契约清单失败时同上"),

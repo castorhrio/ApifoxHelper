@@ -26,8 +26,8 @@ namespace ApifoxHelper.Desktop.Native;
 public static class LoadFailureState
 {
     /// <summary>
-    /// 失败态的唯一行动按钮文字：配置页、任务页，以及报告 / 差异确认 / 任务日志 / 注释候选 / 补充说明
-    /// 五处对话框同一颗、同一字面。唯一的例外是注释回写对话框——那一屏不新增这颗按钮，
+    /// 失败态的唯一行动按钮文字：配置页、任务页，以及报告 / 差异确认 / 任务日志 / 注释候选 / 补充说明 / 注释缺口
+    /// 六处对话框同一颗、同一字面（第三百零五轮补上注释缺口）。唯一的例外是注释回写对话框——那一屏不新增这颗按钮，
     /// 失败提示指名它自己那颗「重新生成计划」（形状见 <see cref="RetryHint"/> 与 <see cref="ApplyPlan"/>）。
     /// </summary>
     public const string RetryLabel = "重试";
@@ -81,6 +81,20 @@ public static class LoadFailureState
     /// <summary>任务目录读不出来时的共同说明：原因猜测 + 指名屏上那颗「重试」。</summary>
     public const string DirectoryHint = "任务目录可能被占用或权限不足；点「重试」再读一次。";
 
+    /// <summary>
+    /// 扫描产物读不出来的标题（第三百零五轮收成一个落点）：注释缺口（<c>ScanResultsDialog</c>）与
+    /// 注释候选的「扫描结果读不出来」那一支（<see cref="Candidates.SlotsTitle"/>）读的是同一份
+    /// symbols.json，同一件事在两屏不许有两种说法，更不许两种说法里只有一种屏上没有入口。
+    /// </summary>
+    public const string SlotsTitle = "读取扫描结果失败";
+
+    /// <summary>
+    /// 扫描产物读不出来的说明：那种失败有两处下一步，两句都指名——屏上那颗「重试」再读一次，
+    /// 而扫描产物本身缺失时重试读不出新东西，那一步在任务页的「开始扫描」上。
+    /// </summary>
+    public const string SlotsHint =
+        "点「重试」再读一次；扫描结果仍读不到时回「" + PageNames.Tasks + "」页重新扫描。";
+
     /// <summary>任务页（<c>TasksPage</c>）的失败态文案：与配置页同一形状，只换「配置」为「任务」。</summary>
     public static class Tasks
     {
@@ -128,14 +142,16 @@ public static class LoadFailureState
     /// 两种失败的下一步不同，各写一句：<see cref="DraftsHint"/> 只可能是任务目录读不出来（候选就在里面），
     /// 重试就是再读一次；<see cref="SlotsHint"/> 还多一条出路——扫描结果本身缺失时重试读不到新东西，
     /// 那一步在检查任务页的「开始扫描」上，所以那句把两处都指名。
+    /// <b>那两条扫描结果的文案自第三百零五轮起指向上面那一对共用常量</b>：注释缺口（<c>ScanResultsDialog</c>）
+    /// 读的是同一份 symbols.json，第三百零四轮那一轮把它登在「仍欠的七屏」名单里，本轮接上它时没有再写第三份说法。
     /// </para>
     /// </summary>
     public static class Candidates
     {
         public const string DraftsTitle = "读取注释候选失败";
         public const string DraftsHint = DirectoryHint;
-        public const string SlotsTitle = "读取扫描结果失败";
-        public const string SlotsHint = "点「重试」再读一次；扫描结果仍读不到时回「" + PageNames.Tasks + "」页重新扫描。";
+        public const string SlotsTitle = LoadFailureState.SlotsTitle;
+        public const string SlotsHint = LoadFailureState.SlotsHint;
     }
 
     /// <summary>

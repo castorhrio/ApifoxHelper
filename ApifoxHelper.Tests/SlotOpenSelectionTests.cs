@@ -43,17 +43,23 @@ public class SlotOpenSelectionTests
     [Fact]
     public void Open_LandsOnTheFirstRowAfterTheListIsBuilt()
     {
+        // 第三百零五轮起读取写在 LoadAll（「打开」与那颗「重试」共用这一个入口），落点跟着在那一个体里。
         var onLoad = MethodBody("OnLoad");
+        Assert.Single(Regex.Matches(onLoad, @"(?m)^\s*LoadAll\(\);$"));
+        Assert.DoesNotContain("_tasks.Read", onLoad, StringComparison.Ordinal);
+
+        var read = MethodBody("LoadAll");
         // 打开时落一次，且经唯一入口（不就地索引 Items[0]、不自己写 > 0 判定）。
-        Assert.Single(Regex.Matches(onLoad, @"(?m)^\s*Ui\.SelectFirstOnOpen\(_list\);$"));
-        Assert.DoesNotContain("Items[0]", onLoad, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(read, @"(?m)^\s*Ui\.SelectFirstOnOpen\(_list\);$"));
+        Assert.DoesNotContain("Items[0]", read, StringComparison.Ordinal);
         // 落点在清单重建之后：先 ApplyFilter 把行填进去，再落点（顺序反了就是在一张空清单上落点）。
-        var filter = onLoad.IndexOf("ApplyFilter();", StringComparison.Ordinal);
-        var land = onLoad.IndexOf("Ui.SelectFirstOnOpen(_list);", StringComparison.Ordinal);
+        var filter = read.IndexOf("ApplyFilter();", StringComparison.Ordinal);
+        var land = read.IndexOf("Ui.SelectFirstOnOpen(_list);", StringComparison.Ordinal);
         Assert.True(filter >= 0 && land > filter, "应在 ApplyFilter 之后落点。");
         // 落点排在两条早退之后：读取失败与没有扫描产物时清单是空的，落点在那里没有意义（也不该先落再收）。
-        var readFail = onLoad.IndexOf("读取扫描结果失败", StringComparison.Ordinal);
-        var noOutput = onLoad.IndexOf("没有扫描结果", StringComparison.Ordinal);
+        // 失败那一条自第三百零五轮起不再就地拼句子——指名字换成口径常量，那句文案只在 LoadFailureState 里有一份。
+        var readFail = read.IndexOf("LoadFailureState.SlotsTitle", StringComparison.Ordinal);
+        var noOutput = read.IndexOf("没有扫描结果", StringComparison.Ordinal);
         Assert.True(readFail >= 0 && noOutput > readFail && land > noOutput, "落点应排在两条早退之后。");
     }
 
@@ -61,11 +67,12 @@ public class SlotOpenSelectionTests
     public void Open_LandsOnTheSelectionOnly()
     {
         // 打开时这一处只落选中：不取键盘（那是 OnShown 的 KeepKeyboardOnQueue）、不自己滚动、不重建清单、不写数据。
-        var onLoad = MethodBody("OnLoad");
-        Assert.DoesNotContain("KeepKeyboardOnQueue", onLoad, StringComparison.Ordinal);
-        Assert.DoesNotContain("EnsureVisible", onLoad, StringComparison.Ordinal);
-        Assert.DoesNotContain(".Focus(", onLoad, StringComparison.Ordinal);
-        Assert.DoesNotContain("Items.Clear", onLoad, StringComparison.Ordinal);
+        // 第三百零五轮起这些动作都在读取入口 LoadAll 里，判那一个体（OnLoad 只剩一句委托，判不到任何东西）。
+        var read = MethodBody("LoadAll");
+        Assert.DoesNotContain("KeepKeyboardOnQueue", read, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnsureVisible", read, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Focus(", read, StringComparison.Ordinal);
+        Assert.DoesNotContain("Items.Clear", read, StringComparison.Ordinal);
     }
 
     [Fact]

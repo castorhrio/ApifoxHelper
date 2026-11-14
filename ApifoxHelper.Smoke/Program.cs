@@ -271,6 +271,9 @@ internal static class Program
         Section("任务日志读取失败态（失败 → 重试 → 恢复，真实控件）", nameof(RunJournalLoadFailure));
         RunJournalLoadFailure(services, dataRoot);
 
+        Section("注释缺口读取失败态（正常 → 扫描结果坏 → 点一次换一种失败、原因跟着换 → 修好恢复 → 清单坏时同一句话 → 没有扫描产物不给那颗按钮，真实控件）", nameof(RunScanResultsLoadFailure));
+        RunScanResultsLoadFailure(services, dataRoot);
+
         Section("注释候选读取失败态（正常 → 候选坏 → 点一次换一种失败、原因跟着换 → 修好恢复 → 扫描结果坏 → 空态不给那颗按钮，真实控件）", nameof(RunCandidatesLoadFailure));
         RunCandidatesLoadFailure(services, dataRoot);
 
@@ -4539,6 +4542,262 @@ internal static class Program
         }
         finally
         {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 注释缺口对话框读取失败态的真实控件交互（第三百零五轮，控制仓简报 P0-2）。
+    /// <para>
+    /// <b>收的是哪一笔挂账</b>：第三百零三轮把注释缺口登在「仍欠的七屏」那份封闭名单里，理由是那句
+    /// 「请关闭后重新扫描再试」指的下一步确实在屏外。本轮接上它——读取收进 <c>LoadAll</c>、屏上给那颗
+    /// 取自口径的「重试」，而「回任务页重新扫描」那一条出路留在同一句里（<c>LoadFailureState.SlotsHint</c>）。
+    /// 与注释候选那一支读的是<b>同一份 symbols.json</b>，所以那一句文案只有一份字面。
+    /// </para>
+    /// <para>
+    /// 形状照注释候选 / 补充说明 / 注释回写那三段（第三百零四轮）：正常 → 失败 → 点一次换一种失败 →
+    /// 修好后点一次恢复 → 非失败态不给那颗按钮。失败是真的：把任务目录里的 symbols.json /
+    /// source-manifest.json 写成不是 JSON 的字节，让 <c>TaskStore.Read</c> 抛它本来会抛的异常；
+    /// 不伪造异常、不调私有方法、不换实现。
+    /// </para>
+    /// <para>
+    /// <b>这一屏多一段判据</b>：扫描结果与清单由同一次扫描写入，两份文件任一读不出来都按「扫描结果不可读」
+    /// 处理（源码里那一句注释这么写，本轮把它在真实控件上量一次——只弄坏 source-manifest.json 那一发）。
+    /// </para>
+    /// </summary>
+    private static void RunScanResultsLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var scan = services.GetRequiredService<SourceScanService>();
+        var drafts = services.GetRequiredService<DraftService>();
+
+        CheckTask? task = null;
+        string? symbolsPath = null;
+        string? manifestPath = null;
+        string? goodSymbols = null;
+        string? goodManifest = null;
+        int slotCount = 0;
+        string? jsonFailureSentence = null;
+        FileStream? hold = null;
+        ScanResultsDialog? dialog = null;
+        try
+        {
+            RunAction("缺口失败态：准备一份真实扫描产物（真实服务落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "Probe12.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "缺口失败态配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "Probe12.Api/Probe12.Api.csproj",
+                    AllowedSourcePaths = ["Probe12.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "缺口失败态任务" });
+                var job = new JobContext(new JobInfo { Id = "job-smoke-scan-12", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+                Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+                var output = tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)
+                    ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+                slotCount = output.Slots.Count;
+                if (slotCount < 2)
+                {
+                    throw new InvalidOperationException($"扫描只产出 {slotCount} 个注释位置，不足以验证「清单回来」那一发。");
+                }
+                symbolsPath = tasks.FilePath(task.Id, TaskFiles.Symbols);
+                manifestPath = tasks.FilePath(task.Id, TaskFiles.Manifest);
+                goodSymbols = File.ReadAllText(symbolsPath);
+                goodManifest = File.ReadAllText(manifestPath);
+                _lines.Add($"     两份磁盘副本各留了一份原文：扫描结果 {goodSymbols.Length} 字、清单 {goodManifest.Length} 字，注释位置 {slotCount} 个");
+            });
+
+            RunAction("缺口失败态：正常打开时清单可见且不显示「重试」（真实控件）", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new ScanResultsDialog(tasks, drafts, task);
+                dialog.Show();
+                Application.DoEvents();
+                var list = SlotList(dialog);
+                if (!list.Visible)
+                {
+                    throw new InvalidOperationException("正常打开时清单不可见（对话框停在提示态）。");
+                }
+                if (list.Items.Count != slotCount)
+                {
+                    throw new InvalidOperationException($"清单有 {list.Items.Count} 行，扫描产出 {slotCount} 个位置。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("扫描结果读出来了，「重试」却亮着：它只在读取失败时才是下一步。");
+                }
+                if (!KeywordBox(dialog).Enabled || !StatusFilter(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("正常打开时筛选器是停用的：有位置可筛的那一档没走到。");
+                }
+                if (!CoverageLabel(dialog).Visible)
+                {
+                    throw new InvalidOperationException("正常打开时覆盖率行不可见：整份扫描的聚合数字被一起收掉了。");
+                }
+                _lines.Add($"     正常打开：清单 {list.Items.Count} 行，计数行「{CountsLabel(dialog).Text}」，那颗按钮没亮");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("缺口失败态：扫描结果读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                if (task is null || symbolsPath is null) throw new InvalidOperationException("上一段没有产出磁盘副本。");
+                File.WriteAllText(symbolsPath, "这不是 JSON");
+                dialog = new ScanResultsDialog(tasks, drafts, task);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("扫描结果读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                if (!hint.Text.StartsWith(LoadFailureState.SlotsTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.SlotsTitle}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal)
+                    || !hint.Text.Contains(PageNames.Tasks, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"这一种失败的下一步有两处（屏上再读一次、以及回「{PageNames.Tasks}」页重新扫描），提示只该把两处都指名：「{hint.Text}」。");
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                if (SlotList(dialog).Visible)
+                {
+                    throw new InvalidOperationException("扫描结果读不出来时清单仍可见：半份队列被留在屏上。");
+                }
+                if (KeywordBox(dialog).Enabled || StatusFilter(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("失败态下筛选器仍可用：清单里没有任何条目可筛。");
+                }
+                // 覆盖率行在失败态里既不可见、文字也被清空（ShowHint 是唯一的收口处），所以这里不问
+                // CoverageLabel（它按那段文字找标签，文字没了就抛「找不到」），而是直接问可见性。
+                if (FindAll<Label>(dialog).Any(l => l.Visible && l.Text.StartsWith("注释覆盖率", StringComparison.Ordinal)))
+                {
+                    throw new InvalidOperationException("失败态下覆盖率行仍可见：整份扫描的数字已经不可信了还摆在屏上。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     扫描结果读不出来：提示「{hint.Text}」");
+            });
+
+            RunAction("缺口失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || symbolsPath is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 判据不能只看「还是不是失败」——成功路径只收起提示区、不清那格文字，按文字判会把
+                // 「重读成功」也读成「仍是失败」。这里换成换一种失败：文件还在、却被独占占用，
+                // 重读抛的是 IOException 而不是 JsonException，句里的原因必须跟着换（与注释候选那一段同一条）。
+                hold = new FileStream(symbolsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var hint = HintLabel(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.SlotsTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"文件被占用时重试，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍读不出来，重试后「重试」却不见了：用户没有第二次机会。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("缺口失败态：修好扫描结果后点「重试」退出失败态、清单与计数回来（真实控件）", () =>
+            {
+                if (dialog is null || task is null || symbolsPath is null || goodSymbols is null) throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                File.WriteAllText(symbolsPath, goodSymbols);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好扫描结果后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                var list = SlotList(dialog);
+                if (!list.Visible || list.Items.Count != slotCount)
+                {
+                    throw new InvalidOperationException($"恢复后清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {slotCount} 行。");
+                }
+                if (CountsLabel(dialog).Text != SlotText.CountsLine(tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)!.Slots))
+                {
+                    throw new InvalidOperationException("恢复后计数行与磁盘上的扫描产物对不上：" + CountsLabel(dialog).Text);
+                }
+                if (!CoverageLabel(dialog).Visible)
+                {
+                    throw new InvalidOperationException("恢复后覆盖率行没回来：整份扫描的聚合数字仍被收着。");
+                }
+                _lines.Add($"     修好后重试：清单回到 {list.Items.Count} 行，计数行「{CountsLabel(dialog).Text}」，提示区收起");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("缺口失败态：清单读不出来时按同一句失败处理、那颗按钮仍亮着（真实控件）", () =>
+            {
+                if (task is null || manifestPath is null) throw new InvalidOperationException("上一段没有产出清单的磁盘路径。");
+                // 扫描结果与清单由同一次扫描写入：源码里那句「任一读取失败都按扫描结果不可读处理」此前
+                // 只在 symbols.json 上量过，这一发只弄坏 source-manifest.json，判的是同一句话。
+                File.WriteAllText(manifestPath, "这不是 JSON");
+                dialog = new ScanResultsDialog(tasks, drafts, task);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Text.StartsWith(LoadFailureState.SlotsTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"清单读不出来时提示是「{hint.Text}」，期望以「{LoadFailureState.SlotsTitle}：」开头。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("清单读不出来时「重试」没亮：那一步的下一步同样在屏上。");
+                }
+                _lines.Add($"     清单读不出来：提示「{hint.Text}」");
+                File.WriteAllText(manifestPath, goodManifest!);
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("缺口失败态：没有扫描产物时不给那颗按钮（再读一次读不出新东西，真实控件）", () =>
+            {
+                if (task is null || symbolsPath is null) throw new InvalidOperationException("上一段没有产出磁盘路径。");
+                // 「没有扫描产物」不是读取失败：文件本来可以不存在，Read 交出 null。那一步的下一步在任务页的
+                // 「开始扫描」上，亮着一颗做「再读一次」的按钮会把那句话指错地方（与注释候选「没有候选」同一取舍）。
+                File.Delete(symbolsPath);
+                dialog = new ScanResultsDialog(tasks, drafts, task);
+                dialog.Show();
+                Application.DoEvents();
+                var hint = HintLabel(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith("没有扫描结果", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"没有扫描产物时提示是「{hint.Text}」，期望以「没有扫描结果」开头。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「没有扫描产物」不是失败态，却显示了「重试」：同一屏给了两个下一步。");
+                }
+                _lines.Add($"     空态：提示以「{hint.Text[..6]}」开头，那颗按钮没亮");
+            });
+        }
+        finally
+        {
+            // 句柄留着，后面每一段读这个任务都会失败；中途红的那一发也必须把它放开。
+            hold?.Dispose();
             dialog?.Dispose();
         }
     }

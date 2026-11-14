@@ -23,7 +23,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// 按钮门控取 <see cref="ListAdvance.Step"/> 口径（到头不绕回、没有当前行不猜第一行），
 /// 位置指示取 <see cref="ListAdvance.PositionText"/> 口径（中文单位，越界说「不在当前筛选中」），
 /// 一行都没有时整行收掉；导航态只在 <see cref="UpdateNav"/> 一处刷新（详情区每次问到详情时一并问它）；
-/// 状态表：无扫描产物=引导先扫描；读取失败=内联错误与下一步；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）；
+/// 状态表：无扫描产物=引导先扫描；读取失败=内联错误 + 屏上那颗「重试」（第三百零五轮接上，那句同时指名
+/// 「检查任务」页的重新扫描——那种失败的下一步有两处）；正常=覆盖率行 + 计数行 + 列表（空列表即全部有效）；
+/// 两种空态（无扫描产物、筛到零行）都不给那颗按钮——再读一次读不出新东西；
 /// 打开即选中第一条（第九十一轮：详情区与三个选中动作对着第一条，键盘在 OnShown 交给清单）；
 /// 筛到零行=列表区一句话与「换一个筛选」这一步，覆盖率行、计数行与两个聚合入口照旧（见 <see cref="ShowFilteredEmpty"/>；
 /// 它与「整份数据不可得」是两种空，后者才随提示把那些入口一起收掉）。
@@ -65,6 +67,12 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         ForeColor = UiTokens.Muted,
         Font = UiTokens.Body.Value,
     };
+
+    /// <summary>
+    /// 读取失败态的唯一行动按钮（第三百零五轮）：文字取自 <see cref="LoadFailureState.RetryLabel"/>，
+    /// 点下去调的是与「打开」同一个 <see cref="LoadAll"/>，两条路不各读一份。
+    /// </summary>
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
 
     private List<DocSlot> _slots = [];
     private List<string> _degradations = [];
@@ -146,6 +154,10 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         AcceptButton = closeButton;
         CancelButton = closeButton;
 
+        // 读取失败态的唯一行动入口（第三百零五轮）：与「打开」调同一个 LoadAll，两条路不各读一份。
+        _retry.Click += (_, _) => LoadAll();
+        _retry.Visible = false;
+
         // 筛选行形状取工厂（§6「列表筛选」）：五张长清单同一份，不各拼一遍。
         var filterRow = Ui.FilterRow(_filter, _keyword, _counts);
         // 注释覆盖率行（分析等级与扫描时间在数据缺失时整段省略）；无扫描产物时整行隐藏。
@@ -193,10 +205,12 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         buttonRow.Controls.Add(_removeStaleButton);
         buttonRow.Controls.Add(_warningsButton);
         buttonRow.Controls.Add(_traceButton);
+        buttonRow.Controls.Add(_retry);
         _removeStaleButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _manualButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _warningsButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _traceButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次状态行、导航行、详情框、筛选行，列表最后填满剩余空间。
         // 导航行排在详情框之后加入，倒序生效后正好落在详情框正上方（那一行讲的就是详情区里这一条）。
@@ -211,6 +225,26 @@ internal sealed class ScanResultsDialog : DpiAwareForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 读扫描结果与清单并呈现。<b>「打开」与那颗「重试」调的都是这一个入口</b>（第三百零五轮）：
+    /// 两条路各读一份，失败态与正常态就会各自漂移。
+    /// <para>
+    /// 这一屏此前读取失败只给一句「请关闭后重新扫描再试」——屏上没有一颗按钮做「再读一次」这件事，
+    /// 那句话把用户支去重开窗口，与报告 / 差异确认（第一百五十二轮）、任务日志（第一百五十七轮）、
+    /// 注释候选 / 补充说明 / 注释回写（第三百零三轮）修掉的是同一族缺陷，违反 DESIGN.md §7「禁用不得移除下一步」。
+    /// 那句「仍读不到时回任务页重新扫描」没有丢：它现在与那颗「重试」在同一句里（<see cref="LoadFailureState.SlotsHint"/>），
+    /// 因为这一屏的下一步确实有两处——再读一次是屏上那颗，重新扫描在「检查任务」页。
+    /// 两种空态（没有扫描产物、筛到零行）<b>不</b>给那颗按钮：那一步的下一步不在「再读一次」上。
+    /// </para>
+    /// </summary>
+    private void LoadAll()
+    {
+        // 每读一次先收起那颗按钮：成功路径不经 ShowHint（那里是唯一的收起处），不先收就会把失败态那颗
+        // 「重试」留在已经正常的屏上——与注释候选、差异确认同一形状（先收起，失败那一支再展开）。
+        _retry.Visible = false;
         ScanOutput? output;
         SourceManifest? manifest;
         try
@@ -221,7 +255,7 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            ShowHint("读取扫描结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后重新扫描再试。", UiTokens.BadText);
+            ShowFailure(LoadFailureState.SlotsTitle, ex, LoadFailureState.SlotsHint);
             return;
         }
         if (output is null)
@@ -295,6 +329,20 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         _degradations = [];
         _counts.Text = "";
         _detail.Text = "";
+        // 提示出口对两种状态通用（读取失败 / 没有扫描产物），那颗「重试」默认不亮：
+        // 只有读取失败那一支经 ShowFailure 展开它——「没有扫描产物」的下一步在任务页的「开始扫描」上，
+        // 再读一次读不出新东西（第三百零五轮，与注释候选、差异确认同一取舍）。
+        _retry.Visible = false;
+    }
+
+    /// <summary>
+    /// 读取失败态：一句原因（脱敏后）+ 屏上一个真的能点的入口。文案与那颗按钮的文字同取
+    /// <see cref="LoadFailureState"/> 一份，界面不就地拼（第三百零五轮）。
+    /// </summary>
+    private void ShowFailure(string title, Exception ex, string hint)
+    {
+        ShowHint(LoadFailureState.FailureMessage(title, Redactor.Redact(ex.Message), hint), UiTokens.BadText);
+        _retry.Visible = true;
     }
 
     /// <summary>
