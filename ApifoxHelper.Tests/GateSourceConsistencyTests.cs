@@ -72,6 +72,17 @@ public class GateSourceConsistencyTests
             // 这一屏的「同源」是算式不是取值：没有可判的字面量（可用宽由 Ui.ContentWidth 一处算）。
             []),
         new(
+            "同步预览勾选页的筛选手势（Ctrl+F / 框里 Enter / 框里 Esc）",
+            "SelectFilterGestureSmokeTests.cs",
+            "TheSmokeSegment_ReallyPressesTheThreeFilterGestures",
+            "RunSelectFilterGestures",
+            // 只有这一句同时满足「两边逐字相同」与「是符号不是字面量」：可同步行数那一句在冒烟段里
+            // 折了行（`new SyncSelect { … }` 与 `.VisibleSyncableCount(…)` 分居两行），逐字比不到。
+            ["new SyncSelect { Query = keywordText }.Visible(diff)"],
+            // 这一屏的「同源」是口径不是取值：可见行与可同步行数都由 SyncSelect 一处算，
+            // 两边都不许出现一个写死的计数行字面量（写死一个数就是第二份口径）。
+            ["已选择 1 个接口"]),
+        new(
             "完整错误对话框「查看完整错误」",
             "StatusLineTextTests.cs",
             "Dialog_TakesItsCopyFromTheSharedSource",

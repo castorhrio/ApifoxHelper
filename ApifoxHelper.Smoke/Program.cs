@@ -313,6 +313,9 @@ internal static class Program
         Section("勾选页往返（真的点一次「查看已有计划」再点一次「重新选择接口」：勾选含被关键词筛掉的那些一个不丢、计数行与「生成同步预览」跟着回来、键盘回到清单上、空格仍翻得动焦点行，真实控件）", nameof(RunSelectRoundTrip));
         RunSelectRoundTrip(services, dataRoot);
 
+        Section("勾选页筛选手势（真的按一次 Ctrl+F、一次 Enter、一次 Esc：焦点交给关键词框、框里已有关键词被全选、键入即筛选、Enter 把焦点与选中交给筛选结果第一行、框里 Esc 清空关键词回到全部行且对话框不关、勾选含被筛掉的一个不丢、清单上 Esc 仍是取消，真实键）", nameof(RunSelectFilterGestures));
+        RunSelectFilterGestures(services, dataRoot);
+
         Section("接口追踪明细真的显示出来（五块停靠区高度对客户区、接口清单装得下十二行、清单不出横向滚动条，真实控件量）", nameof(RunEndpointTraceShown));
         RunEndpointTraceShown(services, dataRoot);
         Section("手工填写说明真的显示出来（三块停靠区高度对客户区、固定四块与 ManualDraftLayout 对账、输入区实测高与算式对账、装得下十行，真实控件量）", nameof(RunManualDraftShown));
@@ -7652,6 +7655,243 @@ internal static class Program
             _lines.Add(
                 $"     往返：勾选 {checkedBefore.Count} 行（其中可见 {expectedVisibleChecked.Count} 行、被关键词筛掉 {checkedBefore.Count - expectedVisibleChecked.Count} 行）；"
                 + $"计数行「{countBefore}」往返前后逐字相同；回来之后键盘在清单上，空格把「{focusedKey}」翻成 {focused.Checked}，计数行「{countLabel.Text}」");
+        });
+    }
+
+    /// <summary>
+    /// 勾选页的筛选手势（第二百九十七轮）：真的按一次 Ctrl+F、一次 Enter、一次 Esc。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一页的三个筛选手势（Ctrl+F 把焦点交给关键词框并选中已有关键词、
+    /// 框里的裸 Enter 把焦点与选中交给筛选结果第一行、框里的 Esc 清空关键词回到全部行）自第七十三轮接上以来，
+    /// 证据只有<b>源码形状</b>——<c>FilterEscapeTests</c> / <c>FilterEnterTests</c> / <c>FilterGesturePlanTests</c>
+    /// 读的是「登记表里登记了哪几个框、<c>ProcessDialogKey</c> 里那一行在不在」，而<b>这三个键一次都没被真的按过</b>
+    /// （全仓冒烟器此前只按过 Ctrl+A、裸空格、Ctrl+空格）。于是「按下去焦点到底落在哪个框上」
+    /// 「框里已有关键词会不会被全选」「Esc 清空之后清单回不回全部行」「Esc 会不会顺手把对话框关掉」
+    /// 「清空关键词触发的重建会不会把勾选丢掉」这五件事，全仓没有一条读数。
+    /// </para>
+    /// <para>
+    /// <b>为什么这五件事值得量</b>：这一页的勾选状态按接口键记在 <c>SyncSelect</c>（单一来源），
+    /// 而 Esc 清空关键词会触发一次重建——重建若有人顺手改成「从行上读勾选」，勾选就静默丢光，
+    /// 而 Linux 侧全绿（与第二百九十二轮往返那一段同一个前提）。Esc 还有第二个含义：
+    /// 焦点不在框上时它仍是「取消对话框」，所以「框里按 Esc 不关窗、清单上按 Esc 关窗」这两件事
+    /// 必须同时量到，否则「一次按键只有一个含义」这句话没有读数。
+    /// </para>
+    /// <para>
+    /// <b>本段不写入、不生成计划</b>：只构造对话框、按键、读控件状态。
+    /// </para>
+    /// </summary>
+    private static void RunSelectFilterGestures(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "勾选页筛选手势冒烟" });
+        var diff = CheckResultsFixture();
+        tasks.Write(task.Id, TaskFiles.Diff, diff);
+        // 期望值取产品自己的口径：界面若与它对不上，就是界面错了而不是夹具错了。
+        const string keywordText = "probe/1";
+        var expectedVisible = new SyncSelect { Query = keywordText }.Visible(diff);
+        var expectedVisibleSyncable = new SyncSelect { Query = keywordText }
+            .VisibleSyncableCount(diff, new DecisionStore(), false);
+
+        RunAction("勾选页筛选手势：真的按一次 Ctrl+F、一次 Enter、一次 Esc——焦点交给关键词框、框里已有关键词被全选、Enter 把焦点与选中交给筛选结果第一行、Esc 清空关键词回到全部行且对话框不关、勾选（含被筛掉的）一个不丢、焦点在清单上时 Esc 仍是取消（真实键）", () =>
+        {
+            using var dialog = new SyncPreviewDialog(
+                tasks,
+                services.GetRequiredService<SyncPlanService>(),
+                services.GetRequiredService<SyncExecutor>(),
+                services.GetRequiredService<JobRunner>(),
+                task);
+            dialog.Show();
+            Application.DoEvents();
+
+            // 勾选页的接口清单按表头认（这一页与预览页各有一张清单，只按类型认会撞车）。
+            var list = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["接口", "名称", "状态", "待确认"]))
+                ?? throw new InvalidOperationException("勾选页找不到表头为「接口 / 名称 / 状态 / 待确认」的接口清单：列增删或改名了，本段口径需要重定。");
+            var keyword = SelectPageKeyword(dialog, list);
+            var countLabel = FindAll<Label>(dialog).FirstOrDefault(label => label.Text == "尚未勾选接口" || label.Text.StartsWith("已选择 ", StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("勾选页找不到勾选计数那一行：本段口径需要重定。");
+
+            // ① 前提：打开时键盘在清单上、关键词框没有焦点——Ctrl+F 那一下才有可量之处。
+            if (keyword.Focused)
+            {
+                throw new InvalidOperationException(
+                    "打开勾选页时焦点已经在关键词框上：本段量的是「Ctrl+F 把焦点交给框」这一下，"
+                    + "前提不成立时那一下量不到任何东西，口径需要重定。");
+            }
+            if (!list.Focused)
+            {
+                throw new InvalidOperationException(
+                    "打开勾选页时键盘不在接口清单上：Ctrl+F 那一下的前提（焦点在清单上）不成立，本段口径需要重定。");
+            }
+
+            // ② 真的按一次 Ctrl+F：焦点交给关键词框。
+            PressKey(dialog, null, "^f");
+            if (!keyword.Focused)
+            {
+                throw new InvalidOperationException(
+                    "按一次 Ctrl+F 之后焦点不在关键词框上：这一页的「在列表中查找」手势在界面上按不出来"
+                    + "（登记表里那个框没接上，或 ProcessDialogKey 那一行被绕过了）。");
+            }
+
+            // ③ 真的逐字敲一个关键词（不是直接赋 Text）：清单只剩几行，计数行仍是空选中。
+            PressKey(dialog, null, keywordText);
+            if (keyword.Text != keywordText)
+            {
+                throw new InvalidOperationException(
+                    $"在关键词框里逐字敲「{keywordText}」之后框里是「{keyword.Text}」：键入没有落到框上，"
+                    + "后面各段量的都不是「筛过之后」的那一屏。");
+            }
+            if (list.Items.Count != expectedVisible.Count)
+            {
+                throw new InvalidOperationException(
+                    $"关键词「{keywordText}」之后清单有 {list.Items.Count} 行，产品口径算出可见行是 {expectedVisible.Count} 行："
+                    + "输入即筛选这一条在真实键入下没生效。");
+            }
+            if (countLabel.Text != "尚未勾选接口")
+            {
+                throw new InvalidOperationException(
+                    $"筛到 {list.Items.Count} 行、一行都没勾时计数行写着「{countLabel.Text}」，应当是「尚未勾选接口」："
+                    + "筛选不该改勾选（它只改可见行）。");
+            }
+
+            // ④ 再按一次 Ctrl+F：框里已有关键词被全选（「选中已有关键词」那一句唯一可量的时刻）。
+            PressKey(dialog, null, "^f");
+            if (!keyword.Focused)
+            {
+                throw new InvalidOperationException(
+                    "框里已有关键词时再按一次 Ctrl+F，焦点不在关键词框上：查找手势在「已经筛过一次」之后按不出来。");
+            }
+            if (keyword.TextLength != keywordText.Length || keyword.SelectionLength != keyword.TextLength)
+            {
+                throw new InvalidOperationException(
+                    $"再按一次 Ctrl+F 之后框里 {keyword.TextLength} 个字、选中 {keyword.SelectionLength} 个："
+                    + "「把焦点交给框并选中已有关键词」这一句要求整段被选中（用户接着敲就是替换），"
+                    + "只移焦点不选中时用户得先自己全选一次。");
+            }
+
+            // ⑤ 焦点交给清单按一次 Ctrl+A：勾上可见行里可同步的那一批（给 ⑦ 的「勾选一个不丢」备料）。
+            PressKey(dialog, list, "^a");
+            var checkedWhileFiltered = list.Items.Cast<ListViewItem>()
+                .Where(item => item.Checked)
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            if (checkedWhileFiltered.Count != expectedVisibleSyncable)
+            {
+                throw new InvalidOperationException(
+                    $"筛到 {list.Items.Count} 行后按一次 Ctrl+A，勾上了 {checkedWhileFiltered.Count} 行，"
+                    + $"产品口径算出可见行里可同步的是 {expectedVisibleSyncable} 行：两个答案必须逐字相同。");
+            }
+            var countWhileFiltered = countLabel.Text;
+            if (countWhileFiltered != "已选择 " + checkedWhileFiltered.Count + " 个接口")
+            {
+                throw new InvalidOperationException(
+                    $"按一次 Ctrl+A 勾上 {checkedWhileFiltered.Count} 行后计数行写着「{countWhileFiltered}」：计数没跟着勾选走。");
+            }
+
+            // ⑥ 再按一次 Ctrl+F 把焦点交回框（用户就是这么回到框里的），随后在框里按一次 Esc：
+            //    关键词清空、清单回到全部行、对话框仍开着、勾选一个不丢、计数行不变。
+            PressKey(dialog, null, "^f");
+            if (!keyword.Focused)
+            {
+                throw new InvalidOperationException(
+                    "勾选之后按一次 Ctrl+F，焦点不在关键词框上：Esc 那一下会落到清单上（变成取消对话框），本段口径需要重定。");
+            }
+            PressKey(dialog, null, "{ESC}");
+            if (keyword.Text.Length != 0)
+            {
+                throw new InvalidOperationException(
+                    $"焦点在关键词框里按一次 Esc 之后框里还留着「{keyword.Text}」："
+                    + "「框里的 Esc 退出筛选」这一句在界面上按不出来（判定或接线没生效）。");
+            }
+            if (list.Items.Count != diff.Endpoints.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Esc 清空关键词之后清单有 {list.Items.Count} 行，检查结果有 {diff.Endpoints.Count} 条："
+                    + "退出筛选没有回到全部行（清空关键词触发的重建没跑，或筛选状态没跟着清）。");
+            }
+            if (!dialog.Visible)
+            {
+                throw new InvalidOperationException(
+                    "焦点在关键词框里按一次 Esc 把对话框关掉了：这一次按键有两个含义——"
+                    + "框里的 Esc 是「退出筛选」，焦点不在框上时才是「取消」（一次按键只有一个含义）。");
+            }
+            var checkedAfterEscape = list.Items.Cast<ListViewItem>()
+                .Where(item => item.Checked)
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            if (!checkedAfterEscape.SequenceEqual(checkedWhileFiltered, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Esc 清空关键词之后勾着 {checkedAfterEscape.Count} 行（{string.Join("、", checkedAfterEscape)}），"
+                    + $"清空之前勾着 {checkedWhileFiltered.Count} 行（{string.Join("、", checkedWhileFiltered)}）："
+                    + "清空关键词触发的重建必须从 SyncSelect 恢复勾选，一个都不许丢（丢了就是静默少同步）。");
+            }
+            if (countLabel.Text != countWhileFiltered)
+            {
+                throw new InvalidOperationException(
+                    $"Esc 清空关键词之后计数行写着「{countLabel.Text}」，清空之前是「{countWhileFiltered}」："
+                    + "勾选没变，计数行也不该变。");
+            }
+
+            // ⑦ Esc 之后焦点仍在框上（用户接着敲就是重新筛）：再敲一次同一个关键词，勾选仍在。
+            PressKey(dialog, null, keywordText);
+            if (keyword.Text != keywordText || list.Items.Count != expectedVisible.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Esc 之后接着敲「{keywordText}」，框里是「{keyword.Text}」、清单 {list.Items.Count} 行"
+                    + $"（应为 {expectedVisible.Count} 行）：Esc 之后焦点没留在框上，用户要重新按一次 Ctrl+F 才能接着筛。");
+            }
+            var checkedAfterRetype = list.Items.Cast<ListViewItem>()
+                .Where(item => item.Checked)
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            if (!checkedAfterRetype.SequenceEqual(checkedWhileFiltered, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"筛一下、Esc 退出、再筛回来之后勾着 {checkedAfterRetype.Count} 行，第一次筛完勾着 {checkedWhileFiltered.Count} 行："
+                    + "筛选只改可见行、不改勾选——筛回来时勾选必须还在。");
+            }
+
+            // ⑧ 在框里按一次 Enter：焦点与选中交给筛选结果第一行。
+            PressKey(dialog, null, "{ENTER}");
+            if (!list.Focused)
+            {
+                throw new InvalidOperationException(
+                    "在关键词框里按一次 Enter 之后焦点不在接口清单上：方向键动的是别的控件、空格翻不动那一行。");
+            }
+            if (list.SelectedItems.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    $"在关键词框里按一次 Enter 之后清单里选中了 {list.SelectedItems.Count} 行：应当恰好一行（筛选结果第一行）。");
+            }
+            var landedKey = (list.SelectedItems[0].Tag as EndpointCheck)?.Key ?? "";
+            if (landedKey != expectedVisible[0].Key)
+            {
+                throw new InvalidOperationException(
+                    $"在关键词框里按一次 Enter 之后落在「{landedKey}」上，筛选结果第一行是「{expectedVisible[0].Key}」："
+                    + "Enter 的落点是显示序第一行（筛选与排序之后），不是数据源第一行。");
+            }
+
+            // ⑨ 焦点在清单上按一次 Esc：仍是取消（对话框关掉）——「一次按键只有一个含义」的另一半。
+            PressKey(dialog, list, "{ESC}");
+            if (dialog.Visible)
+            {
+                throw new InvalidOperationException(
+                    "焦点在接口清单上按一次 Esc，对话框没有关：焦点不在关键词框上时 Esc 仍是「取消对话框」"
+                    + "（与框里那一下是两个含义，各按焦点走）。");
+            }
+
+            _lines.Add(
+                $"     筛选手势：Ctrl+F 把焦点交给关键词框（框里已有关键词时整段 {keywordText.Length} 字被选中）；"
+                + $"键入「{keywordText}」筛到 {expectedVisible.Count} 行、Ctrl+A 勾上其中可同步的 {checkedWhileFiltered.Count} 行；"
+                + $"框里 Esc 清空关键词回到 {diff.Endpoints.Count} 行、对话框仍开着、勾选 {checkedAfterEscape.Count} 行一个不丢、计数行「{countWhileFiltered}」不变；"
+                + $"再筛回来勾选仍是 {checkedAfterRetype.Count} 行；框里 Enter 落在「{landedKey}」；清单上 Esc 关掉对话框");
         });
     }
 
