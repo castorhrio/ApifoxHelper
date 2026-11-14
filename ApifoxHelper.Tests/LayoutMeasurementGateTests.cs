@@ -311,14 +311,31 @@ public class LayoutMeasurementGateTests
     }
 
     /// <summary>
-    /// 那一行必须回答的两件事（判据本体：登记行进、问题清单出）：
+    /// 那一行必须回答的三件事（判据本体：登记行进、问题清单出）：
     /// ① <b>停</b>——第二百五十六轮那句「本轮是这一族的最后一轮」；
     /// ② <b>边界</b>——第二百七十轮划开的「表 ↔ 源码对账」，且区分口径必须写成
-    ///    「判据在判自己」与「判据在判被承诺的实物」两个短语都在。
+    ///    「判据在判自己」与「判据在判被承诺的实物」两个短语都在；
+    /// ③ <b>可照做</b>——第二百八十二轮（简报 P0-1）把上面那句边界从散文收成五步判定步骤，
+    ///    三处字面必须都在：小节标题「怎么判一条新门属不属于本族（可照做」、
+    ///    第 ② 步那句「只引用被它判的那个对象自己的定义」、第 ④ 步那句「删掉它之后本族其余各条照旧全绿」。
     /// <para>
     /// <b>为什么 ② 要两个短语都在</b>：只写「那一族不属本族」是一句<b>可以被自证的空话</b>——
     /// 下一轮任何人给自己那条恒等式门补一句「我这是对账不是恒等式」就过关了。
     /// 两个短语把判法钉住：门判的对象是<b>判据自己</b>还是<b>被承诺的实物</b>，读的人一眼能验。
+    /// </para>
+    /// <para>
+    /// <b>为什么 ③ 要三处字面都在</b>：② 只说了「判什么」，没说「怎么判」——读到它的人仍要自己再判一次，
+    /// 而「再判一次」正是这一族四轮以来一直在重复的那件事。③ 要的是<b>可照做的两步</b>：
+    /// 先看断言引用的名字是不是只指向被它判的那个对象自己的定义（<c>DialogHeight</c> 由
+    /// <c>DialogHeightFor</c> 定义，所以「各块之和 == DialogHeight」永远为真），
+    /// 再把这条门删掉跑一次 <c>dotnet test</c>——本族其余各条照旧全绿就是本族要停的那一类。
+    /// 三处字面各钉一环：标题在不在（这一节有没有被写出来）、第 ② 步在不在（判据的形状）、
+    /// 第 ④ 步在不在（判据的验法）。缺第 ④ 步时这一节退化成「再写一句停在这里」。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判下一轮的人会不会真的照做——那是纪律，不是判据；
+    /// 也不判那五步写得对不对（那是人读的）。它判的是「这一节里那三处字面还在」，
+    /// 与 ② 同一形状：把「停」这个决定钉在仓里，而不是只活在某一轮的 commit message 里。
     /// </para>
     /// </summary>
     private static List<string> FakeGateBoundaryProblems(string registration)
@@ -342,6 +359,28 @@ public class LayoutMeasurementGateTests
         {
             problems.Add("那一行没把区分口径写成「判据在判自己」与「判据在判被承诺的实物」两个短语："
                 + "只说「不属本族」不给判法，任何一条门都能自称是对账门而过关。");
+        }
+
+        // ③ 可照做（第二百八十二轮，简报 P0-1）：边界从散文收成五步判定步骤，三处字面各钉一环。
+        if (!registration.Contains("怎么判一条新门属不属于本族（可照做", StringComparison.Ordinal))
+        {
+            problems.Add("那一行没有「怎么判一条新门属不属于本族（可照做」这一小节："
+                + "边界只说了「判什么」、没说「怎么判」，读到它的人仍要自己再判一次——"
+                + "而「再判一次」正是这一族四轮以来一直在重复的那件事。");
+        }
+
+        if (!registration.Contains("只引用被它判的那个对象自己的定义", StringComparison.Ordinal))
+        {
+            problems.Add("那一行没写第 ② 步「只引用被它判的那个对象自己的定义」："
+                + "「判据在判自己」这句话的形状没有被说出来（DialogHeight 由 DialogHeightFor 定义，"
+                + "所以「各块之和 == DialogHeight」永远为真），下一轮仍认不出自己那条门属不属于本族。");
+        }
+
+        if (!registration.Contains("删掉它之后本族其余各条照旧全绿", StringComparison.Ordinal))
+        {
+            problems.Add("那一行没写第 ④ 步「删掉它之后本族其余各条照旧全绿」："
+                + "这是这一族唯一可当场做的验法——缺了它，这一节退化成「再写一句停在这里」，"
+                + "而第二百五十六轮反对的正是那种写法。");
         }
 
         return problems;
@@ -403,8 +442,21 @@ public class LayoutMeasurementGateTests
         // ⑦ 只补半句「不属本族」、不给区分口径：仍然报——那种登记下一轮能自证。
         var half = FakeGateBoundaryProblems(
             "本轮是这一族的最后一轮；表 ↔ 源码对账 不属本族。");
-        Assert.Single(half);
-        Assert.Contains("判据在判自己", half[0], StringComparison.Ordinal);
+        Assert.Contains(half, p => p.Contains("判据在判自己", StringComparison.Ordinal));
+
+        // ⑧ 第二百七十轮那一行的原样（第二百八十二轮之前）：停写着、边界两个短语都在，
+        //    但「怎么判」一个字没有——这一发就是本轮开工的那一发，它必须报在 ③ 那三处上。
+        var noSteps = FakeGateBoundaryProblems(
+            "**假门防护这一族：收尾登记（第二百五十六轮，简报 P0-2）**（判据）：本轮是这一族的最后一轮。"
+            + "**边界（第二百七十轮）**：本族停止的范围只有一句——为已有判据找恒等式、补形状门。"
+            + "第二百五十九轮起的「表 ↔ 源码对账」不属本族。区分口径就这一句："
+            + "**判据在判自己 = 本族，停在这里；判据在判被承诺的实物 = 对账门，照常随实物一起长**。");
+        Assert.Equal(3, noSteps.Count);
+        Assert.Contains(noSteps, p => p.Contains("怎么判一条新门属不属于本族（可照做", StringComparison.Ordinal));
+        Assert.Contains(noSteps, p => p.Contains("只引用被它判的那个对象自己的定义", StringComparison.Ordinal));
+        Assert.Contains(noSteps, p => p.Contains("删掉它之后本族其余各条照旧全绿", StringComparison.Ordinal));
+        Assert.DoesNotContain(noSteps, p => p.Contains("这一族的最后一轮", StringComparison.Ordinal));
+        Assert.DoesNotContain(noSteps, p => p.Contains("表 ↔ 源码对账", StringComparison.Ordinal));
     }
 
     /// <summary>一条「没有量测段」的理由至少要有的字数。<b>40 是下限，不是目标</b>：一句话答不完那个问题。</summary>
