@@ -51,7 +51,9 @@ public class PageNamesTests
         // 七个任务阶段对话框：「先在某一页点某个按钮」。
         ("DecisionsDialog.cs", "PageNames.Tasks", 1),
         ("PropagationDialog.cs", "PageNames.Tasks", 2),
-        ("CheckResultsDialog.cs", "PageNames.Tasks", 3),
+        // 第三百零八轮：检查结果那一屏的读取失败提示改从口径文件那一对共用常量交出，句子不再指页面——
+        // 剩下两处是模型清单的标题行与「尚未检查」那一句空态（那一种的下一步确实不在「再读一次」上）。
+        ("CheckResultsDialog.cs", "PageNames.Tasks", 2),
         ("SupplementsDialog.cs", "PageNames.Tasks", 1),
         ("CandidatesDialog.cs", "PageNames.Tasks", 2),
         ("BuildLogDialog.cs", "PageNames.Tasks", 2),

@@ -26,8 +26,9 @@ namespace ApifoxHelper.Desktop.Native;
 public static class LoadFailureState
 {
     /// <summary>
-    /// 失败态的唯一行动按钮文字：配置页、任务页，以及报告 / 差异确认 / 任务日志 / 注释候选 / 补充说明 / 注释缺口
-    /// 六处对话框同一颗、同一字面（第三百零五轮补上注释缺口）。唯一的例外是注释回写对话框——那一屏不新增这颗按钮，
+    /// 失败态的唯一行动按钮文字：配置页、任务页，以及报告 / 差异确认 / 任务日志 / 注释候选 / 补充说明 /
+    /// 注释缺口 / 检查结果 七处对话框同一颗、同一字面（第三百零五轮补上注释缺口，第三百零八轮补上检查结果）。
+    /// 唯一的例外是注释回写对话框——那一屏不新增这颗按钮，
     /// 失败提示指名它自己那颗「重新生成计划」（形状见 <see cref="RetryHint"/> 与 <see cref="ApplyPlan"/>）。
     /// </summary>
     public const string RetryLabel = "重试";
@@ -95,6 +96,21 @@ public static class LoadFailureState
     public const string SlotsHint =
         "点「重试」再读一次；扫描结果仍读不到时回「" + PageNames.Tasks + "」页重新扫描。";
 
+    /// <summary>
+    /// 检查结果（diff.json）读不出来的标题（第三百零八轮收成一个落点）：差异确认（<c>DecisionsDialog</c>）、
+    /// 补充说明（<c>SupplementsDialog</c>）与检查结果（<c>CheckResultsDialog</c>）读的是同一份 diff.json，
+    /// 前两家此前各写一份同一句话的字面（两份会各自漂），而第三家写的是<b>另一种说法、屏上没有入口</b>——
+    /// 那正是第三百零三轮点名的盲区本身。
+    /// </summary>
+    public const string CheckTitle = "读取检查结果失败";
+
+    /// <summary>
+    /// 检查结果读不出来的说明：文件在、读不出来（被占用 / 权限不足），再读一次就是那一步，因此只指名屏上那颗。
+    /// 「本来就没有检查结果」不走这一句——那一种的下一步在「检查任务」页那颗「开始检查」上，
+    /// 由那一屏自己的空态说（与 <see cref="Candidates"/> 那一对「两种失败各写一句」同一分别）。
+    /// </summary>
+    public const string CheckHint = DirectoryHint;
+
     /// <summary>任务页（<c>TasksPage</c>）的失败态文案：与配置页同一形状，只换「配置」为「任务」。</summary>
     public static class Tasks
     {
@@ -124,11 +140,15 @@ public static class LoadFailureState
     /// 差异确认对话框（<c>DecisionsDialog</c>）的两种失败态：检查结果读不出来、已保存决策读不出来。
     /// 后者仍保留「保存已停用」这句——读不到既有决策时保存会用空决策覆盖用户的选择，
     /// 这条约束不因为多了「重试」而放松。
+    /// <para>
+    /// <b>「检查结果读不出来」那一支自第三百零八轮起指向顶层那一对共用常量</b>：补充说明读的是同一份 diff.json，
+    /// 检查结果也读它、却写着第三种说法而且屏上没有入口；收成一份与再抄一份差的就是「几屏在同一件事上有几种说法」。
+    /// </para>
     /// </summary>
     public static class Decisions
     {
-        public const string Title = "读取检查结果失败";
-        public const string Hint = DirectoryHint;
+        public const string Title = LoadFailureState.CheckTitle;
+        public const string Hint = LoadFailureState.CheckHint;
         public const string SavedTitle = "读取已保存决策失败";
         public const string SavedHint = "为避免覆盖已有决策，保存已停用；点「重试」再读一次。";
     }
@@ -159,11 +179,13 @@ public static class LoadFailureState
     /// 已保存补充读不出来。前者与 <see cref="Decisions"/> 读的是同一份 diff.json，两处此前一个给
     /// 「点「重试」再读一次」、一个给「请关闭后在「检查任务」页重新检查再试」——同一件事两种说法，
     /// 其中一种屏上没有可点的入口。后者与 <see cref="Decisions.SavedHint"/> 同形：保存停用的约束不放松。
+    /// <b>「检查结果读不出来」那一支与 <see cref="Decisions"/> 自第三百零八轮起共用同一个落点</b>
+    /// （顶层那一对 <see cref="CheckTitle"/> / <see cref="CheckHint"/>），屏幕上念的还是同一句老话。
     /// </summary>
     public static class Supplements
     {
-        public const string Title = "读取检查结果失败";
-        public const string Hint = DirectoryHint;
+        public const string Title = LoadFailureState.CheckTitle;
+        public const string Hint = LoadFailureState.CheckHint;
         public const string SavedTitle = "读取已保存补充失败";
         public const string SavedHint = "为避免覆盖已有补充，保存已停用；点「重试」再读一次。";
     }

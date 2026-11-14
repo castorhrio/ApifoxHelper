@@ -9,7 +9,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// Apifox 差异检查结果（只读）：逐接口状态、结构差异、说明合并结果、数据模型与检查问题。
 /// 数据来自任务目录 diff.json（检查落盘产物）；检查在任务页发起，本对话框无写入动作。
 /// 差异确认（高风险变化、说明冲突、模型绑定）在任务页「处理差异确认」中进行，同步预览与执行在任务页「同步预览」中进行；本对话框只读。
-/// 状态表：尚未检查=空态指引；读取失败=内联错误与下一步；检查之后任务有变化=过期提示（结果仍如实展示）；
+/// 状态表：尚未检查=空态指引；读取失败=内联错误 + 屏上那颗「重试」（第三百零八轮接上，两种空态都不点亮它）；
+/// 检查之后任务有变化=过期提示（结果仍如实展示）；
 /// 正常=概要行 + 筛选 + 接口列表 + 选中接口详情（结构差异/说明合并/备注/质量提示/阻断）+ 模型清单（含关键词框）+ 问题清单；
 /// 模型清单筛到零行=关键词框留着并说明下一步（见 <see cref="PopulateModels"/>）。
 /// 两张清单都支持点击列头排序（第九十七轮，口径见 <see cref="CheckResultSort"/> 与 <see cref="ListSort"/>）：
@@ -75,6 +76,12 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         ForeColor = UiTokens.Muted,
         Font = UiTokens.Body.Value,
     };
+
+    /// <summary>
+    /// 读取失败态的唯一行动按钮（第三百零八轮）：文字取自 <see cref="LoadFailureState.RetryLabel"/>，
+    /// 点下去调的是与「打开」同一个 <see cref="LoadAll"/>，两条路不各读一份。
+    /// </summary>
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
 
     /// <summary>
     /// 本屏两个关键词框的登记表（<see cref="FilterGestures"/>）：主框是接口清单那个（Ctrl+F 的落点），
@@ -191,12 +198,20 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
         CancelButton = closeButton;
+
+        // 读取失败态的唯一行动入口（第三百零八轮）：与「打开」调同一个 LoadAll，两条路不各读一份。
+        _retry.Click += (_, _) => LoadAll();
+        _retry.Visible = false;
+
         // 按钮行是 AutoSize：它的高由按钮高 + 上下内边距决定，代码里没有一处能「设」它。
         // 它的读数（60px）记在 CheckResultsLayout.ButtonRowHeight，与顶部两行一起进 FixedPanesHeight 那个和；
         // 冒烟段 RunCheckResultsShown 把实测的六块与那个和逐字对账（第二百四十九轮，简报 P0-1）。
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, 0, UiTokens.Md) };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
+        // 「重试」落在「关闭」左边（RightToLeft 流向里后加的在左）：这一屏没有第二颗「重试」。
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        buttonRow.Controls.Add(_retry);
 
         // 停靠按集合倒序生效：标题行、筛选行最先停靠（顶部），其次按钮行、模型清单、条目详情、问题清单（自下而上），接口列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -211,6 +226,32 @@ internal sealed class CheckResultsDialog : DpiAwareForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 读检查结果并呈现。<b>「打开」与那颗「重试」调的都是这一个入口</b>（第三百零八轮）：
+    /// 两条路各读一份，失败态与正常态就会各自漂移。
+    /// <para>
+    /// 这一屏此前读取失败只给一句「请关闭后在「检查任务」页重新检查再试」——屏上没有一颗按钮做「再读一次」
+    /// 这件事，那句话把用户支去重开窗口，与报告 / 差异确认（第一百五十二轮）、任务日志（第一百五十七轮）、
+    /// 注释候选 / 补充说明 / 注释回写（第三百零三轮）、注释缺口（第三百零五轮）修掉的是同一族缺陷，
+    /// 违反 DESIGN.md §7「禁用不得移除下一步」。
+    /// </para>
+    /// <para>
+    /// <b>那一句文案没有抄第三份</b>：差异确认与补充说明读的是同一份 diff.json、第三百零三轮起各写一份字面，
+    /// 本轮收成口径文件顶层的一对共用常量（<see cref="LoadFailureState.CheckTitle"/> /
+    /// <see cref="LoadFailureState.CheckHint"/>），那两家的成员改为委托——屏幕上念的还是同一句老话。
+    /// 这一支不带「回任务页重新检查」那半句：文件在、读不出来（被占用 / 权限不足），再读一次就是那一步；
+    /// <b>「本来就没有检查结果」是另一种状态</b>，它的下一步在任务页那颗「开始检查」上，由下面那一句空态自己说。
+    /// 两种空态（尚未检查 / 筛到零行）都不点亮那颗按钮——再读一次读不出新东西。
+    /// </para>
+    /// </summary>
+    private void LoadAll()
+    {
+        // 每读一次先收起那颗按钮：成功路径不经 ShowHint（那里是唯一的收起处），不先收就会把失败态那颗
+        // 「重试」留在已经正常的屏上——与注释候选、注释缺口同一形状（第三百零四轮那一发撞出来的成因与修法）。
+        _retry.Visible = false;
         CheckResult? result;
         try
         {
@@ -221,7 +262,10 @@ internal sealed class CheckResultsDialog : DpiAwareForm
             _filter.Enabled = false;
             _keyword.Enabled = false;
             _modelKeyword.Enabled = ListFilter.KeywordEnabled(false);
-            ShowHint("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在「" + PageNames.Tasks + "」页重新检查再试。", UiTokens.BadText);
+            ShowHint(
+                LoadFailureState.FailureMessage(LoadFailureState.CheckTitle, Redactor.Redact(ex.Message), LoadFailureState.CheckHint),
+                UiTokens.BadText,
+                canRetry: true);
             return;
         }
         if (result is null)
@@ -444,13 +488,19 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         }
     }
 
-    private void ShowHint(string message, Color color)
+    /// <summary>
+    /// 提示出口。<c>canRetry</c> 为真只有一种情形：读取失败。缺省为假——「尚未检查」与「筛到零行」那两种空态
+    /// 的下一步都不在「再读一次」上，那颗按钮因此不亮（第三百零八轮，与注释候选、注释缺口同一取舍）。
+    /// 这一出口对提示态通用，也是<b>唯一的</b>收起处，所以读取入口开头还要自己收一次（成功路径不经这里）。
+    /// </summary>
+    private void ShowHint(string message, Color color, bool canRetry = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
         _hint.Visible = true;
         _list.Visible = false;
         _detail.Text = "";
+        _retry.Visible = canRetry;
     }
 
     private void ShowDetail()

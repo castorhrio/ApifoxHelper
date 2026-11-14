@@ -140,14 +140,18 @@ public class CheckResultsLayoutTests
     /// <para>
     /// 通用的对账在 <c>MeasuredScreensTests</c>；这一条只钉「这一屏这一轮真的被认领了」，
     /// 免得下一轮有人把 <c>RunCheckResultsShown</c> 删掉而登记表悄悄退回「未量」还全绿。
+    /// <para>
+    /// <b>取法为什么带上段名</b>：第三百零八轮起这一屏有两行登记——量布局那一段（<c>RunCheckResultsShown</c>）
+    /// 与量读取失败态那一段（<c>RunCheckResultsLoadFailure</c>）。只按类别名取会一次取到两行，
+    /// 而「退回未量」这一判问的是<b>那一段</b>还在不在，不是这一屏被认领了几次。
     /// </para>
     /// </summary>
     [Fact]
     public void MeasuredScreens_RegistersThisScreenAsMeasured()
     {
-        var row = MeasuredScreens.All.Single(r => r.Classes.Contains("CheckResultsDialog", StringComparer.Ordinal));
+        var row = MeasuredScreens.All.Single(r =>
+            r.Classes.Contains("CheckResultsDialog", StringComparer.Ordinal) && r.Section == "RunCheckResultsShown");
         Assert.True(row.Measured, "「差异检查结果」在登记表里又退回未量了：本轮真的 Show() 过它。");
-        Assert.Equal("RunCheckResultsShown", row.Section);
         Assert.Equal("第二百四十八轮", row.Round);
     }
 
