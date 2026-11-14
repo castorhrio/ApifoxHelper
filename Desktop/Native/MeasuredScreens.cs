@@ -135,7 +135,7 @@ internal static class MeasuredScreens
             "docs/NOTES.md 第二百四十三轮：七屏各一条「真的显示出来并装进行之后」，读 ClientSize 变化与控件自己的滚动条样式位"),
         new("同步预览勾选页的键盘流（真的按一次 Ctrl+A）", "RunSelectKeyboard",
             ["SyncPreviewDialog"], true, "第二百八十六轮",
-            "docs/NOTES.md 第二百八十六轮：真的按一次 Ctrl+A（真键经系统键入，裸 Ctrl + A 进清单），可见行里可同步的勾上、不可同步的没勾、筛到只剩几行时藏起来的行一个都不动"),
+            "docs/NOTES.md 第二百八十六轮：真的按一次 Ctrl+A（真键经系统键入，裸 Ctrl + A 进清单），可见行里可同步的勾上、不可同步的没勾、筛到只剩几行时藏起来的行一个都不动；第二百八十七轮同一段里另判「清空」按勾选数启停的三态（打开时禁用 → 勾上后可用 → 清空后回到禁用）"),
         new("完整旅程（一条任务走到底）", "RunFullJourney",
             ["ProfileDialog", "NewTaskDialog", "CandidatesDialog", "ApplyPlanDialog"], true, "第一百三十九轮",
             "docs/NOTES.md 第一百三十九轮：八段按 README「使用流程」1–9 步里不触碰 Apifox 写入的那几站走完"),

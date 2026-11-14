@@ -50,6 +50,23 @@ public sealed class SyncSelect
     /// <summary>已勾选的接口数（按钮行的聚合数字，不随筛选变化）。</summary>
     public int CheckedCount => _checked.Count;
 
+    /// <summary>
+    /// 「清空」此刻有没有可清的东西（第二百八十七轮）：一行都没勾时这颗按钮应当如实禁用。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：勾选页按钮行上三颗批量按钮里，「生成同步预览」按已勾数量启停
+    /// （<see cref="SyncPreviewDialog"/> 的 <c>RefreshSelectionCount</c>），「全选可同步（N）」按数据是否
+    /// 可用启停，唯独「清空」只要数据在就常亮——打开这一页（一行都没勾）点它，什么也没发生，
+    /// 计数行也不会变一个字。第四十轮对同一形状判过：候选审阅对话框清空选中后「查看代码证据」残留启用、
+    /// 点击静默无响应，那一次的处理是「空选中分支如实禁用」，本处照同一条判据。
+    /// </para>
+    /// <para>
+    /// 判据刻意与 <see cref="CheckedCount"/> 同源：能清的东西就是已勾的那一批（「清空」按<b>全部</b>清，
+    /// 不是只清可见行——看不见的勾选若留着，点完「清空」计数行还写着「已选择 5 个接口」，
+    /// 那看起来就是坏了）。所以「有没有可清的」= 已勾数为零与否，不引入 seconde 份计数。
+    /// </para>
+    /// </summary>
+    public bool CanClear => _checked.Count > 0;
+
     /// <summary>可见行：关键词只改可见行，不改勾选（空关键词返回数据源顺序的副本）。</summary>
     public List<EndpointCheck> Visible(CheckResult diff) =>
         ListFilter.Apply(diff.Endpoints, Query, SearchFields);

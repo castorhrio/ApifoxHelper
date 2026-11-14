@@ -633,7 +633,8 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         }
         _selectAllButton.Text = "全选可同步（" + _select.VisibleSyncableCount(diff, _decisions, _task.OfflineMode) + "）";
         _selectAllButton.Enabled = true;
-        _clearButton.Enabled = true;
+        // 「清空」不在这里写死 true：重建之后勾选可能一个都没有（第二百八十七轮），
+        // 启停由方法末尾的 RefreshSelectionCount → RefreshClearButton 一处给。
         _visibleCount.Text = "接口 " + diff.Endpoints.Count + " · 可同步 "
             + SyncSelection.SyncableKeys(_task.OfflineMode, diff, _decisions).Count;
         RefreshSelectionCount();
@@ -703,6 +704,21 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         var count = _select.CheckedCount;
         _selectedCount.Text = count > 0 ? "已选择 " + count + " 个接口" : "尚未勾选接口";
         if (!_busy) _generateButton.Enabled = count > 0;
+        RefreshClearButton();
+    }
+
+    /// <summary>
+    /// 「清空」的启停（第二百八十七轮）：口径与 <see cref="SyncSelect.CanClear"/> 同源——一行都没勾时它没有可清的东西，
+    /// 如实禁用（与「生成同步预览」按已勾数量启停同一形状，第四十轮「空选中分支如实禁用」同一条判据）。
+    /// <para>
+    /// <b>为什么单独一个方法</b>：这颗按钮的可用性有两个触发时刻（勾选变了、作业开始/结束），
+    /// 两处各写一遍「有数据 ∧ 不在忙 ∧ 有东西可清」就是两份判定，迟早一处漏掉一个条件——
+    /// 收在一处，两处都调它。
+    /// </para>
+    /// </summary>
+    private void RefreshClearButton()
+    {
+        _clearButton.Enabled = !_busy && _diff is not null && _select.CanClear;
     }
 
     private void Generate()
@@ -733,7 +749,8 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     {
         _busy = busy;
         _selectAllButton.Enabled = !busy && _diff is not null;
-        _clearButton.Enabled = !busy && _diff is not null;
+        // 「清空」比「全选可同步」多一个条件：真有东西可清（第二百八十七轮，判定在 RefreshClearButton 一处）。
+        RefreshClearButton();
         _keyword.Enabled = ListFilter.KeywordEnabled(_diff is not null, busy);
         _actionKeyword.Enabled = ListFilter.KeywordEnabled(_plan is { Actions.Count: > 0 }, busy);
         _viewPlanButton.Enabled = !busy && File.Exists(_tasks.FilePath(_taskId, TaskFiles.Plan));

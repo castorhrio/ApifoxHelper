@@ -307,7 +307,7 @@ internal static class Program
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
-        Section("勾选页的键盘流（真的按一次 Ctrl+A：打开即选中第一条、键盘真的在清单上、可见行里可同步的勾上而不可同步的没勾、藏起来的行一个都不动，真实键）", nameof(RunSelectKeyboard));
+        Section("勾选页的键盘流（真的按一次 Ctrl+A：打开即选中第一条、键盘真的在清单上、可见行里可同步的勾上而不可同步的没勾、藏起来的行一个都不动；「清空」按勾选数启停，真实键）", nameof(RunSelectKeyboard));
         RunSelectKeyboard(services, dataRoot);
 
         Section("接口追踪明细真的显示出来（五块停靠区高度对客户区、接口清单装得下十二行、清单不出横向滚动条，真实控件量）", nameof(RunEndpointTraceShown));
@@ -6991,6 +6991,11 @@ internal static class Program
     /// <summary>
     /// 勾选页的键盘流（第二百八十六轮）：真的按一次 Ctrl+A。
     /// <para>
+    /// <b>第二百八十七轮加的一段</b>：「清空」这颗按钮的启停与勾选数同源——打开时一行都没勾，它应当如实禁用；
+    /// 按过 Ctrl+A 之后有东西可清，它应当可用；点过「清空」之后又没有可清的东西，它应当回到禁用。
+    /// 这三处此前一个读数都没有：按钮的可用性只写在源码里，界面上按不按得动没人量过。
+    /// </para>
+    /// <para>
     /// <b>补的是哪个缺口</b>：第二百八十四轮把 Ctrl+A 接到「全选可同步」那颗按钮调用的同一个方法上，
     /// 但键要到达清单得先有落点——打开勾选页时清单里没有选中行、键盘也不在清单上
     /// （落在框架 tab 序的第一个可聚焦控件上），那只手势在界面上按不出来：得先用鼠标点一下清单才有落点。
@@ -7066,6 +7071,14 @@ internal static class Program
                     "方向键动的是别的控件、Ctrl+A 也到不了清单，那只手势在界面上按不出来。");
             }
 
+            // ①' 「清空」此刻应当如实禁用：一行都没勾，它没有可清的东西（第二百八十七轮）。
+            if (clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "打开勾选页时一行都没勾，「清空」却是可用的：点下去什么也不会发生、计数行也不会变一个字——" +
+                    "空选中分支应当如实禁用（与第四十轮「查看代码证据」残留启用同一条判据）。");
+            }
+
             // ② 真的按一次 Ctrl+A：可见行里可同步的勾上、不可同步的没勾。
             PressCtrlA(dialog);
             var checkedAll = list.Items.Cast<ListViewItem>()
@@ -7087,10 +7100,23 @@ internal static class Program
                     $"按一次 Ctrl+A 后计数行写着「{countLabel.Text}」，按勾上的 {expectedKeys.Count} 行应该是「已选择 {expectedKeys.Count} 个接口」：计数与勾选对不上。");
             }
 
+            if (!clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    $"按一次 Ctrl+A 勾上了 {expectedKeys.Count} 行，「清空」却仍是禁用的：" +
+                    "有东西可清时它必须可用，否则用户清不掉自己刚勾的那一批。");
+            }
+
             // ③ 作用域只到可见行：筛到只剩几行再按一次，藏起来的那几行一个都不动。
             // 「清空」按全部清（含看不见的），清完之后再按 Ctrl+A：勾上的只能是看得见的那些。
             clearButton.PerformClick();
             Application.DoEvents();
+            if (clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "点过「清空」之后一行都没勾了，「清空」却仍是可用的：" +
+                    "它清的是已勾的那一批，清完就没有可清的东西（与打开时那一态同一个判定）。");
+            }
             keyword.Text = "probe/1";
             Application.DoEvents();
             var visibleKeys = list.Items.Cast<ListViewItem>()
