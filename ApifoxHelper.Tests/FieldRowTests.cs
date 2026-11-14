@@ -26,6 +26,8 @@ namespace ApifoxHelper.Tests;
 /// （工厂没有那一支，提示行另有 <c>Ui.HintRow</c>）；⑥ 工厂依赖的前提还在——两个行容器自己把
 /// <c>Margin</c> 置 0，守卫才不是「什么都不做」；⑦ 两个主页面各自的字段行按登记留在它们自己那一份
 /// 行内留白上（要折进工厂是另一次带读数的决定，不该顺手发生）；⑧ 设计基线 §6 / §8 记下这条口径。
+/// <see cref="RowContainers_StillZeroTheirOwnMargin"/> 那一句写的是「两个」而不是「三个」——
+/// 为什么第三份不在守卫内，逐字写在那一个方法自己的注释里。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判任何一行的真实像素（「这一行到底多高」只有真实控件答得出，
@@ -184,6 +186,21 @@ public class FieldRowTests
     /// <summary>
     /// 守卫依赖的前提：两个行容器出厂时自己把 <c>Margin</c> 置 0。
     /// 工厂不加外层留白不等于「这一行没有留白」——前提被改掉时，那一行会安静地贴到上一行下面。
+    /// <para>
+    /// <b>范围是那两个文件，第三份不在这一条里，也不是漏登记</b>（第二百八十轮简报 P0-2 现读收口）：
+    /// <c>ProfileAnalysisDialog.cs</c> 那 16 行字段行交出来的全是裸控件或 <c>Ui.FieldBox</c>
+    /// （它自己那个 <c>Field(TextBox, fieldId)</c> 回的就是 <c>Ui.FieldBox</c>），而该文件唯一的
+    /// <c>FlowLayoutPanel</c> 是底部<b>按钮行</b>（<c>Dock = DockStyle.Bottom</c>，不进字段网格）——
+    /// 那一屏没有「作为字段行的行容器」，这一支在它那里没有可断言的实物，外层那一次 4+4 对它
+    /// 恰好就是 §6 要的写法。它的 16 行由 <see cref="CallSites"/> 与 <see cref="FieldLabels"/> 登记着。
+    /// </para>
+    /// <para>
+    /// <b>别把这一条读成「那一屏的行高也有人判」</b>：仓内对 <c>ProfileAnalysisDialog</c> 的常驻行高读数
+    /// 只有冒烟器 <c>RunProfileFormLayout</c> 里「四个子对话框的提示行没有死空白」那一段（量的是
+    /// <c>Ui.HintRow</c> 那一族，出处 <c>docs/DESIGN.md</c> §8「提示行死空白」）；这 16 行字段行的整行行高
+    /// 在仓内<b>没有常驻读数</b>——第二百八十轮那一次是临时量法（一次性构造、量完以备份覆盖还原，
+    /// 冒烟段集合一字未动），留下的只有 §8 那一格「那一屏没有行容器」这一句结论。真机行高随 G-D5 复核。
+    /// </para>
     /// </summary>
     [Fact]
     public void RowContainers_StillZeroTheirOwnMargin()

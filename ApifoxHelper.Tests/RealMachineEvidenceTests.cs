@@ -502,9 +502,8 @@ public class RealMachineEvidenceTests
         {
             var span = m.Groups[1].Value.Trim();
 
-            // 断言名：XxxTests.Method —— 方法名必须真的在测试工程里（写错一个字母即红）。
-            var assertion = Regex.Match(span, @"^(\w+Tests)\.(\w+)$");
-            if (assertion.Success && AssertionExists(assertion.Groups[1].Value, assertion.Groups[2].Value)) return true;
+            // 断言名：XxxTests.Method —— 方法名必须真的在测试工程里（写错一个字母即红）。认法只有一份。
+            if (CitedAssertionSpan(span) is not null) return true;
 
             // 命令或路径：按空白与管道切开，逐段看是不是仓内实物。
             foreach (var token in span.Split([' ', '|', '"', '\''], StringSplitOptions.RemoveEmptyEntries))
@@ -2209,5 +2208,217 @@ public class RealMachineEvidenceTests
         cells[2] = statement;
         if (pointer is not null) cells[3] = pointer;
         return "| " + string.Join(" | ", cells) + " |";
+    }
+
+    // ---------- 第二百八十一轮（简报 P0-1）：「从零到勾选」那一页 ----------
+
+    /// <summary>「从零到勾选」那一页的标题前缀（三级标题，落在 G-D5 动作单那一节之内）。</summary>
+    private const string ZeroToCheckedHeading = "### 从零到勾选";
+
+    /// <summary>那一页每一格念成成人话时的字数上限（同一分寸见 <c>DocsSpacingTests</c> 对验收表那一族）。</summary>
+    private const int MaxZeroToCheckedCellChars = 200;
+
+    /// <summary>那一页的一行：动作编号 / 当场可机械复跑的读数 / 必须人眼判的那一句 / 写回哪一行 / 谁核回写。</summary>
+    internal readonly record struct ZeroToCheckedRow(int Number, string Machine, string Eye, string Writeback, string Auditor);
+
+    /// <summary>那一页的正文行（标题行到下一个二级 / 三级标题之前）。</summary>
+    private static string[] ZeroToCheckedLines()
+    {
+        var lines = ActionListLines();
+        var start = Array.FindIndex(lines, l => l.TrimEnd().StartsWith(ZeroToCheckedHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 的 G-D5 动作单里缺「{ZeroToCheckedHeading}」这一页：动作单按事排、「照抄即可」两张表按数排、"
+            + "「真机到手 30 分钟执行单」按时间排，三页都在，但「机器到手」走到「G-D5 那一格改判」这条线本身没有人排——"
+            + "哪条的数当场可机械复跑、哪一句必须人眼、量回来的数写进哪一行，就又散回判定标准那一列的散文里。");
+        var end = Array.FindIndex(lines, start + 1,
+            l => l.StartsWith("## ", StringComparison.Ordinal) || l.StartsWith("### ", StringComparison.Ordinal));
+        return lines[start..(end < 0 ? lines.Length : end)];
+    }
+
+    /// <summary>那一页表里的七行（表头与分隔行按「第一格是不是 <c>1.</c> 这种编号」跳掉；列数不对的行不许静默跳过）。</summary>
+    private static List<ZeroToCheckedRow> ZeroToCheckedRows()
+    {
+        var rows = new List<ZeroToCheckedRow>();
+        foreach (var line in ZeroToCheckedLines())
+        {
+            if (!line.TrimStart().StartsWith("|", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            var number = Regex.Match(cells[0], @"^(\d+)\.");
+            if (!number.Success) continue;
+            Assert.True(cells.Count == 5,
+                $"「从零到勾选」有一行是 {cells.Count} 列（应为 5 列：动作 / 当场可机械复跑的读数 / 必须人眼判的那一句 / "
+                + $"读数写回哪一行 / 谁核这次回写）：{cells[0]}。列数错的行不许被解析器跳过——那一行当天没人会去读。");
+            rows.Add(new ZeroToCheckedRow(int.Parse(number.Groups[1].Value), cells[1], cells[2], cells[3], cells[4]));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// 一个反引号里的跨度是不是「<c>XxxTests.Method</c> 且那条断言真的在」，是则返回它自己。
+    /// <para>
+    /// 抽出来是为了让 <see cref="CitesRealArtifact"/> 与 <see cref="CitedAssertions"/> 共用同一条认法：
+    /// 「怎么算一个真存在的断言名」写两遍，就会有一遍先漂（同一口径见 <see cref="AssertionExists"/>）。
+    /// </para>
+    /// </summary>
+    private static string? CitedAssertionSpan(string span)
+    {
+        var assertion = Regex.Match(span, @"^(\w+Tests)\.(\w+)$");
+        return assertion.Success && AssertionExists(assertion.Groups[1].Value, assertion.Groups[2].Value) ? span : null;
+    }
+
+    /// <summary>一段文字里点到、且此刻真在测试工程里的那些断言名（编一个不存在的名字，这里就少一个）。</summary>
+    private static List<string> CitedAssertions(string text) =>
+        Regex.Matches(text, "`([^`]+)`").Cast<Match>()
+            .Select(m => CitedAssertionSpan(m.Groups[1].Value.Trim()))
+            .Where(s => s is not null)
+            .Select(s => s!)
+            .ToList();
+
+    /// <summary>那一页 blockquote 的正文（页首那几段：判据、为什么两格分开写、机械门自己那段）。</summary>
+    private static string ZeroToCheckedBlockquote(IEnumerable<string> lines) =>
+        string.Join('\n', lines.Where(l => l.TrimStart().StartsWith(">", StringComparison.Ordinal)));
+
+    /// <summary>
+    /// 判据本体（纯函数：行进、问题出；注入自测直接喂夹具，不改磁盘）。
+    /// <para>
+    /// 判六件事：① 七行、编号 1–7 各一次且递增；② 四格都不许空着；③ 「当场可机械复跑的读数」要么以「无」
+    /// 起头，要么引到仓里真有的实物——写「无」是允许的说法（那一件东西本机复跑不出来），
+    /// <b>不写「无」又不指实物</b>才是把当天要敲的那一条藏起来；④ 「读数写回哪一行」必须点到本条自己那一个
+    /// 编号的「动作单第 N 条行内」——指着别条的行内，当天就把数写进没人回看的那一格；⑤ 「谁核这次回写」
+    /// 至少点到一条真断言；⑥ 页首点名本门、写明「不判真机有没有跑」与「一个勾都不打」。
+    /// </para>
+    /// <para>
+    /// 另加一条长度地板：每一格都不许超过 <see cref="MaxZeroToCheckedCellChars"/> 字。这一页的用处是
+    /// 「照行点数」，格子里写成散文就点不动（同一分寸见 <c>docs/NOTES.md</c> 顶部验收表那一族）。
+    /// </para>
+    /// </summary>
+    internal static List<string> ZeroToCheckedProblems(IReadOnlyList<ZeroToCheckedRow> rows, string blockquote)
+    {
+        var problems = new List<string>();
+
+        if (rows.Count != 7) problems.Add($"这一页有 {rows.Count} 行（应为 7 行，与上面动作单同数）：多一行是没人判的动作，少一行是断链。");
+        for (var i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Number != i + 1)
+            {
+                problems.Add($"这一页第 {i + 1} 行的动作编号是 {rows[i].Number}（应为 {i + 1}，且逐行递增）：编号乱了，当天按行号点数就会点错一条动作。");
+                break;
+            }
+        }
+
+        foreach (var row in rows)
+        {
+            var named = $"第 {row.Number} 条";
+            if (row.Machine.Length == 0) problems.Add($"{named}「当场可机械复跑的读数」是空的：要么点到实物，要么逐字写「无」，留白读不出是「没量」还是「忘了写」。");
+            if (row.Eye.Length == 0) problems.Add($"{named}「必须人眼判的那一句」是空的：那一格里写的是判定标准中那句观感，空着就等于把「脚本绿了」读成「这条过了」。");
+            if (row.Writeback.Length == 0) problems.Add($"{named}「读数写回哪一行」是空的：量回来的数没有落点，当天就落成一份没人回看的临时笔记。");
+            if (row.Auditor.Length == 0) problems.Add($"{named}「谁核这次回写」是空的：写完没人对账，那一格改没改、改得对不对都不留痕迹。");
+
+            if (row.Machine.StartsWith("没有", StringComparison.Ordinal))
+                problems.Add($"{named}「当场可机械复跑的读数」写成了「没有」起头：这一页只许一种写法表达「本机复跑不出来」——逐字以「无」起头。两种写法并存，下一轮就分不清是「没写」还是「写了另一种」。");
+            if (row.Machine.Length > 0 && !row.Machine.StartsWith("无", StringComparison.Ordinal) && !CitesRealArtifact(row.Machine))
+                problems.Add($"{named}「当场可机械复跑的读数」既不以「无」起头，也没点到仓里真有的实物（脚本 / 冒烟段 / 断言 / 文件）：{row.Machine[..Math.Min(40, row.Machine.Length)]}…");
+            if (row.Eye.StartsWith("没有", StringComparison.Ordinal) && !CitesRealArtifact(row.Machine))
+                problems.Add($"{named}那一格写「没有」（这一条不需要人眼），可机械读数那一格也没指到实物：两边都没有落点的那一条，当天既不用看也不用跑，属页上多余的一行。");
+
+            var expect = $"动作单第 {row.Number} 条行内";
+            if (row.Writeback.Length > 0 && !row.Writeback.Contains(expect, StringComparison.Ordinal))
+                problems.Add($"{named}「读数写回哪一行」没点到「{expect}」——它写的是：{row.Writeback[..Math.Min(40, row.Writeback.Length)]}…。指着别条的行内，当天就把这一条的数写进没人回看的那一格。");
+
+            if (row.Auditor.Length > 0 && CitedAssertions(row.Auditor).Count == 0)
+                problems.Add($"{named}「谁核这次回写」没有点到一条真存在的断言（写成 `XxxTests.Method` 且那个方法须在测试工程里）：{row.Auditor[..Math.Min(40, row.Auditor.Length)]}…");
+
+            foreach (var (cell, column) in new[] { (row.Machine, 2), (row.Eye, 3), (row.Writeback, 4), (row.Auditor, 5) })
+            {
+                if (cell.Length > MaxZeroToCheckedCellChars)
+                    problems.Add($"{named}第 {column} 列 {cell.Length} 字（上限 {MaxZeroToCheckedCellChars}）：这一页的用处是照行点数，格子里写成散文就点不动。");
+            }
+        }
+
+        var self = $"{nameof(RealMachineEvidenceTests)}.{nameof(ZeroToChecked_Path_NamesTheWritebackRowAndTheBucket)}";
+        if (!blockquote.Contains(self, StringComparison.Ordinal))
+            problems.Add($"这一页没点名核它的那条门（应写 {self}）：门只活在测试文件里，读页的人不知道这一页有人对着账。");
+        if (!blockquote.Contains("不判真机有没有跑", StringComparison.Ordinal))
+            problems.Add("这一页没写「不判真机有没有跑」：有门不等于过了，这一句必须写在页上（同一纪律见本节开头那一段）。");
+        if (!blockquote.Contains("一个勾都不打", StringComparison.Ordinal))
+            problems.Add("这一页没写「一个勾都不打」：这一页排的是顺序与落点，勾仍由真机证据关闭——不写清就会被读成一页可以照着勾的清单。");
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 「从零到勾选」那一页：七行、每行都写清「哪一格是当场可机械复跑的数、哪一句必须人眼、数写回哪一行、谁核回写」。
+    /// <para>
+    /// <b>补的是哪个缺口</b>（第二百八十一轮，简报 P0-1）：动作单 / 两张「照抄即可」表 / 30 分钟执行单都在，
+    /// 但从「机器到手」到「G-D5 那一格改判」这条线没有人排；更要紧的是<b>两类判定一直没逐条分开</b>——
+    /// 「当场可机械复跑的读数」与「必须人眼判的那一句」混在判定标准那一列的散文里，于是
+    /// `bash .winecheck/collect-real-machine.sh` 报「都不空」很容易被读成「可以勾了」。这一页把两格拆成两列，
+    /// 判据本体在 <see cref="ZeroToCheckedProblems"/>。
+    /// </para>
+    /// <para>
+    /// <b>另判一件事：编号与动作单同序</b>。这一页自己数「1–7 递增」只证明它内部齐，不证明它说的还是那七条动作；
+    /// 所以下面那一发拿 <see cref="ActionRows"/> 现读的编号逐个比一次——动作单删掉一条而这一页没跟上，红在这里。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：<b>不判真机有没有跑</b>（本机没有 Windows 图形子系统），也不判那一页写回来的数对不对——
+    /// 那要人按 `docs/evidence/real-machine/README.md` 的「什么算过」判。这一页存在的理由是「别把等人的一格读成等脚本的一格」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ZeroToChecked_Path_NamesTheWritebackRowAndTheBucket()
+    {
+        var rows = ZeroToCheckedRows();
+        var problems = ZeroToCheckedProblems(rows, ZeroToCheckedBlockquote(ZeroToCheckedLines()));
+        Assert.True(problems.Count == 0,
+            $"\u300c从零到勾选\u300d那一页有 {problems.Count} 处问题：\n  " + string.Join("\n  ", problems));
+
+        var actionList = ActionRows().Select(r => r.Number).ToList();
+        Assert.True(actionList.SequenceEqual(rows.Select(r => r.Number)),
+            $"这一页的动作编号是 {string.Join("、", rows.Select(r => r.Number))}，上面动作单现读到的是 {string.Join("、", actionList)}："
+            + "两边各数各的，动作单增删一条而这一页留着旧编号，当天就按一页根本不存在的动作去量。");
+    }
+
+    /// <summary>
+    /// 判据自己被抓得住（注入自测，同 <see cref="DegradeStatementDetector_ReportsTheBreaksItMustCatch"/>）：
+    /// 合规那一份零问题，七发注入各红在点自己那一处的那句话上。
+    /// </summary>
+    [Fact]
+    public void ZeroToCheckedDetector_ReportsTheBreaksItMustCatch()
+    {
+        var rows = ZeroToCheckedRows();
+        var quote = ZeroToCheckedBlockquote(ZeroToCheckedLines());
+        Assert.Empty(ZeroToCheckedProblems(rows, quote));
+
+        // ① 少一行：删掉第 4 条那一行。
+        var dropped = rows.Where(r => r.Number != 4).ToList();
+        Assert.Contains(ZeroToCheckedProblems(dropped, quote), p => p.Contains("应为 7 行", StringComparison.Ordinal));
+
+        // ② 编号乱了：把第 3 行的编号改成 6（行还在，序不是那七条）。
+        var renumbered = rows.Select(r => r.Number == 3 ? r with { Number = 6 } : r).ToList();
+        Assert.Contains(ZeroToCheckedProblems(renumbered, quote), p => p.Contains("逐行递增", StringComparison.Ordinal));
+
+        // ③ 机械格既不写「无」也不指实物：换成一句「现场看报告」。
+        var noArtifact = rows.Select(r => r.Number == 2 ? r with { Machine = "现场看那一档的报告里对应的行" } : r).ToList();
+        Assert.Contains(ZeroToCheckedProblems(noArtifact, quote), p => p.Contains("第 2 条", StringComparison.Ordinal) && p.Contains("没点到仓里真有的实物", StringComparison.Ordinal));
+
+        // ④ 写回落点指着别条的行内。
+        var wrongRow = rows.Select(r => r.Number == 3 ? r with { Writeback = r.Writeback.Replace("动作单第 3 条行内", "动作单第 2 条行内", StringComparison.Ordinal) } : r).ToList();
+        Assert.Contains(ZeroToCheckedProblems(wrongRow, quote), p => p.Contains("动作单第 3 条行内", StringComparison.Ordinal));
+
+        // ⑤ 断言名编一个不存在的。
+        var badAssertion = rows.Select(r => r.Number == 5 ? r with { Auditor = "`RealMachineEvidenceTests.NoSuchAssertionNameHere`" } : r).ToList();
+        Assert.Contains(ZeroToCheckedProblems(badAssertion, quote), p => p.Contains("第 5 条", StringComparison.Ordinal) && p.Contains("真存在的断言", StringComparison.Ordinal));
+
+        // ⑥ 人眼那一格清空：两类判定又混回一格里。
+        var emptied = rows.Select(r => r.Number == 1 ? r with { Eye = "" } : r).ToList();
+        Assert.Contains(ZeroToCheckedProblems(emptied, quote), p => p.Contains("第 1 条", StringComparison.Ordinal) && p.Contains("必须人眼判的那一句", StringComparison.Ordinal));
+
+        // ⑦ 页首不提本门：门只活在测试文件里。
+        Assert.Contains(ZeroToCheckedProblems(rows, quote.Replace("ZeroToChecked_Path_NamesTheWritebackRowAndTheBucket", "SomethingElse", StringComparison.Ordinal)),
+            p => p.Contains("没点名核它的那条门", StringComparison.Ordinal));
+
+        // 合规的写法不许被报：机械格以「无」起头、或写「没有」但机械格指到实物，都是这一页允许的两形状。
+        Assert.Empty(ZeroToCheckedProblems(rows.Select(r => r.Number == 7 ? r with { Eye = "没有——这一条念的全是报告里的字" } : r).ToList(), quote));
     }
 }
