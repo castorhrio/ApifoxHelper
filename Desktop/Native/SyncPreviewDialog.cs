@@ -476,7 +476,31 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
             return;
         }
         ApplyFilter();
+        // 打开即选中第一条接口（与另十张长清单同一行为，第九十轮口径）：这一页是逐行勾选的清单，
+        // 打开时没有一行被标出来——键盘在清单上时方向键的第一下是从头找、空格勾不上任何一行（没有选中行可落），
+        // 第二百八十四轮接上的那只 Ctrl+A 全选手势也没有一个被标出来的落点。
+        // 落点经 Ui.SelectFirstOnOpen 唯一入口（有行才落，空态不索引不存在的第一行）；只落选中、不取键盘——
+        // 键盘在 OnShown 交给清单（Focus() 的落点取决于框架在激活时怎么选初始焦点，第八十八、八十九轮同一划界）。
+        Ui.SelectFirstOnOpen(_selectList);
         _viewPlanButton.Enabled = File.Exists(_tasks.FilePath(_taskId, TaskFiles.Plan));
+    }
+
+    /// <summary>
+    /// 打开时把键盘交给勾选清单（DESIGN.md §6「列表行」，与预览页同一纪律、第九十二轮）：
+    /// 这一页打开即选中第一条接口，而对话框打开时键盘落在框架 tab 序的第一个可聚焦控件上——
+    /// 这一页的清单恰好排在 tab 序第一位、键盘今天确实落在那里，但**那是布局的巧合不是契约**：
+    /// 布局一动（筛选行里多一个控件、或那一行的次序变了）键盘就会静默落到别处，
+    /// 方向键动的是别的控件、空格勾不上那一行、Ctrl+A 也到不了清单。
+    /// 交键盘只在 <see cref="Ui.KeepKeyboardOnQueue"/> 一处（判定在 <see cref="ListFocus"/>：选中行与焦点行是同一行才交），
+    /// 本对话框不自己写 .Focus()、不选中、不滚动、不重建清单。
+    /// 放在 OnShown 而不是 OnLoad：OnLoad 时窗体尚未显示，Focus() 的落点取决于框架在激活时怎么选初始焦点。
+    /// 打开时那一屏是提示或空态（读取失败、没有接口、离线任务）就没有选中行，不动键盘——
+    /// 那一步的下一步在提示与按钮上，不在清单上。
+    /// </summary>
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        Ui.KeepKeyboardOnQueue(_selectList);
     }
 
     protected override void Dispose(bool disposing)
@@ -550,10 +574,15 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     /// 按当前关键词重建清单：可见行取 <see cref="SyncSelect.Visible"/>（与五张长清单同一份匹配规则），
     /// 每行的勾选从 <see cref="SyncSelect"/> 恢复——重建不丢勾选，这是本页筛选的前提。
     /// 计数格按整份检查结果统计（不随关键词变化），按钮上的数字是可见行里的可同步数（与按钮实际勾的行同一批）。
+    /// 选中按接口键恢复（与预览页的写入清单同一口径）：重建前记下、重建后找回——
+    /// 筛一下再筛回来仍停在原来那个接口；恢复不到（那一行被筛掉了）落在新筛选第一条，
+    /// 于是「打开即选中第一条」这条落点在筛过之后仍在，键盘交到清单上也有落点（<see cref="Ui.SelectFirstOnOpen"/> 负责打开那一次）。
     /// </summary>
     private void PopulateSelectList()
     {
         var diff = _diff!;
+        // 重建前记下选中的接口键（勾选状态按接口键记在 SyncSelect，选中同样按接口键恢复）。
+        var selectedKey = (Ui.SelectedItem(_selectList)?.Tag as EndpointCheck)?.Key;
         // 筛选先于排序（ListFilter → ListSort，与另十二处同一顺序）：筛掉的行不参与排序，
         // 排序键取 SyncSelectSort 单一口径（与四格同源），界面不就地写 switch。
         // 勾选状态按接口键记在 SyncSelect，重建（含排序）从它恢复——排序不丢勾选。
@@ -592,6 +621,16 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
             _rebuilding = false;
         }
         RefreshSelectSortHeaders();
+        // 选中恢复：找得回就回原来那一行，找不回（新筛选里没有它）落在第一条——
+        // 落点仍经 Ui.SelectFirstOnOpen 唯一入口（空清单不索引不存在的第一行）；
+        // 打开那一次由 OnLoad 里的同一入口负责（此处 selectedKey 为 null，不重复落点）。
+        if (selectedKey is not null)
+        {
+            var target = _selectList.Items.OfType<ListViewItem>()
+                .FirstOrDefault(i => (i.Tag as EndpointCheck)?.Key == selectedKey);
+            if (target is not null) Ui.SelectItem(target);
+            else Ui.SelectFirstOnOpen(_selectList);
+        }
         _selectAllButton.Text = "全选可同步（" + _select.VisibleSyncableCount(diff, _decisions, _task.OfflineMode) + "）";
         _selectAllButton.Enabled = true;
         _clearButton.Enabled = true;
@@ -1131,6 +1170,13 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         }
     }
 
+    /// <summary>
+    /// 回到勾选页：这一页重新出现时把键盘交回勾选清单（与预览页交出键盘同一纪律、第九十二轮）。
+    /// 预览页出现时键盘交给了写入清单；用户从预览页退回勾选页时，键盘的归属应当跟着页面走——
+    /// 否则方向键动的是看不见的那一页、Ctrl+A 也落不到眼前这张清单上。
+    /// 交键盘仍经 <see cref="Ui.KeepKeyboardOnQueue"/> 一处（判定在 <see cref="ListFocus"/>：选中行与焦点行是同一行才交），
+    /// 本对话框不自己写 .Focus()；筛到零行或整页不可用时没有选中行，不动键盘。
+    /// </summary>
     private void ShowSelectPage()
     {
         _page2.Visible = false;
@@ -1139,6 +1185,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _generateButton.Visible = true;
         _statusHost.SetText("", UiTokens.Text);
         SetBusy(false);
+        Ui.KeepKeyboardOnQueue(_selectList);
     }
 
     /// <summary>选中动作的写入内容：与 Web 下载同一脱敏口径（Redactor.RedactNode），缩进 JSON。</summary>

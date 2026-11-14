@@ -169,9 +169,10 @@ public class OpenSelectionTests
     }
 
     [Fact]
-    public void OnlyTheThreeLists_LandOnTheFirstRowOnOpen()
+    public void OnlyTheFourLists_LandOnTheFirstRowOnOpen()
     {
-        // 落点的调用点恰三处：注释候选与响应契约（第九十轮）、注释缺口（第九十一轮）。
+        // 落点的调用点恰四处：注释候选与响应契约（第九十轮）、注释缺口（第九十一轮）、
+        // 同步预览的勾选页（第二百八十六轮）。
         // 差异确认不另加落点（它的重建路径本就落在第一条，第五十六、五十九轮），
         // 五张只读长清单各有自己的打开落点（第八十一轮等），不经本入口。
         var callers = Repo.NativeSources()
@@ -179,7 +180,7 @@ public class OpenSelectionTests
             .Select(s => s.Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
-        Assert.Equal(new[] { "CandidatesDialog.cs", "ContractsDialog.cs", "ScanResultsDialog.cs" }, callers);
+        Assert.Equal(new[] { "CandidatesDialog.cs", "ContractsDialog.cs", "ScanResultsDialog.cs", "SyncPreviewDialog.cs" }, callers);
     }
 
     // ---------- 设计基线 ----------

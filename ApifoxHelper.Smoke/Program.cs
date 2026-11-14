@@ -307,6 +307,9 @@ internal static class Program
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
+        Section("勾选页的键盘流（真的按一次 Ctrl+A：打开即选中第一条、键盘真的在清单上、可见行里可同步的勾上而不可同步的没勾、藏起来的行一个都不动，真实键）", nameof(RunSelectKeyboard));
+        RunSelectKeyboard(services, dataRoot);
+
         Section("接口追踪明细真的显示出来（五块停靠区高度对客户区、接口清单装得下十二行、清单不出横向滚动条，真实控件量）", nameof(RunEndpointTraceShown));
         RunEndpointTraceShown(services, dataRoot);
         Section("手工填写说明真的显示出来（三块停靠区高度对客户区、固定四块与 ManualDraftLayout 对账、输入区实测高与算式对账、装得下十行，真实控件量）", nameof(RunManualDraftShown));
@@ -6983,6 +6986,178 @@ internal static class Program
             }
         });
     }
+
+
+    /// <summary>
+    /// 勾选页的键盘流（第二百八十六轮）：真的按一次 Ctrl+A。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百八十四轮把 Ctrl+A 接到「全选可同步」那颗按钮调用的同一个方法上，
+    /// 但键要到达清单得先有落点——打开勾选页时清单里没有选中行、键盘也不在清单上
+    /// （落在框架 tab 序的第一个可聚焦控件上），那只手势在界面上按不出来：得先用鼠标点一下清单才有落点。
+    /// G-D5 动作单第 2 条点名的「同步预览勾选页」那一格写明它量的是行为
+    /// （Ctrl+A 会不会被系统吞掉、200% 档下是否仍能全选可见行），此前一档都没跑过。
+    /// </para>
+    /// <para>
+    /// <b>真键怎么发</b>：用 <see cref="SendKeys"/>——它经系统键入（连同修饰键的真实状态），
+    /// 清单收到的是「裸 Ctrl + A」这一组键，与 Windows 上 Ctrl+A 落进控件的那条路一致；
+    /// 不是把处理函数直接调一遍（那样什么也证明不了）。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 打开即选中第一条接口、键盘真的在清单上（不是落在别的控件上）；
+    /// ② 真的按一次 Ctrl+A，可见行里可同步的被勾上、不可同步的没勾，计数行跟着走；
+    /// ③ 作用域只到可见行——筛到只剩几行时按 Ctrl+A，藏起来的那几行一个都不动。
+    /// 期望值取产品自己的口径（<see cref="SyncSelection"/>），界面与它对不上就是界面错了。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：中文输入法是否吞掉 Ctrl+A、200% 真机档位下的观感仍要 G-D5 真机
+    /// （NOTES 已如实登记，不在这里冒充真机结论）。
+    /// </para>
+    /// </summary>
+    private static void RunSelectKeyboard(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "勾选页键盘冒烟" });
+        var diff = CheckResultsFixture();
+        tasks.Write(task.Id, TaskFiles.Diff, diff);
+        // 期望值取产品自己的口径：界面若与它对不上，就是界面错了而不是夹具错了。
+        var expectedAll = SyncSelection.SyncableKeys(false, diff, new DecisionStore());
+
+        RunAction("勾选页：真的按一次 Ctrl+A——打开即选中第一条、键盘真的在清单上、可见行里可同步的被勾上而不可同步的没勾、藏起来的行一个都不动（真实键）", () =>
+        {
+            using var dialog = new SyncPreviewDialog(
+                tasks,
+                services.GetRequiredService<SyncPlanService>(),
+                services.GetRequiredService<SyncExecutor>(),
+                services.GetRequiredService<JobRunner>(),
+                task);
+            dialog.Show();
+            Application.DoEvents();
+
+            // 勾选页的接口清单按表头认（这一页与预览页各有一张清单，只按类型认会撞车）。
+            var list = FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["接口", "名称", "状态", "待确认"]))
+                ?? throw new InvalidOperationException("勾选页找不到表头为「接口 / 名称 / 状态 / 待确认」的接口清单：列增删或改名了，本段口径需要重定。");
+            var keyword = SelectPageKeyword(dialog, list);
+            var countLabel = FindAll<Label>(dialog).FirstOrDefault(label => label.Text == "尚未勾选接口" || label.Text.StartsWith("已选择 ", StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("勾选页找不到勾选计数那一行：本段口径需要重定。");
+            var clearButton = FindAll<Button>(dialog).FirstOrDefault(button => button.Text == "清空")
+                ?? throw new InvalidOperationException("勾选页找不到「清空」那颗按钮：本段口径需要重定。");
+
+            // ① 打开即选中第一条接口、键盘真的在清单上。
+            if (list.Items.Count != diff.Endpoints.Count)
+            {
+                throw new InvalidOperationException(
+                    $"勾选页清单有 {list.Items.Count} 行，检查结果有 {diff.Endpoints.Count} 条：夹具与这一屏对不上，量到的不是这一屏。");
+            }
+            if (list.SelectedItems.Count != 1 || list.SelectedItems[0].Index != 0)
+            {
+                var firstIndex = list.SelectedItems.Count > 0 ? list.SelectedItems[0].Index : -1;
+                throw new InvalidOperationException(
+                    $"打开勾选页时选中了 {list.SelectedItems.Count} 行（第一行序号 {firstIndex}）：" +
+                    "这一屏应当打开即选中第一条接口（与另十张长清单同一行为），一条都不选是「没有落点」。");
+            }
+            if (!list.Focused)
+            {
+                throw new InvalidOperationException(
+                    "打开勾选页时键盘不在接口清单上（焦点落在别的控件上）：" +
+                    "方向键动的是别的控件、Ctrl+A 也到不了清单，那只手势在界面上按不出来。");
+            }
+
+            // ② 真的按一次 Ctrl+A：可见行里可同步的勾上、不可同步的没勾。
+            PressCtrlA(dialog);
+            var checkedAll = list.Items.Cast<ListViewItem>()
+                .Where(item => item.Checked)
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .ToList();
+            var expectedKeys = expectedAll.OrderBy(key => key, StringComparer.Ordinal).ToList();
+            var actualKeys = checkedAll.OrderBy(key => key, StringComparer.Ordinal).ToList();
+            if (!expectedKeys.SequenceEqual(actualKeys, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"按一次 Ctrl+A 后勾上了 {actualKeys.Count} 行（{string.Join("、", actualKeys)}），" +
+                    $"产品口径算出可同步的是 {expectedKeys.Count} 行（{string.Join("、", expectedKeys)}）：" +
+                    "两个答案必须逐字相同，不对就是勾选范围错了。");
+            }
+            if (!countLabel.Text.StartsWith("已选择 " + expectedKeys.Count + " 个接口", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"按一次 Ctrl+A 后计数行写着「{countLabel.Text}」，按勾上的 {expectedKeys.Count} 行应该是「已选择 {expectedKeys.Count} 个接口」：计数与勾选对不上。");
+            }
+
+            // ③ 作用域只到可见行：筛到只剩几行再按一次，藏起来的那几行一个都不动。
+            // 「清空」按全部清（含看不见的），清完之后再按 Ctrl+A：勾上的只能是看得见的那些。
+            clearButton.PerformClick();
+            Application.DoEvents();
+            keyword.Text = "probe/1";
+            Application.DoEvents();
+            var visibleKeys = list.Items.Cast<ListViewItem>()
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .ToList();
+            if (visibleKeys.Count >= diff.Endpoints.Count)
+            {
+                throw new InvalidOperationException(
+                    $"关键词「probe/1」之后清单还有 {visibleKeys.Count} 行（共 {diff.Endpoints.Count} 行）：筛选没生效，第三段量到的不是「只作用于可见行」。");
+            }
+            PressCtrlA(dialog);
+            var checkedVisible = list.Items.Cast<ListViewItem>()
+                .Where(item => item.Checked)
+                .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
+                .ToList();
+            var expectedVisible = expectedAll.Where(key => visibleKeys.Contains(key, StringComparer.Ordinal))
+                .OrderBy(key => key, StringComparer.Ordinal).ToList();
+            var actualVisible = checkedVisible.OrderBy(key => key, StringComparer.Ordinal).ToList();
+            if (!expectedVisible.SequenceEqual(actualVisible, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"筛到 {visibleKeys.Count} 行后按一次 Ctrl+A，勾上了 {actualVisible.Count} 行（{string.Join("、", actualVisible)}），" +
+                    $"可见行里可同步的只有 {expectedVisible.Count} 行（{string.Join("、", expectedVisible)}）：" +
+                    "藏起来的行一个都不该被勾上（只作用于可见行）。");
+            }
+            if (!countLabel.Text.StartsWith("已选择 " + expectedVisible.Count + " 个接口", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"筛到 {visibleKeys.Count} 行后按一次 Ctrl+A，计数行写着「{countLabel.Text}」，" +
+                    $"应当是「已选择 {expectedVisible.Count} 个接口」：计数与勾选对不上。");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 勾选页的关键词框（第二百八十六轮）：按「与接口清单同一页」认，不按「可见的文本框」认——
+    /// 这一对话框有两页、各有一个关键词框，构造期两页都还没隐藏，按可见性认会认出两个。
+    /// 勾选页的清单与它的关键词框同在勾选页那一块里（按钮行在对话框底部，不在这一块）。
+    /// </summary>
+    private static TextBox SelectPageKeyword(Form dialog, ListView list)
+    {
+        Control page = list;
+        while (page.Parent is not null && page.Parent != dialog) page = page.Parent;
+        return FindAll<TextBox>(page).SingleOrDefault()
+            ?? throw new InvalidOperationException("勾选页找不到关键词框（本段口径需要重定）。");
+    }
+
+    /// <summary>
+    /// 真按一次 Ctrl+A（第二百八十六轮）：经系统键入把「裸 Ctrl + A」送进清单。
+    /// <para>
+    /// 修饰键的判定取系统键状态（<c>KeyEventArgs.Modifiers</c> 来自系统，不是来自消息），
+    /// 所以这里必须走真的键入——手工拼一条 <c>WM_KEYDOWN</c> 消息带不出 Ctrl，
+    /// 那种按法在判「界面上按不按得出来」时什么也证明不了。
+    /// </para>
+    /// </summary>
+    private static void PressCtrlA(Form dialog)
+    {
+        dialog.Activate();
+        SetForegroundWindow(dialog.Handle);
+        Application.DoEvents();
+        SendKeys.SendWait("^a");
+        Application.DoEvents();
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
 
     /// <summary>

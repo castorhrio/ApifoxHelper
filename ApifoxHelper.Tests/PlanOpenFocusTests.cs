@@ -104,9 +104,12 @@ public class PlanOpenFocusTests
         Assert.DoesNotContain("EnsureVisible", line, StringComparison.Ordinal);
         Assert.DoesNotContain("PopulateActions", line, StringComparison.Ordinal);
         Assert.DoesNotContain(".Focus(", line, StringComparison.Ordinal);
-        // 整个对话框只经这一处入口交键盘，不自己写 .Focus()。
+        // 这一对话框有两页各一张清单，交键盘按清单认（第二百八十六轮勾选页也接上「打开时」这一口径）：
+        // 勾选页两处（打开时、回到勾选页时）、预览页一处（那一页由隐藏变可见时），
+        // 别处再写一句就是多了一个不交键盘的入口。整个对话框不自己写 .Focus()。
         var source = Repo.Source("Desktop", "Native", File);
-        Assert.Single(Regex.Matches(source, @"Ui\.KeepKeyboardOnQueue\("));
+        Assert.Equal(2, Regex.Matches(source, @"Ui\.KeepKeyboardOnQueue\(_selectList\);").Count);
+        Assert.Single(Regex.Matches(source, @"Ui\.KeepKeyboardOnQueue\(_actionList\);"));
         Assert.Empty(Regex.Matches(source, @"(?m)^\s*\w+\.Focus\(\);$"));
     }
 
@@ -120,12 +123,17 @@ public class PlanOpenFocusTests
     }
 
     [Fact]
-    public void Dialog_DoesNotTakeTheKeyboardOnOpen()
+    public void PreviewPage_DoesNotTakeTheKeyboardOnOpen()
     {
-        // 对话框打开时落在勾选页（那一页的清单没有选中语义），故不接「打开时」那一口径（OnShown）——
-        // 打开即选中一行的九张清单见 OpenFocusTests。
+        // 打开时对话框落在勾选页，预览页那时还不存在（计划还没生成）——写入清单没有落点可交，
+        // 它在「这一页由隐藏变可见」那一次交（第九十二轮，见 PreviewPage_HandsTheKeyboardOnlyWhenItAppears）。
+        // 第二百八十六轮勾选页接上了「打开时」这一口径（它打开即选中第一条接口），故 OnShown 交的是勾选页那一处，
+        // 不是写入清单——两张清单各有一处，别把一条口径接到两张清单上。
         var source = Repo.Source("Desktop", "Native", File);
-        Assert.DoesNotContain("OnShown", source, StringComparison.Ordinal);
+        var onShown = Regex.Match(source, @"protected override void OnShown\(EventArgs e\)\s*\{(?<body>[^}]*)\}").Groups["body"].Value;
+        Assert.True(onShown.Length > 0, "缺少 OnShown（打开时把键盘交给勾选清单的唯一时机）。");
+        Assert.DoesNotContain("_actionList", onShown, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(onShown, @"Ui\.KeepKeyboardOnQueue\(_selectList\);"));
     }
 
     // ---------- 设计基线 ----------

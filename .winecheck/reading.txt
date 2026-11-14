@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-14
-source=bb0498826635e68c3d75a3a371577aca2cbd873e
-tier=96 passed=257 failed=0 exit=0
-tier=120 passed=257 failed=0 exit=0
-tier=192 passed=257 failed=0 exit=0
+source=51b26983fb14e0664a5eacf2b93fd033537be2c6
+tier=96 passed=258 failed=0 exit=0
+tier=120 passed=258 failed=0 exit=0
+tier=192 passed=258 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -44,6 +44,7 @@ section=RunListColumnFit tier=96 passed=15 failed=0
 section=RunActionRowFit tier=96 passed=8 failed=0
 section=RunCapabilitiesShown tier=96 passed=1 failed=0
 section=RunCheckResultsShown tier=96 passed=1 failed=0
+section=RunSelectKeyboard tier=96 passed=1 failed=0
 section=RunEndpointTraceShown tier=96 passed=1 failed=0
 section=RunManualDraftShown tier=96 passed=1 failed=0
 section=RunScanWarningsShown tier=96 passed=1 failed=0
@@ -77,6 +78,7 @@ section=RunListColumnFit tier=120 passed=15 failed=0
 section=RunActionRowFit tier=120 passed=8 failed=0
 section=RunCapabilitiesShown tier=120 passed=1 failed=0
 section=RunCheckResultsShown tier=120 passed=1 failed=0
+section=RunSelectKeyboard tier=120 passed=1 failed=0
 section=RunEndpointTraceShown tier=120 passed=1 failed=0
 section=RunManualDraftShown tier=120 passed=1 failed=0
 section=RunScanWarningsShown tier=120 passed=1 failed=0
@@ -110,6 +112,7 @@ section=RunListColumnFit tier=192 passed=15 failed=0
 section=RunActionRowFit tier=192 passed=8 failed=0
 section=RunCapabilitiesShown tier=192 passed=1 failed=0
 section=RunCheckResultsShown tier=192 passed=1 failed=0
+section=RunSelectKeyboard tier=192 passed=1 failed=0
 section=RunEndpointTraceShown tier=192 passed=1 failed=0
 section=RunManualDraftShown tier=192 passed=1 failed=0
 section=RunScanWarningsShown tier=192 passed=1 failed=0
