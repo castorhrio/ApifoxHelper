@@ -111,6 +111,12 @@ internal sealed class StatusLineHost : Panel
     /// XML 注释写着同一个前提（第二百九十九轮登记）。两处说的是同一件事，改一处就得同时改另一处，
     /// 或者把那条断言改成不依赖字面相等——不要只改这里。
     /// </para>
+    /// <para>
+    /// <b>第三百零一轮起这一句有门了（简报 P0-2）</b>：<c>StatusLineTextTests.SetText_WritesVerbatim_NoNormalizationInTheBody</c>
+    /// 按源码形状判本方法体里不含 <c>Trim()</c> / <c>Replace()</c> / 正则 / 大小写转换 / <c>Normalize()</c>，
+    /// 且下面那一句赋值仍是 <c>_label.Text = text ?? "";</c>——加一句 <c>.Trim()</c> 当场红。
+    /// <b>它判不到的那一半</b>：别处又包了一层规范化（调用方先 Trim 再传进来），那只有人读得出来。
+    /// </para>
     /// </summary>
     public void SetText(string? text, Color color)
     {

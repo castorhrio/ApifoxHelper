@@ -24,14 +24,14 @@ public static class ApifoxRoutes
         app.MapGet("/api/apifox/projects", async (string profileId, ProfileStore profiles, ApifoxCli cli, HttpContext http) =>
         {
             var result = await cli.ListProjectsAsync(profiles.Get(profileId).Apifox, http.RequestAborted);
-            if (!result.Ok) throw new UserException("读取项目列表失败：" + result.Describe());
+            if (!result.Ok) throw new UserException(ErrorCopy.ProjectsReadFailedMessage + result.Describe());
             return Json((result.Data as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(p => new { id = p["id"]?.ToString(), name = p["name"]?.ToString(), teamName = p["teamName"]?.ToString() ?? p["team"]?["name"]?.ToString() }));
         });
         app.MapGet("/api/apifox/branches", async (string profileId, string projectId, ProfileStore profiles, ApifoxCli cli, HttpContext http) =>
         {
             if (!projectId.All(char.IsDigit)) throw new UserException(ErrorCopy.InvalidProjectIdMessage);
             var result = await cli.ListBranchesAsync(profiles.Get(profileId).Apifox, projectId, http.RequestAborted);
-            if (!result.Ok) throw new UserException("读取分支失败：" + result.Describe());
+            if (!result.Ok) throw new UserException(ErrorCopy.BranchesReadFailedMessage + result.Describe());
             return Json((result.Data as JsonArray ?? new JsonArray()).OfType<JsonObject>().Select(b => new
             {
                 id = b["id"]?.ToString(),
@@ -46,7 +46,7 @@ public static class ApifoxRoutes
             var profile = profiles.Get(profileId);
             if (profile.Apifox.ProjectId is null) throw new UserException(ErrorCopy.NoApifoxProjectMessage);
             var result = await cli.ListFoldersAsync(profile.Apifox, profile.Apifox.ProjectId, profile.Apifox.BranchName, http.RequestAborted);
-            if (!result.Ok) throw new UserException("读取目录失败：" + result.Describe());
+            if (!result.Ok) throw new UserException(ErrorCopy.FoldersReadFailedMessage + result.Describe());
             return Json(result.Data);
         });
 
@@ -56,7 +56,7 @@ public static class ApifoxRoutes
             var profile = profiles.Get(profileId);
             if (profile.Apifox.ProjectId is null) throw new UserException(ErrorCopy.NoApifoxProjectMessage);
             var result = await cli.GetEndpointAsync(profile.Apifox, profile.Apifox.ProjectId, profile.Apifox.BranchName, endpointId, http.RequestAborted);
-            if (!result.Ok || result.Data is not JsonObject data) throw new UserException("读取接口失败：" + result.Describe());
+            if (!result.Ok || result.Data is not JsonObject data) throw new UserException(ErrorCopy.EndpointReadFailedMessage + result.Describe());
             return Json(EndpointTemplateReader.Read(data));
         });
 
@@ -100,8 +100,8 @@ public static class ApifoxRoutes
         app.MapGet("/api/tasks/{id}/plan", (string id, TaskStore tasks) => Json(tasks.Read<SyncPlan>(id, TaskFiles.Plan)));
         app.MapGet("/api/tasks/{id}/plan/payload/{actionId}", (string id, string actionId, TaskStore tasks) =>
         {
-            var plan = tasks.Read<SyncPlan>(id, TaskFiles.Plan) ?? throw new UserException("还没有同步计划。");
-            var action = plan.Actions.FirstOrDefault(a => a.ActionId == actionId) ?? throw new UserException("动作不存在。", 404);
+            var plan = tasks.Read<SyncPlan>(id, TaskFiles.Plan) ?? throw new UserException(ErrorCopy.NoSyncPlanMessage);
+            var action = plan.Actions.FirstOrDefault(a => a.ActionId == actionId) ?? throw new UserException(ErrorCopy.ActionNotFoundMessage, 404);
             return Json(Redactor.RedactNode(FileStore.ReadNode(action.PayloadFile)));
         });
         app.MapPost("/api/tasks/{id}/plan/apply", (string id, ApplyPlanRequest request, SyncExecutor executor, JobRunner jobs) =>

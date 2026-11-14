@@ -171,6 +171,13 @@ public class RejectMessageTests
     /// 前提的落点是 <c>Desktop/Native/StatusLineHost.cs</c> 的 <c>SetText</c>（全仓状态行唯一的写入点，
     /// 由 <c>StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost</c> 判住「都经它写」）。
     /// </para>
+    /// <para>
+    /// <b>第三百零一轮起，「能机械判的那一半」有门了</b>：<c>StatusLineTextTests.SetText_WritesVerbatim_NoNormalizationInTheBody</c>
+    /// 按源码形状判 <c>SetText</c> 的方法体里不含 <c>Trim()</c> / <c>Replace()</c> / 正则 / 大小写转换 /
+    /// <c>Normalize()</c>，且那一句赋值仍是 <c>_label.Text = text ?? "";</c>（抓不抓得住由同文件
+    /// <c>SetTextDetector_ReportsTheBreaksItMustCatch</c> 拿三发注入当场验）。<b>判不到的仍是那一半</b>：
+    /// 别处又包了一层规范化（例如调用方先 Trim 再传进来）——那只有人读得出来，所以上面这段登记不撤。
+    /// </para>
     /// </summary>
     [Fact]
     public void Dialog_ClearsTheSentenceOnlyWhenTheSelectionReallyChanged()

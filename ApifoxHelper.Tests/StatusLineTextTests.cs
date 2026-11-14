@@ -217,6 +217,114 @@ public class StatusLineTextTests
         Assert.True(offenders.Count == 0, $"这些行直接写状态行标签而不是走宿主 SetText：{string.Join("、", offenders)}。");
     }
 
+    /// <summary>
+    /// <c>SetText</c> 原样写入：方法体里不许出现任何规范化调用（第三百零一轮，简报 P0-2）。
+    /// <para>
+    /// <b>要解决的问题</b>：第三百轮把「本方法原样写入（不 <c>Trim()</c>、不折叠空白、不截断）」登记进了
+    /// <c>StatusLineHost.SetText</c> 的注释，但<b>只有注释、没有门</b>——注释挡不住下一轮有人顺手加一句
+    /// <c>.Trim()</c>。而 <c>RejectMessageTests.Dialog_ClearsTheSentenceOnlyWhenTheSelectionReallyChanged</c>
+    /// 判的是「我写进去的那一句」与「读回来的那一句」<b>字面相等</b>：一旦这里做了规范化，那条断言
+    /// <b>静默失效</b>（它仍然绿，但它判的那件事已经不成立了）。
+    /// </para>
+    /// <para>
+    /// <b>能机械判的是哪一半</b>：<c>SetText</c> 方法体里不含 <c>Trim()</c> / <c>Replace()</c> / 正则 /
+    /// 大小写转换 / <c>Normalize()</c>，且那一句赋值仍是 <c>_label.Text = text ?? "";</c>。
+    /// <b>判不到的那一半</b>：别处又包了一层规范化（例如调用方先 Trim 再传进来）——那只有人读得出来，
+    /// 所以这一条只把「承诺」变成「部分可判」，不冒充「前提已被完全证明」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SetText_WritesVerbatim_NoNormalizationInTheBody()
+    {
+        var body = MethodBody(Repo.Source("Desktop", "Native", "StatusLineHost.cs"), "public void SetText(string? text, Color color)");
+        // 前提：真的取到了方法体（取不到时下面几条「不含」会恒真，那比没有门更糟）。
+        Assert.Contains("_label.Text = text ?? \"\";", body, StringComparison.Ordinal);
+        Assert.Contains("UpdateFullText();", body, StringComparison.Ordinal);
+
+        foreach (var call in NormalizingCalls)
+        {
+            Assert.DoesNotContain(call, body, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：三发注入各报一处，合规方法体不报。
+    /// <para>
+    /// 本仓的教训是「判据自己没被跑过」比「没有判据」更贵（第二百零九轮那两处假变异、
+    /// 第二百四十三轮 M4 那一发假绿）。第一发是简报点名的那一句 <c>.Trim()</c>，
+    /// 第二发是「把连续空白折成一个」，第三发是「赋值那一句被换掉」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SetTextDetector_ReportsTheBreaksItMustCatch()
+    {
+        var good = MethodBody(Repo.Source("Desktop", "Native", "StatusLineHost.cs"), "public void SetText(string? text, Color color)");
+        Assert.Empty(SetTextProblems(good));
+
+        // ① 简报点名的那一句：顺手 Trim 一下。
+        var trimmed = good.Replace("_label.Text = text ?? \"\";", "_label.Text = (text ?? \"\").Trim();", StringComparison.Ordinal);
+        Assert.Contains(SetTextProblems(trimmed), p => p.Contains("Trim", StringComparison.Ordinal));
+
+        // ② 把连续空白折成一个（字面相等判据同样失效，而且更隐蔽：短句上看不出来）。
+        var collapsed = good.Replace("_label.Text = text ?? \"\";", "_label.Text = Regex.Replace(text ?? \"\", \" +\", \" \");", StringComparison.Ordinal);
+        Assert.Contains(SetTextProblems(collapsed), p => p.Contains("Regex", StringComparison.Ordinal));
+
+        // ③ 赋值那一句被换掉（原样写入这件事本身没了）。
+        var replaced = good.Replace("_label.Text = text ?? \"\";", "_label.Text = text ?? string.Empty;", StringComparison.Ordinal);
+        Assert.Contains(SetTextProblems(replaced), p => p.Contains("原样写入", StringComparison.Ordinal));
+    }
+
+    /// <summary>规范化调用（封闭清单）：出现在 <c>SetText</c> 方法体里即判红。</summary>
+    private static readonly string[] NormalizingCalls =
+    [
+        ".Trim(", ".TrimStart(", ".TrimEnd(", ".Replace(", "Regex.", ".Normalize(", ".ToUpper(", ".ToLower(",
+    ];
+
+    /// <summary>判据本体：方法体进、问题出（空清单 = 原样写入）。</summary>
+    private static List<string> SetTextProblems(string body)
+    {
+        var problems = new List<string>();
+        if (!body.Contains("_label.Text = text ?? \"\";", StringComparison.Ordinal))
+        {
+            problems.Add("StatusLineHost.SetText 里那一句原样写入（_label.Text = text ?? \"\";）不见了："
+                + "RejectMessageTests 的字面相等判据依赖它，换掉就等于把那条断言的前提抽掉。");
+        }
+        foreach (var call in NormalizingCalls)
+        {
+            if (body.Contains(call, StringComparison.Ordinal))
+            {
+                problems.Add($"StatusLineHost.SetText 的方法体里出现规范化调用「{call}」：本方法原样写入，"
+                    + "传进来什么就写什么——RejectMessageTests 判的是字面相等，规范化会让那条断言静默失效。");
+            }
+        }
+        return problems;
+    }
+
+    /// <summary>
+    /// 取一个方法的方法体（按花括号深度界定，不靠缩进猜）。找不到就判红——
+    /// 提取器失效时「不含某调用」会恒真，那比没有门更糟。
+    /// </summary>
+    private static string MethodBody(string source, string header)
+    {
+        var start = source.IndexOf(header, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"StatusLineHost.cs 里找不到「{header}」。");
+        var open = source.IndexOf('{', start);
+        Assert.True(open > start, $"「{header}」后面没有方法体。");
+
+        var depth = 0;
+        for (var i = open; i < source.Length; i++)
+        {
+            if (source[i] == '{') depth++;
+            else if (source[i] == '}')
+            {
+                depth--;
+                if (depth == 0) return source[open..(i + 1)];
+            }
+        }
+        Assert.Fail($"「{header}」的方法体没有闭合。");
+        return string.Empty;
+    }
+
     [Fact]
     public void Host_KeepsTheStatusLineHeight()
     {

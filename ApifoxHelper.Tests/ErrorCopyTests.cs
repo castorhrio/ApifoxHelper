@@ -308,6 +308,127 @@ public class ErrorCopyTests
         Assert.Contains("ErrorCopy.InternalMessage", source, StringComparison.Ordinal);
     }
 
+    // ── 路由文案的落点（第三百零一轮，简报 P0-1）────────────────────────
+
+    /// <summary>
+    /// <c>Api/ApifoxRoutes.cs</c> 里此前<b>就地拼接</b>的六处文案：字面量 → 常量名（封闭清单）。
+    /// <para>
+    /// <b>为什么这六处要收</b>：<c>ErrorCopy</c> 的既定方向是「错误文案单一口径」，而
+    /// <c>ServiceCopyTests</c> 的扫描面只覆盖 <c>new UserException("…")</c> 的字面量与以 <c>Message</c>
+    /// 收尾的常量——<b>就地拼接的前缀两头都不占</b>，于是这六句落在扫描面之外：它们会原样进原生界面的
+    /// 状态行与内联错误，却不受中文标点、空话禁词、中英文空隙那几条口径约束。收进常量之后，
+    /// 它们自动落进 <c>ServiceCopyTests</c> 的扫描面（常量名以 <c>Message</c> 收尾是落进去的条件）。
+    /// </para>
+    /// <para>
+    /// <b>措辞逐字未变</b>：本轮只动落点，不动一个字（<see cref="RouteCopy_KeepsTheExactWording"/> 钉住）。
+    /// </para>
+    /// </summary>
+    private static readonly (string Literal, string Constant)[] RouteCopySites =
+    [
+        ("读取项目列表失败：", nameof(ErrorCopy.ProjectsReadFailedMessage)),
+        ("读取分支失败：", nameof(ErrorCopy.BranchesReadFailedMessage)),
+        ("读取目录失败：", nameof(ErrorCopy.FoldersReadFailedMessage)),
+        ("读取接口失败：", nameof(ErrorCopy.EndpointReadFailedMessage)),
+        ("还没有同步计划。", nameof(ErrorCopy.NoSyncPlanMessage)),
+        ("动作不存在。", nameof(ErrorCopy.ActionNotFoundMessage)),
+    ];
+
+    /// <summary>六句的措辞逐字未变（真执行：<c>ErrorCopy</c> 与测试工程共享编译）。</summary>
+    [Fact]
+    public void RouteCopy_KeepsTheExactWording()
+    {
+        Assert.Equal("读取项目列表失败：", ErrorCopy.ProjectsReadFailedMessage);
+        Assert.Equal("读取分支失败：", ErrorCopy.BranchesReadFailedMessage);
+        Assert.Equal("读取目录失败：", ErrorCopy.FoldersReadFailedMessage);
+        Assert.Equal("读取接口失败：", ErrorCopy.EndpointReadFailedMessage);
+        Assert.Equal("还没有同步计划。", ErrorCopy.NoSyncPlanMessage);
+        Assert.Equal("动作不存在。", ErrorCopy.ActionNotFoundMessage);
+    }
+
+    /// <summary>
+    /// 六句都落进 <c>ServiceCopyTests</c> 的扫描面：常量名必须以 <c>Message</c> 收尾
+    /// （那条扫描面的正则就是 <c>const string \w*Message =</c>）。改名成别的收尾，这一条即红——
+    /// 否则「收进常量」只是换了个地方写，中文排版那几条口径照样管不到它。
+    /// </summary>
+    [Fact]
+    public void RouteCopy_ConstantsFallIntoTheTypographyScan()
+    {
+        foreach (var (_, constant) in RouteCopySites)
+        {
+            Assert.EndsWith("Message", constant, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 六处不再就地拼接（按源码形状判）：路由文件里既不许再出现那六个字面量，
+    /// 又必须真的引用到那六个常量；四条「读取…失败：」的详情仍由 <c>Describe()</c> 给
+    /// （常量 + 变量，不是把详情也塞进常量）。
+    /// </summary>
+    [Fact]
+    public void Routes_TakeTheSixSentencesFromTheSingleSource() =>
+        Assert.Empty(RouteCopyProblems(Repo.Source("Api", "ApifoxRoutes.cs")));
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：三发注入各报一处，合规源码不报。
+    /// <para>
+    /// 本仓的教训是「判据自己没被跑过」比「没有判据」更贵（第二百零九轮那两处假变异、
+    /// 第二百四十三轮 M4 那一发假绿）。第一发是「就地拼接又回来了」，第二发是「常量引用了但字面量还在」，
+    /// 第三发是「详情不再由 Describe() 给」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RouteCopyDetector_ReportsTheBreaksItMustCatch()
+    {
+        var good = Repo.Source("Api", "ApifoxRoutes.cs");
+        Assert.Empty(RouteCopyProblems(good));
+
+        // ① 就地拼接又回来了：前缀写回字面量。
+        var inPlace = good.Replace(
+            "ErrorCopy.ProjectsReadFailedMessage + result.Describe()",
+            "\"读取项目列表失败：\" + result.Describe()",
+            StringComparison.Ordinal);
+        Assert.Contains(RouteCopyProblems(inPlace), p => p.Contains("读取项目列表失败：", StringComparison.Ordinal));
+
+        // ② 常量引用了，但字面量还留在别处（两处各写一份，改一处就漂）。
+        var duplicated = good + "\n// throw new UserException(\"读取分支失败：\");\n";
+        Assert.Contains(RouteCopyProblems(duplicated), p => p.Contains("读取分支失败：", StringComparison.Ordinal));
+
+        // ③ 详情不再由 Describe() 给：常量后面拼了别的东西（用户读到的就不再是 CLI 的失败描述）。
+        var noDetail = good.Replace(
+            "ErrorCopy.FoldersReadFailedMessage + result.Describe()",
+            "ErrorCopy.FoldersReadFailedMessage",
+            StringComparison.Ordinal);
+        Assert.Contains(RouteCopyProblems(noDetail), p => p.Contains("Describe()", StringComparison.Ordinal));
+    }
+
+    /// <summary>判据本体：路由源码进、问题出（空清单 = 六处都从单一落点取）。</summary>
+    private static List<string> RouteCopyProblems(string routes)
+    {
+        var problems = new List<string>();
+        foreach (var (literal, constant) in RouteCopySites)
+        {
+            if (routes.Contains("\"" + literal + "\"", StringComparison.Ordinal))
+            {
+                problems.Add($"Api/ApifoxRoutes.cs 里仍有就地拼接的字面量「{literal}」：这一句会原样进界面状态行，"
+                    + $"却落在 ServiceCopyTests 的扫描面之外。改成 ErrorCopy.{constant}。");
+            }
+            if (!routes.Contains("ErrorCopy." + constant, StringComparison.Ordinal))
+            {
+                problems.Add($"Api/ApifoxRoutes.cs 没有引用 ErrorCopy.{constant}：文案的单一落点没有接上。");
+            }
+        }
+
+        // 四条「读取…失败：」的详情仍由 Describe() 给：常量 + 变量，不是把详情塞进常量。
+        var withDetail = Regex.Matches(routes, @"ErrorCopy\.\w+ReadFailedMessage \+ result\.Describe\(\)").Count;
+        if (withDetail != 4)
+        {
+            problems.Add($"四条「读取…失败：」里只有 {withDetail} 条把 Describe() 的失败描述拼在后面（应为 4）："
+                + "详情是 CLI 那一侧的口径，不能在这里丢掉或换成别的东西。");
+        }
+
+        return problems;
+    }
+
     /// <summary>共享编译：文案文件必须进测试工程的编译清单，否则上面的断言测的是另一份代码。</summary>
     [Fact]
     public void ErrorCopy_IsSharedCompiledIntoTheTestProject()
