@@ -13,7 +13,14 @@
 # 不判什么：**不判内容对不对**（截图有没有裁切、读数落得对不对要人看），也**不判真机跑没跑**——
 #         第 ④ 条只判「目录在位」，九个目录都还空着（真机 0 台）不算预检失败，那是 G-D5 的账。
 #
-# 可覆盖的环境变量：REPO / READING / SMOKE_EXE / EVIDENCE / README / PWSH。
+# 干净环境那一支（第二百八十一轮实测修）：②③ 判的是**已经发出来的**冒烟器与读数记录，而这两样
+# 恰恰是 demo.sh 在 PUBLISH=1 时才发的，demo.sh 又排在预检之后（defense-day.sh 的第 ③ 步）。
+# 于是清过 /tmp/ah-smoke-pub 的机器上，`PUBLISH=1 bash .winecheck/defense-day.sh` 会永远停在第 ② 步：
+# 预检要的产物只有它后面那一步才会发出来。PUBLISH=1 时这两条因此改判「重发得起来」——
+# 判的仍是实物（dotnet 与冒烟器工程在位），而「三档到底过没过」由第 ③ 步自己判：它判不过就非零退出，
+# 链照样停在那里。不带 PUBLISH 时四条一个字没变（产物不在就照旧点名，那是「拿旧产物开讲」的挡板）。
+#
+# 可覆盖的环境变量：REPO / READING / SMOKE_EXE / EVIDENCE / README / PWSH / PUBLISH。
 #
 # 退出码：0 = 四条都过，可以开讲；1 = 有一条没过（上面已逐条点名是哪一步、怎么解）。
 set -u
@@ -24,6 +31,7 @@ SMOKE_EXE=${SMOKE_EXE:-/tmp/ah-smoke-pub/ApifoxHelper.Smoke.exe}
 EVIDENCE=${EVIDENCE:-$REPO/docs/evidence/real-machine}
 README=${README:-$EVIDENCE/README.md}
 PWSH=${PWSH:-}
+PUBLISH=${PUBLISH:-0}
 
 FAILED=""
 fail() {
@@ -72,7 +80,11 @@ if [ ! -f "$READING" ]; then
 elif [ -z "$RECORDED" ]; then
   fail "②" "读数记录里没有 source= 那一行（$READING）——记录被改过或写了一半，念的数没有可对账的出处。解一次：PUBLISH=1 bash .winecheck/demo.sh"
 elif [ "$CURRENT" != "$RECORDED" ]; then
-  fail "②" "源指纹对不上：记录里是 $RECORDED，当前源码算出来是 $CURRENT——文档念的那个数属于上一版代码。解一次：PUBLISH=1 bash .winecheck/demo.sh"
+  if [ "$PUBLISH" = "1" ]; then
+    echo "   ② 推迟：记录里是 $RECORDED，当前源码算出来是 $CURRENT——PUBLISH=1 时第 ③ 步会重发冒烟器并重写这份记录，这一条届时由 demo.sh 自己判（它判不过就非零退出，链照样停在那里）"
+  else
+    fail "②" "源指纹对不上：记录里是 $RECORDED，当前源码算出来是 $CURRENT——文档念的那个数属于上一版代码。解一次：PUBLISH=1 bash .winecheck/demo.sh"
+  fi
 else
   echo "   ② 一致：$CURRENT"
 fi
@@ -83,26 +95,41 @@ echo "-- ③ 三档演示是否跑过且通过（PUBLISH=1 bash .winecheck/demo.
 STAMP="$(dirname "$SMOKE_EXE")/smoke-source.sha"
 TIER_LINES=0
 BAD_TIERS=0
-if [ -f "$READING" ]; then
-  TIER_LINES=$(grep -c '^tier=' "$READING" || true)
-  BAD_TIERS=$(awk '
-    /^tier=/ {
-      for (i = 1; i <= NF; i++) {
-        split($i, kv, "=")
-        if (kv[1] == "failed" && kv[2] != "0") bad = 1
-        if (kv[1] == "exit" && kv[2] != "0") bad = 1
-      }
-    }
-    END { print bad + 0 }' "$READING")
-fi
-if [ "$TIER_LINES" = "0" ]; then
-  fail "③" "读数记录里一条 tier= 都没有（$READING）——三档演示没跑过，或跑挂了没留下数。解一次：PUBLISH=1 bash .winecheck/demo.sh"
-elif [ "$BAD_TIERS" != "0" ]; then
-  fail "③" "读数记录里有档位不是「0 失败、退出码 0」——带着失败行念「wine 量到」就是假绿。先按讲稿逐条查到底层，再 PUBLISH=1 bash .winecheck/demo.sh 复跑"
-elif [ ! -f "$STAMP" ]; then
-  fail "③" "冒烟器旁边没有源码指纹（$STAMP）——这一档不是 PUBLISH=1 发出来的，判不出它出自哪一版源码。解一次：PUBLISH=1 bash .winecheck/demo.sh"
+if [ "$PUBLISH" = "1" ]; then
+  # 干净环境那一支：这一条要判的产物（冒烟器 + 源码指纹 + 读数记录）正是第 ③ 步要发的东西。
+  # 拿「还没发出来的产物」判它，链就永远停在预检（第二百八十一轮实测：清掉 /tmp/ah-smoke-pub 后
+  # `PUBLISH=1 bash .winecheck/defense-day.sh` 整支退出码 1，停在第 ② 步）。所以改判「重发得起来」：
+  # 判的是发布这一步真会用到的那两件实物，而三档过没过由 demo.sh 自己判、自己非零退出。
+  SMOKE_PROJ="$REPO/ApifoxHelper.Smoke/ApifoxHelper.Smoke.csproj"
+  if ! command -v dotnet >/dev/null 2>&1; then
+    fail "③" "PUBLISH=1 要重发冒烟器，但 PATH 里没有 dotnet——第 ③ 步会在发布那一步就停。解一次：装 .NET 8 SDK，或按 .winecheck/README.md 手工发布之后不带 PUBLISH 再跑这一支"
+  elif [ ! -f "$SMOKE_PROJ" ]; then
+    fail "③" "PUBLISH=1 要重发冒烟器，但找不到冒烟器工程 $SMOKE_PROJ——REPO 指错了地方？第 ③ 步会在发布那一步就停。解一次：REPO 指到仓根再跑这一支"
+  else
+    echo "   ③ PUBLISH=1：冒烟器与源码指纹由第 ③ 步（demo.sh）重发时自己写，这一条改判「重发得起来」——dotnet 在位、冒烟器工程在位；三档到底过没过由第 ③ 步自己判（它判不过就非零退出，链照样停在那里）"
+  fi
 else
-  echo "   ③ $TIER_LINES 档全部 0 失败、退出码 0；冒烟器源码指纹在位：$STAMP"
+  if [ -f "$READING" ]; then
+    TIER_LINES=$(grep -c '^tier=' "$READING" || true)
+    BAD_TIERS=$(awk '
+      /^tier=/ {
+        for (i = 1; i <= NF; i++) {
+          split($i, kv, "=")
+          if (kv[1] == "failed" && kv[2] != "0") bad = 1
+          if (kv[1] == "exit" && kv[2] != "0") bad = 1
+        }
+      }
+      END { print bad + 0 }' "$READING")
+  fi
+  if [ "$TIER_LINES" = "0" ]; then
+    fail "③" "读数记录里一条 tier= 都没有（$READING）——三档演示没跑过，或跑挂了没留下数。解一次：PUBLISH=1 bash .winecheck/demo.sh"
+  elif [ "$BAD_TIERS" != "0" ]; then
+    fail "③" "读数记录里有档位不是「0 失败、退出码 0」——带着失败行念「wine 量到」就是假绿。先按讲稿逐条查到底层，再 PUBLISH=1 bash .winecheck/demo.sh 复跑"
+  elif [ ! -f "$STAMP" ]; then
+    fail "③" "冒烟器旁边没有源码指纹（$STAMP）——这一档不是 PUBLISH=1 发出来的，判不出它出自哪一版源码。解一次：PUBLISH=1 bash .winecheck/demo.sh"
+  else
+    echo "   ③ $TIER_LINES 档全部 0 失败、退出码 0；冒烟器源码指纹在位：$STAMP"
+  fi
 fi
 
 # ④ 九个归档目录在位：调 collect-real-machine.sh。它自己的三个退出码分工是

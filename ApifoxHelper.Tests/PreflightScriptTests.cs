@@ -464,4 +464,54 @@ public class PreflightScriptTests
         Assert.Contains("pwsh", output, StringComparison.Ordinal);
         Assert.Contains("dotnet tool install", output, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// 第 ③ 条在 <c>PUBLISH=1</c> 下的那一支（第二百八十一轮，简报 P0-1 的实测修）。
+    /// <para>
+    /// <b>它挡的是什么</b>：干净环境（清过 <c>/tmp/ah-smoke-pub</c>）里，第 ③ 条要判的产物
+    /// （冒烟器 + 源码指纹 + 读数记录）正是 <c>demo.sh</c> 在 <c>PUBLISH=1</c> 时才发的，而 <c>demo.sh</c>
+    /// 排在预检之后（<c>defense-day.sh</c> 的第 ③ 步）。拿「还没发出来的产物」判这一条，链就永远停在预检——
+    /// 第二百八十一轮实测：清掉产物后 <c>PUBLISH=1 bash .winecheck/defense-day.sh</c> 整支退出码 1、停在第 ② 步。
+    /// 所以 <c>PUBLISH=1</c> 时这一条改判「重发得起来」，判的仍是实物（<c>dotnet</c> 与冒烟器工程在位）。
+    /// </para>
+    /// <para>
+    /// <b>两个方向都在</b>：① 冒烟器工程不在 → 点名 ③（重发根本起不来，别放行）；
+    /// ② 工程在位 → 通过并如实说「三档过没过由第 ③ 步自己判」；③ 不带 <c>PUBLISH</c> 时照旧点名 ③
+    /// （产物不在就是不在——这一支没有把默认那一支放松）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CheckpointThree_UnderPublishJudgesTheRepublishInsteadOfTheMissingArtifact()
+    {
+        if (LocateBash() is null) return;
+
+        using var tree = new FakeTree();
+        tree.SeedArchive();
+        tree.WriteReading("deadbeef");
+        var (_, probe) = RunPreflight(tree.Env());
+        var current = Regex.Match(probe, @"当前源码算出来是 ([0-9a-f]{40})").Groups[1].Value;
+        Assert.False(string.IsNullOrEmpty(current), $"第 ② 条没打出当前指纹：{probe}");
+        tree.WriteReading(current, "tier=96 passed=1 failed=0 exit=0");
+
+        // ① 冒烟器工程不在：PUBLISH=1 也起不来 → 点名 ③。
+        var (exitA, outputA) = RunPreflight([.. tree.Env(), ("PUBLISH", "1")]);
+        Assert.True(exitA != 0, "PUBLISH=1 但冒烟器工程不在，预检却退出了 0——第 ③ 步会在发布那一步就停，而现场不知道。");
+        Assert.Contains("③ 未通过", outputA, StringComparison.Ordinal);
+        Assert.Contains("找不到冒烟器工程", outputA, StringComparison.Ordinal);
+
+        // ② 工程在位：改判「重发得起来」→ 通过，并如实说三档过没过由第 ③ 步自己判。
+        Directory.CreateDirectory(Path.Combine(tree.Root, "ApifoxHelper.Smoke"));
+        File.WriteAllText(Path.Combine(tree.Root, "ApifoxHelper.Smoke", "ApifoxHelper.Smoke.csproj"), "<Project />\n");
+        var (exitB, outputB) = RunPreflight([.. tree.Env(), ("PUBLISH", "1")]);
+        Assert.True(exitB == 0, $"PUBLISH=1 且冒烟器工程在位时预检却非零退出：{outputB}");
+        Assert.Contains("③ PUBLISH=1", outputB, StringComparison.Ordinal);
+        Assert.Contains("重发得起来", outputB, StringComparison.Ordinal);
+        Assert.Contains("由第 ③ 步自己判", outputB, StringComparison.Ordinal);
+
+        // ③ 不带 PUBLISH：产物不在就照旧点名 ③（默认那一支一个字没放松）。
+        var (exitC, outputC) = RunPreflight(tree.Env());
+        Assert.True(exitC != 0, "不带 PUBLISH 时冒烟器旁边没有源码指纹，预检却退出了 0——判不出这一档出自哪一版源码。");
+        Assert.Contains("③ 未通过", outputC, StringComparison.Ordinal);
+        Assert.Contains("没有源码指纹", outputC, StringComparison.Ordinal);
+    }
 }
