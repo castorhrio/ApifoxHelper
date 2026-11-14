@@ -159,6 +159,40 @@ public class RowToggleGestureTests
         Assert.Empty(CodeScan.LinesContaining(source, "Checked = !"));
     }
 
+    /// <summary>
+    /// 组合键在界面上真的按过一次（第二百九十一轮，简报 P1-2）：冒烟段里焦点在第一条上按一次
+    /// <b>Ctrl+空格</b>，并如实断言量到的那个事实。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：上面那张真值表判的是「判定函数对 Ctrl+空格 返回 false」，
+    /// 判不到「界面上按下去那一行翻不翻」。真键量到的第一手事实与简报的预期相反：
+    /// <b>控件自身那一支会翻</b>（wine 10.0 三档一致）——本仓的判定不吞这一下，于是它落到控件自身，
+    /// 而控件把它当勾选翻转处理。所以这一段断言的是「翻」，并写明翻它的不是本仓的翻转点。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 段体里真的经 <c>PressKey</c> 按了 <c>"^ "</c>；② 断言方向是「没翻就抛」
+    /// （<c>if (!first.Checked)</c>）——写成「翻了就抛」等于把量到的事实改回简报的预期，那才是假绿；
+    /// ③ 再按一次翻回去，且注释里写明「翻它的不是本仓的翻转点」——不写这一句，下一轮会把它读成
+    /// 「本仓的手势接管了 Ctrl+空格」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TheSmokeSegment_ReallyPressesCtrlSpaceAndRecordsWhatTheControlDoes()
+    {
+        var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
+        var body = Slice(
+            smoke,
+            "private static void RunSelectKeyboard(IServiceProvider services, string dataRoot)",
+            "/// <summary>\n    /// 勾选页的关键词框");
+
+        Assert.Contains("PressKey(dialog, list, \"^ \");", body, StringComparison.Ordinal);
+        var at = body.IndexOf("PressKey(dialog, list, \"^ \");", StringComparison.Ordinal);
+        var after = body[at..];
+        Assert.Contains("if (!first.Checked)", after, StringComparison.Ordinal);
+        Assert.Contains("翻它的不是本仓的翻转点", body, StringComparison.Ordinal);
+        // 翻回去那一下也在（这一段不改变后面各段的前提）。
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(after, "PressKey\\(dialog, list, \"\\^ \"\\);").Count);
+    }
+
     // ---------- 设计基线回写 ----------
 
     [Fact]

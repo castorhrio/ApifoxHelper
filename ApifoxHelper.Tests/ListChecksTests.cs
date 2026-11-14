@@ -98,12 +98,15 @@ public class ListChecksTests
         Assert.Matches(
             @"(?m)^\s*if \(!ListChecks\.ShouldToggle\(e\.Button == MouseButtons\.Left, true, hit\.Location == ListViewHitTestLocations\.StateImage\)\) return;$",
             branch);
-        Assert.Matches(@"(?m)^\s*row\.Checked = !row\.Checked;$", branch);
+        // 翻转本身不在分支里就地写（第二百八十九轮）：鼠标与键盘两条入口共用同一个私有翻转点
+        // <c>Ui.ToggleRow</c>，分支只调它——分支里再写一遍 `Checked = !Checked` 就是第二处翻转点。
+        Assert.Matches(@"(?m)^\s*ToggleRow\(row\);$", branch);
+        Assert.DoesNotMatch(@"(?m)^\s*row\.Checked = ", branch);
 
         var hit = branch.IndexOf("list.HitTest(e.Location)", StringComparison.Ordinal);
         var guard = branch.IndexOf("hit.Item is not ListViewItem row", StringComparison.Ordinal);
         var judge = branch.IndexOf("ListChecks.ShouldToggle(", StringComparison.Ordinal);
-        var flip = branch.IndexOf("row.Checked = !row.Checked;", StringComparison.Ordinal);
+        var flip = branch.IndexOf("ToggleRow(row);", StringComparison.Ordinal);
         Assert.True(hit < guard && guard < judge && judge < flip,
             "应先取命中、再断言命中在一行上、再由共享口径判定、最后翻那一行。");
     }

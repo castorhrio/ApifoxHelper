@@ -150,8 +150,12 @@ public class SelectPageKeyboardTests
         Assert.Contains("nameof(RunSelectKeyboard)", smoke, StringComparison.Ordinal);
         Assert.Contains("private static void RunSelectKeyboard(IServiceProvider services, string dataRoot)", smoke, StringComparison.Ordinal);
         // 真键：SendKeys 经系统键入，修饰键的真实状态随之而来（手工拼一条 WM_KEYDOWN 带不出 Ctrl）。
-        Assert.Contains("SendKeys.SendWait(\"^a\")", smoke, StringComparison.Ordinal);
+        // 第二百九十一轮起「按一次键」只有一处落点（PressKey），Ctrl+A 与裸空格不再各写一份形似的实现；
+        // 判的是「这一段真的经那个落点按了 Ctrl+A」+「那个落点真的走 SendKeys」，两处缺一即红。
         var body = Slice(smoke, "private static void RunSelectKeyboard(IServiceProvider services, string dataRoot)", "/// <summary>\n    /// 勾选页的关键词框");
+        Assert.Contains("PressKey(dialog, null, \"^a\");", body, StringComparison.Ordinal);
+        var helper = Slice(smoke, "private static void PressKey(Form dialog, ListView? list, string keys)", "[DllImport(\"user32.dll\")]");
+        Assert.Contains("SendKeys.SendWait(keys);", helper, StringComparison.Ordinal);
         Assert.Contains(".Show();", body, StringComparison.Ordinal);
         // 期望值取产品自己的口径，界面与它对不上就是界面错了。
         Assert.Contains("SyncSelection.SyncableKeys(", body, StringComparison.Ordinal);

@@ -148,18 +148,48 @@ public class ClearButtonGateTests
         Assert.Contains("public void Clear() => _checked.Clear();", CodeScan.Text(select), StringComparison.Ordinal);
     }
 
-    // ---------- 冒烟段：三态真的按过 ----------
+    // ---------- 冒烟段：每一态都真的按过 ----------
 
+    /// <summary>
+    /// 冒烟段里「清空」的每一态都真的按过一次（第二百八十七轮立三态、第二百九十轮补到七态、第二百九十一轮补到九态）。
+    /// <para>
+    /// <b>为什么从「数三处」改成「逐态点名」（第二百九十一轮）</b>：第二百八十七轮那一条判的是
+    /// 「<c>if (clearButton.Enabled)</c> 恰出现三处」——它判的是<b>行数</b>，不是<b>态</b>。
+    /// 第二百九十轮把空格翻行与第三态接进同一段之后，那一段里这类判定变成七处，这条门当场红，
+    /// 而它红的原因不是「少了一态」，是「多了一态」：一条按行数判的门，段体一长就必然要人跟着改数，
+    /// 改数的时候没人会去核「那七处是不是真的七态」。现改成逐态点名——每一态按它自己那句能读的话认，
+    /// 少一态即红、多一态也即红（总数仍钉住，段体再长要人看一眼这七态是不是还是这七态）。
+    /// </para>
+    /// </summary>
     [Fact]
-    public void TheSmokeSegment_ReallyChecksTheThreeStates()
+    public void TheSmokeSegment_ReallyChecksEveryClearButtonState()
     {
         var smoke = Repo.Source("ApifoxHelper.Smoke", "Program.cs");
         var body = Slice(
             smoke,
             "private static void RunSelectKeyboard(IServiceProvider services, string dataRoot)",
             "/// <summary>\n    /// 勾选页的关键词框");
-        // 三处：打开时禁用 → 勾上后可用 → 清空后回到禁用。
-        Assert.Equal(3, Regex.Matches(body, @"if \((?:!)?clearButton\.Enabled\)").Count);
+
+        // 九态，每一态按它自己那句能读的话认（话在段体里，改话即红）。
+        var states = new[]
+        {
+            "打开勾选页时一行都没勾，「清空」却是可用的",          // ①' 打开时禁用
+            "「清空」却仍是禁用的",                                // ② Ctrl+A 勾上后可用
+            "点过「清空」之后一行都没勾了",                        // ③ 清空后回到禁用
+            "按一次空格勾上一行之后，「清空」仍是禁用的",          // ④ 空格勾上后可用
+            "再按一次空格取消勾选之后一行都没勾了",                // ④' 空格翻回去后禁用
+            "在不可同步的那一行上按空格之后一行都没勾上",          // ⑤ 不可同步行按空格后禁用
+            "可见行全是不可同步的接口、一行都没勾上，「清空」却是可用的", // ⑥ 第三态
+            "按一次 Ctrl+空格勾上一行之后，「清空」仍是禁用的",            // ④'' 组合键翻行后可用（第二百九十一轮）
+            "再按一次 Ctrl+空格取消勾选之后一行都没勾了，「清空」却仍是可用的", // ④'' 组合键翻回去后禁用
+        };
+        foreach (var state in states)
+        {
+            Assert.Contains(state, body, StringComparison.Ordinal);
+        }
+        // 总数仍钉住：段体里「清空」的启停判定恰九处，多一处少一处都要人看一眼上面那九态还对不对。
+        Assert.Equal(states.Length, Regex.Matches(body, @"if \((?:!)?clearButton\.Enabled\)").Count);
+
         Assert.Contains("clearButton.PerformClick();", body, StringComparison.Ordinal);
         // 期望值仍取产品自己的口径，不另写一份「应该勾几行」。
         Assert.Contains("SyncSelection.SyncableKeys(", body, StringComparison.Ordinal);

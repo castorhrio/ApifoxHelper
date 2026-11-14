@@ -158,7 +158,10 @@ public class ListCopyTests
         {
             if (source.IsUi || source.Name == "ListCopy.cs") continue;
             Assert.Empty(source.Matches(@"Keys\.C\b"));
-            Assert.DoesNotContain("ListCopy.", source.Text, StringComparison.Ordinal);
+            // 只算代码行（第二百九十一轮）：口径文件在注释里点名另一只手势，是在说明「本文件不重复它」
+            // （`ListChecks` 的类注释就写着「清单复制——判定各在自己的手势文件里」），那不是装了一套复制。
+            // 判的是「有没有在代码里调它」——注释里提一句与真的接上，是两件事。
+            Assert.DoesNotContain("ListCopy.", CodeScan.Text(source.Text), StringComparison.Ordinal);
         }
     }
 

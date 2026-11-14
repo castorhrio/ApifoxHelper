@@ -349,11 +349,13 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         var caption = Ui.Caption("勾选要纳入同步的接口（无变化、阻断与仅源码不可同步）；生成计划只读远端、不写入。");
         caption.Dock = DockStyle.Top;
         caption.Padding = new Padding(UiTokens.Lg, UiTokens.Md, UiTokens.Lg, UiTokens.Sm);
-        // 键盘手势的可见提示（第二百九十轮，简报 P1-1）：这一页的三只手势——空格翻这一行（第二百八十九轮）、
-        // Ctrl+A 全选可同步（第二百八十四轮）、Ctrl+C 复制这一行的接口（第五十二轮）——都已接线，
-        // 而界面上一个字都没说：隐式手势对知道的人省事，对不知道的人等于不存在。
-        // 只补一句能读的话：不新增手势、不改作用域、不动可同步口径（三处判定仍各在自己的口径文件里）。
-        var keys = Ui.Caption("空格翻这一行，Ctrl+A 全选可同步，Ctrl+C 复制这一行的接口。");
+        // 键盘手势的可见提示（第二百九十轮补、第二百九十一轮 quieter 减到一句）：这一页接了三只手势——
+        // 空格翻这一行（第二百八十九轮）、Ctrl+A 全选可同步（第二百八十四轮）、Ctrl+C 复制这一行的接口（第五十二轮）。
+        // 三句都写在界面上是过度：后两只是清单的通用行为（空格翻行与 Ctrl+C 复制标识列在每一张清单上都一样，
+        // 口径在 ListChecks 与 ListCopy 各一份），勾选页不特别声明；只有 Ctrl+A 这一只的作用域是本页特有的
+        // （只作用于可见行，与「全选可同步」那颗按钮逐字相同），所以只留这一句。
+        // 不新增手势、不改作用域、不动可同步口径（三处判定仍各在自己的口径文件里）。
+        var keys = Ui.Caption("Ctrl+A 全选可同步（只作用于可见行）。");
         keys.Dock = DockStyle.Top;
         keys.Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm);
         // 筛选行取工厂（第六十八轮立的形状）：这一页只有关键词框、没有筛选下拉，故走 counts 可缺省的那一支，

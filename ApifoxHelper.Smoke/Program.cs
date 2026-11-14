@@ -7080,7 +7080,7 @@ internal static class Program
             }
 
             // ② 真的按一次 Ctrl+A：可见行里可同步的勾上、不可同步的没勾。
-            PressCtrlA(dialog);
+            PressKey(dialog, null, "^a");
             var checkedAll = list.Items.Cast<ListViewItem>()
                 .Where(item => item.Checked)
                 .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
@@ -7127,7 +7127,7 @@ internal static class Program
                 throw new InvalidOperationException(
                     $"关键词「probe/1」之后清单还有 {visibleKeys.Count} 行（共 {diff.Endpoints.Count} 行）：筛选没生效，第三段量到的不是「只作用于可见行」。");
             }
-            PressCtrlA(dialog);
+            PressKey(dialog, null, "^a");
             var checkedVisible = list.Items.Cast<ListViewItem>()
                 .Where(item => item.Checked)
                 .Select(item => (item.Tag as EndpointCheck)?.Key ?? "")
@@ -7168,7 +7168,7 @@ internal static class Program
                     $"清单第一条是「{firstKey}」，产品口径算出的可同步行里没有它：" +
                     "本段拿它当「可同步的那一行」用，夹具或排序变了，这一段的口径需要重定。");
             }
-            PressSpace(dialog, list);
+            PressKey(dialog, list, " ");
             if (!first.Checked)
             {
                 throw new InvalidOperationException(
@@ -7187,7 +7187,7 @@ internal static class Program
             }
 
             // ④' 再按一次空格：翻回去。翻回来之后计数行与「清空」一起回到空选中那一态。
-            PressSpace(dialog, list);
+            PressKey(dialog, list, " ");
             if (first.Checked)
             {
                 throw new InvalidOperationException(
@@ -7204,6 +7204,50 @@ internal static class Program
                     "再按一次空格取消勾选之后一行都没勾了，「清空」却仍是可用的：它清的是已勾的那一批，清完就没有可清的东西。");
             }
 
+            // ④'' Ctrl+空格 落到控件自身那一支（第二百九十一轮，简报 P1-2）：本段第一次按组合键。
+            // 真值表判的是「本仓的判定对 Ctrl+空格 返回 false」——不吞键、留给控件自身。真键量到的第一手事实
+            // 与简报的预期相反：**控件自身那一支会翻**（wine 10.0 三档一致），所以界面上按得出来，
+            // 但翻它的不是本仓的翻转点（ToggleRow）。这一段如实断言这个事实，不写成「本仓的手势生效」：
+            // 改判定去接管 Ctrl+空格，等于给系统手势发明新语义（资源管理器里 Ctrl+空格改的是选中态，不是勾选），
+            // 而本仓的纪律是「不吞键、不给既有组合键发明新语义」——所以记下来，不改判定。
+            PressKey(dialog, list, "^ ");
+            if (!first.Checked)
+            {
+                throw new InvalidOperationException(
+                    $"焦点在第一条「{firstKey}」上按了一次 Ctrl+空格，那一行没被勾上：" +
+                    "本仓的判定不吞这一下（ListChecks.IsToggleRowGesture 只认裸空格），它落到控件自身那一支，" +
+                    "而那一支在 wine 三档里都会翻——不翻说明控件那一支的行为变了，这一段的口径需要重定。");
+            }
+            if (countLabel.Text != "已选择 1 个接口")
+            {
+                throw new InvalidOperationException(
+                    $"按一次 Ctrl+空格之后计数行写着「{countLabel.Text}」，应当是「已选择 1 个接口」：" +
+                    "控件那一支翻了行，计数行必须跟着走（勾选状态仍只经 ItemChecked 写进 SyncSelect）。");
+            }
+            if (!clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "按一次 Ctrl+空格勾上一行之后，「清空」仍是禁用的：有东西可清时它必须可用。");
+            }
+            // 再按一次翻回去：把状态交回空选中那一态给 ⑤ 用（这一段不改变后面各段的前提）。
+            PressKey(dialog, list, "^ ");
+            if (first.Checked)
+            {
+                throw new InvalidOperationException(
+                    $"焦点仍在第一条「{firstKey}」上再按一次 Ctrl+空格，那一行还是勾着的：" +
+                    "控件那一支翻不回去，用户按错了没法撤回。");
+            }
+            if (countLabel.Text != "尚未勾选接口")
+            {
+                throw new InvalidOperationException(
+                    $"再按一次 Ctrl+空格取消勾选之后，计数行写着「{countLabel.Text}」，应当是「尚未勾选接口」。");
+            }
+            if (clearButton.Enabled)
+            {
+                throw new InvalidOperationException(
+                    "再按一次 Ctrl+空格取消勾选之后一行都没勾了，「清空」却仍是可用的：没有可清的东西时它必须禁用。");
+            }
+
             // ⑤ 不可同步的那一行按空格照旧勾不上（ItemCheck 的拒绝路径）。
             // 期望值仍取产品自己的口径：SyncSelection.Selectable 说它不可同步，界面就不该让它勾上。
             var blockedRow = list.Items.Cast<ListViewItem>().FirstOrDefault(item =>
@@ -7214,7 +7258,7 @@ internal static class Program
             Ui.SelectItem(blockedRow);
             list.Focus();
             Application.DoEvents();
-            PressSpace(dialog, list);
+            PressKey(dialog, list, " ");
             if (blockedRow.Checked)
             {
                 throw new InvalidOperationException(
@@ -7251,7 +7295,7 @@ internal static class Program
                 throw new InvalidOperationException(
                     "关键词「无变化」之后清单里还有可同步的行：这一段要的是「可见行里一个可同步的都没有」，夹具变了，口径需要重定。");
             }
-            PressCtrlA(dialog);
+            PressKey(dialog, null, "^a");
             if (list.Items.Cast<ListViewItem>().Any(item => item.Checked))
             {
                 throw new InvalidOperationException(
@@ -7284,37 +7328,30 @@ internal static class Program
     }
 
     /// <summary>
-    /// 真按一次 Ctrl+A（第二百八十六轮）：经系统键入把「裸 Ctrl + A」送进清单。
+    /// 真按一次键（第二百八十六轮立、第二百九十一轮收成一处）：经系统键入把 <paramref name="keys"/> 送进对话框。
     /// <para>
     /// 修饰键的判定取系统键状态（<c>KeyEventArgs.Modifiers</c> 来自系统，不是来自消息），
     /// 所以这里必须走真的键入——手工拼一条 <c>WM_KEYDOWN</c> 消息带不出 Ctrl，
     /// 那种按法在判「界面上按不按得出来」时什么也证明不了。
     /// </para>
-    /// </summary>
-    private static void PressCtrlA(Form dialog)
-    {
-        dialog.Activate();
-        SetForegroundWindow(dialog.Handle);
-        Application.DoEvents();
-        SendKeys.SendWait("^a");
-        Application.DoEvents();
-    }
-
-    /// <summary>
-    /// 真按一次裸空格（第二百九十轮）：经系统键入把空格送进清单，焦点先交给清单本身。
     /// <para>
-    /// 与 <see cref="PressCtrlA"/> 同一做法、同一理由：修饰键与按键都经系统键入，
-    /// 手工拼一条 <c>WM_KEYDOWN</c> 证明不了「界面上按不按得出来」。焦点必须显式交给清单——
-    /// 前几段在关键词框里打过字，键盘此刻不在清单上，不交过去的话空格落在框里（打出一个空格）。
+    /// <b>为什么收成一个</b>：Ctrl+A（第二百八十六轮）与裸空格（第二百九十轮）此前是两份形似的实现，
+    /// 第三只手势（Ctrl+空格）要真键时就会抄出第三份——「按一次键」这件事只有一处落点，
+    /// 差别只在「要不要先把焦点交给清单」这一个参数上。
+    /// </para>
+    /// <para>
+    /// <paramref name="list"/> 非空时先把焦点交给它：前几段在关键词框里打过字，键盘此刻不在清单上，
+    /// 不交过去的话按键落在框里（空格打出一个空格、Ctrl+A 选中框里的文字）。传 null 表示焦点不动
+    /// （Ctrl+A 那一段量的是「打开对话框后键盘本来就在清单上」——那正是它要证的事，先交焦点就把答案写进前提了）。
     /// </para>
     /// </summary>
-    private static void PressSpace(Form dialog, ListView list)
+    private static void PressKey(Form dialog, ListView? list, string keys)
     {
         dialog.Activate();
         SetForegroundWindow(dialog.Handle);
-        list.Focus();
+        if (list is not null) list.Focus();
         Application.DoEvents();
-        SendKeys.SendWait(" ");
+        SendKeys.SendWait(keys);
         Application.DoEvents();
     }
 
