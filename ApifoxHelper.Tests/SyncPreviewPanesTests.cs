@@ -238,9 +238,11 @@ public class SyncPreviewPanesTests
     /// <summary>
     /// 取一个方法体：从签名那一行起，按 <c>{}</c> 配平到方法体收尾（第二百九十三轮，简报 P1-1）。
     /// <para>
-    /// <b>为什么不再按缩进切</b>：旧写法是「到第一个四空格缩进的 <c>}</c> 为止」——冒烟器里方法体都缩进四格，
-    /// 于是「四空格缩进的 <c>}</c>」被当成方法收尾。可方法体里只要有<b>嵌套的 lambda / 局部函数</b>，
-    /// 它们自己的收尾大括号也缩进四格（<c>RunAction(... () => { ... });</c> 那一层就是），切片会提前收口，
+    /// <b>为什么不再按缩进切</b>：旧写法是「到第一个四空格缩进的 <c>}</c> 为止」。冒烟器里方法体缩进八格、
+    /// 方法自己的收尾大括号缩进四格，所以<b>今天</b>两种取法取到同一段——第二百九十四轮把冒烟器里 36 个
+    /// <c>Run*</c> 方法逐个比过，<b>0 处不同</b>。也就是说：<b>这一改不是修一处正在发生的假绿</b>，
+    /// 如实记在这里，不冒充成「抓到了一个错」。它挡的是<b>会切短的形状</b>：方法体里只要出现一行恰好是
+    /// 四空格 <c>}</c> 的（逐字串里的 JSON 夹具、被整体左移的嵌套块），旧写法就在那一行收口，
     /// 后面那半段判不到——而这一族门判的正是「那一段里有没有某句话」，切短了就是<b>静默放宽</b>：
     /// 断言照样绿，管住的范围却少了一半。本文件近三轮（第二百九十、二百九十一、第二百九十二轮）反复被触碰，
     /// 正是这种脆弱最容易变成假绿的地方。
@@ -251,6 +253,11 @@ public class SyncPreviewPanesTests
     /// <b>另加一条形状守卫</b>：收尾那一行必须恰好是四空格缩进的 <c>}</c>——冒烟器的方法都写在类体里，
     /// 这是它的排版事实。守卫挡的是「字符串字面量里出现不配平的 <c>}</c>」那种漂移：配平会提前收口，
     /// 收口那一行不是四空格缩进，于是当场红，而不是悄悄切短。
+    /// </para>
+    /// <para>
+    /// <b>这两件事各自被当场验过</b>（第二百九十四轮，简报 P1-1）：<see cref="MethodSlice_ReportsTheBreaksItMustCatch"/>
+    /// 拿「旧写法会切短的样本」验新取法不切短、拿「不配平的字符串字面量」验形状守卫报红。
+    /// 判据自己没被跑过，比没有判据更贵（第二百零九、二百四十三轮那两处假绿都是这一种）。
     /// </para>
     /// </summary>
     private static string MethodSlice(string source, string signature)
@@ -275,6 +282,97 @@ public class SyncPreviewPanesTests
         }
         Assert.Fail($"{signature} 的方法体没有闭合——冒烟器里这一段的括号不配平。");
         return "";
+    }
+
+    /// <summary>
+    /// 切片法自己的自证：<b>注入破坏必红</b>（第二百九十四轮，简报 P1-1）。
+    /// <para>
+    /// <b>为什么要有这一条</b>：第二百九十三轮把 <see cref="MethodSlice"/> 从「到第一个四空格缩进的 <c>}</c> 为止」
+    /// 改成按 <c>{}</c> 配平 + 形状守卫，但<b>没有带自证</b>——那一轮给的理由是「插一个假 <c>}</c> 会变成判据判自己」。
+    /// 这个理由不成立：本仓既有形态（<c>LayoutMeasurementGateTests.ReasonDetector_ReportsTheBreaksItMustCatch</c>、
+    /// <c>WiringAssertionShapeTests.ShapeDetector_ReportsTheBreaksItMustCatch</c>）判的正是
+    /// 「<b>这个判据抓不抓得住它该抓的那一发</b>」，它引用的实物是<b>注入的夹具</b>，不是判据自己的定义。
+    /// 没有这一条，切片法改坏了（改回按缩进切、或形状守卫被删）全仓没有一条门会响：这一族门判的是
+    /// 「那一段里有没有某句话」，切短了只会静默放宽——断言照样绿，管住的范围却少了一半。
+    /// </para>
+    /// <para>
+    /// <b>四发注入</b>：① 旧写法会切短的样本（方法体里有一行恰好是四空格 <c>}</c>，逐字串里的 JSON 夹具就是这个形状）
+    /// ——旧写法切短、新写法不切短；② 不配平的字符串字面量（<c>"收尾 }"</c>）——形状守卫当场红；
+    /// ③ 签名找不到——红；④ 方法体没有闭合——红。每一发都断言<b>报出来的那句话</b>，不只断言「抛了」。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判冒烟器里那 36 个方法今天取到的是不是同一段（那是 <see cref="MethodSlice"/> 的
+    /// 注释里记的读数，第二百九十四轮逐个比过、0 处不同）；也不判「切短了会不会真的漏掉某个缺陷」——
+    /// 那要看具体那一段判的是什么，只有人读得出来。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void MethodSlice_ReportsTheBreaksItMustCatch()
+    {
+        const string Signature = "private static void RunSample(IServiceProvider services, string dataRoot)";
+
+        // ① 旧写法会切短的样本：方法体里有一行恰好是四空格缩进的「}」——逐字串里的 JSON 夹具就是这个形状。
+        var verbatim = Lines(
+            "    " + Signature,
+            "    {",
+            "        var json = @\"",
+            "{",
+            "    }",
+            "\";",
+            "        var tail = \"收尾那一句\";",
+            "    }");
+
+        // 旧写法（第二百九十三轮之前那一版，原样照抄）在「    }」那一行收口，后面那半段判不到。
+        Assert.DoesNotContain("收尾那一句", OldMethodSlice(verbatim, Signature), StringComparison.Ordinal);
+        // 新写法按配平取到方法收尾，收尾那一行仍是四空格缩进，形状守卫不误报。
+        Assert.Contains("收尾那一句", MethodSlice(verbatim, Signature), StringComparison.Ordinal);
+
+        // ② 不配平的字符串字面量：配平提前收口，收口那一行不是四空格缩进——形状守卫必须当场红。
+        var unbalanced = Lines(
+            "    " + Signature,
+            "    {",
+            "        var text = \"收尾 }\";",
+            "        var tail = \"后面那一句\";",
+            "    }");
+        var guard = Assert.ThrowsAny<Exception>(() => MethodSlice(unbalanced, Signature));
+        Assert.Contains("四空格缩进", guard.Message, StringComparison.Ordinal);
+        Assert.Contains("静默放宽", guard.Message, StringComparison.Ordinal);
+
+        // ③ 签名找不到：量测段改名或搬家，这一族门就再也管不住它。
+        var missing = Assert.ThrowsAny<Exception>(() => MethodSlice(verbatim, "private static void RunMissing("));
+        Assert.Contains("找不到了", missing.Message, StringComparison.Ordinal);
+
+        // ④ 方法体没有闭合：不许静默返回半段。
+        var unclosed = Lines(
+            "    " + Signature,
+            "    {",
+            "        var tail = \"没有收尾\";");
+        var open = Assert.ThrowsAny<Exception>(() => MethodSlice(unclosed, Signature));
+        Assert.Contains("没有闭合", open.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>把几行拼成一份源码夹具（行尾统一 <c>\n</c>，与冒烟器读进来的形状一致）。</summary>
+    private static string Lines(params string[] lines) => string.Join('\n', lines) + "\n";
+
+    /// <summary>
+    /// 第二百九十三轮之前那一版切片法（<b>原样照抄</b>，只用来当场证明「旧写法会切短」）。
+    /// <para>
+    /// 它不参与任何产品判据：<see cref="MethodSlice_ReportsTheBreaksItMustCatch"/> 拿它当<b>对照</b>——
+    /// 同一份夹具，旧写法切短、新写法不切短，这一条才证明得了「新取法真的多取到了那半段」。
+    /// </para>
+    /// </summary>
+    private static string OldMethodSlice(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"{signature} 在夹具里找不到了。");
+        var body = new List<string>();
+        foreach (var line in source[start..].Split('\n'))
+        {
+            body.Add(line);
+            if (line.TrimEnd() == "    }") break;
+        }
+
+        return string.Join('\n', body);
     }
 
     /// <summary>
