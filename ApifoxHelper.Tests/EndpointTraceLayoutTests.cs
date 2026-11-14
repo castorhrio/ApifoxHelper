@@ -192,10 +192,16 @@ public class EndpointTraceLayoutTests
     [Fact]
     public void MeasuredScreens_RegistersThisScreenAsMeasured()
     {
-        var row = MeasuredScreens.All.Single(r => r.Classes.Contains("EndpointTraceDialog", StringComparer.Ordinal));
+        // 第三百一十轮起这一屏有两行登记：量布局那一段（RunEndpointTraceShown）、量读取失败态那一段
+        // （RunEndpointTraceLoadFailure）——取法因此带上段名，否则 Single 会在两行上抛。
+        var row = MeasuredScreens.All.Single(r =>
+            r.Classes.Contains("EndpointTraceDialog", StringComparer.Ordinal) && r.Section == "RunEndpointTraceShown");
         Assert.True(row.Measured, "「接口追踪明细」在登记表里又退回未量了：本轮真的 Show() 过它。");
-        Assert.Equal("RunEndpointTraceShown", row.Section);
         Assert.Equal("第二百五十轮", row.Round);
+        // 新登记那一行也要在：接线与读数都在仓里，屏单与登记表不许只认其中一段。
+        var failureRow = MeasuredScreens.All.Single(r =>
+            r.Classes.Contains("EndpointTraceDialog", StringComparer.Ordinal) && r.Section == "RunEndpointTraceLoadFailure");
+        Assert.True(failureRow.Measured, "「接口追踪明细」的读取失败态那一段没有标「已量」：冒烟器里那七段是真的 Show() 过的。");
     }
 
     /// <summary>

@@ -289,6 +289,9 @@ internal static class Program
         Section("代码证据读取失败态（正常 → 证据坏 → 点一次换一种失败、原因跟着换 → 修好后点一次清单、计数与片段一起回来 → 该位置没有证据不给那颗按钮 → 那份产物本来就没有也不给那颗按钮，真实控件）", nameof(RunEvidenceLoadFailure));
         RunEvidenceLoadFailure(services, dataRoot);
 
+        Section("接口追踪明细读取失败态（正常 → 那份产物坏 → 点一次换一种失败、原因跟着换 → 修好后点一次清单、计数与明细一起回来且关键词框可用 → 筛到零行不给那颗按钮 → 没有追踪数据不给那颗按钮，真实控件）", nameof(RunEndpointTraceLoadFailure));
+        RunEndpointTraceLoadFailure(services, dataRoot);
+
         Section("极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）", nameof(RunDetailBreak));
         RunDetailBreak(services, dataRoot);
 
@@ -4944,6 +4947,313 @@ internal static class Program
                     throw new InvalidOperationException("文件本来就没有，却显示了「重试」：再读一次读不出新东西。");
                 }
                 _lines.Add("     没有那份产物：走的仍是那一句空态说明，那颗按钮没亮");
+            });
+        }
+        finally
+        {
+            hold?.Dispose();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 接口追踪明细读取失败态的真实控件交互（第三百一十轮，简报 P0：一次只收一屏）。
+    /// <para>
+    /// 接线那一半在 <c>Desktop/Native/EndpointTraceDialog.cs</c>，本段是它在模拟器上被真的点过一次的那一半：
+    /// 形状逐字照第三百零九轮代码证据那一屏（正常 → 读不出来 → 点一次换一种失败 → 修好后点一次 →
+    /// 非失败态不给那颗按钮）。失败是真的——把任务目录里那份 evidence.json 写成不是 JSON 的字节，
+    /// 让 <c>TaskStore.Read</c> 抛它本来会抛的异常，不伪造异常类型、不调私有方法、不换实现。
+    /// </para>
+    /// <para>
+    /// <b>第 3 段多判的那一件事是本轮的主张本身</b>：那句失败提示以 <c>LoadFailureState.Evidence.Title</c>
+    /// 开头——这一屏屏幕上被读作「接口追踪明细」，可它读不出来的东西是那份证据产物，
+    /// 「两句收成一句」在真实控件上念出来才是收成一句（静态那条对账门判的是源码，判不到屏幕上那句）。
+    /// </para>
+    /// <para>
+    /// 取控件全部按形状认、不按次序猜：计数行是「右对齐 + 不自适应宽度」那一格（提示出口会把它清成空串，
+    /// 按文字前缀认会在空态找不到落点——第三百零九轮那一发撞出来的同一处），主清单按它的宿主与表头认。
+    /// </para>
+    /// </summary>
+    private static void RunEndpointTraceLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "接口追踪明细失败态冒烟" });
+        var evidencePath = tasks.FilePath(task.Id, TaskFiles.Evidence);
+
+        // 主清单与它那一句提示：按宿主认（填满剩余空间那一块里铺满列表区的居中 Label），不按 FindAll 的次序猜。
+        static (ListView List, Label Hint) MainPane(EndpointTraceDialog form)
+        {
+            var host = form.Controls.OfType<Panel>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的接口清单宿主：停靠分法变了，本段判据需要重定。");
+            var hint = host.Controls.OfType<Label>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("接口清单宿主里没有那句铺满列表区的提示行：提示出口的形状变了。");
+            var list = FindAll<ListView>(host).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["接口", "读取方法", "未解析调用", "外部调用", "预算"]))
+                ?? throw new InvalidOperationException("这一屏找不到表头为「接口 / 读取方法 / 未解析调用 / 外部调用 / 预算」的接口清单：列增删或改名了，本段判据需要重定。");
+            return (list, hint);
+        }
+
+        static Label TraceCounts(EndpointTraceDialog form)
+        {
+            var cells = FindAll<Label>(form)
+                .Where(control => control.TextAlign == ContentAlignment.MiddleRight && !control.AutoSize)
+                .ToList();
+            return cells.Count switch
+            {
+                1 => cells[0],
+                0 => throw new InvalidOperationException("这一屏没有那块右对齐、不自适应宽度的计数行格：表头行的形状变了，本段判据需要重定。"),
+                _ => throw new InvalidOperationException($"这一屏有 {cells.Count} 块右对齐、不自适应宽度的 Label，计数行按形状认不再唯一：本段判据需要重定。"),
+            };
+        }
+
+        // 追踪明细区是这一屏唯一的多行只读框，关键词框是唯一的单行框：两只都按形状认，取不到或取到多个都点名。
+        static TextBox DetailPane(EndpointTraceDialog form) =>
+            FindAll<TextBox>(form).SingleOrDefault(control => control.Multiline)
+            ?? throw new InvalidOperationException("这一屏找不到那块只读追踪明细框：详情区的形状变了，本段判据需要重定。");
+
+        static TextBox TraceKeyword(EndpointTraceDialog form) =>
+            FindAll<TextBox>(form).SingleOrDefault(control => !control.Multiline)
+            ?? throw new InvalidOperationException("这一屏的关键词框不唯一（或没了）：Ui.FilterRow 的形状变了，本段判据需要重定。");
+
+        EndpointTraceDialog? dialog = null;
+        FileStream? hold = null;
+        string? good = null;
+        string? jsonFailureSentence = null;
+        string? countsWhenGood = null;
+        string? detailWhenGood = null;
+        const int rowCount = 16;
+        try
+        {
+            RunAction("接口追踪明细失败态：准备一份真实接口追踪数据（产品自己的写入口径落盘）", () =>
+            {
+                tasks.Write(task.Id, TaskFiles.Evidence, EndpointTraceFixture());
+                var reread = tasks.Read<EvidenceStore>(task.Id, TaskFiles.Evidence)
+                    ?? throw new InvalidOperationException("写入后读不回接口追踪数据。");
+                if (reread.Coverage.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"夹具回读到 {reread.Coverage.Count} 个接口，期望 {rowCount} 个。");
+                }
+                good = File.ReadAllText(evidencePath);
+                _lines.Add($"     磁盘副本留了一份原文 {good.Length} 字：追踪数据 {reread.Coverage.Count} 个接口");
+            });
+
+            RunAction("接口追踪明细失败态：正常打开时清单与明细可见且不显示「重试」（真实控件）", () =>
+            {
+                dialog = new EndpointTraceDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!list.Visible || list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"正常打开时清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {rowCount} 行。");
+                }
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"正常打开时提示区却可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("接口追踪明细读出来了，「重试」却亮着：它只在读取失败时才是下一步。");
+                }
+                countsWhenGood = TraceCounts(dialog).Text;
+                detailWhenGood = DetailPane(dialog).Text;
+                if (string.IsNullOrWhiteSpace(detailWhenGood))
+                {
+                    throw new InvalidOperationException("打开即选中第一个接口，追踪明细区却念不出它那一段：详情区没随选中刷新。");
+                }
+                if (!TraceKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("有数据可筛时关键词框却停着：那一种状态整份数据是读得出来的（口径见 ListFilter.KeywordEnabled）。");
+                }
+                _lines.Add($"     正常打开：清单 {list.Items.Count} 行，计数行「{countsWhenGood}」，明细区 {detailWhenGood.Length} 字，那颗按钮没亮");
+            });
+
+            RunAction("接口追踪明细失败态：那份产物读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                File.WriteAllText(evidencePath, "这不是 JSON");
+                dialog = new EndpointTraceDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("那份产物读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                // 本轮的主张就在这一判里：这一屏念的是口径文件那一句，不再自己拼「读取追踪明细失败」。
+                if (!hint.Text.StartsWith(LoadFailureState.Evidence.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Evidence.Title}：」开头（与代码证据那一屏同一句话）。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名屏上那颗按钮，用户读不到该点哪一颗：「{hint.Text}」。");
+                }
+                foreach (var phrase in new[] { "请关闭后", "关闭后重试", "关闭本窗口重新打开" })
+                {
+                    if (hint.Text.Contains(phrase, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException($"失败提示仍然把用户支去重开窗口（「{phrase}」）：「{hint.Text}」。");
+                    }
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                if (list.Visible)
+                {
+                    throw new InvalidOperationException("那份产物读不出来时清单仍可见：半份结果被留在屏上。");
+                }
+                if (TraceKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("整份数据不可得时关键词框仍可用：框里敲字筛不到任何东西（口径见 ListFilter.KeywordEnabled）。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     那份产物读不出来：提示「{hint.Text}」，那颗按钮亮着");
+            });
+
+            RunAction("接口追踪明细失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 判据不能只看「还是不是失败」——成功路径只收起提示区、不清那格文字，按文字判会把
+                // 「重读成功」也读成「仍是失败」。这里换成换一种失败：文件还在、却被独占占用（第三百零四轮那条）。
+                hold = new FileStream(evidencePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var (_, hint) = MainPane(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.Evidence.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"文件被占用时重试，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍读不出来，重试后「重试」却不见了：用户没有第二次机会。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("接口追踪明细失败态：修好后点「重试」退出失败态、清单与计数与明细一起回来（真实控件）", () =>
+            {
+                if (dialog is null || good is null || countsWhenGood is null || detailWhenGood is null)
+                {
+                    throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                }
+                File.WriteAllText(evidencePath, good);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好那份产物后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                // 清单从「不可见 + 零行」回到「可见 + 那几行」：失败态不收清单、恢复时不重填，都在这一判里。
+                if (!list.Visible || list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"恢复后清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {rowCount} 行。");
+                }
+                if (TraceCounts(dialog).Text != countsWhenGood)
+                {
+                    throw new InvalidOperationException($"恢复后计数行与正常打开时不是同一句：「{TraceCounts(dialog).Text}」对「{countsWhenGood}」。");
+                }
+                if (DetailPane(dialog).Text != detailWhenGood)
+                {
+                    throw new InvalidOperationException("恢复后明细区念出的不是正常打开时那一接口那一段：那一格与清单不同源或没随选中刷新。");
+                }
+                if (!TraceKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("恢复后关键词框还停着：失败态那句「整份数据不可得」已经不再成立，框却没人把它交回来。");
+                }
+                _lines.Add($"     修好后重试：清单回到 {list.Items.Count} 行，计数行「{TraceCounts(dialog).Text}」，明细区与选中那一行同源，关键词框可用，那颗按钮收起");
+            });
+
+            RunAction("接口追踪明细失败态：筛到零行不给那颗按钮而关键词框留着（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有留下已经正常的界面。");
+                // 「筛到零行」不是失败：那份产物读得出来，只是这一屏当下没有行——那一步在框里那个词上，
+                // 再读一次读不出新东西。走的是 PopulateList 里那条口，根本不经提示出口。
+                TraceKeyword(dialog).Text = "绝不可能命中任何接口的关键词";
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible || list.Visible)
+                {
+                    throw new InvalidOperationException("筛到零行时没有换成那一句说明（或清单还留着）：这一屏的空态形状变了。");
+                }
+                if (hint.Text != ListFilter.FilteredEmptyKeywordHint(ListFilter.EndpointNoun))
+                {
+                    throw new InvalidOperationException($"筛到零行那句不是共享口径那一句：「{hint.Text}」。");
+                }
+                if (hint.Text.StartsWith(LoadFailureState.Evidence.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"筛到零行被当成读取失败处理了：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("筛到零行不是失败态，却显示了「重试」：同一屏给了两个下一步。");
+                }
+                if (!TraceKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("筛到零行时关键词框被禁用：那句提示指名的下一步按不动（§7「禁用不得移除下一步」）。");
+                }
+                if (TraceCounts(dialog).Text != countsWhenGood)
+                {
+                    throw new InvalidOperationException($"筛到零行时计数行不再是整份追踪数据的数字：「{TraceCounts(dialog).Text}」对「{countsWhenGood}」。");
+                }
+                _lines.Add($"     筛到零行：提示「{hint.Text}」，框留着、计数仍是整份的数字，那颗按钮没亮");
+                TraceKeyword(dialog).Text = "";
+                Application.DoEvents();
+                if (MainPane(dialog).List.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException("清空关键词之后清单没有回到整份行：筛选与恢复不同一条路。");
+                }
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("接口追踪明细失败态：那份扫描产物里没有追踪数据时不给那颗按钮（真实控件）", () =>
+            {
+                // 旧任务缺 Coverage：读得出来、就是没有那一段。重试读不出新东西，那一步在分析设置上，
+                // 由这一屏那句空态自己指名——它不是失败态，故与第三百零九轮那两屏同一取舍。
+                tasks.Write(task.Id, TaskFiles.Evidence, new EvidenceStore { Items = [], Coverage = [] });
+                dialog = new EndpointTraceDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible || list.Visible)
+                {
+                    throw new InvalidOperationException("没有追踪数据时没有换成那句说明（或清单还留着）：这一屏的空态形状变了。");
+                }
+                if (hint.Text.StartsWith(LoadFailureState.Evidence.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"没有追踪数据被当成读取失败处理了：「{hint.Text}」。");
+                }
+                if (!hint.Text.Contains("没有接口追踪数据", StringComparison.Ordinal)
+                    || !hint.Text.Contains(PageNames.Projects, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"那句说明没有把「没有这一段数据」与「下一步在哪」一起说清：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("没有追踪数据不是失败态，却显示了「重试」：再读一次读不出新东西。");
+                }
+                if (TraceCounts(dialog).Text.Length != 0)
+                {
+                    throw new InvalidOperationException($"没有追踪数据时计数行仍有文字：「{TraceCounts(dialog).Text}」。");
+                }
+                _lines.Add($"     那份产物里没有追踪数据：提示以「{hint.Text[..9]}…」开头，那颗按钮没亮");
             });
         }
         finally

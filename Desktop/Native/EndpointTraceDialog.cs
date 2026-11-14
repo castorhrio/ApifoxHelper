@@ -11,8 +11,9 @@ namespace ApifoxHelper.Desktop.Native;
 /// （与「分析警告与降级」同一透明口径，降级只有让用户看见才算「明确降级」）。
 /// 数据来自任务目录 evidence.json 的 Coverage（扫描落盘产物）；证据经 EvidenceDialog 只读对照；
 /// 本对话框无写入动作。文字与结构口径经 EndpointTrace 单一口径。
-/// 状态表：读取失败=内联错误与下一步；没有追踪数据（旧任务缺 Coverage）=如实说明；
-/// 正常=接口列表 + 选中接口的追踪明细与证据入口；筛到零行=关键词框留着并说明下一步，
+/// 状态表：读取失败=内联错误 + 屏上那颗「重试」（第三百一十轮接上，那一句文案取 <see cref="LoadFailureState.Evidence"/>，
+/// 与代码证据那一屏读的是同一份 evidence.json、念的是同一句话）；没有追踪数据（旧任务缺 Coverage）=如实说明、
+/// 不点亮那颗按钮；正常=接口列表 + 选中接口的追踪明细与证据入口；筛到零行=关键词框留着并说明下一步，
 /// 计数行仍是整份追踪数据的数字（见 <see cref="PopulateList"/>）。
 /// 清单支持点击列头排序（第九十八轮，口径见 <see cref="EndpointTraceSort"/> 与 <see cref="ListSort"/>）：
 /// 同一列再点反向、换一列从升序开始、表头带方向标记；排序状态留在本次打开期间，关闭即忘。
@@ -26,6 +27,13 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
     private readonly TextBox _keyword = Ui.Input();
     private readonly TextBox _detail = Ui.Preview(multiline: true, caption: true, scrollBars: ScrollBars.Vertical);
     private readonly Button _evidenceButton;
+
+    /// <summary>
+    /// 读取失败态的唯一行动按钮（第三百一十轮）：文字取自 <see cref="LoadFailureState.RetryLabel"/>，
+    /// 点下去调的是与「打开」同一个 <see cref="LoadAll"/>，两条路不各读一份。
+    /// </summary>
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
+
     private readonly Label _counts = Ui.Mono();
     private readonly Label _hint = new()
     {
@@ -92,6 +100,10 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         AcceptButton = closeButton;
         CancelButton = closeButton;
 
+        // 读取失败态的唯一行动入口（第三百一十轮）：与「打开」调同一个 LoadAll，两条路不各读一份。
+        _retry.Click += (_, _) => LoadAll();
+        _retry.Visible = false;
+
         _counts.AutoSize = false;
         _counts.Dock = DockStyle.Fill;
         _counts.TextAlign = ContentAlignment.MiddleRight;
@@ -120,16 +132,20 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         // 改它时 DetailPaneHeight / FixedPanesHeight / DialogHeight 一起动。
         AddBoxRow(detailGrid, Ui.Hairline(_detail), EndpointTraceLayout.DetailBoxHeight);
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 3, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 4, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _evidenceButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         closeButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         actionRow.Controls.Add(_evidenceButton, 0, 0);
         // 第 1 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
         // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
-        actionRow.Controls.Add(closeButton, 2, 0);
+        // 读取失败态那颗「重试」落在「关闭」左边（Windows 惯例：确认类按钮在最右），这一屏没有第二颗「重试」。
+        actionRow.Controls.Add(_retry, 2, 0);
+        actionRow.Controls.Add(closeButton, 3, 0);
 
         // 停靠按集合倒序生效：标题行、筛选行最先停靠（顶部），其次按钮行（最底部）、详情区，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -142,6 +158,34 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 读接口追踪明细并呈现。<b>「打开」与那颗「重试」调的都是这一个入口</b>（第三百一十轮）：
+    /// 两条路各读一份，失败态与正常态就会各自漂移。
+    /// <para>
+    /// 这一屏此前读取失败只给一句「请关闭后重新扫描再试」——屏上没有一颗按钮做「再读一次」这件事，
+    /// 那句话把用户支去重开窗口，与报告 / 差异确认（第一百五十二轮）、任务日志（第一百五十七轮）、
+    /// 注释候选 / 补充说明 / 注释回写（第三百零三轮）、注释缺口（第三百零五轮）、检查结果（第三百零八轮）、
+    /// 代码证据（第三百零九轮）修掉的是同一族缺陷，违反 DESIGN.md §7「禁用不得移除下一步」。
+    /// </para>
+    /// <para>
+    /// <b>那一句文案没有抄第二份</b>：代码证据那一屏（第三百零九轮）与这一屏读的是<b>同一份 evidence.json</b>，
+    /// 标题与说明都从口径文件的 <see cref="LoadFailureState.Evidence"/> 交出，本屏不再自己拼一句
+    /// 「读取追踪明细失败」——同一份产物读不出来在两屏不许有两种说法，更不许一种有入口、另一种没有。
+    /// </para>
+    /// <para>
+    /// <b>两种非失败态都不点亮那颗按钮</b>：「这份扫描结果没有接口追踪数据」那一种，重试读不出新东西，
+    /// 那一步在项目设置页的分析设置上（那句空态自己指名）；「筛到零行」那一种走 <see cref="PopulateList"/>
+    /// 里那条口，根本不经提示出口——与代码证据、检查结果两屏同一取舍。
+    /// </para>
+    /// </summary>
+    private void LoadAll()
+    {
+        // 每读一次先收起那颗按钮：成功路径不经 ShowHint（那里是唯一的收起处），不先收就会把失败态那颗
+        // 「重试」留在已经正常的屏上——与注释候选、注释缺口、检查结果、代码证据同一形状。
+        _retry.Visible = false;
         EvidenceStore? store;
         try
         {
@@ -149,7 +193,10 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            ShowHint("读取追踪明细失败：" + Redactor.Redact(ex.Message) + "。请关闭后重新扫描再试。", UiTokens.BadText);
+            ShowHint(
+                LoadFailureState.FailureMessage(LoadFailureState.Evidence.Title, Redactor.Redact(ex.Message), LoadFailureState.Evidence.Hint),
+                UiTokens.BadText,
+                canRetry: true);
             return;
         }
         if (store is null || store.Coverage.Count == 0)
@@ -306,7 +353,13 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         dialog.ShowDialog(this);
     }
 
-    private void ShowHint(string message, Color color)
+    /// <summary>
+    /// 提示出口。<c>canRetry</c> 为真只有一种情形：读取失败。缺省为假——「这份扫描结果没有接口追踪数据」
+    /// 那一种空态的下一步不在「再读一次」上（重试读不出新东西），那颗按钮因此不亮
+    /// （第三百一十轮，与代码证据、检查结果同一取舍）。「筛到零行」走 <see cref="PopulateList"/> 里那条口，
+    /// 根本不经这里。这一出口对提示态通用，也是<b>唯一的</b>收起处，所以读取入口开头还要自己收一次（成功路径不经这里）。
+    /// </summary>
+    private void ShowHint(string message, Color color, bool canRetry = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
@@ -318,6 +371,7 @@ internal sealed class EndpointTraceDialog : DpiAwareForm
         _evidenceButton.Enabled = false;
         _counts.Text = "";
         _detail.Text = "";
+        _retry.Visible = canRetry;
     }
 
     private static void AddCaptionRow(TableLayoutPanel grid, string text)

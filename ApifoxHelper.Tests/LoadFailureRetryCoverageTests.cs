@@ -30,7 +30,7 @@ namespace ApifoxHelper.Tests;
 /// 解析本身由 <see cref="RetryWrapper_IsResolvedOnlyWhenItDelegatesToOneReadEntry"/> 拿三发注入当场验。
 /// </para>
 /// <para>
-/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheElevenScreens"/> 把「发现到哪几屏」
+/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheTwelveScreens"/> 把「发现到哪几屏」
 /// 钉成封闭清单——发现正则写坏（比如口径文件改名）会让清单变空，那条用例先红，
 /// 不会出现「一条都没发现、于是全部通过」的假绿。
 /// <b>但这一族只看得见已经接入口径文件的屏</b>（第三百零三轮）：一屏从不引用 <c>LoadFailureState</c>，
@@ -80,7 +80,7 @@ public class LoadFailureRetryCoverageTests
     /// （「读取项目列表」「读取分支」那两颗按钮早就这么判）。它改由
     /// <see cref="NamedEntryScreen_RetryIsTheButtonTheHintNames"/> 单独判三件事：提示句指名的那颗按钮确实存在、
     /// 点的是同一个读取入口、失败态确实把它交回可用。<b>它不进封闭清单以外的第三条路</b>——
-    /// <see cref="Discovery_CoversExactlyTheElevenScreens"/> 判两组之和必须等于发现到的全部屏。
+    /// <see cref="Discovery_CoversExactlyTheTwelveScreens"/> 判两组之和必须等于发现到的全部屏。
     /// </para>
     /// </summary>
     private static readonly string[] NamedEntryScreens = ["ApplyPlanDialog.cs"];
@@ -125,7 +125,7 @@ public class LoadFailureRetryCoverageTests
     // ---------- 发现：范围本身要钉住，否则「一条都没发现」也是绿的 ----------
 
     [Fact]
-    public void Discovery_CoversExactlyTheElevenScreens()
+    public void Discovery_CoversExactlyTheTwelveScreens()
     {
         // 封闭清单：新增一屏带失败态时，这里会红——提醒把新屏的接线一并补上（而不是悄悄漏掉）。
         // 第一百五十七轮新增第五屏 JournalDialog.cs（任务日志对话框的读取失败态）。
@@ -136,17 +136,20 @@ public class LoadFailureRetryCoverageTests
         // 那两家第三百零三轮起就有那颗按钮，而这一屏写的是第三种说法——同一件事在两屏不许有两种说法，
         // 而其中一种屏上没有入口正是第三百零三轮点名的盲区。
         // 第三百零九轮补到十一屏：EvidenceDialog（代码证据）读的是 evidence.json，与接口追踪明细那一屏
-        // （EndpointTraceDialog，仍欠着）是同一份产物两种说法，两边那句下一步写的还是同一句话。
+        // （EndpointTraceDialog，当时仍欠着）是同一份产物两种说法，两边那句下一步写的还是同一句话。
+        // 第三百一十轮补到十二屏：EndpointTraceDialog（接口追踪明细）读的就是同一份 evidence.json，
+        // 第三百零九轮把这一条写在本文件「为什么只收这一屏」那一段里，本轮收的是它自己那一笔——
+        // 两句收成一句，口径文件那一对因此从一屏变两屏（见 SharedEvidenceCopy 那条）。
         var names = FailureScreens().Select(s => s.Name).ToArray();
         Assert.Equal(
             [
                 "ApplyPlanDialog.cs", "CandidatesDialog.cs", "CheckResultsDialog.cs", "DecisionsDialog.cs",
-                "EvidenceDialog.cs", "JournalDialog.cs", "ProjectsPage.cs", "ReportsDialog.cs",
-                "ScanResultsDialog.cs", "SupplementsDialog.cs", "TasksPage.cs",
+                "EndpointTraceDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs", "ProjectsPage.cs",
+                "ReportsDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs", "TasksPage.cs",
             ],
             names);
 
-        // 两个形状必须把这十一屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
+        // 两个形状必须把这十二屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
         // 少了这一句，往 NamedEntryScreens 里写一个不存在的文件名会静默少判一屏。
         var partition = ButtonScreens().Select(s => s.Name)
             .Concat(NamedEntryScreens)
@@ -582,6 +585,200 @@ public class LoadFailureRetryCoverageTests
             p => p.Contains("不在仓里", StringComparison.Ordinal));
     }
 
+    // ---------- 「那份证据产物读不出来」那一句在两屏只有一份字面（第三百一十轮） ----------
+
+    /// <summary>
+    /// 界面侧引用「那份证据产物读不出来」这一对的写法：口径文件顶层那一对的两个成员名。
+    /// 取的是去注释后的代码——注释里提一句那个名字是在说明理由，不是在这一屏接这句话。
+    /// </summary>
+    private static readonly string[] EvidenceCopyMarkers = ["Evidence.Title", "Evidence.Hint"];
+
+    /// <summary>那两份界面共读的那一份产物（实物侧的读法：谁读它，谁就该念这一句）。</summary>
+    private const string EvidenceArtifact = "TaskFiles.Evidence";
+
+    /// <summary>
+    /// 判定本体（纯函数：口径源码 + 全部界面源码 + 登记的那两屏进，问题出）——注入自测直接喂夹具，磁盘一个字不动。
+    /// <para>
+    /// 判四件事：① 口径侧那一句字面在口径文件里只出现一次（抄成第二份就有两处可改，而下一轮只看得见其中一处）；
+    /// ② 每一屏<b>真读那份产物，就必须把那两个成员都引用上</b>——少一个即报（一屏只报一处）；
+    /// ③ 引用了却不读那份产物的屏另报（那句话说的正是它读不出来，念到别的屏上是答非所问）；
+    /// ④ 登记的集合必须等于真读那份产物的集合（少一屏 = 那一屏改回就地拼一句；多一屏 = 接上了却没登记），
+    ///    且已登记的每一屏都不把那句字面抄进自己屏里。
+    /// </para>
+    /// <para>
+    /// <b>②为什么是「两个都要引用」而不是「引用其一」</b>：本轮磁盘注入 I2（把那一句的标题换回屏里自己拼的
+    /// 「读取追踪明细失败」、说明仍取 <c>Evidence.Hint</c>）在「引用其一」那一版上是<b>绿的</b>——那一屏确实还引用着
+    /// 这一族，门就看不见它已经把屏幕上那句话的<b>主语</b>换掉了，而「同一份产物两种说法」恰恰活在那个词上。
+    /// 取法因此收紧成两个成员都要在：少哪个报哪个，一屏只报一处，于是一发注入只红一条用例、说的是那一处。
+    /// </para>
+    /// </summary>
+    internal static List<string> EvidenceCopyProblems(
+        string stateSource,
+        IEnumerable<(string Name, string Code)> nativeScreens,
+        string[] shipped)
+    {
+        const string title = "读取代码证据失败";
+        var problems = new List<string>();
+
+        var literals = Count(stateSource, title);
+        if (literals != 1)
+        {
+            problems.Add($"口径文件里「{title}」出现 {literals} 次，登记的是 1 次——两份会各自漂，"
+                + "而两屏念出口的那一句从此只有一处被人看到。");
+        }
+
+        var screens = nativeScreens
+            .Where(s => s.Name != "LoadFailureState.cs")
+            .OrderBy(s => s.Name, StringComparer.Ordinal)
+            .ToList();
+        var readers = screens.Where(s => s.Code.Contains(EvidenceArtifact, StringComparison.Ordinal)).ToList();
+        var quoters = screens.Where(s => EvidenceCopyMarkers.Any(s.Code.Contains)).ToList();
+
+        foreach (var screen in readers)
+        {
+            var missing = EvidenceCopyMarkers.Where(marker => !screen.Code.Contains(marker, StringComparison.Ordinal)).ToList();
+            if (missing.Count > 0)
+            {
+                problems.Add($"{screen.Name}：它读 {EvidenceArtifact}，却没有引用这一对的 {string.Join("、", missing)}"
+                    + "——屏幕上那句失败提示的主语（读不出来的那份产物叫什么）从此由这一屏自己拼，"
+                    + "「同一份产物两种说法」就是活在这种一字之差上（磁盘注入 I2 实测到的正是这一处）。");
+            }
+        }
+
+        foreach (var screen in quoters.Where(s => !readers.Contains(s)).ToList())
+        {
+            problems.Add($"{screen.Name}：引用了这一对却不读 {EvidenceArtifact}"
+                + "——那句话说的正是那份产物读不出来，不读它的屏念它就是答非所问。");
+        }
+
+        string[] Sorted(IEnumerable<string> names) => names.OrderBy(n => n, StringComparer.Ordinal).ToArray();
+        var readerNames = Sorted(readers.Select(s => s.Name));
+        var expected = Sorted(shipped);
+        if (!readerNames.SequenceEqual(expected, StringComparer.Ordinal))
+        {
+            problems.Add($"读 {EvidenceArtifact} 的屏是 [{string.Join("、", readerNames)}]，登记的是 [{string.Join("、", expected)}]"
+                + "——少一屏说明那一屏不再读那份产物（登记要跟着收），多一屏说明有人也开始读它却没在这里登记。");
+        }
+
+        foreach (var screen in screens.Where(s => expected.Contains(s.Name, StringComparer.Ordinal)))
+        {
+            if (screen.Code.Contains(title, StringComparison.Ordinal))
+            {
+                problems.Add($"{screen.Name}：那一屏把「{title}」抄了第二份——屏幕上那句话从此有两处可改。");
+            }
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 「那份证据产物读不出来」那一句在两屏只有一份字面（第三百一十轮，接上接口追踪明细时补的两侧对账）。
+    /// <para>
+    /// <b>判的是哪件事</b>：代码证据（<c>EvidenceDialog</c>）与接口追踪明细（<c>EndpointTraceDialog</c>）
+    /// 读的是同一份 <c>evidence.json</c>，第三百零九轮接第一屏时把第二屏登成欠账并写了那句
+    /// 「接上它的那一轮把两句收成一句，本文件的这一对因此从一屏变两屏」。本轮接上它：那一屏不再自己拼
+    /// 「读取追踪明细失败」那一句，两屏念出的因此是同一句话——同一件事在两屏不许有两种说法，
+    /// 更不许一种有入口、另一种没有（DESIGN.md §7 的对面那一半）。
+    /// </para>
+    /// <para>
+    /// <b>两侧对账、三个方向都判</b>：有人把自己那处改回就地拼一句 → 红；第三屏也开始读那份产物却没人登记 → 红；
+    /// 谁把口径侧那句话抄成第二份、或已接的那一屏另抄一份 → 红。与
+    /// <see cref="SharedScanCopy_HasOneLiteralAndTheTwoScreensThatReadSymbols"/>（symbols.json 两屏）、
+    /// <see cref="SharedCheckCopy_HasOneLiteralAndTheThreeScreensThatReadDiff"/>（diff.json 三屏）同一形状，
+    /// 区别只在这一族登记的是<b>读法</b>而不是委托成员名——<c>Evidence</c> 那一对没有第三家委托它。
+    /// 按第二百八十二轮那五步判：① 断言里出现的名字是 <c>LoadFailureState.Evidence.*</c>（口径文件）与
+    /// <c>Desktop/Native</c> 各屏的源码文本（在口径文件之外）；② 后者不在被它判的那个对象里，答「不是」；
+    /// ③ 按第 ③ 步当<b>对账门</b>处理，不属第二百五十六轮收口那一族，照常随实物一起长。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SharedEvidenceCopy_HasOneLiteralAndTheTwoScreensThatReadEvidence()
+    {
+        var problems = EvidenceCopyProblems(
+            Repo.Source("Desktop", "Native", "LoadFailureState.cs"),
+            Repo.NativeSources().Select(s => (s.Name, s.Code)).ToList(),
+            ["EndpointTraceDialog.cs", "EvidenceDialog.cs"]);
+        Assert.True(problems.Count == 0,
+            "同一份 evidence.json 读不出来，在两屏只该有一句说法，而读它的那两屏要能被看见："
+            + string.Join("；", problems));
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：合规形状不报，六发各报该报的那一处。
+    /// 夹具是一份假口径源码 + 四屏假代码，磁盘一个字不动（本仓那句老话——「判据自己没被跑过」比「没有判据」更贵）。
+    /// <para>
+    /// <b>第 ② 发是磁盘教出来的</b>：本轮同一发的磁盘版本跑在「引用其一」那一版判定上是<b>绿的</b>，
+    /// 于是判定本体收成「两个成员都要引用」，这一发与那条磁盘注入现在都红得下来。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EvidenceCopyDetector_ReportsTheShapesItMustCatch()
+    {
+        const string title = "读取代码证据失败";
+        var shared = "public const string Title = \"" + title + "\";\npublic const string Hint = DirectoryHint;\n";
+        var shipped = new[] { "EndpointTraceDialog.cs", "EvidenceDialog.cs" };
+        const string readLine = "store = _tasks.Read<EvidenceStore>(_task.Id, TaskFiles.Evidence);";
+        const string quoteLine =
+            "ShowHint(LoadFailureState.FailureMessage(LoadFailureState.Evidence.Title, error, LoadFailureState.Evidence.Hint), UiTokens.BadText, canRetry: true);";
+        var screens = new (string Name, string Code)[]
+        {
+            ("LoadFailureState.cs", shared),
+            ("EvidenceDialog.cs", quoteLine + "\n" + readLine),
+            ("EndpointTraceDialog.cs", quoteLine + "\n" + readLine),
+            // 一张不读那份产物的屏：注入 ⑤ 用它当「引用了却不读它」的那一发。
+            ("JournalDialog.cs", "rows = JournalEntries.Read(node);"),
+        };
+        Assert.Empty(EvidenceCopyProblems(shared, screens, shipped));
+
+        // ① 口径侧那句话被抄成第二份。
+        var twoLiterals = shared + "\npublic const string Third = \"" + title + "\";";
+        Assert.Contains(EvidenceCopyProblems(twoLiterals, screens, shipped),
+            p => p.Contains("出现 2 次", StringComparison.Ordinal));
+
+        // ② 那一屏把标题换回自己拼的一句、说明仍取 Evidence.Hint——「引用其一」那一版对这一发是绿的（本轮磁盘注入实测），
+        //     收紧之后它报的是「少了哪一个成员」，一屏只报这一处。
+        var ownTitle = screens
+            .Select(s => s.Name == "EndpointTraceDialog.cs"
+                ? (Name: s.Name, Code: s.Code.Replace("LoadFailureState.Evidence.Title", "\"读取追踪明细失败\"", StringComparison.Ordinal))
+                : s)
+            .ToList();
+        var ownTitleProblems = EvidenceCopyProblems(shared, ownTitle, shipped);
+        Assert.Contains(ownTitleProblems, p => p.Contains("却没有引用这一对的 Evidence.Title", StringComparison.Ordinal));
+        Assert.Single(ownTitleProblems);
+
+        // ③ 第三屏也开始读那份产物却不接这一对（下一轮新增一屏读它的形态）。
+        //     同一发里「登记的集合与真读的集合不一致」也报出来——那两句说的都是这一发真破坏了的东西。
+        var newReader = screens
+            .Concat([(Name: "ScanWarningsDialog.cs", Code: readLine)])
+            .ToList();
+        var newReaderProblems = EvidenceCopyProblems(shared, newReader, shipped);
+        Assert.Contains(newReaderProblems, p => p.Contains("却没有引用这一对的", StringComparison.Ordinal));
+        Assert.Contains(newReaderProblems, p => p.Contains("登记的是", StringComparison.Ordinal));
+
+        // ④ 已接的一屏另把那五个字抄进自己屏里（两个成员都还在、也仍读那份产物，多出来的只是第二处字面）。
+        var secondCopy = screens
+            .Select(s => s.Name == "EvidenceDialog.cs"
+                ? (Name: s.Name, Code: s.Code + "\n_status.Text = \"" + title + "（已停用）\";")
+                : s)
+            .ToList();
+        Assert.Contains(EvidenceCopyProblems(shared, secondCopy, shipped),
+            p => p.Contains("抄了第二份", StringComparison.Ordinal));
+
+        // ⑤ 引用了那一对却不读那份产物：那句话说的就是它读不出来，念到别的屏上就是答非所问。
+        var wrongRegister = screens
+            .Select(s => s.Name == "JournalDialog.cs"
+                ? (Name: s.Name, Code: s.Code + "\n" + quoteLine)
+                : s)
+            .ToList();
+        Assert.Contains(
+            EvidenceCopyProblems(shared, wrongRegister, ["EndpointTraceDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs"]),
+            p => p.Contains("却不读", StringComparison.Ordinal));
+
+        // ⑥ 名单里漏掉一屏真读那份产物的（登记与实物各指一处——收屏忘了登记、或加屏忘了删行都红在这一句）。
+        Assert.Contains(EvidenceCopyProblems(shared, screens, ["EvidenceDialog.cs"]),
+            p => p.Contains("登记的是", StringComparison.Ordinal));
+    }
+
     private static int Count(string text, string value)
     {
         var count = 0;
@@ -639,6 +836,19 @@ public class LoadFailureRetryCoverageTests
     /// <c>LoadAll</c>」那一支（与第三百零三、三百零五、三百零八轮同一形状）。
     /// </para>
     /// <para>
+    /// <b>第三百一十轮收掉第四条</b>：接口追踪明细（<c>EndpointTraceDialog</c>）读的正是上一轮那一屏读的
+    /// <b>同一份 evidence.json</b>（全原生界面只有这两处读它），两边那句下一步是同一句「请关闭后重新扫描再试」，
+    /// 而两屏此前都没有做那次读取的入口。名单由四条缩到三条，口径文件那一对（<c>LoadFailureState.Evidence</c>）
+    /// 因此从一屏变两屏——上一轮那段「为什么只收这一屏」欠的就是这一笔，本轮收的是它自己那一笔。
+    /// 选屏判据本轮现场又读了一遍：剩下三屏里 <c>ContractsDialog</c> 那三颗审阅按钮在失败态被提示出口一并禁用、
+    /// <c>PropagationDialog</c> 只剩「关闭」、<c>SyncPreviewDialog</c> 那颗「重新核对（只读）」在预览页而
+    /// 失败发生在勾选页且做的不是那一次读取——仍没有一屏有等价入口，故仍走新增那颗取自口径的按钮那一支。
+    /// <b>「两句收成一句」在门上是看得见的</b>：
+    /// <see cref="SharedEvidenceCopy_HasOneLiteralAndTheTwoScreensThatReadEvidence"/> 两侧对账
+    /// （口径侧那一句字面只出现一次 ↔ 界面侧读那份产物的屏恰是这两屏、且两屏都不抄第二份），
+    /// 与第三百零五、三百零八轮那两条同形状。
+    /// </para>
+    /// <para>
     /// <b>理由里点名的那个落点，本轮起要能在源码里找到</b>（第三百零六轮，简报 P1-2）：上面那一句
     /// 「这一屏的下一步在屏外」此前只是一句被读到的散文。第三百零五轮删掉 <c>ScanResultsDialog</c> 那一行之后，
     /// 剩下两条写的还是「同上」——「上」那一行已经不在了，理由指向一个不存在的东西，而名单照旧六条、
@@ -656,8 +866,6 @@ public class LoadFailureRetryCoverageTests
     /// </summary>
     private static readonly (string File, string Reason)[] SendAwayExemptions =
     [
-        ("EndpointTraceDialog.cs", "接口追踪明细：读的是同一份扫描产物，失败时这一屏同样没有入口，那一步在"
-            + "「检查任务」页的「开始扫描」上（第一百零八轮接了列排序、第七十六轮接了关键词框，失败态这一族一直漏着）"),
         ("ContractsDialog.cs", "响应契约：读不出来时这一屏只剩「关闭」可点（提示出口把三颗审阅按钮一并禁用），"
             + "那一步在「检查任务」页的「开始扫描」上——那三颗在审阅保存成功之后确实会重读一次清单，可失败态下点不动"),
         ("PropagationDialog.cs", "生成文档核对：失败句里那个动词在界面上没有对应的那一颗按钮，屏外做这一步的是"

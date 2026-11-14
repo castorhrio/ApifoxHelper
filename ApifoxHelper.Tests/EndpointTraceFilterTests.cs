@@ -124,14 +124,20 @@ public class EndpointTraceFilterTests
     public void Counts_AreComputedOnceFromTheWholeTraceData()
     {
         var source = Repo.Source("Desktop", "Native", "EndpointTraceDialog.cs");
-        // 计数行只在 OnLoad 里按整份 Coverage 算一次：放进重建里就等于随关键词变化（「超限 N」被抹掉）。
+        // 计数行只在读取入口里按整份 Coverage 算一次：放进重建里就等于随关键词变化（「超限 N」被抹掉）。
         // （`_counts.Text = ""` 另有一处在「整份数据不可得」的提示出口里，那是收掉数字、不是算数字。）
+        // 第三百一十轮：读取从 OnLoad 切进 LoadAll（那颗「重试」与「打开」调的同一个入口），切体跟着实物走。
         Assert.Single(Regex.Matches(source, @"(?m)^\s*_counts\.Text = \$""接口 ").Cast<Match>());
-        var onLoad = MethodSlice(source, "protected override void OnLoad");
-        Assert.Contains("_counts.Text = ", onLoad, StringComparison.Ordinal);
-        Assert.Contains("_coverages.Count(c => c.BudgetExceeded)", onLoad, StringComparison.Ordinal);
+        var load = MethodSlice(source, "private void LoadAll");
+        Assert.Contains("_counts.Text = ", load, StringComparison.Ordinal);
+        Assert.Contains("_coverages.Count(c => c.BudgetExceeded)", load, StringComparison.Ordinal);
         var populate = MethodSlice(source, "private void PopulateList");
         Assert.DoesNotContain("_counts.Text", populate, StringComparison.Ordinal);
+
+        // 打开那一路只委托这一个入口、自己不碰磁盘：第二条读取路就是「两条路各读一份」那一族缺陷。
+        var onLoad = MethodSlice(source, "protected override void OnLoad");
+        Assert.Single(Regex.Matches(onLoad, @"(?m)^\s*LoadAll\(\);$"));
+        Assert.DoesNotContain("_tasks.Read", onLoad, StringComparison.Ordinal);
     }
 
     [Fact]
