@@ -2421,4 +2421,76 @@ public class RealMachineEvidenceTests
         // 合规的写法不许被报：机械格以「无」起头、或写「没有」但机械格指到实物，都是这一页允许的两形状。
         Assert.Empty(ZeroToCheckedProblems(rows.Select(r => r.Number == 7 ? r with { Eye = "没有——这一条念的全是报告里的字" } : r).ToList(), quote));
     }
+
+    // ---------- 第二百八十三轮（简报 P0-1）：动作单第 2 条点名的代表对话框 ----------
+
+    /// <summary>
+    /// 动作单第 2 条要截的那几个代表对话框（封闭清单：屏名 → 源文件相对路径）。
+    /// <para>
+    /// 写成字面量而不是从文档里抓，是为了挡住「两边同时少一屏」——那种改法在「屏名在不在那一格」这条判据下是绿的，
+    /// 而少一屏就是真机当天少截一张。加一屏要同时改这里、动作单第 2 条那一格，两处都改才算过。
+    /// </para>
+    /// <para>
+    /// 第四屏「差异确认」是第二百八十三轮补的：`DecisionsDialog.cs` 第 169 行那一句说明行至今没有仓内
+    /// 「文字宽 / 可用宽」读数，第二百七十九轮只能把它登记成「随 G-D5 第 2 条 + 需要点名这一屏」——
+    /// 本轮把这一屏点名补进动作单，归属从此只写一份。
+    /// </para>
+    /// </summary>
+    private static readonly (string Screen, string File)[] RepresentativeDialogs =
+    [
+        ("新建配置", "Desktop/Native/ProjectsPage.cs"),
+        ("补充说明", "Desktop/Native/SupplementsDialog.cs"),
+        ("模型服务", "Desktop/Native/GenerationDialog.cs"),
+        ("差异确认", "Desktop/Native/DecisionsDialog.cs"),
+    ];
+
+    /// <summary>
+    /// 动作单第 2 条点名的代表对话框与源文件、与封闭清单三向对账（第二百八十三轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百七十九轮把「差异确认第 169 行那一句没有仓内读数」登记在
+    /// 「G-D4 排版：详细口径」末尾，并如实写明「动作单第 2 条点名的三个代表对话框里没有这一屏」——
+    /// 于是那一笔只能写成「随 G-D5 第 2 条 + 需要点名这一屏」，而「谁来点名」没有落点。
+    /// 本轮把这一屏点名补进动作单第 2 条，这一条门判的就是「补进去的那一屏还在不在、点到的源文件是不是真的」。
+    /// </para>
+    /// <para>
+    /// <b>判三件事</b>：① 封闭清单里每一屏的屏名都在动作单第 2 条那一格里出现一次；
+    /// ② 每一屏后面点到的 <c>Desktop/Native/*.cs</c> 在仓里真的存在（写一个不存在的文件名即红）；
+    /// ③ 那一格里点到的 <c>Desktop/Native/*.cs</c> 不许超出封闭清单（自己发明一屏即红）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判这一句在真机上放不放得下（本仓一个数都没有），也不判真机有没有跑——
+    /// 那一格仍是 <c>[ ]</c>，勾选框只由真机证据关闭。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ActionList_SecondItem_NamesEveryRepresentativeDialog()
+    {
+        var cell = ActionRows().Single(r => r.Number == 2).Action;
+
+        // ① 每一屏的屏名都在那一格里。
+        foreach (var (screen, file) in RepresentativeDialogs)
+        {
+            Assert.True(cell.Contains("「" + screen + "」", StringComparison.Ordinal),
+                $"动作单第 2 条没有点名「{screen}」这一屏：少一屏就是真机当天少截一张"
+                + $"（封闭清单在 {nameof(RepresentativeDialogs)}）。");
+            Assert.True(cell.Contains(file, StringComparison.Ordinal),
+                $"动作单第 2 条没有点到「{screen}」的源文件 {file}：真机当天照着念的屏名必须指得到仓里的实物。");
+        }
+
+        // ② 点到的源文件真的在仓里。
+        foreach (var (screen, file) in RepresentativeDialogs)
+        {
+            Assert.True(File.Exists(Path.Combine(Repo.Root, file.Replace('/', Path.DirectorySeparatorChar))),
+                $"动作单第 2 条为「{screen}」点到的 {file} 在仓里不存在：屏名指到一个不存在的文件，等于没点名。");
+        }
+
+        // ③ 那一格点到的 Desktop/Native/*.cs 不许超出封闭清单。
+        var named = Regex.Matches(cell, @"Desktop/Native/[A-Za-z0-9]+\\.cs")
+            .Select(m => m.Value).Distinct(StringComparer.Ordinal).ToList();
+        var registered = RepresentativeDialogs.Select(d => d.File).ToHashSet(StringComparer.Ordinal);
+        var invented = named.Where(n => !registered.Contains(n)).ToList();
+        Assert.True(invented.Count == 0,
+            "动作单第 2 条点了封闭清单外的源文件：" + string.Join(" ／ ", invented)
+            + "。加一屏要同时改 " + nameof(RepresentativeDialogs) + " 与那一格，两处都改才算过。");
+    }
 }
