@@ -93,6 +93,38 @@ public class RejectMessageTests
         }
     }
 
+    /// <summary>
+    /// 接口身份<b>原样写进那一句</b>：空 key 仍说清为什么，超长 key 不被截断（第二百九十九轮，简报 P1-2）。
+    /// <para>
+    /// <b>为什么补这一条</b>：<see cref="SyncSelection.RejectMessage"/> 的 <c>endpointKey</c> 此前只有
+    /// 「正常 key」这一种输入被真执行过，两种边界（空 / 超长）的<b>当前行为</b>没有任何东西钉住——
+    /// 下一轮有人顺手加一句 <c>endpointKey.Trim()</c> 或 <c>Truncate(40)</c>，界面上「是哪一行」这半句
+    /// 就悄悄变了，而所有断言照旧全绿。这一条钉的是<b>已经承诺的行为</b>（那一句里必须有那一行），
+    /// 不是新造一条口径：空 key 与超长 key 在真实数据里一次都没出现过（<c>EndpointCheck.Key</c> 由扫描器
+    /// 按「方法 + 空格 + 路径」拼出来），所以<b>不为它们另写一句话</b>，只把当前行为钉住。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判「空 key 时该不该换一句话」、不判「超长 key 该不该截断」——那两条只有人读得出来，
+    /// 登记在 <see cref="SyncSelection.RejectMessage"/> 的「边界登记」那一段里。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RejectMessage_KeyIsWrittenVerbatim_EmptyAndLongKeysIncluded()
+    {
+        // 空 key：括号里空着，但「为什么勾不上」那半句照旧完整——用户仍读得到结论。
+        var empty = SyncSelection.RejectMessage("", offlineMode: false, checkStatus: "unchanged");
+        Assert.NotNull(empty);
+        Assert.Contains("「」勾不上", empty, StringComparison.Ordinal);
+        Assert.Contains("不进计划", empty, StringComparison.Ordinal);
+
+        // 超长 key：原样写进去、不截断（截断处正是区分两个接口的那一段）。
+        var longKey = "GET /api/" + new string('x', 400);
+        var longMessage = SyncSelection.RejectMessage(longKey, offlineMode: false, checkStatus: "blocked");
+        Assert.NotNull(longMessage);
+        Assert.Contains(longKey, longMessage, StringComparison.Ordinal);
+        Assert.EndsWith("勾选不生效。", longMessage, StringComparison.Ordinal);
+    }
+
     // ---------- 源码形状：界面只在一处落地 ----------
 
     /// <summary>
@@ -123,6 +155,21 @@ public class RejectMessageTests
     /// 判据是「这一行真的勾上了」而不是「<c>ItemChecked</c> 来过一次」：勾不动的那一行自己也会走一次
     /// <c>ItemChecked</c>（<c>Checked</c> 仍是 false），在那里收掉等于刚写上去就抹掉，用户一个字都看不到。
     /// 收的时候还要认「当前文字逐字等于我写的那一句」——状态行上别人的消息（作业进度、失败原因）一个字不碰。
+    /// </para>
+    /// <para>
+    /// <b>前提登记：状态行文字原样写入、不做规范化（第二百九十九轮，简报 P1-1）</b>。
+    /// 上面那句「当前文字逐字等于我写的那一句」是<b>字面相等</b>判据，它成立的前提是
+    /// <c>StatusLineHost.SetText</c> 把传进来的文字<b>原样</b>写进标签（<c>_label.Text = text ?? ""</c>：
+    /// 不 Trim、不折叠空白、不换全角半角、不截断），于是「我写进去的那一句」与「读回来的那一句」
+    /// 逐字相同。若哪天有人在写状态行那一处加了规范化（例如顺手 Trim 一下、把连续空格折成一个），
+    /// 这一句判据会<b>静默失效</b>——收不掉那一句，用户看到的是上一次点的那一行留下的旧话，
+    /// 而所有断言照旧全绿（它们判的是「这一行代码在不在」，判不到「写进去的文字有没有被改过」）。
+    /// </para>
+    /// <para>
+    /// <b>这一条只登记、不加门</b>：能机械判的只有「<c>SetText</c> 里那一句赋值在不在」，
+    /// 而「有没有人在别处又加了一层规范化」判不到——加一条门只会把「门绿」当成「前提成立」。
+    /// 前提的落点是 <c>Desktop/Native/StatusLineHost.cs</c> 的 <c>SetText</c>（全仓状态行唯一的写入点，
+    /// 由 <c>StatusLineTextTests.EveryStatusLine_OnDisk_IsWrittenThroughTheHost</c> 判住「都经它写」）。
     /// </para>
     /// </summary>
     [Fact]

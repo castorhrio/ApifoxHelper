@@ -46,6 +46,26 @@ public static class SyncSelection
     /// <b>它不改什么</b>：不改可同步口径、不改勾选状态的写入（仍只经 <c>ItemChecked</c> 写进
     /// <see cref="SyncSelect"/>）、不改两个批量动作的作用域、不改任何按钮的启停。
     /// </para>
+    /// <para>
+    /// <b>边界登记：<paramref name="endpointKey"/> 原样写进那一句，不裁剪、不改写（第二百九十九轮，简报 P1-2）</b>。
+    /// 这一条<b>只登记、不另加门</b>——本仓纪律是「能找到根因 + 证据才改」，而下面两种边界在真实数据里
+    /// 一次都没出现过（`EndpointCheck.Key` 由扫描器按「方法 + 空格 + 路径」拼出来，既不会空也不会长到
+    /// 撑破状态行）。登记的是<b>当前行为</b>与<b>为什么它不构成阻断</b>：
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>空 key</b>：那一句变成「「」勾不上：…」——括号里空着，但「为什么勾不上」那半句照旧完整，
+    /// 用户仍读得到结论。空 key 在界面上不可能出现（清单首列就是这一格，空着的那一行用户也点不到），
+    /// 所以不为它加一条「空 key 时换一句话」的分支：那会多出一条永远走不到的路，而走不到的路没人验。</item>
+    /// <item><b>超长 key</b>：原样写进去、<b>不截断</b>。截断会把「是哪一行」这半句弄坏（截断处正是
+    /// 区分两个接口的那一段），而状态行本身有两条兜底：<c>AutoEllipsis</c> 让末尾出现「…」、
+    /// 「查看完整错误」入口把全文交出来（<see cref="StatusLineText.ShouldOfferFullText"/> 判「放不下才给」）。
+    /// 所以长 key 的代价是「要多点一次入口」，不是「读不到」。</item>
+    /// </list>
+    /// <para>
+    /// 这两条由 <c>RejectMessageTests.RejectMessage_KeyIsWrittenVerbatim_EmptyAndLongKeysIncluded</c>
+    /// 钉住<b>当前行为</b>（空 key 仍说清为什么、长 key 不被截断）——它判的是「这一句里有没有那一行」，
+    /// 判不到「该不该为这两种边界另写一句话」，后者只有人读得出来。
+    /// </para>
     /// </summary>
     /// <param name="endpointKey">那一行的接口身份（清单首列，与 <c>EndpointCheck.Key</c> 同一份）。</param>
     /// <param name="offlineMode">任务是不是离线模式（离线时整份检查结果都不可同步）。</param>
