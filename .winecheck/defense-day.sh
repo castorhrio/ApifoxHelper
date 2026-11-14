@@ -8,10 +8,14 @@
 # 任一步非零即停并点名停在第几步（停的那一步自己的输出原样在上面，解法在那几句里）。
 #
 # 四步（顺序固定，不跳步）：
+#
 #   ① due-date.sh     判今天是不是到期日；「已过」是退出码 1，于是第 ① 步就把这一条挡住（见下）
 #   ② preflight.sh    临场预检四条：pwsh / 源指纹 / 三档跑过 / 九个归档目录在位
 #   ③ demo.sh         按 TIERS 各跑一次冒烟、逐档出讲稿（缺省三档 96 / 120 / 192）
 #   ④ 念序摘要 + 结尾固定一句    念序从 narration-<档位>.txt 现读，那句口径从 demo.sh 现读
+#
+# 四步之后还有一格不编号的收尾（见文件末尾）：把「整支跑通」这件事写成一行机器可读的记录
+# （读数记录同目录的 defense.txt 的 source=），好让「上一版读数被当成当前读数」变成机械可判。
 #
 # 四样东西本脚本都不抄第二份：讲稿落点与档位（从 demo.sh 的 OUT / TIERS 缺省现读）、
 # 结尾那一句口径（从 demo.sh 的录制口径第 4 条现读）、到期日（连日期字面量都不出现，由 due-date.sh 现读
@@ -138,6 +142,42 @@ for TIER in $TIERS; do
   fi
 done
 echo "   结尾固定一句（照念，出处 demo.sh 的录制口径第 4 条）：$CLOSING"
+
+echo
+echo "-- 收尾：把「最近一次整支跑通」的源码指纹写进读数记录 --"
+# 为什么要有这一格（第三百轮，简报 P0-1）：reading.txt 的 source= 只说明「那份读数出自哪一版源码」，
+# 说明不了「那一版源码是不是整支链跑通的」——demo.sh 单独跑一次也会写 source=，于是「上一版读数被当成
+# 当前读数」只能靠人读 NOTES 的考古层。这一格把「整支跑通」写成一行机器可读的记录，
+# 门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs：reading.txt 的 source= 必须逐字等于这里的 source=。
+# 落点与指纹都不在这里抄第二份：READING 的缺省从 demo.sh 现读（与 OUT / TIERS 同一取法），
+# 指纹从第 ③ 步刚写回的那一份现读——本脚本自己不算指纹，算了就是第二份算法。
+READING_DEFAULT=$(sed -n 's/^READING=${READING:-\(.*\)}$/\1/p' "$HERE/demo.sh" | head -1)
+if [ -z "$READING_DEFAULT" ]; then
+  echo "停在第 ⑤ 步：从 $HERE/demo.sh 读不到 READING 的缺省值——收尾那一格要写的那一份记录没有落点。"
+  echo "  那一行只有一份出处（demo.sh 的 READING= 赋值），在这里写死一份，改了那一支的人不会知道这里还留着旧的。"
+  exit 3
+fi
+READING=${READING:-${READING_DEFAULT//\$REPO/$REPO}}
+DEFENSE=$(dirname "$READING")/defense.txt
+SRC=$(sed -n 's/^source=//p' "$READING" 2>/dev/null | head -1)
+if [ -z "$SRC" ]; then
+  echo "停在第 ⑤ 步：$READING 里读不到 source=——第 ③ 步刚跑完却没有那一行，收尾没有可写的指纹。"
+  echo "  先查第 ③ 步有没有真的写回读数记录（它自己会打「读数记录：…」那一行）。"
+  exit 3
+fi
+{
+  echo "# 最近一次整支跑通（defense-day.sh 四步走完）的源码指纹——由 .winecheck/defense-day.sh 写出，不是手抄的。"
+  echo "# 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs：reading.txt 的 source= 必须逐字等于这里的 source=；"
+  echo "#   不等 = 最近一次整支跑通的那一版源码不是当前源码（读数过期），重跑 PUBLISH=1 bash .winecheck/defense-day.sh。"
+  echo "script=defense-day.sh"
+  echo "date=$(date +%F)"
+  echo "source=$SRC"
+} >"$DEFENSE" 2>/dev/null || {
+  echo "停在第 ⑤ 步：写不进 $DEFENSE——收尾没有落点，读数与「整支跑通」之间就没有可判的连线。"
+  echo "  它落在 READING 同一目录（不另设环境变量：落点跟着读数记录走，两处不会分家）；先解那一处权限。"
+  exit 3
+}
+echo "   收尾过：$DEFENSE 记下 source=$SRC（与 $READING 的 source= 逐字相同）。"
 
 echo
 echo "四步走完。当天剩下的两件事这一支不代做："

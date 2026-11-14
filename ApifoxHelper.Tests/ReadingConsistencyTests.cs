@@ -1270,4 +1270,189 @@ public class ReadingConsistencyTests
         Assert.Null(ProseFingerprintDrift(
             $"…`{older[..10]}…` 是那一跑的读数；`{current[..10]}…` 是当前值。", current));
     }
+
+    // ---------- 第三百轮（简报 P0-1）：读数与「整支跑通」之间第一次有可判的连线 ----------
+
+    /// <summary>
+    /// 「最近一次整支跑通」的记录 <c>.winecheck/defense.txt</c>——由 <c>defense-day.sh</c> 四步走完之后写出。
+    /// <para>
+    /// <b>为什么不写进 <c>reading.txt</c></b>（简报原话是「<c>reading.txt</c> 顶部加一行」）：那一份是
+    /// <b>整份重写</b>的（<c>demo.sh</c> 与 <c>demo.ps1</c> 各自 <c>&gt;"$READING"</c> 一次写全），
+    /// 而且它的解析器对没约定的键当场判红。把这一行放进去，就得同时改那两支脚本让它们「原样带过去」，
+    /// 于是<b>单独跑一次 <c>demo.sh</c> 也会把整支跑通的记录抹掉</b>——那正是这一条门要防的「过期读数被当成
+    /// 当前读数」的另一种形状（记录被抹掉之后，门只能判「没有记录」，判不出「记录是旧的」）。
+    /// 放在同一目录的兄弟文件里，写它的只有一支脚本（<c>defense-day.sh</c>），读它的只有这一条门。
+    /// </para>
+    /// <para>
+    /// <b>它补的是哪个缺口</b>：<see cref="ReadingRecord_SourceIsTheCurrentSource"/> 判的是
+    /// 「<c>reading.txt</c> 的 <c>source=</c> 等于当前源码」——<b>单独跑一次 <c>demo.sh</c> 就能满足它</b>。
+    /// 而到期日当天要念的那几个数，前提是「整支链（四步）在这一版源码上跑通过」：预检四条、三档冒烟、
+    /// 逐屏对账、念序，任何一步没过，那份读数就不该被当成当天的读数。这一条把「整支跑通」写成一行
+    /// 机器可读的记录，于是「上一版读数被当成当前读数」从「靠人读 NOTES 的考古层」变成机械可判。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那份记录是不是真跑出来的（与 <c>reading.txt</c> 同一条固有边界：
+    /// 文件可以被手写，门看不出来），不判真机跑没跑（真机 0 台，G-D5 仍是 <c>[ ]</c>），
+    /// 也不判 <c>defense-day.sh</c> 的四步各自对不对（那是 <c>WineCheckScriptsTests.DefenseDayScript_*</c> 的事）。
+    /// </para>
+    /// </summary>
+    private const string DefenseRecordPath = ".winecheck/defense.txt";
+
+    /// <summary>一份「整支跑通」记录（来历三行）。</summary>
+    private sealed record DefenseRecord(string Script, string Date, string Source);
+
+    /// <summary>
+    /// 读那份记录。缺文件即红并给出「怎么补出来」的一条命令——与 <see cref="ReadingRecord"/> 同一口径：
+    /// 这份记录是跑出来的，不在磁盘上就说明整支链没跑过（或有人删了它）。
+    /// </summary>
+    private static DefenseRecord DefenseRecordFile()
+    {
+        var path = Path.Combine(Repo.Root, DefenseRecordPath.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(File.Exists(path),
+            $"{DefenseRecordPath} 不在——「最近一次整支跑通的是哪一版源码」没有落点，"
+            + "于是「上一版读数被当成当前读数」只能靠人读 docs/NOTES.md 的考古层。"
+            + "补一次：PUBLISH=1 bash .winecheck/defense-day.sh（四步走完它自己写出这一份）。");
+
+        var script = ""; var date = ""; var source = "";
+        foreach (var raw in File.ReadAllLines(path))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            var at = line.IndexOf('=');
+            if (at <= 0) continue;
+            var key = line[..at];
+            var value = line[(at + 1)..];
+            switch (key)
+            {
+                case "script": script = value; break;
+                case "date": date = value; break;
+                case "source": source = value; break;
+                default:
+                    Assert.Fail($"{DefenseRecordPath} 出现没有约定的键 {key}（这一份只能由 .winecheck/defense-day.sh 写出，"
+                        + "手改就是把出处变成自述）：{line}");
+                    break;
+            }
+        }
+
+        return new DefenseRecord(script, date, source);
+    }
+
+    /// <summary>
+    /// 「读数记录与整支跑通记录不是同一版源码」这一件事的<b>唯一判法</b>（收成一处，好让
+    /// <see cref="DefenseRecordDetector_ReportsTheBreaksItMustCatch"/> 把每一发破坏各喂一遍）。
+    /// 返回 null = 对得上；返回一句话 = 对不上，那句话就是红的时候念出来的那一句。
+    /// </summary>
+    private static string? DefenseDrift(string readingSource, string defenseSource, string defenseDate)
+    {
+        if (string.IsNullOrWhiteSpace(defenseSource))
+        {
+            return $"{DefenseRecordPath} 的 source= 是空的：整支跑通记录没有说清自己出自哪一版源码。"
+                + "补一次：PUBLISH=1 bash .winecheck/defense-day.sh。";
+        }
+
+        if (!Regex.IsMatch(defenseSource, "^[0-9a-f]{40}$"))
+        {
+            return $"{DefenseRecordPath} 的 source=「{defenseSource}」不是 40 位小写十六进制：它不是源码指纹，"
+                + "这一份只能由 .winecheck/defense-day.sh 写出（手改就是把出处变成自述）。";
+        }
+
+        if (!Regex.IsMatch(defenseDate, @"^\d{4}-\d{2}-\d{2}$"))
+        {
+            return $"{DefenseRecordPath} 的 date=「{defenseDate}」不是 YYYY-MM-DD：读它的人不知道整支链是哪一天跑通的。";
+        }
+
+        if (!string.Equals(readingSource, defenseSource, StringComparison.Ordinal))
+        {
+            return $"{ReadingPath} 的 source= 是 {Short(readingSource)}，而最近一次整支跑通（{defenseDate}）的是 "
+                + $"{Short(defenseSource)}：最近一次 defense-day.sh 跑的不是当前源码——"
+                + "那份读数出自另一版源码，不能当成当天的读数念。重跑 PUBLISH=1 bash .winecheck/defense-day.sh。"
+                + "（这一条不判那份报告是不是真跑出来的，只判「整支跑通」与「读数」是不是同一版源码。）";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 读数记录与整支跑通记录必须是<b>同一版源码</b>（第三百轮，简报 P0-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="ReadingRecord_SourceIsTheCurrentSource"/> 只判「读数等于当前源码」，
+    /// 而 <c>demo.sh</c> 单独跑一次就满足它——<b>整支链（预检四条 + 三档 + 逐屏对账 + 念序）有没有在这一版
+    /// 源码上跑通过，此前没有任何东西判</b>。到期日当天念的正是那几个数，而「上一次整支跑通是上一版源码」
+    /// 这件事只有人读 NOTES 顶部那一段上千字的考古层才看得出来。
+    /// </para>
+    /// <para>
+    /// <b>两个方向都能红</b>：整支跑通记录不在 → 红（没有落点）；在但与读数不是同一版源码 → 红（就是本轮要挡的那件事）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DefenseRecord_SourceIsTheSameSourceAsTheReadingRecord()
+    {
+        var reading = ReadingRecord();
+        var defense = DefenseRecordFile();
+
+        Assert.True(defense.Script == "defense-day.sh",
+            $"{DefenseRecordPath} 的 script= 是「{defense.Script}」——这一份只能由 .winecheck/defense-day.sh 写出。");
+
+        var drift = DefenseDrift(reading.Source, defense.Source, defense.Date);
+        Assert.True(drift is null, drift);
+    }
+
+    /// <summary>
+    /// 上面那条判法<b>抓不抓得住</b>——四发破坏各喂一遍（第三百轮）。
+    /// <para>
+    /// 只在真仓上判的门，抓不抓得住全靠那天有没有人想到去试。四发分别是：整支跑通记录是上一版源码、
+    /// 记录里的指纹不是指纹、日期不是日期、指纹是空的。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DefenseRecordDetector_ReportsTheBreaksItMustCatch()
+    {
+        var current = new string('c', 40);
+        var older = new string('a', 40);
+
+        // 前提：同一版源码时是干净的——下面每一发「变红」才只可能来自注入的破坏。
+        Assert.Null(DefenseDrift(current, current, "2026-11-14"));
+
+        // ① 整支跑通记录停在上一版源码（本轮要挡的那件事）：红，两处字面都打出来，并给出补救命令。
+        var stale = DefenseDrift(current, older, "2026-11-13");
+        Assert.NotNull(stale);
+        Assert.Contains($"{current[..10]}…", stale, StringComparison.Ordinal);
+        Assert.Contains($"{older[..10]}…", stale, StringComparison.Ordinal);
+        Assert.Contains("PUBLISH=1 bash .winecheck/defense-day.sh", stale, StringComparison.Ordinal);
+
+        // ② 记录里的 source= 不是指纹（截断的 SHA）：形状就不对，不许被当成「对得上」。
+        Assert.NotNull(DefenseDrift(current, current[..8], "2026-11-14"));
+
+        // ③ 日期不是日期：读它的人不知道整支链是哪一天跑通的。
+        Assert.NotNull(DefenseDrift(current, current, "昨天"));
+
+        // ④ 指纹是空的：整支跑通记录没有说清自己出自哪一版源码。
+        Assert.NotNull(DefenseDrift(current, "", "2026-11-14"));
+    }
+
+    /// <summary>
+    /// 那一格记录必须由 <c>defense-day.sh</c> 自己写出，且落点跟着读数记录走（第三百轮）。
+    /// <para>
+    /// <b>为什么这条要单独判</b>：上面两条判的是「记录与读数是不是同一版源码」，它们<b>判不到记录是谁写的</b>——
+    /// 一份手写的记录照样能让它们绿。这一条判的是「写它的那一支脚本里真有那几行」：落点从 <c>demo.sh</c> 的
+    /// <c>READING</c> 缺省现读（不抄第二份路径）、指纹从第 ③ 步刚写回的那一份现读（不算第二份指纹算法）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那几行跑起来对不对（那是 <c>WineCheckScriptsTests.DefenseDayScript_*</c> 与
+    /// 到期日当天那一跑的事），也不判记录里的日期是不是今天。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DefenseRecord_IsWrittenByTheDefenseDayScriptFromTheReadingRecord()
+    {
+        var script = Repo.Source(".winecheck", "defense-day.sh");
+
+        Assert.Contains("defense.txt", script, StringComparison.Ordinal);
+        Assert.Contains("source=$SRC", script, StringComparison.Ordinal);
+        Assert.Contains(@"s/^READING=${READING:-\(.*\)}$/\1/p", script, StringComparison.Ordinal);
+        Assert.Contains(@"s/^source=//p", script, StringComparison.Ordinal);
+
+        // 落点不许在脚本里写死一份：它必须从 demo.sh 的 READING 缺省现读（与 OUT / TIERS 同一取法）。
+        Assert.DoesNotContain(".winecheck/defense.txt", script, StringComparison.Ordinal);
+    }
 }

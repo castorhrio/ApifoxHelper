@@ -1,0 +1,6 @@
+# 最近一次整支跑通（defense-day.sh 四步走完）的源码指纹——由 .winecheck/defense-day.sh 写出，不是手抄的。
+# 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs：reading.txt 的 source= 必须逐字等于这里的 source=；
+#   不等 = 最近一次整支跑通的那一版源码不是当前源码（读数过期），重跑 PUBLISH=1 bash .winecheck/defense-day.sh。
+script=defense-day.sh
+date=2026-11-14
+source=f22b48c99fef2171f3002ba8d41dbdb99cfb99f8

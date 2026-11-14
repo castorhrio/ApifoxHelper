@@ -98,6 +98,19 @@ internal sealed class StatusLineHost : Panel
     /// 写状态行：文字与字色一起给，入口按「放不放得下」显隐。
     /// 页面与对话框此前直接写 <c>_status.Text</c>，现在两个主页面只经这一个入口——
     /// 入口的显隐与文字同一次更新，不会出现「文字换了、按钮还留着」的半截状态。
+    /// <para>
+    /// <b>本方法原样写入</b>（第三百轮登记，简报 P0-2）：不 <c>Trim()</c>、不折叠空白、不截断——
+    /// 传进来什么就写什么，一个字都不改。这不是「顺手没做」，是<b>有断言依赖它</b>：
+    /// <c>RejectMessageTests.Dialog_ClearsTheSentenceOnlyWhenTheSelectionReallyChanged</c> 判的是
+    /// 「我写进去的那一句」与「读回来的那一句」<b>字面相等</b>（勾不动的那一行弹回时写的那句为什么，
+    /// 只在「这一行真的勾上了」时收掉，且只收自己写的那一句）。谁在这里加一句 <c>Trim()</c> 或把连续空白
+    /// 折成一个，那条断言就会静默失效——它仍然绿，但它判的那件事已经不成立了。
+    /// </para>
+    /// <para>
+    /// <b>要改这一行之前先翻回去</b>：<c>ApifoxHelper.Tests/RejectMessageTests.cs</c> 里那条断言的
+    /// XML 注释写着同一个前提（第二百九十九轮登记）。两处说的是同一件事，改一处就得同时改另一处，
+    /// 或者把那条断言改成不依赖字面相等——不要只改这里。
+    /// </para>
     /// </summary>
     public void SetText(string? text, Color color)
     {

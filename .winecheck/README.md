@@ -150,6 +150,7 @@ bash .winecheck/collect-real-machine.sh # 真机证据归档核对：九个目�
 | 冒烟报告（UTF-8，逐行 PASS/FAIL） | `/tmp/ah-smoke-report.txt` |
 | 演示三档产物（`demo.sh`） | `/tmp/ah-demo/report-<档位>.txt`、`/tmp/ah-demo/narration-<档位>.txt`、`/tmp/ah-demo/console-<档位>.log` |
 | **读数记录（入库）** | `.winecheck/reading.txt`——`demo.sh` 与 `demo.ps1` 跑完三档各自写出，同一份格式；文档念的数由门与它对账（见上一表的 `READING`） |
+| **整支跑通记录（入库）** | `.winecheck/defense.txt`——`defense-day.sh` 四步走完之后写出（`script=` / `date=` / `source=` 三行）。它记的是「最近一次整支跑通的是哪一版源码」：`reading.txt` 的 `source=` 只说明那份读数出自哪一版源码，单独跑一次 `demo.sh` 就能满足它；这一份才说明整支链（预检四条 + 三档 + 逐屏对账 + 念序）在这一版源码上跑通过。两份的 `source=` 不等即红（`ReadingConsistencyTests.DefenseRecord_SourceIsTheSameSourceAsTheReadingRecord`）。落点跟着 `READING` 走（同一目录），不另设环境变量 |
 
 ## Windows 侧那支（`demo.ps1`）
 
@@ -490,6 +491,13 @@ TIERS=96 bash .winecheck/defense-day.sh         # 只跑一档（答辩前自查
 
 整支退出码：`0` = 四步走完；`1` = 停在某一步；`2` = 停在第 ① 步且到期日核对本身跑不动；
 `3` = 这一支自己跑不动（要调的三支不在位 / 从 `demo.sh` 读不到缺省或那句口径 / 讲稿读不到）。
+
+**四步之后还有一格不编号的收尾**：把「整支跑通」写成一行机器可读的记录——`reading.txt` 同目录的 `defense.txt` 里
+`script=defense-day.sh` / `date=<当天>` / `source=<第 ③ 步刚写回的那个指纹>`。它不重算指纹（算了就是第二份算法），
+也不写死落点（`READING` 的缺省从 `demo.sh` 现读，与 `OUT` / `TIERS` 同一取法）。写不进去时打「停在第 ⑤ 步」并退 `3`：
+那一格没有落点，读数与「整支跑通」之间就没有可判的连线。**为什么要有这一格**：`reading.txt` 的 `source=` 只说明
+「那份读数出自哪一版源码」，单独跑一次 `demo.sh` 就能满足它；「整支链有没有在这一版源码上跑通过」此前只能靠人读
+`docs/NOTES.md` 顶部那一段考古层。现在两份记录的 `source=` 不等即红。
 
 **四样东西都不抄第二份**：
 
