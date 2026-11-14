@@ -286,6 +286,9 @@ internal static class Program
         Section("检查结果读取失败态（正常 → 检查结果坏 → 点一次换一种失败、原因跟着换 → 修好恢复且筛选器一起回来 → 筛到零行不给那颗按钮 → 尚未检查不给那颗按钮，真实控件）", nameof(RunCheckResultsLoadFailure));
         RunCheckResultsLoadFailure(services, dataRoot);
 
+        Section("代码证据读取失败态（正常 → 证据坏 → 点一次换一种失败、原因跟着换 → 修好后点一次清单、计数与片段一起回来 → 该位置没有证据不给那颗按钮 → 那份产物本来就没有也不给那颗按钮，真实控件）", nameof(RunEvidenceLoadFailure));
+        RunEvidenceLoadFailure(services, dataRoot);
+
         Section("极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）", nameof(RunDetailBreak));
         RunDetailBreak(services, dataRoot);
 
@@ -4670,6 +4673,341 @@ internal static class Program
             dialog?.Dispose();
         }
     }
+
+    /// <summary>
+    /// 代码证据读取失败态的真实控件交互（第三百零九轮，简报 P1-2）。
+    /// <para>
+    /// 接线那一半在 <c>Desktop/Native/EvidenceDialog.cs</c>，本段是它在模拟器上被真的点过一次的那一半：
+    /// 形状照第三百零八轮检查结果那一屏（正常 → 读不出来 → 点一次换一种失败 → 修好后点一次 →
+    /// 非失败态不给那颗按钮）。失败是真的——把任务目录里那份 evidence.json 写成不是 JSON 的字节，
+    /// 让 <c>TaskStore.Read</c> 抛它本来会抛的异常，不伪造异常类型、不调私有方法、不换实现。
+    /// </para>
+    /// <para>
+    /// <b>本段第一发撞出来的两处，都按实物改了而不是把判据改松</b>：① 计数行按文字「证据 」开头认，
+    /// 而提示出口在空态把那一格清成空串——「该位置没有证据」那一发因此找不到落点，现按形状认；
+    /// ② 我原以为那颗按钮让同一入口可以被走第二遍、于是先在读取开头清一次清单并写了一条「行数不翻倍」的判据，
+    /// 把 `_list.Items.Clear()` 删掉跑一整档却是<b>全绿</b>——这一屏成功那一刻就收起那颗按钮、
+    /// 失败那一支由提示出口清空，屏上根本叠不出双份行。那三行清理与那一条判据一并撤掉，
+    /// 留下的第 5 段念的是它真的量到的那几件事（清单回来、计数同一句、片段同一格、那颗按钮收起）。
+    /// </para>
+    /// </summary>
+    private static void RunEvidenceLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "代码证据失败态冒烟" });
+        var evidencePath = tasks.FilePath(task.Id, TaskFiles.Evidence);
+
+        var wantedIds = new List<string> { "ev-route", "ev-validation", "ev-return", "ev-mapping" };
+        var slot = EvidenceSlot("slot-evidence-failure", [.. wantedIds]);
+        // 另一个位置：编号一个都不在这份产物里。「没有直接关联的证据」不是读取失败，那一种不给那颗按钮。
+        var emptySlot = EvidenceSlot("slot-evidence-none", ["ev-not-in-this-store"]);
+
+        // 计数行按形状认，不按文字认：提示出口把那一格清成空串（§7「空态不留白」之外另一半是不留半份数字），
+        // 按「证据 」开头取法在「该位置没有证据」那一发根本找不到落点——本段第一发撞的就是这一处。
+        static Label Counts(EvidenceDialog form)
+        {
+            var cells = FindAll<Label>(form)
+                .Where(control => control.TextAlign == ContentAlignment.MiddleRight && !control.AutoSize)
+                .ToList();
+            return cells.Count switch
+            {
+                1 => cells[0],
+                0 => throw new InvalidOperationException("这一屏没有那块右对齐、不自适应宽度的计数行格：标题行的形状变了，本段判据需要重定。"),
+                _ => throw new InvalidOperationException($"这一屏有 {cells.Count} 块右对齐、不自适应宽度的 Label，计数行按形状认不再唯一：本段判据需要重定。"),
+            };
+        }
+
+        // 片段区是这一屏唯一的可滚只读多行框（清单里选中那一行的代码就在这一格里）。
+        static TextBox SnippetBox(EvidenceDialog form) =>
+            FindAll<TextBox>(form).SingleOrDefault(control => control.Multiline)
+            ?? throw new InvalidOperationException("这一屏找不到那块只读片段框。");
+
+        // 主清单与它那一句提示：按宿主认（填满剩余空间那一块里铺满列表区的居中 Label），不按次序猜。
+        static (ListView List, Label Hint) MainPane(EvidenceDialog form)
+        {
+            var host = form.Controls.OfType<Panel>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的证据清单宿主：停靠分法变了，本段判据需要重定。");
+            var hint = host.Controls.OfType<Label>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("证据清单宿主里没有那句铺满列表区的提示行：提示出口的形状变了。");
+            var list = FindAll<ListView>(host).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["分类", "证据摘要", "文件:行"]))
+                ?? throw new InvalidOperationException("这一屏找不到表头为「分类 / 证据摘要 / 文件:行」的证据清单：列增删或改名了，本段判据需要重定。");
+            return (list, hint);
+        }
+
+        EvidenceDialog? dialog = null;
+        FileStream? hold = null;
+        string? good = null;
+        string? jsonFailureSentence = null;
+        string? countsWhenGood = null;
+        string? snippetWhenGood = null;
+        const int rowCount = 4;
+        try
+        {
+            RunAction("代码证据失败态：准备一份真实代码证据（产品自己的写入口径落盘）", () =>
+            {
+                tasks.Write(task.Id, TaskFiles.Evidence, EvidenceFailureStore(wantedIds));
+                var reread = tasks.Read<EvidenceStore>(task.Id, TaskFiles.Evidence)
+                    ?? throw new InvalidOperationException("写入后读不回代码证据。");
+                if (reread.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"夹具回读到 {reread.Items.Count} 条证据，期望 {rowCount} 条。");
+                }
+                good = File.ReadAllText(evidencePath);
+                _lines.Add($"     磁盘副本留了一份原文 {good.Length} 字：证据 {reread.Items.Count} 条");
+            });
+
+            RunAction("代码证据失败态：正常打开时清单与片段可见且不显示「重试」（真实控件）", () =>
+            {
+                dialog = new EvidenceDialog(tasks, task, slot);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!list.Visible || list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"正常打开时清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {rowCount} 行。");
+                }
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"正常打开时提示区却可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("代码证据读出来了，「重试」却亮着：它只在读取失败时才是下一步。");
+                }
+                countsWhenGood = Counts(dialog).Text;
+                snippetWhenGood = SnippetBox(dialog).Text;
+                if (string.IsNullOrWhiteSpace(snippetWhenGood) || snippetWhenGood == EvidenceEntries.EmptySnippetText)
+                {
+                    throw new InvalidOperationException($"打开即选中第一条证据，片段区却念不出它的代码：「{snippetWhenGood}」。");
+                }
+                _lines.Add($"     正常打开：清单 {list.Items.Count} 行，计数行「{countsWhenGood}」，片段区 {snippetWhenGood.Length} 字，那颗按钮没亮");
+            });
+
+            RunAction("代码证据失败态：证据读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                File.WriteAllText(evidencePath, "这不是 JSON");
+                dialog = new EvidenceDialog(tasks, task, slot);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("证据读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                if (!hint.Text.StartsWith(LoadFailureState.Evidence.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Evidence.Title}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名屏上那颗按钮，用户读不到该点哪一颗：「{hint.Text}」。");
+                }
+                // 那一句静态门（NoScreen_SendsTheUserAwayToReopenTheWindow）判的是源码里有没有那几种说法；
+                // 这一判判的是屏幕上念出来的那一句里也确实没有——源码改了、句子还是从别处拼回来的那种红它抓不到。
+                foreach (var phrase in new[] { "请关闭后", "关闭后重试", "关闭本窗口重新打开" })
+                {
+                    if (hint.Text.Contains(phrase, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException($"失败提示仍然把用户支去重开窗口（「{phrase}」）：「{hint.Text}」。");
+                    }
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                if (list.Visible)
+                {
+                    throw new InvalidOperationException("证据读不出来时清单仍可见：半份结果被留在屏上。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     证据读不出来：提示「{hint.Text}」，那颗按钮亮着");
+            });
+
+            RunAction("代码证据失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 判据不能只看「还是不是失败」——成功路径只收起提示区、不清那格文字，按文字判会把
+                // 「重读成功」也读成「仍是失败」。这里换成换一种失败：文件还在、却被独占占用（第三百零四轮那条）。
+                hold = new FileStream(evidencePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var (_, hint) = MainPane(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.Evidence.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"文件被占用时重试，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍读不出来，重试后「重试」却不见了：用户没有第二次机会。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("代码证据失败态：修好后点「重试」退出失败态、清单与计数与片段一起回来（真实控件）", () =>
+            {
+                if (dialog is null || good is null || countsWhenGood is null || snippetWhenGood is null)
+                {
+                    throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                }
+                File.WriteAllText(evidencePath, good);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好证据后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                // 清单从「不可见 + 零行」回到「可见 + 那几行」：失败态不收清单、恢复时不重填，都在这一判里。
+                if (list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"恢复后清单是 {list.Items.Count} 行，期望 {rowCount} 行。");
+                }
+                if (Counts(dialog).Text != countsWhenGood)
+                {
+                    throw new InvalidOperationException($"恢复后计数行与正常打开时不是同一句：「{Counts(dialog).Text}」对「{countsWhenGood}」。");
+                }
+                if (SnippetBox(dialog).Text != snippetWhenGood)
+                {
+                    throw new InvalidOperationException("恢复后片段区念出的不是正常打开时那一格的代码：那一格与清单不同源或没随选中刷新。");
+                }
+                _lines.Add($"     修好后重试：清单回到 {list.Items.Count} 行，计数行「{Counts(dialog).Text}」，片段与选中那一行同一格，那颗按钮收起");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("代码证据失败态：该位置没有直接关联的证据时不给那颗按钮（真实控件）", () =>
+            {
+                // 「没有证据」不是失败：那份产物在而这一行筛不出东西，那一步不在这条清单的再读一次上。
+                // 与检查结果那一屏「筛到零行不给那颗按钮」、注释候选「扫描结果本身缺失」同一取舍。
+                dialog = new EvidenceDialog(tasks, task, emptySlot);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible || list.Visible)
+                {
+                    throw new InvalidOperationException("该位置没有证据时没有换成那句说明（或清单还留着）：这一屏的空态形状变了。");
+                }
+                if (hint.Text.StartsWith(LoadFailureState.Evidence.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"没有证据被当成读取失败处理了：「{hint.Text}」。");
+                }
+                if (!hint.Text.Contains("没有与该位置直接关联的代码证据", StringComparison.Ordinal)
+                    || !hint.Text.Contains("留待人工确认", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"那句说明没有把「没有证据」与「不编造」一起说清：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("该位置没有证据不是失败态，却显示了「重试」：同一屏给了两个下一步。");
+                }
+                if (Counts(dialog).Text.Length != 0)
+                {
+                    throw new InvalidOperationException($"没有证据时计数行仍有文字：「{Counts(dialog).Text}」。");
+                }
+                _lines.Add($"     该位置没有证据：提示以「{hint.Text[..10]}…」开头，那颗按钮没亮");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("代码证据失败态：那份产物本来就没有时走的仍是空态那一句（本轮未改这一支，量下来记在账上）", () =>
+            {
+                // 源码里那一句「store 为 null 时按空清单处理」决定这一屏在没有证据产物时念的是那一句说明，
+                // 而不是「读取失败」。本轮没有改这一支（改它就是新增一种状态，不属这一族那一条纪律），
+                // 但把它在真实控件上量出来：那颗按钮在这种情况下不亮，重试读不出新东西。
+                File.Delete(evidencePath);
+                dialog = new EvidenceDialog(tasks, task, slot);
+                dialog.Show();
+                Application.DoEvents();
+                var (_, hint) = MainPane(dialog);
+                if (!hint.Visible || !hint.Text.Contains("没有与该位置直接关联的代码证据", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"没有那份产物时提示是「{hint.Text}」，期望仍是那一句空态说明。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("文件本来就没有，却显示了「重试」：再读一次读不出新东西。");
+                }
+                _lines.Add("     没有那份产物：走的仍是那一句空态说明，那颗按钮没亮");
+            });
+        }
+        finally
+        {
+            hold?.Dispose();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>代码证据失败态那一段用的位置（两处只差证据编号集合：一处命中、一处一个都不命中）。</summary>
+    private static DocSlot EvidenceSlot(string id, List<string> evidenceIds) => new()
+    {
+        Id = id,
+        SymbolId = "M:Probe.Api.Controllers.ProbeController.Get",
+        SymbolKind = "method",
+        Display = "GET /api/probe",
+        Tag = "summary",
+        Status = "missing",
+        File = "Probe.Api/Controllers/ProbeController.cs",
+        Line = 12,
+        Role = "endpoint",
+        Editable = true,
+        EvidenceIds = evidenceIds,
+    };
+
+    /// <summary>
+    /// 代码证据失败态那一段的夹具：四条证据，分类覆盖路由 / 校验 / 返回 / 映射四族，
+    /// 每条带一段真会在片段区念出来的代码（第一条那段的文字本段要逐字比回来）。
+    /// </summary>
+    private static EvidenceStore EvidenceFailureStore(List<string> ids) => new()
+    {
+        Items =
+        [
+            new CodeEvidence
+            {
+                Id = ids[0], Kind = "route", OwnerSymbolId = "M:Probe.Api.Controllers.ProbeController.Get",
+                File = "Probe.Api/Controllers/ProbeController.cs", StartLine = 11, EndLine = 14,
+                Summary = "路由 GET /api/probe 声明在控制器方法上",
+                Snippet = "[HttpGet(\"probe\")]\npublic ProbeResult Get() => _service.Load();",
+            },
+            new CodeEvidence
+            {
+                Id = ids[1], Kind = "validation", OwnerSymbolId = "M:Probe.Api.Controllers.ProbeController.Get",
+                File = "Probe.Api/Controllers/ProbeController.cs", StartLine = 22, EndLine = 26,
+                Summary = "参数区间约束（必须大于 0）",
+                Snippet = "[Range(1, int.MaxValue)] public int PageSize { get; set; }",
+            },
+            new CodeEvidence
+            {
+                Id = ids[2], Kind = "return", OwnerSymbolId = "M:Probe.Api.Controllers.ProbeService.Load",
+                File = "Probe.Api/Services/ProbeService.cs", StartLine = 40, EndLine = 44,
+                Summary = "返回分支：命中与未命中两种",
+                Snippet = "return row is null ? ProbeResult.Missing : ProbeResult.From(row);",
+            },
+            new CodeEvidence
+            {
+                Id = ids[3], Kind = "mapping", OwnerSymbolId = "M:Probe.Api.Controllers.ProbeController.Get",
+                File = "Probe.Api/Mapping/ProbeMapping.cs", StartLine = 8, EndLine = 12,
+                Summary = "响应 data 的实际类型由映射处确定",
+                Snippet = "map.Create<ProbeRequest, ProbeRow>().MapAll();",
+            },
+        ],
+        Coverage = [],
+    };
 
     /// <summary>
     /// 差异确认对话框读取失败态的真实控件交互（第一百五十三轮，控制仓简报 P1-3）。

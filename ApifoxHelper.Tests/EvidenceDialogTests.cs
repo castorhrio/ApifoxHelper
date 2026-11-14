@@ -137,7 +137,9 @@ public class EvidenceDialogTests
     [Fact]
     public void Open_SelectsTheFirstEvidenceThroughTheSingleEntry()
     {
-        var body = MethodSlice(Repo.Source("Desktop", "Native", "EvidenceDialog.cs"), "protected override void OnLoad");
+        // 第三百零九轮：读取收进 LoadAll（那颗「重试」与「打开」调的同一个入口），切体跟着实物走。
+        var source = Repo.Source("Desktop", "Native", "EvidenceDialog.cs");
+        var body = MethodSlice(source, "private void LoadAll");
         // 恰一处，且经 Ui.SelectItem 唯一入口（Selected + Focused + 滚入可见区，片段随选中事件显示）。
         Assert.Single(Regex.Matches(body, @"(?m)^\s*Ui\.SelectItem\(_list\.Items\[0\]\);$"));
         // 排在填充之后：清单还空着时选中第一行就是索引一个不存在的行。
@@ -148,13 +150,18 @@ public class EvidenceDialogTests
         Assert.DoesNotContain(".Selected = true", body, StringComparison.Ordinal);
         Assert.DoesNotContain(".Focused = true", body, StringComparison.Ordinal);
         Assert.DoesNotContain("EnsureVisible", body, StringComparison.Ordinal);
+
+        // 打开那一路只委托这一个入口、自己不碰磁盘：第二条读取路就是「两条路各读一份」那一族缺陷。
+        var onLoad = MethodSlice(source, "protected override void OnLoad");
+        Assert.Single(Regex.Matches(onLoad, @"(?m)^\s*LoadAll\(\);$"));
+        Assert.DoesNotContain("_tasks.Read", onLoad, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Open_DoesNotIndexAnEmptyList()
     {
         // 没有证据的那一支在上面已经返回（没有可索引的第一行），这里不猜。
-        var body = MethodSlice(Repo.Source("Desktop", "Native", "EvidenceDialog.cs"), "protected override void OnLoad");
+        var body = MethodSlice(Repo.Source("Desktop", "Native", "EvidenceDialog.cs"), "private void LoadAll");
         var emptyBranch = body.IndexOf("if (items.Count == 0)", StringComparison.Ordinal);
         var selected = body.IndexOf("Ui.SelectItem(_list.Items[0]);", StringComparison.Ordinal);
         Assert.True(emptyBranch >= 0 && selected > emptyBranch, "空清单分支要排在选中之前。");

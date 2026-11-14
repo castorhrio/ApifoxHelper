@@ -14,7 +14,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// <para>
 /// 本文件只放<b>通用机制</b>（按钮文字、三态门控、状态行拼装、指名入口的指引）与<b>各屏文案</b>
 /// （<see cref="Tasks"/> / <see cref="Reports"/> / <see cref="Journal"/> / <see cref="Decisions"/> /
-/// <see cref="Candidates"/> / <see cref="Supplements"/> / <see cref="ApplyPlan"/>），不依赖 WinForms，
+/// <see cref="Candidates"/> / <see cref="Supplements"/> / <see cref="ApplyPlan"/> / <see cref="Evidence"/>），不依赖 WinForms，
 /// 以共享源码编入测试工程在 Linux 断言；配置页的文案仍在 <see cref="ProfileLoadState"/>，
 /// 它把通用机制委托到这里——「重试」这个字面全仓只有一处。
 /// <b>这份枚举与那份封闭清单是一件事的两头</b>（第三百零三轮补的一句）：
@@ -27,7 +27,8 @@ public static class LoadFailureState
 {
     /// <summary>
     /// 失败态的唯一行动按钮文字：配置页、任务页，以及报告 / 差异确认 / 任务日志 / 注释候选 / 补充说明 /
-    /// 注释缺口 / 检查结果 七处对话框同一颗、同一字面（第三百零五轮补上注释缺口，第三百零八轮补上检查结果）。
+    /// 注释缺口 / 检查结果 / 代码证据 八处对话框同一颗、同一字面（第三百零五轮补上注释缺口，
+    /// 第三百零八轮补上检查结果，第三百零九轮补上代码证据）。
     /// 唯一的例外是注释回写对话框——那一屏不新增这颗按钮，
     /// 失败提示指名它自己那颗「重新生成计划」（形状见 <see cref="RetryHint"/> 与 <see cref="ApplyPlan"/>）。
     /// </summary>
@@ -207,5 +208,29 @@ public static class LoadFailureState
         /// <summary>重试指引 + 仍失败时的那一条出路（在「检查任务」页的「开始扫描」上）。</summary>
         public static string Hint(string entryLabel) =>
             RetryHint(entryLabel) + "仍失败时回「" + PageNames.Tasks + "」页重新扫描。";
+    }
+
+    /// <summary>
+    /// 代码证据对话框（<c>EvidenceDialog</c>）的失败态文案（第三百零九轮）。这一屏此前写的是
+    /// 「请关闭后重新扫描再试」——屏上没有一颗按钮做「再读一次」这件事，那句话把用户支去重开窗口，
+    /// 与报告 / 差异确认（第一百五十二轮）、任务日志（第一百五十七轮）、注释候选 / 补充说明 / 注释回写
+    /// （第三百零三轮）、注释缺口（第三百零五轮）、检查结果（第三百零八轮）修掉的是同一族缺陷。
+    /// <para>
+    /// <b>标题为什么不与 <see cref="SlotsTitle"/> 共用</b>：屏幕上那一格被读作「代码证据」，不是「扫描结果」，
+    /// 共用会把这一屏自己的名字弄丢。<b>说明为什么直接取 <see cref="DirectoryHint"/></b>：证据就落在任务目录里，
+    /// 那句「任务目录可能被占用或权限不足；点「重试」再读一次」正是这一步，不另起一份字面——
+    /// 本文件里那句已经有四处取它（<see cref="Tasks"/> / <see cref="Journal"/> /
+    /// <see cref="Candidates.DraftsHint"/> / <see cref="CheckHint"/>）。
+    /// </para>
+    /// <para>
+    /// <b>为什么只收这一屏</b>：<c>EndpointTraceDialog</c> 读的是同一份 evidence.json、写的是另一种说法
+    /// （「读取追踪明细失败」+ 同一句「请关闭后重新扫描再试」），它仍在欠着的那几屏名单里；
+    /// 接上它的那一轮把两句收成一句，本文件的这一对因此从一屏变两屏。
+    /// </para>
+    /// </summary>
+    public static class Evidence
+    {
+        public const string Title = "读取代码证据失败";
+        public const string Hint = DirectoryHint;
     }
 }

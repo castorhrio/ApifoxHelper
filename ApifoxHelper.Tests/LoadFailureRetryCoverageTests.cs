@@ -30,7 +30,7 @@ namespace ApifoxHelper.Tests;
 /// 解析本身由 <see cref="RetryWrapper_IsResolvedOnlyWhenItDelegatesToOneReadEntry"/> 拿三发注入当场验。
 /// </para>
 /// <para>
-/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheTenScreens"/> 把「发现到哪几屏」
+/// 发现本身也要防退化：<see cref="Discovery_CoversExactlyTheElevenScreens"/> 把「发现到哪几屏」
 /// 钉成封闭清单——发现正则写坏（比如口径文件改名）会让清单变空，那条用例先红，
 /// 不会出现「一条都没发现、于是全部通过」的假绿。
 /// <b>但这一族只看得见已经接入口径文件的屏</b>（第三百零三轮）：一屏从不引用 <c>LoadFailureState</c>，
@@ -80,7 +80,7 @@ public class LoadFailureRetryCoverageTests
     /// （「读取项目列表」「读取分支」那两颗按钮早就这么判）。它改由
     /// <see cref="NamedEntryScreen_RetryIsTheButtonTheHintNames"/> 单独判三件事：提示句指名的那颗按钮确实存在、
     /// 点的是同一个读取入口、失败态确实把它交回可用。<b>它不进封闭清单以外的第三条路</b>——
-    /// <see cref="Discovery_CoversExactlyTheTenScreens"/> 判两组之和必须等于发现到的全部屏。
+    /// <see cref="Discovery_CoversExactlyTheElevenScreens"/> 判两组之和必须等于发现到的全部屏。
     /// </para>
     /// </summary>
     private static readonly string[] NamedEntryScreens = ["ApplyPlanDialog.cs"];
@@ -125,7 +125,7 @@ public class LoadFailureRetryCoverageTests
     // ---------- 发现：范围本身要钉住，否则「一条都没发现」也是绿的 ----------
 
     [Fact]
-    public void Discovery_CoversExactlyTheTenScreens()
+    public void Discovery_CoversExactlyTheElevenScreens()
     {
         // 封闭清单：新增一屏带失败态时，这里会红——提醒把新屏的接线一并补上（而不是悄悄漏掉）。
         // 第一百五十七轮新增第五屏 JournalDialog.cs（任务日志对话框的读取失败态）。
@@ -135,16 +135,18 @@ public class LoadFailureRetryCoverageTests
         // 第三百零八轮补到十屏：CheckResultsDialog（检查结果）读的是与差异确认、补充说明同一份 diff.json，
         // 那两家第三百零三轮起就有那颗按钮，而这一屏写的是第三种说法——同一件事在两屏不许有两种说法，
         // 而其中一种屏上没有入口正是第三百零三轮点名的盲区。
+        // 第三百零九轮补到十一屏：EvidenceDialog（代码证据）读的是 evidence.json，与接口追踪明细那一屏
+        // （EndpointTraceDialog，仍欠着）是同一份产物两种说法，两边那句下一步写的还是同一句话。
         var names = FailureScreens().Select(s => s.Name).ToArray();
         Assert.Equal(
             [
                 "ApplyPlanDialog.cs", "CandidatesDialog.cs", "CheckResultsDialog.cs", "DecisionsDialog.cs",
-                "JournalDialog.cs", "ProjectsPage.cs", "ReportsDialog.cs", "ScanResultsDialog.cs",
-                "SupplementsDialog.cs", "TasksPage.cs",
+                "EvidenceDialog.cs", "JournalDialog.cs", "ProjectsPage.cs", "ReportsDialog.cs",
+                "ScanResultsDialog.cs", "SupplementsDialog.cs", "TasksPage.cs",
             ],
             names);
 
-        // 两个形状必须把这十屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
+        // 两个形状必须把这十一屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
         // 少了这一句，往 NamedEntryScreens 里写一个不存在的文件名会静默少判一屏。
         var partition = ButtonScreens().Select(s => s.Name)
             .Concat(NamedEntryScreens)
@@ -627,6 +629,16 @@ public class LoadFailureRetryCoverageTests
     /// 命中禁词，剩下五条里被谁偷偷改掉却没人删行同样红——两侧都判的读法一字未变。
     /// </para>
     /// <para>
+    /// <b>第三百零九轮收掉第三条</b>：代码证据（<c>EvidenceDialog</c>）与接口追踪明细（<c>EndpointTraceDialog</c>，
+    /// 仍欠着）读的是<b>同一份 evidence.json</b>，两边那句下一步写的还是同一句话、而两屏都没有做那次读取的入口。
+    /// 名单由五条缩到四条。<b>简报那条选屏判据本轮现场读过，仍不成立</b>（第三百零八轮同一处教训）：
+    /// 剩下四屏里，接口追踪明细那颗「查看代码证据」做的是看某一条证据、不是重读这一屏的清单，
+    /// 生成文档核对只剩「关闭」，响应契约那三颗审阅按钮在失败态被提示出口一并禁用、
+    /// 点下去什么都不做，同步预览那颗「重新核对（只读）」在预览页而失败发生在勾选页、做的也不是那一次读取——
+    /// 没有一屏有一颗等价入口，故本轮仍走「新增一颗取自 <c>LoadFailureState.RetryLabel</c> 的按钮 + 读取收进
+    /// <c>LoadAll</c>」那一支（与第三百零三、三百零五、三百零八轮同一形状）。
+    /// </para>
+    /// <para>
     /// <b>理由里点名的那个落点，本轮起要能在源码里找到</b>（第三百零六轮，简报 P1-2）：上面那一句
     /// 「这一屏的下一步在屏外」此前只是一句被读到的散文。第三百零五轮删掉 <c>ScanResultsDialog</c> 那一行之后，
     /// 剩下两条写的还是「同上」——「上」那一行已经不在了，理由指向一个不存在的东西，而名单照旧六条、
@@ -644,8 +656,6 @@ public class LoadFailureRetryCoverageTests
     /// </summary>
     private static readonly (string File, string Reason)[] SendAwayExemptions =
     [
-        ("EvidenceDialog.cs", "代码证据：读 evidence.json 失败时这一屏没有做那次读取的入口，那一步在"
-            + "「检查任务」页的「开始扫描」上（扫描作业不在这一屏发起，对话框只读落盘产物）"),
         ("EndpointTraceDialog.cs", "接口追踪明细：读的是同一份扫描产物，失败时这一屏同样没有入口，那一步在"
             + "「检查任务」页的「开始扫描」上（第一百零八轮接了列排序、第七十六轮接了关键词框，失败态这一族一直漏着）"),
         ("ContractsDialog.cs", "响应契约：读不出来时这一屏只剩「关闭」可点（提示出口把三颗审阅按钮一并禁用），"
