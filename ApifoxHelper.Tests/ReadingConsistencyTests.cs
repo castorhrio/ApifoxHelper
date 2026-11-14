@@ -1146,4 +1146,128 @@ public class ReadingConsistencyTests
             $"demo.sh 的 source_fingerprint() 退出码 {process.ExitCode}：{error.Trim()}");
         Assert.Equal(output, SourceFingerprint.OfRepo());
     }
+
+    // ---------- 第二百八十五轮（简报 P0-2）：散文里那个指纹与文件里那个数 ----------
+
+    /// <summary>
+    /// <c>docs/NOTES.md</c> 顶部「到期日核对」那一段（含它后面续写的各行，到下一个 <c>&gt; **</c> 条目为止）。
+    /// <para>
+    /// <b>为什么不能只取一行</b>：那一段在仓里是「一行 blockquote + 若干续写行」的形状（第二百八十一轮、
+    /// 第二百八十五轮那两段都没有 <c>&gt;</c> 前缀），只取一行的话，续写行里的指纹就落在判据外面——
+    /// 而「散文里那个数不是文件里那个数」正是这一条门要挡的形状。
+    /// </para>
+    /// </summary>
+    private static string ExpiryCheckBlock()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").ReplaceLineEndings("\n").Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimStart().StartsWith("> **到期日核对", StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            "docs/NOTES.md 顶部找不到「> **到期日核对…」那一行：到期日这件事只剩一条脚本，跑过之后结论落在哪里没人说。");
+        var end = start + 1;
+        while (end < lines.Length)
+        {
+            var trimmed = lines[end].Trim();
+            if (trimmed.StartsWith('>') && trimmed.Length > 1) break;
+            end++;
+        }
+
+        return string.Join('\n', lines[start..end]);
+    }
+
+    /// <summary>散文里写指纹的形状：10 位小写十六进制 + 省略号（正文里一律只念前 10 位，全串只在 <c>reading.txt</c> 里）。</summary>
+    private static readonly Regex ProseFingerprint = new(@"(?<![0-9a-f])[0-9a-f]{10}…", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 判据本体：一段散文 + 读数记录里的 <c>source=</c> 进，问题出（<c>null</c> = 对得上）。
+    /// <para>
+    /// <b>只判最后那一处</b>：那一段按时间顺序往后记，最后出现的那一个指纹就是当前值；此前各段里的旧指纹
+    /// 是各自那一跑的读数，本来就该各不相同——把它们也拉平，等于把历史读数改坏（与本文件第一条门同一边界）。
+    /// </para>
+    /// </summary>
+    private static string? ProseFingerprintDrift(string block, string recorded)
+    {
+        var matches = ProseFingerprint.Matches(block);
+        if (matches.Count == 0)
+        {
+            return "「到期日核对」那一段里一个指纹都没有：读数记录里那个 source= 在散文里没有落点，"
+                + "读到这一段的人分不清「当前源码是哪一版」与「上一次跑的是哪一版」。"
+                + "补一句：把 .winecheck/reading.txt 的 source= 前 10 位写进那一段（并写清它是哪一轮那一跑的）。";
+        }
+
+        var last = matches[^1].Value.TrimEnd('…');
+        if (!Regex.IsMatch(recorded, "^[0-9a-f]{40}$"))
+        {
+            return $"{ReadingPath} 的 source=「{recorded}」不是 40 位小写十六进制：它不是源码指纹，"
+                + "这一份只能由 .winecheck/demo.sh 或 demo.ps1 写出（手改就是把出处变成自述）。";
+        }
+
+        var current = recorded[..10];
+        if (!string.Equals(last, current, StringComparison.Ordinal))
+        {
+            return $"「到期日核对」那一段最后出现的指纹是 {last}…，而 {ReadingPath} 的 source= 是 {current}…："
+                + "散文里那个数与文件里那个数不是同一个。要么重跑 bash .winecheck/demo.sh 让脚本自己写回读数记录、"
+                + "再把那一段最后那一处改成它现读的值；要么把散文里那一处改回记录里的值——"
+                + "别让「当前源码是哪一版」在同一个仓里有两个答案。";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 「到期日核对」那一段最后出现的指纹必须逐字等于读数记录的 <c>source=</c>（第二百八十五轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第二百八十四轮改了产品源码、重跑了三档，<c>reading.txt</c> 的 <c>source=</c>
+    /// 由脚本自己重烧成 <c>bb04988266…</c>，而顶部那一段最后写的还是 <c>510a0bdab3…</c>——
+    /// <b>散文没跟着写回</b>。本文件已有的几条门判的是「N 通过 / 0 失败 ×3」与段集合，
+    /// <b>判不到散文里那个 10 位指纹</b>：这正是历史上反复出现的「散文里那个数不是文件里那个数」的形状。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那份报告是不是真跑出来的（<c>reading.txt</c> 与报告原文都可以被手写，门看不出来），
+    /// 不判真机跑没跑（真机 0 台，G-D5 仍是 <c>[ ]</c>），也不判那一段里其余各处的旧指纹——
+    /// 那些是各自那一跑的读数，留在原处才对。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void CurrentSourceFingerprint_MatchesTheReadingRecord()
+    {
+        var record = ReadingRecord();
+        var drift = ProseFingerprintDrift(ExpiryCheckBlock(), record.Source);
+        Assert.True(drift is null, drift);
+    }
+
+    /// <summary>
+    /// 上面那条判法<b>抓不抓得住</b>——四发破坏各喂一遍（第二百八十五轮）。
+    /// <para>
+    /// 只在真仓上判的门，抓不抓得住全靠那天有没有人想到去试；本仓对每一条判据都跑一遍反向，
+    /// 为的就是让「它绿着」不等于「它什么都看不见」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ProseFingerprintDetector_ReportsTheBreaksItMustCatch()
+    {
+        var current = new string('b', 40);
+        var older = new string('a', 40);
+
+        // 前提：最后那一处等于记录时是干净的——下面每一发「变红」才只可能来自注入的破坏。
+        Assert.Null(ProseFingerprintDrift($"…由 `{older[..10]}…` 重烧成 `{current[..10]}…`——这是一版新读数。", current));
+
+        // ① 散文最后那一处是旧指纹（第二百八十四轮那一发的原样）：红，且两处字面都打出来。
+        var stale = ProseFingerprintDrift($"…`source=` 由 `{older[..10]}…` 重烧成 `{current[..10]}…`。", older);
+        Assert.NotNull(stale);
+        Assert.Contains($"{current[..10]}…", stale, StringComparison.Ordinal);
+        Assert.Contains($"{older[..10]}…", stale, StringComparison.Ordinal);
+        Assert.Contains("bash .winecheck/demo.sh", stale, StringComparison.Ordinal);
+
+        // ② 一个指纹都没有：读数记录里的 source= 在散文里没有落点。
+        var none = ProseFingerprintDrift("这一段只说「真机仍 0 台」，一个指纹都没写。", current);
+        Assert.NotNull(none);
+        Assert.Contains("一个指纹都没有", none, StringComparison.Ordinal);
+
+        // ③ 记录里的 source= 不是指纹（截断的 SHA）：形状就不对，不许被当成「对得上」。
+        Assert.NotNull(ProseFingerprintDrift($"…`{current[..10]}…`。", current[..8]));
+
+        // ④ 历史旧指纹排在前面、当前值在最后：不报（历史读数本来就该各不相同）。
+        Assert.Null(ProseFingerprintDrift(
+            $"…`{older[..10]}…` 是那一跑的读数；`{current[..10]}…` 是当前值。", current));
+    }
 }

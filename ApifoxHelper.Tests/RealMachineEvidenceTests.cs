@@ -2442,10 +2442,13 @@ public class RealMachineEvidenceTests
         ("补充说明", "Desktop/Native/SupplementsDialog.cs"),
         ("模型服务", "Desktop/Native/GenerationDialog.cs"),
         ("差异确认", "Desktop/Native/DecisionsDialog.cs"),
+        ("同步预览勾选页", "Desktop/Native/SyncPreviewDialog.cs"),
     ];
 
     /// <summary>
-    /// 动作单第 2 条点名的代表对话框与源文件、与封闭清单三向对账（第二百八十三轮，简报 P0-1）。
+    /// 动作单第 2 条点名的代表对话框与源文件、与封闭清单三向对账（第二百八十三轮，简报 P0-1；
+    /// 第二百八十五轮把第五张「同步预览勾选页」补进清单与那一格——它量的是 Ctrl+A 那只手势在真机上的行为，
+    /// 与其余四张的文字宽 / 可用宽不是同一件事，但同样要真机当天截一张）。
     /// <para>
     /// <b>补的是哪个缺口</b>：第二百七十九轮把「差异确认第 169 行那一句没有仓内读数」登记在
     /// 「G-D4 排版：详细口径」末尾，并如实写明「动作单第 2 条点名的三个代表对话框里没有这一屏」——
