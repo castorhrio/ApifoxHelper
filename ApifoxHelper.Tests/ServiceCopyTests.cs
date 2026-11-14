@@ -20,8 +20,21 @@ public class ServiceCopyTests
 {
     private static readonly Regex Literal = new("\"((?:[^\"\\\\]|\\\\.)*)\"");
 
-    /// <summary>文案常量：<c>public const string NoSlotsMessage = "…";</c>（界面与异常共用同一句）。</summary>
-    private static readonly Regex ConstMessage = new(@"const\s+string\s+\w*Message\s*=\s*");
+    /// <summary>
+    /// 文案常量：<c>public const string NoSlotsMessage = "…";</c>（界面与异常共用同一句）。
+    /// 名字带一个捕获组，是为了让 <see cref="ScannedConstNames"/> 能报出「扫描面这一轮判到了谁」——
+    /// 整段匹配的位置与长度不变，<see cref="UserVisibleLiterals"/> 的取法照旧。
+    /// </summary>
+    private static readonly Regex ConstMessage = new(@"const\s+string\s+(\w*Message)\s*=\s*");
+
+    /// <summary>
+    /// 声明侧的取法：一个文件里<b>任何</b>字符串常量声明（<c>const</c> 与 <c>static readonly</c> 都算，
+    /// 名字怎么写不管）。它与 <see cref="ConstMessage"/> 的差集，就是「写在文案口径文件里、却不在扫描面之内」的那几句。
+    /// </summary>
+    private static readonly Regex DeclaredStringConst = new(@"(?:const|static\s+readonly)\s+string\s+(\w+)\s*=\s*(.*)");
+
+    /// <summary>值转发给另一个常数：<c>= JsonErrorCopy.InvalidJsonMessage;</c>（口径本体在别处，由别处进入扫描面）。</summary>
+    private static readonly Regex ForwardedValue = new(@"^[A-Za-z_][\w.]*\s*;\s*$");
 
     // ── 提取 ─────────────────────────────────────────────────────────
 
@@ -110,6 +123,113 @@ public class ServiceCopyTests
                     + "改成单行，或先扩展 ServiceCopyTests 的提取器。");
             }
         }
+    }
+
+    /// <summary>扫描面在这个文件里实际判到的文案常量名（用的就是 <see cref="ConstMessage"/> 那一把，不另写一份取法）。</summary>
+    private static List<string> ScannedConstNames(ServiceSource source) =>
+        source.Text.Split('\n')
+            .Select(line => ConstMessage.Match(line))
+            .Where(m => m.Success)
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+
+    /// <summary>
+    /// <c>Api/ErrorCopy.cs</c> 声明的文案常量 ↔ 本类扫描面实际判到的常量，两侧对账。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第三百零一轮把路由上就地拼接的六句收进 <c>ErrorCopy</c>，它们落进扫描面
+    /// <b>靠的是一条命名约定</b>（常量名以 <c>Message</c> 收尾），而这一层边界当时没有任何东西判它。
+    /// 下一轮有人在这里加一条 <c>ProjectsReadFailedPrefix</c>，或把某条改写成 <c>static readonly</c>，
+    /// 扫描面漏掉而本类其余各条照旧全绿——中文标点、空话禁词、中英文空隙那三条口径就在<b>错误路径上
+    /// 静默失效</b>，而那正是第三百零一轮点名要收的「就地拼接的前缀两头都不占」的同一个形状：
+    /// 收口靠约定，约定本身没人守。
+    /// </para>
+    /// <para>
+    /// <b>判三件事</b>：① 声明侧每一条都要被扫描面判到（改名去掉 <c>Message</c>、写成 <c>static readonly</c>
+    /// 都当场红——声明侧 <b>不看名字怎么写</b>，这是它与 <c>ErrorCopyTests.RouteCopy_ConstantsFallIntoTheTypographyScan</c>
+    /// 的分工：那一条拿六个写死的名字判「收尾是不是 Message」，这一条判「这个文件里还有谁没被扫到」）；
+    /// ② 扫描面在这个文件里判到的每一条都确有其名（把 <see cref="ConstMessage"/> 改坏到凭空判出一个名字，同样红）；
+    /// ③ 每条声明要么在同一行带上它的字面量，要么把值显式转发给另一个常数——跨行书写时 ① 抓不住
+    /// （名字照样以 <c>Message</c> 收尾），可扫描面按行取字，会读到名字、漏掉那一句：那与
+    /// <see cref="UserExceptionCalls_AreSingleLine"/> 挡的是同一件事，只是换了个出口。
+    /// </para>
+    /// <para>
+    /// <b>按那五步判这一条属不属于「假门防护」那一族</b>（五步写在 <c>docs/NOTES.md</c> 顶部「假门防护这一族：
+    /// 收尾登记」那一行末尾——第二百七十轮定下「判完把结论写进 commit message」，第二百八十二轮把它收成五步）：
+    /// ① 断言里出现的口径名是
+    /// <c>Api/ErrorCopy.cs</c> 里的声明与本类 <see cref="ConstMessage"/> 的取法；② 前者不在被它判的这个对象里
+    /// （产品文件的声明由产品文件说了算）——答「不是」；③ 按第 ③ 步当<b>对账门</b>处理，不属那一族，
+    /// 照常随实物一起长；④ 实测：把这一条整条 <c>Skip</c> 掉再跑全量，<b>3135 通过 / 1 跳过 / 0 失败</b>，
+    /// 本族其余各条照旧全绿（它不参与任何恒等式）。
+    /// 结论同时写进本轮 commit message。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：只判 <c>Api/ErrorCopy.cs</c> 这一个文件。服务层那十个目录里加起来另有 52 处不以
+    /// <c>Message</c> 收尾的 <c>const string</c> 声明（CSP 头、JSON 字段名、HTML 样式），它们大多不是界面要念出口
+    /// 的那一句；把那些一起拉进对账得先给「什么算文案」立一条口径，那是另一件事，不在这里顺手做。
+    /// <b>也不判转发那一句的本体合不合规</b>——转发目标自己也在扫描面之内（<c>Infrastructure/JsonErrorCopy.cs</c>），
+    /// 由它自己那一行受同样的三条口径。<b>两侧都是按行取文本</b>，与既有扫描面一样看不见注释：注释里写一句
+    /// <c>const string XxxMessage = "…";</c>，两侧会同时看到它，于是对得上。这不是本门新引入的盲区，
+    /// 是那条扫描面从一开始的取法（注释里重复的那句字面量另有 <c>ErrorCopyTests.RouteCopyDetector_ReportsTheBreaksItMustCatch</c> 判）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ErrorCopy_DeclaredConsts_AreTheOnesTheScanSurfaceReads()
+    {
+        var source = Repo.ServiceSources().SingleOrDefault(s => s.Relative == "Api/ErrorCopy.cs");
+        Assert.NotNull(source);
+
+        var problems = ErrorCopyScanDrift(source!);
+        Assert.True(problems.Count == 0,
+            "Api/ErrorCopy.cs 的文案常量与 ServiceCopyTests 的扫描面对不上：\n  "
+            + string.Join("\n  ", problems)
+            + "\n这个文件是错误响应文案的单一落点，这里的每一句都会原样进原生界面的状态行与内联错误"
+            + "（见 Api/ErrorCopy.cs 抬头那段「存在理由」）。");
+    }
+
+    /// <summary>上面那条判据的取法本体（写成纯函数，是为了能拿注入过的源码当场验它抓不抓得住）。</summary>
+    private static List<string> ErrorCopyScanDrift(ServiceSource source)
+    {
+        var problems = new List<string>();
+        var scanned = ScannedConstNames(source);
+        var lines = source.Text.Split('\n');
+
+        var declared = new List<string>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var match = DeclaredStringConst.Match(lines[i]);
+            if (!match.Success) continue;
+
+            var name = match.Groups[1].Value;
+            declared.Add(name);
+
+            if (!scanned.Contains(name, StringComparer.Ordinal))
+            {
+                problems.Add($"{source.Relative}:{i + 1}:「{name}」不在扫描面之内（{ConstMessage} 判不到它）。"
+                    + "这句会原样进界面状态行，却不受中文标点、空话禁词、中英文空隙那三条口径约束"
+                    + "——常量名以 Message 收尾才是它被扫到的条件，改名或改写成 static readonly 都会让它静默出局。");
+            }
+
+            // 同一行既没有字面量、也不是显式转发：那一句写在下一行，按行取的扫描面读不到它。
+            var tail = match.Groups[2].Value.Trim();
+            if (!tail.Contains('"') && !ForwardedValue.IsMatch(tail))
+            {
+                problems.Add($"{source.Relative}:{i + 1}:「{name}」的声明在同一行既读不到字面量、也不是转发给另一个常数。"
+                    + "扫描面按行取文案，跨行书写会让它判到名字、漏掉那一句（同 UserExceptionCalls_AreSingleLine 那一课）。");
+            }
+        }
+
+        // 地板：两侧同时取空是一种「绿得没有内容」——先问取法还在不在，再问两边走不走得通。
+        Assert.True(declared.Count >= 10,
+            $"{source.Relative} 只取到 {declared.Count} 条文案常量声明（地板 10）。"
+            + "取法退化会让两侧都是空集合，而空集合对空集合是绿的。");
+
+        foreach (var name in scanned.Where(n => !declared.Contains(n, StringComparer.Ordinal)))
+        {
+            problems.Add($"{source.Relative}: 扫描面判到「{name}」，这个文件里却没有它的声明。"
+                + "扫描面多判出来的东西不进任何口径断言，只会把「这一条被扫到了」变成一句自证的话。");
+        }
+
+        return problems;
     }
 
     /// <summary><c>Describe()</c> 是失败描述的唯一出口，提取不到就等于这条检查空转。</summary>
