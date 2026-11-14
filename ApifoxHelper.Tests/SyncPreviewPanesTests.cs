@@ -235,18 +235,46 @@ public class SyncPreviewPanesTests
         Assert.DoesNotContain("Math.Max(1, list.ClientSize.Height / rowHeight)", segment, StringComparison.Ordinal);
     }
 
-    /// <summary>取一个方法体：从签名那一行起，到第一个「四空格缩进的收尾大括号」为止（冒烟器里方法都是这个缩进）。</summary>
+    /// <summary>
+    /// 取一个方法体：从签名那一行起，按 <c>{}</c> 配平到方法体收尾（第二百九十三轮，简报 P1-1）。
+    /// <para>
+    /// <b>为什么不再按缩进切</b>：旧写法是「到第一个四空格缩进的 <c>}</c> 为止」——冒烟器里方法体都缩进四格，
+    /// 于是「四空格缩进的 <c>}</c>」被当成方法收尾。可方法体里只要有<b>嵌套的 lambda / 局部函数</b>，
+    /// 它们自己的收尾大括号也缩进四格（<c>RunAction(... () => { ... });</c> 那一层就是），切片会提前收口，
+    /// 后面那半段判不到——而这一族门判的正是「那一段里有没有某句话」，切短了就是<b>静默放宽</b>：
+    /// 断言照样绿，管住的范围却少了一半。本文件近三轮（第二百九十、二百九十一、第二百九十二轮）反复被触碰，
+    /// 正是这种脆弱最容易变成假绿的地方。
+    /// </para>
+    /// <para>
+    /// <b>取法与全仓其它门同一套</b>（<c>BuildCommandCopyTests.MethodBody</c>、<c>ApplyPlanConfirmTests</c> 等）：
+    /// 从签名之后第一个 <c>{</c> 起数深度，深度回到 0 的那一个 <c>}</c> 就是方法收尾。
+    /// <b>另加一条形状守卫</b>：收尾那一行必须恰好是四空格缩进的 <c>}</c>——冒烟器的方法都写在类体里，
+    /// 这是它的排版事实。守卫挡的是「字符串字面量里出现不配平的 <c>}</c>」那种漂移：配平会提前收口，
+    /// 收口那一行不是四空格缩进，于是当场红，而不是悄悄切短。
+    /// </para>
+    /// </summary>
     private static string MethodSlice(string source, string signature)
     {
         var start = source.IndexOf(signature, StringComparison.Ordinal);
         Assert.True(start >= 0, $"{signature} 在冒烟器里找不到了——量测段改名或搬家，这一族门就再也管不住它。");
-        var body = new List<string>();
-        foreach (var line in source[start..].Split('\n'))
+        var open = source.IndexOf('{', start);
+        Assert.True(open > start, $"{signature} 之后找不到方法体的开括号——签名被改成了没有方法体的形状。");
+        var depth = 0;
+        for (var i = open; i < source.Length; i++)
         {
-            body.Add(line);
-            if (line.TrimEnd() == "    }") break;
+            if (source[i] == '{') depth++;
+            else if (source[i] == '}' && --depth == 0)
+            {
+                var slice = source[start..(i + 1)];
+                var lastLine = slice[(slice.LastIndexOf('\n') + 1)..];
+                Assert.True(lastLine == "    }",
+                    $"{signature} 按大括号配平取到的方法体收尾不是四空格缩进的「}}」（实际是「{lastLine}」）："
+                    + "方法体里出现了不配平的大括号（多半在字符串字面量里），切片会提前收口、这一族门会静默放宽。");
+                return slice;
+            }
         }
-        return string.Join('\n', body);
+        Assert.Fail($"{signature} 的方法体没有闭合——冒烟器里这一段的括号不配平。");
+        return "";
     }
 
     /// <summary>
