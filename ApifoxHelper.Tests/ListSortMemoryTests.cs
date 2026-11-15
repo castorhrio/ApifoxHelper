@@ -144,13 +144,67 @@ public class ListSortMemoryTests : IDisposable
     public void Save_ColumnOutOfRange_WritesNothingAndKeepsEarlierEntry()
     {
         // 列号落在本页列头之外（界面减列而调用面未跟上）：宁可忘记，也不写一个猜出来的列。
+        // 越界是「调用面出错」，与第三态的「用户真的撤掉了排序」分开判——后者要抹掉记忆（见下一条）。
         var memory = Memory();
         memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, 99, descending: false);
         Assert.False(File.Exists(_path), "越界列号不应落盘。");
         memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, 6, descending: true);
         memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, 99, descending: false);
-        memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, ListSort.None, descending: false);
+        memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, -2, descending: false);
         Assert.Equal((6, true), memory.Read(ListSortMemoryKeys.Tasks, TaskTitles));
+    }
+
+    // ---------- 第三态：回到未排序时连记忆一起抹掉 ----------
+
+    /// <summary>
+    /// 第三态（第三百三十轮）：<c>Save(..., ListSort.None, ...)</c> 抹掉本页那一格。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：用户第三次点同一列撤掉排序之后，界面上的标记撤了、行序回到数据源顺序，
+    /// 但记忆里那一格还留着——下次启动那一列会自己回来，等于用户撤不掉它。这一条判「抹掉了」，
+    /// 并且<b>另一页原样保留</b>（两页各排各的列这条口径不能被这一支破掉）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Save_Unsorted_ForgetsThisPageAndKeepsTheOther()
+    {
+        var memory = Memory();
+        memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, 6, descending: true);
+        memory.Save(ListSortMemoryKeys.Profiles, ProfileTitles, 1, descending: false);
+
+        memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, ListSort.None, descending: false);
+
+        // 本页：读回来是未排序（另一份实例读同一个文件，证明抹的是盘上那一格，不是内存字段）。
+        Assert.Equal((ListSort.None, false), memory.Read(ListSortMemoryKeys.Tasks, TaskTitles));
+        Assert.Equal((ListSort.None, false), Memory().Read(ListSortMemoryKeys.Tasks, TaskTitles));
+        // 另一页：原样保留。
+        Assert.Equal((1, false), Memory().Read(ListSortMemoryKeys.Profiles, ProfileTitles));
+    }
+
+    /// <summary>第三态抹掉之后，落盘的那一格是空的（不是留着旧标题、也不是把整份文件删掉）。</summary>
+    [Fact]
+    public void Save_Unsorted_WritesAnEmptySlotNotTheOldTitle()
+    {
+        var memory = Memory();
+        memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, 6, descending: true);
+        memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, ListSort.None, descending: false);
+
+        var json = File.ReadAllText(_path);
+        Assert.DoesNotContain("更新时间", json, StringComparison.Ordinal);
+        // 文件还在（另一页将来要写进来时不必重建），只是本页那一格空了。
+        Assert.True(File.Exists(_path), "抹掉本页那一格不该把整份记忆文件删掉。");
+    }
+
+    /// <summary>第三态抹掉之后重新点同一列：仍从升序起手（方向位没有从旧记忆里漏回来）。</summary>
+    [Fact]
+    public void Save_Unsorted_ThenSortAgain_StartsAscending()
+    {
+        var memory = Memory();
+        memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, 6, descending: true);
+        memory.Save(ListSortMemoryKeys.Tasks, TaskTitles, ListSort.None, descending: false);
+        var (column, descending) = memory.Read(ListSortMemoryKeys.Tasks, TaskTitles);
+        Assert.Equal((ListSort.None, false), (column, descending));
+        // 界面下一次点击走 ListSort.Toggle：从「未排序」起手，方向必须是升序。
+        Assert.Equal((6, false), ListSort.Toggle(column, descending, 6));
     }
 
     [Fact]

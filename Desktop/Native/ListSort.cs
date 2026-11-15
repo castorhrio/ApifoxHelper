@@ -2,7 +2,8 @@ namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
 /// 列表列排序的单一口径（DESIGN.md §6「列表列排序」）：点击列头按该列排序，再点同一列反向，
-/// 换一列从升序开始；表头文字带方向标记（▲ 升序 / ▼ 降序），未排序的列保持原标题。
+/// 第三次点同一列回到数据源自身顺序（三态：升序 → 降序 → 未排序），换一列从升序开始；
+/// 表头文字带方向标记（▲ 升序 / ▼ 降序），未排序的列保持原标题。
 /// 未排序（<see cref="None"/>）时保持数据源自身顺序——任务列表即任务创建时间倒序，与冻结页面一致。
 /// 排序只改呈现顺序：不写任务数据、不改选中（选中按任务 Id 恢复），也不改列宽（列宽仍由 ListColumns 口径算）。
 /// 文字列按「自然序」比较，与资源管理器的名称列同序：连续数字段按数值排（「2」在「10」前，不再是「10」在「2」前），
@@ -18,9 +19,23 @@ public static class ListSort
     public const string AscendingMark = "▲";
     public const string DescendingMark = "▼";
 
-    /// <summary>点击列头后的排序状态：同一列反向，换一列从升序开始。</summary>
+    /// <summary>
+    /// 点击列头后的排序状态，<b>三态</b>：同一列第一次点升序、第二次点降序、<b>第三次点回到未排序</b>
+    /// （<see cref="None"/>，即数据源自身顺序）；换一列从升序开始。
+    /// <para>
+    /// <b>为什么要有第三态</b>：只有两态时，用户点过列头之后<b>没有任何办法回到数据源顺序</b>——
+    /// 任务列表的「创建时间倒序」是这一页的默认读法，点错一列就只能关掉重开（而排序记忆还会把它带回来）。
+    /// 第三次点同一列回到未排序，与资源管理器「点第三次撤掉排序」同一惯例。
+    /// </para>
+    /// <para>
+    /// <b>方向位一并归零</b>：回到未排序时 <c>Descending</c> 必须是 <c>false</c>——留着上一次的
+    /// <c>true</c>，下一次点同一列就会从降序起手，而「第一次点从升序开始」这条口径就破了。
+    /// </para>
+    /// </summary>
     public static (int Column, bool Descending) Toggle(int column, bool descending, int clicked) =>
-        clicked == column ? (column, !descending) : (clicked, false);
+        clicked != column ? (clicked, false)
+        : descending ? (None, false)
+        : (column, true);
 
     /// <summary>
     /// 表头文字：排序列追加方向标记，其余列保持原标题。标题本身不含标记，

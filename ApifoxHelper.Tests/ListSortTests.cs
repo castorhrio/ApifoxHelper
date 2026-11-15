@@ -29,7 +29,7 @@ public class ListSortTests
     private static List<Row> Rows(params (string Text, int Count, int Day)[] values) =>
         values.Select(v => new Row(v.Text, v.Count, T0.AddDays(v.Day))).ToList();
 
-    // ---------- 状态口径：同一列反向、换一列从升序开始 ----------
+    // ---------- 状态口径：同一列反向、第三次回到未排序、换一列从升序开始 ----------
 
     [Fact]
     public void Toggle_FirstClickOnAnyColumnSortsAscending()
@@ -45,7 +45,52 @@ public class ListSortTests
     {
         var (column, descending) = ListSort.Toggle(ListSort.None, false, 2);
         Assert.Equal((2, true), ListSort.Toggle(column, descending, 2));
-        Assert.Equal((2, false), ListSort.Toggle(2, true, 2));
+    }
+
+    /// <summary>
+    /// 第三态（第三百三十轮）：同一列第三次点回到未排序，方向位一并归零。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：只有两态时，用户点过列头之后<b>没有任何办法回到数据源自身顺序</b>——
+    /// 任务列表的「创建时间倒序」是这一页的默认读法，点错一列只能关掉重开（而排序记忆还会把它带回来）。
+    /// 这一条判的是「第三次点真的回到 <see cref="ListSort.None"/>」，并且<b>方向位是 false</b>：
+    /// 留着上一次的 true，下一次点同一列就从降序起手，「第一次点从升序开始」那条口径当场破。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Toggle_ThirdClickOnSameColumnReturnsToUnsorted()
+    {
+        var (column, descending) = ListSort.Toggle(ListSort.None, false, 2);
+        (column, descending) = ListSort.Toggle(column, descending, 2);
+        Assert.Equal((2, true), (column, descending));
+        // 第三次：回到未排序，方向位归零。
+        Assert.Equal((ListSort.None, false), ListSort.Toggle(column, descending, 2));
+        // 回到未排序之后再点同一列，仍从升序起手（不是从降序接着走）。
+        Assert.Equal((2, false), ListSort.Toggle(ListSort.None, false, 2));
+    }
+
+    /// <summary>
+    /// 第三态之后「屏幕上那一屏」：行序回到数据源自身顺序、表头一个方向标记都不带。
+    /// <para>
+    /// 期望值写成字面量（不调 <see cref="ListSort.Header"/> 现算）：两侧都调同一个函数等于判据在判自己。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ThirdClick_RendersDataSourceOrderAndNoHeaderMark()
+    {
+        var rows = Rows(("报告2", 2, 0), ("报告10", 10, 1), ("报告1", 1, 2));
+        var (column, descending) = ListSort.Toggle(ListSort.None, false, 0);
+        (column, descending) = ListSort.Toggle(column, descending, 0);
+        (column, descending) = ListSort.Toggle(column, descending, 0);
+
+        Assert.Equal(ListSort.None, column);
+        // 行序 = 数据源自身顺序（不是按名称排的那一版）。
+        Assert.Equal(
+            new[] { "报告2", "报告10", "报告1" },
+            ListSort.Order(rows, column, descending, Key).Select(row => row.Text).ToArray());
+        // 表头：一个标记都不带。
+        Assert.Equal(
+            new[] { "名称", "数量", "时间" },
+            new[] { ListSort.Header("名称", 0, column, descending), ListSort.Header("数量", 1, column, descending), ListSort.Header("时间", 2, column, descending) });
     }
 
     [Fact]

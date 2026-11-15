@@ -16,6 +16,8 @@ public static class ListSortMemoryKeys
 /// 与第五十三轮「声明的列落在格数之外时宁可复制不到」同一取舍。
 /// 无记录、读取失败、内容损坏、页键不认识、标题不在本页列头里，一律回退未排序
 /// （任务=创建时间倒序、配置=名称升序，即第四十七轮的原有行为）；保存失败不影响排序。
+/// <b>第三态（未排序）要连记忆一起清掉</b>：用户第三次点同一列撤掉排序之后，本页那一格必须被抹掉——
+/// 只把界面上的标记撤掉而记忆还留着，下次启动那一列会自己回来，等于用户撤不掉它。
 /// 不记筛选关键词（筛到零行的下一步是空态的「清空筛选」，把关键词带到下次启动会把行藏起来）、
 /// 不记选中行、不记列宽列序，也不写任务与配置数据。
 /// 不依赖 WinForms，以共享源码编入测试工程在 Linux 断言。
@@ -45,10 +47,20 @@ public sealed class ListSortMemory(string path)
     /// <summary>
     /// 记录本页本次排序的列（按标题）与方向；页键不认识、列号落在本页列头之外、标题为空都不写，
     /// 另一页的记忆原样保留（两页各排各的列）。保存失败不影响本次排序。
+    /// <para>
+    /// <b><paramref name="column"/> 为 <see cref="ListSort.None"/> 时是「忘掉本页」</b>（第三态）：
+    /// 用户第三次点同一列撤掉排序，本页那一格被抹掉，另一页原样保留。这一支与「列号越界不写」
+    /// 分开判——越界是调用面出错（宁可忘记也不写一个猜出来的列），未排序是用户真的撤掉了排序。
+    /// </para>
     /// </summary>
     public void Save(string page, IReadOnlyList<string> titles, int column, bool descending)
     {
         if (page is not (ListSortMemoryKeys.Tasks or ListSortMemoryKeys.Profiles)) return;
+        if (column == ListSort.None)
+        {
+            Forget(page);
+            return;
+        }
         if (column < 0 || column >= titles.Count) return;
         var title = titles[column];
         if (title.Length == 0) return;
@@ -64,6 +76,26 @@ public sealed class ListSortMemory(string path)
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // 排序记忆只是便利设置，保存失败不影响本次排序。
+        }
+    }
+
+    /// <summary>
+    /// 抹掉本页那一格（第三态）：另一页的记忆原样保留，两页各排各的列这条口径不变。
+    /// 写失败与 <see cref="Save"/> 同一处理——记忆只是便利设置，抹不掉不影响本次呈现。
+    /// </summary>
+    private void Forget(string page)
+    {
+        var saved = ReadSaved();
+        var next = page == ListSortMemoryKeys.Tasks
+            ? new Saved(null, saved?.Profiles)
+            : new Saved(saved?.Tasks, null);
+        try
+        {
+            FileStore.WriteJson(path, next);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 抹记忆只是便利设置，写不进去不影响本次呈现。
         }
     }
 

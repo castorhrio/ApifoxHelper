@@ -465,8 +465,10 @@ internal sealed class ProjectsPage : UserControl, INativePage
     }
 
     /// <summary>
-    /// 点击列头排序（DESIGN.md §6「列表列排序」）：同一列再点反向，换一列从升序开始；
-    /// 排序状态留在本页并按列标题记下（<see cref="_sortMemory"/>），刷新、切页回来与保存后的
+    /// 点击列头排序（DESIGN.md §6「列表列排序」）：同一列再点反向，第三次点同一列回到数据源自身顺序
+    /// （三态：升序 → 降序 → 未排序），换一列从升序开始；
+    /// 排序状态留在本页并按列标题记下（<see cref="_sortMemory"/>；回到未排序时那一格一并抹掉，
+    /// 否则用户撤掉的排序下次启动会自己回来），刷新、切页回来与保存后的
     /// 重建都按同一列同一方向呈现，下次启动回来仍是这一列。
     /// 只改呈现顺序：配置数据一行未动，选中按配置 Id 恢复（<see cref="RestoreSelection"/>）。
     /// </summary>

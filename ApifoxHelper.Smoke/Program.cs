@@ -13668,6 +13668,113 @@ internal static class Program
 
                 _lines.Add($"     重开（同一份记忆）：表头「{list.Columns[profileColumn].Text}」，行序 {string.Join(" → ", after)}，一次都没点");
             });
+
+            // 第九段（第三百三十轮）：第三次点同一列回到数据源自身顺序——表头标记撤掉、排序记忆一并抹掉，
+            // 再重开一次也不会自己回来。这一段量的是「用户撤得掉排序」这件事：只有两态时它做不到。
+            RunAction("列头排序：第三次点同一列回到数据源自身顺序——表头标记撤掉、list-sort.json 里那一格被抹掉，再重开一次仍是数据源顺序（撤掉的排序不会自己回来）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有打开任务列表。");
+                var list = TaskList(page);
+
+                // 从「配置 升序」起手，改点「任务」列：第一次升序、第二次降序、第三次回到未排序。
+                // 用「任务」列而不是「配置」列，是因为按配置名排出来的行序与数据源顺序恰好相同——
+                // 那样「回到数据源顺序」与「还按配置排着」量不出区别。
+                var before = SortSignature(list);
+                ClickColumnHeader(host!, list, nameColumn, () => SortSignature(list) != before);
+                if (list.Columns[nameColumn].Text != "任务 " + ListSort.AscendingMark)
+                {
+                    throw new InvalidOperationException(
+                        $"点了「任务」列头之后表头是「{list.Columns[nameColumn].Text}」，期望「任务 {ListSort.AscendingMark}」："
+                        + "这一段要从升序起手，起点不对就量不到第三次点击。");
+                }
+
+                before = SortSignature(list);
+                ClickColumnHeader(host!, list, nameColumn, () => SortSignature(list) != before);
+                if (list.Columns[nameColumn].Text != "任务 " + ListSort.DescendingMark)
+                {
+                    throw new InvalidOperationException(
+                        $"第二次点「任务」列头之后表头是「{list.Columns[nameColumn].Text}」，期望「任务 {ListSort.DescendingMark}」："
+                        + "第二次点击要反向，否则第三次点击的起点不对。");
+                }
+
+                // 第三次：回到未排序。
+                before = SortSignature(list);
+                ClickColumnHeader(host!, list, nameColumn, () => SortSignature(list) != before);
+
+                var after = list.Items.Cast<ListViewItem>().Select(item => item.Text).ToList();
+                if (!after.SequenceEqual(sourceOrder, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"第三次点「任务」列头之后清单是「{string.Join("、", after)}」，数据源顺序是「{string.Join("、", sourceOrder)}」："
+                        + "第三次点同一列要回到数据源自身顺序（ListSort.Toggle 的第三态），不是接着反向。");
+                }
+
+                var marked = list.Columns.Cast<ColumnHeader>()
+                    .Where(column => column.Text.Contains(ListSort.AscendingMark, StringComparison.Ordinal)
+                        || column.Text.Contains(ListSort.DescendingMark, StringComparison.Ordinal))
+                    .ToList();
+                if (marked.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"第三次点之后还有 {marked.Count} 个表头带方向标记（{string.Join("、", marked.Select(column => column.Text))}）："
+                        + "回到未排序时标记要全部撤掉，否则用户看不出现在是「没排」。");
+                }
+
+                // 记忆一并抹掉：盘上那一格不能还留着「任务」或「配置」。
+                var memoryPath = Path.Combine(sortRoot, "ui", "list-sort.json");
+                if (File.Exists(memoryPath))
+                {
+                    var json = File.ReadAllText(memoryPath);
+                    if (json.Contains("\"任务\"", StringComparison.Ordinal) || json.Contains("\"配置\"", StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            $"第三次点之后排序记忆里还留着列标题（现读：{json}）：回到未排序时本页那一格要一并抹掉，"
+                            + "否则用户撤掉的排序下次启动会自己回来。");
+                    }
+                }
+
+                var restored = new ListSortMemory(memoryPath).Read(ListSortMemoryKeys.Tasks, originalTitles);
+                if (restored != (ListSort.None, false))
+                {
+                    throw new InvalidOperationException(
+                        $"第三次点之后从 {memoryPath} 读回来的是第 {restored.Column} 列、方向 {(restored.Descending ? "降序" : "升序")}，"
+                        + "期望未排序：记忆没被抹掉，下次启动那一列会自己回来。");
+                }
+
+                // 再重开一次（模拟下次启动）：仍是数据源顺序、表头一个标记都不带。
+                page.Dispose();
+                host!.Dispose();
+                host = new Form { Width = 1400, Height = 800, Text = "任务列表列头排序冒烟（撤掉排序后重开）" };
+                page = NewPage();
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                page.RefreshData();
+                Application.DoEvents();
+
+                var reopened = TaskList(page);
+                var shown = reopened.Items.Cast<ListViewItem>().Select(item => item.Text).ToList();
+                if (!shown.SequenceEqual(sourceOrder, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"撤掉排序之后重开，清单是「{string.Join("、", shown)}」，数据源顺序是「{string.Join("、", sourceOrder)}」："
+                        + "用户撤掉的排序下次启动自己回来了。");
+                }
+
+                var reopenedMarked = reopened.Columns.Cast<ColumnHeader>()
+                    .Where(column => column.Text.Contains(ListSort.AscendingMark, StringComparison.Ordinal)
+                        || column.Text.Contains(ListSort.DescendingMark, StringComparison.Ordinal))
+                    .ToList();
+                if (reopenedMarked.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"撤掉排序之后重开，还有 {reopenedMarked.Count} 个表头带方向标记（{string.Join("、", reopenedMarked.Select(column => column.Text))}）："
+                        + "记忆没抹干净。");
+                }
+
+                _lines.Add($"     第三次点「任务」列头：行序回到 {string.Join(" → ", after)}（数据源顺序），表头无标记，记忆已抹；重开仍是 {string.Join(" → ", shown)}");
+            });
         }
         finally
         {
