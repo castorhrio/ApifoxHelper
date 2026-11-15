@@ -121,7 +121,11 @@ public class DemoWorkspaceTests
     /// <para>
     /// 这一处判两头：① 源码那一侧的注释原文由扫描器读出来（<c>ExistingText</c>）；
     /// ② 远端快照那一侧的 <c>description</c> 由本测试从 JSON 里读出来。两边都真的读，不是抄一份常量。
-    /// 演示里「1 处说明冲突」就是这一处。
+    /// </para>
+    /// <para>
+    /// <b>它钉的是样本，不是演示</b>：这一条只保证「那两句话确实不一致」。产品<b>在离线检查里比不出它</b>——
+    /// 摆开两类说明做比对的那一段（<c>Sync/CheckService.cs</c> 的 <c>CheckModels</c>）整段只在非离线任务里执行，
+    /// 而 <c>docs/DEMO.md</c> 第 6 站按这一条如实写着「缺口 ② 离线比不出来」（第三百四十三轮，简报 P0-2）。
     /// </para>
     /// </summary>
     [Fact]
@@ -272,7 +276,17 @@ public class DemoWorkspaceTests
         }
     }
 
-    /// <summary>剧本正文里点到的归档目录（去重、顺序稳定）：<c>docs/evidence/&lt;子目录&gt;/</c>。</summary>
+    /// <summary>
+    /// 剧本正文里点到的归档目录（去重、顺序稳定）：<c>docs/evidence/&lt;子目录&gt;/</c>。
+    /// <para>
+    /// <b>这一条假定的边界（第三百四十三轮，简报 P1-1；只登记，不加门）</b>：它假定<b>路径不含空格与全角括号</b>——
+    /// 字符类 <c>[^/\s`）)]</c> 把空白与全角括号一律当成路径的结束。将来若真出现这种目录名，
+    /// 这里会<b>漏判</b>（那句归档承诺读不出来，门于是对着一个不存在的承诺判绿），要改的就是这一个字符类，
+    /// 改完把 <see cref="ArchiveClaimDetector_ReportsTheBreaksItMustCatch"/> 的注入面补上那一发。
+    /// 与「假门防护」那一族同一分寸（第二百五十六轮收尾登记；同族先例是第三百三十三轮 <c>ExportPathProblem</c> 上那一句依赖登记）：
+    /// 登记的是假定，不再为它补一条形状门。
+    /// </para>
+    /// </summary>
     private static List<string> ArchiveClaims(string doc) => Regex
         .Matches(doc, @"docs/evidence/(?<dir>[^/\s`）)]+)/")
         .Select(m => $"docs/evidence/{m.Groups["dir"].Value}/")

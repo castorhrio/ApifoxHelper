@@ -50,6 +50,13 @@ public class DocsSpacingTests
     /// <summary>
     /// 当年那张登记表的形状。拆成三段拼出来：<b>判据不许与它判的东西同名</b>——判据里若原样写着那一串，
     /// 「把表加回来即红」这条门自己就是第一次触发它的那一处（第二百三十四轮实测：写成一个字面量时它当场判红自己）。
+    /// <para>
+    /// <b>这是一处自指规避，不是一处风格选择（第三百四十三轮，简报 P1-2；只登记，不加门）</b>：
+    /// <see cref="ScannedDocs_AreTheTwoExternalOnes_AndNoLegacyTableCameBack"/> 拿这个属性去判<b>本文件自己的源码文本</b>，
+    /// 所以它的绿依赖「拼接保持在这一串之外」这一件事。将来谁把这三段合回一行、改成插值字符串、或提成一个常量字面量，
+    /// 那条反向门就会<b>悄悄失效</b>——它读到的一直是拼接结果，看不出源码里已经写出了那一串。
+    /// 重构这一段时必须同步来看这一条。与「假门防护」那一族同一分寸（第二百五十六轮收尾登记）：登记的是假定，不为它补门。
+    /// </para>
     /// </summary>
     private static string LegacyTableShape => "(" + "string File, string Snippet, int Count)" + "[]";
 
