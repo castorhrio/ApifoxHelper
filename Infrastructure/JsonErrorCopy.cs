@@ -59,13 +59,31 @@ public static class JsonErrorCopy
     /// 两句话并存正是这一轮要收掉的东西。
     /// </para>
     /// </summary>
-    public static string InvalidJson(JsonException ex)
-    {
-        if (ex.LineNumber is not { } line || ex.BytePositionInLine is not { } position)
-        {
-            return InvalidJsonMessage;
-        }
+    public static string InvalidJson(JsonException ex) =>
+        PositionClause(ex) is { } clause ? "JSON 格式无效" + clause : InvalidJsonMessage;
 
-        return $"JSON 格式无效（第 {line + 1} 行，第 {position + 1} 个字节处）。";
-    }
+    /// <summary>
+    /// 点名是哪一份输入解析失败的说法：前一句由调用方给，后面接的仍是同一个结构口径，不回 <c>ex.Message</c>。
+    /// <para>
+    /// <b>补的是哪个口</b>：<c>Comments/ModelClient.cs</c> 与 <c>Contracts/OpenApiSource.cs</c> 的两条
+    /// <c>catch (JsonException ex)</c> 此前拼的是 <c>"…：" + ex.Message</c>。那一句是解析器生成的英文描述，
+    /// 后面跟着出错位置附近的那一段原文；而它经 <c>UserException.Message</c> 到界面那一头是<b>原样念</b>的——
+    /// 原生界面那 38 处 <c>catch (UserException ex)</c> 走的就是 <c>SetStatus(ex.Message)</c>，因为这条通道
+    /// 本来就是授权文案（<c>ServiceCopyTests</c> 扫 <c>new UserException("…")</c> 的字面量）。可那条扫描面
+    /// 判的是<b>写下来的那一句</b>，判不到运行时拼进去的一段原文——所以「不回原文」这条口径得站在抛出这一头。
+    /// </para>
+    /// <para>
+    /// 位置取法只有一份（<see cref="PositionClause"/>）：本方法与 <see cref="InvalidJson(JsonException)"/>
+    /// 共用它，不另写第二个「第 N 行第 M 个字节」。取不到位置时交出调用方那一句本身，不猜、也不接固定文案——
+    /// 那一句已经点名了是哪一份输入，比通用的「JSON 格式无效」更准。
+    /// </para>
+    /// </summary>
+    public static string InvalidJson(string inputNamed, JsonException ex) =>
+        PositionClause(ex) is { } clause ? inputNamed + clause : inputNamed + "。";
+
+    /// <summary>出错位置那半句（含括号与收尾句号）；解析器没给位置时返回 null，由调用方回各自那一句。</summary>
+    private static string? PositionClause(JsonException ex) =>
+        ex.LineNumber is { } line && ex.BytePositionInLine is { } position
+            ? $"（第 {line + 1} 行，第 {position + 1} 个字节处）。"
+            : null;
 }

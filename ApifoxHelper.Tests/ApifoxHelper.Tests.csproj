@@ -133,6 +133,10 @@
     <Compile Include="..\Tasks\TaskFiles.cs" Link="Shared\TaskFiles.cs" />
     <Compile Include="..\Source\SourceModels.cs" Link="Shared\SourceModels.cs" />
     <Compile Include="..\Comments\DraftModels.cs" Link="Shared\DraftModels.cs" />
+    <!-- 模型输出的那层解析（第三百四十六轮）：ParseResult 是静态、只依赖 BCL，而它抛出的
+         UserException.Message 正是原生状态行原样念的那一句——要判「不回原文」就得真的喂它一份坏 JSON。
+         本文件其余部分（HttpClient）在测试里不被调用。 -->
+    <Compile Include="..\Comments\ModelClient.cs" Link="Shared\ModelClient.cs" />
     <Compile Include="..\Tasks\TaskStore.cs" Link="Shared\TaskStore.cs" />
     <Compile Include="..\Infrastructure\FileStore.cs" Link="Shared\FileStore.cs" />
     <Compile Include="..\Profiles\ProjectProfile.cs" Link="Shared\ProjectProfile.cs" />

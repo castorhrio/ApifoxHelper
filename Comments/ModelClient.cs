@@ -92,7 +92,9 @@ public sealed class ModelClient
         }
         catch (JsonException ex)
         {
-            throw new UserException("候选结果不是约定的 JSON 格式：" + ex.Message);
+            // 只回结构信息（第几行第几个字节），不回 ex.Message：那一句是解析器的英文描述，
+            // 后面跟着出错位置附近那一段原文，而 UserException.Message 到原生状态行是原样念的。
+            throw new UserException(JsonErrorCopy.InvalidJson("候选结果不是约定的 JSON 格式", ex));
         }
     }
 }

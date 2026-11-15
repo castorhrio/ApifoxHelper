@@ -69,7 +69,9 @@ public sealed class OpenApiSource
         }
         catch (JsonException ex)
         {
-            throw new UserException("Swagger JSON 无法解析：" + ex.Message);
+            // 与 ModelClient 那一条同一个口径：只回结构信息，不回 ex.Message——它会带上
+            // 出错位置附近那一段 Swagger 原文，而这一句到原生状态行是原样念的。
+            throw new UserException(JsonErrorCopy.InvalidJson("Swagger JSON 无法解析", ex));
         }
         info.Hash = Canonical.Sha256Hex(trimmed);
         var openapi = document["openapi"]?.ToString();
