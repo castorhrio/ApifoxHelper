@@ -85,6 +85,9 @@
     <Compile Include="..\Desktop\Native\ManualDraftLayout.cs" Link="Shared\ManualDraftLayout.cs" />
     <!-- 「扫描警告」的竖直预算（第二百五十二轮）：纯数据、不依赖 WinForms，门在 ScanWarningsLayoutTests。 -->
     <Compile Include="..\Desktop\Native\ScanWarningsLayout.cs" Link="Shared\ScanWarningsLayout.cs" />
+    <!-- 「点列头」的落点几何（第三百二十七轮）：纯算术、不依赖 WinForms，门在 ColumnHeaderClickTests。
+         冒烟器点列头时用的就是这一处算式——算错一格点下去就是隔壁那一列，而那种错在 Linux 上没人看得见。 -->
+    <Compile Include="..\Desktop\Native\ColumnHeaderClick.cs" Link="Shared\ColumnHeaderClick.cs" />
     <Compile Include="..\Desktop\Native\ListSort.cs" Link="Shared\ListSort.cs" />
     <Compile Include="..\Desktop\Native\CheckResultSort.cs" Link="Shared\CheckResultSort.cs" />
     <Compile Include="..\Desktop\Native\EndpointTraceSort.cs" Link="Shared\EndpointTraceSort.cs" />

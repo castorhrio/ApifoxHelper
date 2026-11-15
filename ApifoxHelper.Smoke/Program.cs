@@ -376,6 +376,9 @@ internal static class Program
         Section("列表 Ctrl+C 复制：注释回写（打开即选中第一个文件且键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「源码文件」格、不是邻列「回写范围」 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGestureApplyPlan));
         RunListCopyGestureApplyPlan(services, dataRoot);
 
+        Section("任务列表的列头排序（真的点一次列头：点「任务」列 → 自然序重排并画出 ▲ → 再点一次反向 ▼ → 换点「配置」列按配置名升序且原列标记撤掉 → 排序不写任务数据、选中按 Id 恢复，真实鼠标）", nameof(RunColumnSortGesture));
+        RunColumnSortGesture(services, dataRoot);
+
         Section("接口追踪明细真的显示出来（五块停靠区高度对客户区、接口清单装得下十二行、清单不出横向滚动条，真实控件量）", nameof(RunEndpointTraceShown));
         RunEndpointTraceShown(services, dataRoot);
         Section("手工填写说明真的显示出来（三块停靠区高度对客户区、固定四块与 ManualDraftLayout 对账、输入区实测高与算式对账、装得下十行，真实控件量）", nameof(RunManualDraftShown));
@@ -13131,6 +13134,559 @@ internal static class Program
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect rect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    private static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extraInfo);
+
+    /// <summary>取表头窗口用的消息（<c>LVM_GETHEADER</c>）：清单自己的表头是一个独立窗口。</summary>
+    private const int LvmGetHeader = 0x101F;
+
+    private const uint MouseLeftDown = 0x0002;
+    private const uint MouseLeftUp = 0x0004;
+
+    /// <summary>窗口矩形（与 Win32 的 <c>RECT</c> 同一形状）。</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    /// <summary>
+    /// 真的点一次列头（第三百二十七轮）：把光标移到表头那一列上，按下、松开。
+    /// <para>
+    /// <b>为什么必须是真鼠标</b>：列头排序的入口是 <c>ListView.ColumnClick</c>，
+    /// 而那个事件由操作系统的表头控件在<b>真鼠标点击</b>时通知上来。
+    /// 在代码里直接把这个事件抬起来（<c>ColumnClick?.Invoke(...)</c>）等于自己给自己发通知——
+    /// 量到的「排序生效了」与用户点一下是不是同一件事，就再也分不开了。
+    /// 本段走的正是那一条路：取表头窗口的真实位置 → 按 <see cref="ColumnHeaderClick"/> 的口径算出落点 →
+    /// <c>SetCursorPos</c> 把光标真的移过去 → <c>mouse_event</c> 按下再松开。
+    /// </para>
+    /// <para>
+    /// <b>落点几何不在本文件里</b>：算式在 <see cref="ColumnHeaderClick"/>（与测试工程共享编译），
+    /// 这样「点第三列会不会落到第二列上」在 Linux 上是一条会红的断言，不必等一台 Windows 机器。
+    /// </para>
+    /// <para>
+    /// <b>为什么可能要点两次</b>：窗口刚显示出来时还没拿到焦点，第一次点击有可能只把窗口激活、
+    /// 没落到表头上。所以这里点一次、<paramref name="changed"/> 说没变就再补一次——
+    /// <b>只补一次</b>：连点两下会把排序方向点回去（那是另一种状态，不是这一段要量的）。
+    /// </para>
+    /// </summary>
+    private static void ClickColumnHeader(Form host, ListView list, int columnIndex, Func<bool> changed)
+    {
+        ClickColumnHeaderOnce(host, list, columnIndex);
+        if (changed()) return;
+        ClickColumnHeaderOnce(host, list, columnIndex);
+    }
+
+    /// <summary>点一次列头（不重试）：取表头窗口 → 算落点 → 移光标 → 按下 → 松开。</summary>
+    private static void ClickColumnHeaderOnce(Form host, ListView list, int columnIndex)
+    {
+        host.Activate();
+        SetForegroundWindow(host.Handle);
+        Application.DoEvents();
+
+        var header = SendMessage(list.Handle, LvmGetHeader, IntPtr.Zero, IntPtr.Zero);
+        if (header == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("取不到清单的表头窗口：这一段量不到「点列头」。");
+        }
+
+        if (!GetWindowRect(header, out var rect))
+        {
+            throw new InvalidOperationException("取不到表头的屏幕位置：这一段量不到「点列头」。");
+        }
+
+        var widths = list.Columns.Cast<ColumnHeader>().Select(column => column.Width).ToArray();
+        var (x, y) = ColumnHeaderClick.PointIn(widths, columnIndex, rect.Bottom - rect.Top);
+        var target = new Point(rect.Left + x, rect.Top + y);
+
+        SetCursorPos(target.X, target.Y);
+        Application.DoEvents();
+        mouse_event(MouseLeftDown, 0, 0, 0, UIntPtr.Zero);
+        Application.DoEvents();
+        mouse_event(MouseLeftUp, 0, 0, 0, UIntPtr.Zero);
+        // 按下与松开之间要真的过一遍消息泵：那一瞬的排版与重建都在泵里。
+        for (var i = 0; i < 10; i++)
+        {
+            Application.DoEvents();
+            Thread.Sleep(20);
+        }
+    }
+
+    /// <summary>
+    /// 任务列表这一屏的「点列头排序」（第三百二十七轮，控制仓简报 P0-1 的收口之后另起的一族手势）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：点列头排序这条手势此前只有<b>逻辑层</b>与<b>接线层</b>两处证据——
+    /// <c>ListSort</c> 把自然序、方向标记与表头文案都算对了（<c>ListSortTests</c> 逐条断言），
+    /// <c>TasksPage</c> 也确实把 <c>ColumnClick</c> 接到了 <c>SortBy</c> 上；
+    /// 但**没有任何一处真的点过一次列头**：行到底有没有重排、表头到底有没有画出 ▲/▼、
+    /// 换一列到底是不是按新列排、排序有没有动到磁盘上的任务数据、选中是不是按任务 Id 恢复的——
+    /// 五件事全都只有源码可读。这与列表 Ctrl+C 复制那一族（第三百一十七轮起逐屏补段）是同一类缺口：
+    /// 手势在界面上按不出来 / 按出来不是那个样子，只有真按一次才知道。
+    /// </para>
+    /// <para>
+    /// <b>这一族与列表 Ctrl+C 复制那一族是两族</b>：那一族是「抄出去的是哪一格」，这一族是
+    /// 「点列头排的是哪一列」。第三百二十七轮起列表 Ctrl+C 复制那一族已收口（不再补屏），
+    /// 这一族从这一段起另起：第三百二十七轮六段（点之前 → 点一次 → 再点反向 → 换列 → 不写任务数据），
+    /// 第三百二十八轮补两段——<b>排序记忆跨启动</b>：点过列头之后那一列那一方向真的落进
+    /// <c>list-sort.json</c>（记的是标题不是列号），关掉这一页、用同一份记忆重新打开，
+    /// 清单直接按上次那一列同一方向排、表头带同一个方向标记，一次都没再点。
+    /// </para>
+    /// <para>
+    /// <b>为什么补这两段</b>：<c>ListSortMemory</c> 的口径在 Linux 上有断言（<c>ListSortMemoryTests</c>），
+    /// 两页的接线也有行首正则钉住；但「点一次列头 → 文件里真的多了一条 → 重开一页真的按它排」这条
+    /// <b>端到端</b>此前没有任何一处跑过——记忆写错列、写错方向、或者页面读了却没用在首次加载上，
+    /// 三种错都只在真控件上才看得见，而 Linux 侧全绿。
+    /// </para>
+    /// <para>
+    /// <b>夹具为什么是三个任务、三份配置</b>：任务名带序号（排序任务1 / 排序任务2 / 排序任务10），
+    /// 于是「自然序」（1 → 2 → 10）与「文字序」（1 → 10 → 2）是两种不同的排法；
+    /// 配置名（配置1 / 配置2 / 配置3）又与任务名的顺序<b>故意错开</b>，
+    /// 于是「点任务列」与「点配置列」得到的两种行序也彼此不同——
+    /// 这样每一段量到的是「点的是哪一列就按哪一列排」，而不是「反正排了，顺序碰巧对」。
+    /// 三个任务分三次创建（中间停一下）：<c>TaskStore.List</c> 按创建时间倒序返回，
+    /// 同一时刻创建的两个任务先后不定——夹具的源顺序必须确定，否则「点之前是什么样」量不准。
+    /// </para>
+    /// <para>
+    /// <b>配置名为什么用「配置1 / 配置2 / 配置3」而不是「配置甲 / 配置乙 / 配置丙」（第三百二十七轮第一次跑量到的）</b>：
+    /// 第一版夹具用的是甲乙丙，期望顺序写的是「甲 → 乙 → 丙」——那是<b>一个文化相关的假设</b>。
+    /// 产品这一列按 <c>StringComparison.CurrentCulture</c> 比较（<see cref="ListSort"/> 的口径：中文与大小写混排
+    /// 保持既有 locale 行为），而本容器里 CurrentCulture 对汉字是按<b>码位</b>排的：丙（U+4E19）&lt; 乙（U+4E59）&lt; 甲（U+7532），
+    /// 于是三档都量到「排序任务10、排序任务1、排序任务2」——<b>产品排得对，是夹具的期望写错了</b>。
+    /// 换成带 ASCII 数字的配置名之后，比较走的是 <see cref="ListSort"/> 的自然序数字段（按数值比），
+    /// 与 locale 无关，三档读数才可比。**这一处不改产品**：产品按当前区域比较是写明的口径，
+    /// 为一段冒烟去改它，等于让夹具反过来规定产品怎么排中文。
+    /// </para>
+    /// </summary>
+    private static void RunColumnSortGesture(IServiceProvider services, string dataRoot)
+    {
+        // 这一段用自己的一份数据根：排序要量的是「行序变了」，清单里混着别的段造出来的任务就量不准了。
+        var sortRoot = Path.Combine(dataRoot, "SortProbe");
+        var sortServices = BuildServices(sortRoot);
+        var profiles = sortServices.GetRequiredService<ProfileStore>();
+        var tasks = sortServices.GetRequiredService<TaskStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(sortRoot, "ui", "list-sort.json"));
+
+        // 这一页要建两次（第二段首次打开、第八段模拟下次启动）：构造参数只写一份，
+        // 两处建出来的必须是同一形状的页——否则第八段量到的「重开之后」不是产品路径上那一页。
+        TasksPage NewPage() => new TasksPage(
+            tasks,
+            sortServices.GetRequiredService<SourceScanService>(),
+            sortServices.GetRequiredService<JobRunner>(),
+            profiles,
+            sortServices.GetRequiredService<DraftService>(),
+            sortServices.GetRequiredService<CommentPlanService>(),
+            sortServices.GetRequiredService<PropagationService>(),
+            sortServices.GetRequiredService<BuildService>(),
+            sortServices.GetRequiredService<ContractReviewService>(),
+            sortServices.GetRequiredService<CheckService>(),
+            sortServices.GetRequiredService<DecisionService>(),
+            sortServices.GetRequiredService<SupplementService>(),
+            sortServices.GetRequiredService<ReportExportService>(),
+            sortServices.GetRequiredService<SyncPlanService>(),
+            sortServices.GetRequiredService<SyncExecutor>(),
+            sortMemory);
+
+        // 任务名与配置名的顺序故意错开：两种排法互不相同，才量得出「点的是哪一列」。
+        var plan = new (string ProfileName, string ProjectDir, string TaskName)[]
+        {
+            ("配置1", "SortProbe.Api", "排序任务2"),
+            ("配置2", "SortProbe.B.Api", "排序任务1"),
+            ("配置3", "SortProbe.C.Api", "排序任务10"),
+        };
+
+        var taskIds = new Dictionary<string, string>(StringComparer.Ordinal);
+        var sourceOrder = new List<string>();
+        // 列号在**点之前**取一次（第三百二十七轮第一次跑时量到的真实缺陷）：点过列头之后表头文字会带上
+        // 方向标记（「任务」→「任务 ▲」），再按标题找就找不到了——第二段起那几处 `ColumnIndex(list, "任务")`
+        // 当场抛「清单里找不到「任务」列」。列号是清单的固有属性，点一次不会变，取一次就够。
+        var nameColumn = -1;
+        var profileColumn = -1;
+        string[] originalTitles = [];
+        var beforeFiles = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            // 第一段：三份真配置与三个真任务，读回来核对。
+            RunAction("列头排序：准备三份真配置与三个真任务（任务名带序号、配置名与任务名顺序错开，读回来核对）", () =>
+            {
+                foreach (var (profileName, projectDir, taskName) in plan)
+                {
+                    var dir = Path.Combine(sortRoot, projectDir);
+                    CreateProbeWorkspace(dir);
+                    var profile = profiles.Save(new ProjectProfile
+                    {
+                        Name = profileName,
+                        WorkspaceRoot = sortRoot,
+                        ApiProject = $"{projectDir}/{projectDir}.csproj",
+                        AllowedSourcePaths = [$"{projectDir}/"],
+                    }, isNew: true);
+                    var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = taskName });
+                    taskIds[taskName] = task.Id;
+                    // 三个任务分三次创建：创建时间相同则 List 的先后不定，夹具的源顺序就定不下来。
+                    Thread.Sleep(30);
+                }
+
+                var listed = tasks.List();
+                sourceOrder.AddRange(listed.Select(task => task.Name));
+                if (sourceOrder.Count != 3 || sourceOrder.Distinct().Count() != 3)
+                {
+                    throw new InvalidOperationException(
+                        $"任务清单读回来是 {sourceOrder.Count} 行（{string.Join("、", sourceOrder)}），夹具是三个任务："
+                        + "量到的不是这一份夹具，后面几段数的行序就安不到它身上。");
+                }
+
+                foreach (var name in taskIds.Keys)
+                {
+                    if (!sourceOrder.Contains(name, StringComparer.Ordinal))
+                    {
+                        throw new InvalidOperationException($"任务「{name}」不在读回来的清单里：夹具没落全，后面几段量不到。");
+                    }
+                    beforeFiles[name] = File.ReadAllText(tasks.FilePath(taskIds[name], TaskStore.TaskFile));
+                }
+
+                _lines.Add($"     夹具：三个任务（{string.Join("、", sourceOrder)}）、三份配置（配置1 / 配置2 / 配置3）");
+            });
+
+            // 第二段：打开任务列表，点之前是什么样——数据源自身顺序，表头还没有方向标记。
+            RunAction("列头排序：点之前清单是数据源自身顺序、表头还没有方向标记（未排序时保持数据源顺序）", () =>
+            {
+                host = new Form { Width = 1400, Height = 800, Text = "任务列表列头排序冒烟" };
+                page = NewPage();
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                page.RefreshData();
+                Application.DoEvents();
+
+                var list = TaskList(page);
+                if (list.Items.Count != 3)
+                {
+                    throw new InvalidOperationException($"任务清单有 {list.Items.Count} 行，夹具是三个任务：量到的不是这一屏。");
+                }
+
+                var shown = list.Items.Cast<ListViewItem>().Select(item => item.Text).ToList();
+                if (!shown.SequenceEqual(sourceOrder, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"点之前清单是「{string.Join("、", shown)}」，数据源顺序是「{string.Join("、", sourceOrder)}」："
+                        + "未排序时应当保持数据源自身顺序，这一段量不准「点了之后有没有变」。");
+                }
+
+                var marked = list.Columns.Cast<ColumnHeader>()
+                    .Where(column => column.Text.Contains(ListSort.AscendingMark, StringComparison.Ordinal)
+                        || column.Text.Contains(ListSort.DescendingMark, StringComparison.Ordinal))
+                    .ToList();
+                if (marked.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"点之前「{string.Join("、", marked.Select(column => column.Text))}」已经带方向标记："
+                        + "还没点就带着标记，这一屏的起点就不干净。");
+                }
+
+                // 列号在这里取一次（表头还没带标记，按标题找得到）；后面几段一律用这两个数。
+                nameColumn = ColumnIndex(list, "任务");
+                profileColumn = ColumnIndex(list, "配置");
+                // 原标题快照也在这里取一次：点过列头之后表头会带上 ▲/▼，再按表头文字当标题去查记忆就查不到了。
+                originalTitles = list.Columns.Cast<ColumnHeader>().Select(column => column.Text).ToArray();
+
+                // 源顺序必须与「按任务名列升序」不同，否则点了等于没点，这一段量不出任何东西。
+                var byName = sourceOrder.OrderBy(name => name, StringComparer.CurrentCulture).ToList();
+                if (sourceOrder.SequenceEqual(byName, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"夹具的源顺序「{string.Join("、", sourceOrder)}」与按任务名列出来的一样："
+                        + "点了列头行序也不会变，这一段量不到「排序真的发生了」。");
+                }
+
+                _lines.Add($"     点之前：{string.Join("、", shown)}（数据源自身顺序，表头无方向标记）");
+            });
+
+            // 第三段：真的点一次「任务」列头——行序按自然序重排，表头画出「任务 ▲」。
+            RunAction("列头排序：真的点一次「任务」列头——行序按自然序重排（1 → 2 → 10，不是文字序 1 → 10 → 2）、表头画出「任务 ▲」", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有打开任务列表。");
+                var list = TaskList(page);
+                var before = SortSignature(list);
+
+                ClickColumnHeader(host!, list, nameColumn, () => SortSignature(list) != before);
+
+                var after = list.Items.Cast<ListViewItem>().Select(item => item.Text).ToList();
+                var expected = new[] { "排序任务1", "排序任务2", "排序任务10" };
+                if (!after.SequenceEqual(expected, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"点了「任务」列头之后清单是「{string.Join("、", after)}」，期望「{string.Join("、", expected)}」："
+                        + "点列头排序按自然序排（1 在 2 前、2 在 10 前），不是按文字排（那样 10 会在 2 前）。");
+                }
+
+                if (list.Columns[nameColumn].Text != "任务 " + ListSort.AscendingMark)
+                {
+                    throw new InvalidOperationException(
+                        $"点了「任务」列头之后表头是「{list.Columns[nameColumn].Text}」，期望「任务 {ListSort.AscendingMark}」："
+                        + "方向标记没画出来，用户不知道这一列现在是按什么排的。");
+                }
+
+                var marked = list.Columns.Cast<ColumnHeader>()
+                    .Where(column => column.Text.Contains(ListSort.AscendingMark, StringComparison.Ordinal)
+                        || column.Text.Contains(ListSort.DescendingMark, StringComparison.Ordinal))
+                    .ToList();
+                if (marked.Count != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"点了一次列头之后带标记的表头有 {marked.Count} 个（{string.Join("、", marked.Select(column => column.Text))}）："
+                        + "同一时刻只能有一列带方向标记。");
+                }
+
+                _lines.Add($"     点「任务」列头：行序变成 {string.Join(" → ", after)}，表头「{list.Columns[nameColumn].Text}」");
+            });
+
+            // 第四段：再点一次同一列头——反向，表头换成「任务 ▼」。
+            RunAction("列头排序：再点一次「任务」列头——行序反向（10 → 2 → 1）、表头换成「任务 ▼」", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有打开任务列表。");
+                var list = TaskList(page);
+                var before = SortSignature(list);
+
+                ClickColumnHeader(host!, list, nameColumn, () => SortSignature(list) != before);
+
+                var after = list.Items.Cast<ListViewItem>().Select(item => item.Text).ToList();
+                var expected = new[] { "排序任务10", "排序任务2", "排序任务1" };
+                if (!after.SequenceEqual(expected, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"再点一次「任务」列头之后清单是「{string.Join("、", after)}」，期望「{string.Join("、", expected)}」："
+                        + "同一列再点一次要反向（ListSort.Toggle 的口径）。");
+                }
+
+                if (list.Columns[nameColumn].Text != "任务 " + ListSort.DescendingMark)
+                {
+                    throw new InvalidOperationException(
+                        $"再点一次之后表头是「{list.Columns[nameColumn].Text}」，期望「任务 {ListSort.DescendingMark}」："
+                        + "方向标记没跟着反向。");
+                }
+
+                _lines.Add($"     再点「任务」列头：行序变成 {string.Join(" → ", after)}，表头「{list.Columns[nameColumn].Text}」");
+            });
+
+            // 第五段：换一列——新列从升序开始，原列的标记撤掉。
+            RunAction("列头排序：换点「配置」列头——按配置名升序排（1 → 2 → 3）、「任务」列的标记撤掉", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有打开任务列表。");
+                var list = TaskList(page);
+                var before = SortSignature(list);
+
+                ClickColumnHeader(host!, list, profileColumn, () => SortSignature(list) != before);
+
+                var after = list.Items.Cast<ListViewItem>().Select(item => item.Text).ToList();
+                // 配置名与任务名的顺序故意错开：配置1 配的是排序任务2、配置2 配的是排序任务1。
+                // 配置名带 ASCII 数字（不是甲乙丙）：比较走自然序的数字段，与 locale 无关（见本段方法注释）。
+                var expected = new[] { "排序任务2", "排序任务1", "排序任务10" };
+                if (!after.SequenceEqual(expected, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"点了「配置」列头之后清单是「{string.Join("、", after)}」，期望「{string.Join("、", expected)}」："
+                        + "换一列要按新列排（这一列是按配置名排的，与任务名列的顺序刻意不同）。");
+                }
+
+                if (list.Columns[nameColumn].Text != "任务")
+                {
+                    throw new InvalidOperationException(
+                        $"点了「配置」列头之后「任务」列表头是「{list.Columns[nameColumn].Text}」，期望「任务」："
+                        + "换列之后原列的标记要撤掉，两列都带标记等于没说清现在按哪列排。");
+                }
+
+                if (list.Columns[profileColumn].Text != "配置 " + ListSort.AscendingMark)
+                {
+                    throw new InvalidOperationException(
+                        $"点了「配置」列头之后表头是「{list.Columns[profileColumn].Text}」，期望「配置 {ListSort.AscendingMark}」："
+                        + "换一列从升序开始。");
+                }
+
+                _lines.Add($"     点「配置」列头：行序变成 {string.Join(" → ", after)}，表头「{list.Columns[profileColumn].Text}」，「任务」列标记已撤");
+            });
+
+            // 第六段：排序只改呈现顺序——磁盘上的任务数据一行未动，选中按任务 Id 恢复。
+            RunAction("列头排序：排序只改呈现顺序——磁盘上的 task.json 一字未动、选中的任务按 Id 恢复（不是按行号）", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有打开任务列表。");
+                var list = TaskList(page);
+
+                // 先选中一个任务，再点一次列头：行序会变，但被选中的应当还是同一个任务。
+                var target = list.Items.Cast<ListViewItem>().First(item => item.Text == "排序任务2");
+                list.SelectedItems.Clear();
+                target.Selected = true;
+                list.Focus();
+                Application.DoEvents();
+                var selectedId = taskIds["排序任务2"];
+                if (list.SelectedItems.Count != 1 || list.SelectedItems[0].Text != "排序任务2")
+                {
+                    throw new InvalidOperationException(
+                        $"选中之后清单里选中了 {list.SelectedItems.Count} 行：这一段量不到「排序不换选中」。");
+                }
+
+                var before = SortSignature(list);
+                ClickColumnHeader(host!, list, nameColumn, () => SortSignature(list) != before);
+
+                var after = list.Items.Cast<ListViewItem>().Select(item => item.Text).ToList();
+                if (after.SequenceEqual(new[] { "排序任务2", "排序任务1", "排序任务10" }, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException("点列头之后行序没有变：这一段量不到「排序真的发生了」。");
+                }
+
+                if (list.SelectedItems.Count != 1 || list.SelectedItems[0].Text != "排序任务2")
+                {
+                    throw new InvalidOperationException(
+                        $"排序之后清单里选中了 {list.SelectedItems.Count} 行"
+                        + $"（{string.Join("、", list.SelectedItems.Cast<ListViewItem>().Select(item => item.Text))}），"
+                        + "期望仍是「排序任务2」：排序只改呈现顺序，选中按任务 Id 恢复，不按行号。");
+                }
+
+                // 磁盘上的任务数据一个字都不能动：排序是呈现层的事。
+                foreach (var (name, id) in taskIds)
+                {
+                    var now = File.ReadAllText(tasks.FilePath(id, TaskStore.TaskFile));
+                    if (now != beforeFiles[name])
+                    {
+                        throw new InvalidOperationException(
+                            $"任务「{name}」的 task.json 在排序之后变了：排序只改呈现顺序，不写任务数据。");
+                    }
+                }
+
+                _lines.Add($"     排序后：行序 {string.Join(" → ", after)}，选中的仍是「排序任务2」（Id {selectedId}），三个 task.json 一字未动");
+            });
+
+            // 第七段：点过列头之后，排序记忆真的落盘了——记的是「配置」这个标题与方向，不是列号。
+            RunAction("列头排序：点过列头之后排序记忆真的落盘——list-sort.json 里记的是「配置」这个标题与方向（不是列号），另一份记忆实例读回来仍是同一列同一方向", () =>
+            {
+                if (page is null) throw new InvalidOperationException("上一段没有打开任务列表。");
+                var list = TaskList(page);
+                var before = SortSignature(list);
+                ClickColumnHeader(host!, list, profileColumn, () => SortSignature(list) != before);
+
+                if (list.Columns[profileColumn].Text != "配置 " + ListSort.AscendingMark)
+                {
+                    throw new InvalidOperationException(
+                        $"点了「配置」列头之后表头是「{list.Columns[profileColumn].Text}」，期望「配置 {ListSort.AscendingMark}」："
+                        + "这一段要量的是「这一列这一方向有没有被记下来」，表头没落到这一列就量不到。");
+                }
+
+                var memoryPath = Path.Combine(sortRoot, "ui", "list-sort.json");
+                if (!File.Exists(memoryPath))
+                {
+                    throw new InvalidOperationException(
+                        $"点过列头之后 {memoryPath} 不存在：排序记忆没有落盘，下次启动回来就回到未排序。");
+                }
+
+                var json = File.ReadAllText(memoryPath);
+                if (!json.Contains("\"配置\"", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"排序记忆里没有「配置」这个标题（现读：{json}）：记的应当是列标题，不是列号——"
+                        + "列号在界面增删列之后会指向另一列，那等于把用户没点过的那一列当成上次排的那一列。");
+                }
+
+                // 用另一份记忆实例读回来（同一个文件）：证明落盘的是「这一列这一方向」，不是内存里的字段。
+                var restored = new ListSortMemory(memoryPath).Read(ListSortMemoryKeys.Tasks, originalTitles);
+                if (restored != (profileColumn, false))
+                {
+                    throw new InvalidOperationException(
+                        $"从 {memoryPath} 读回来的是第 {restored.Column} 列、方向 {(restored.Descending ? "降序" : "升序")}，"
+                        + $"期望第 {profileColumn} 列（「配置」）、升序：落盘的不是刚才点的那一列那一方向。");
+                }
+
+                _lines.Add($"     排序记忆：{memoryPath} 记下「配置」/ 升序，另一份实例读回来是第 {restored.Column} 列");
+            });
+
+            // 第八段：关掉这一页、用同一份记忆重新打开（模拟下次启动）——清单直接按上次那一列同一方向排。
+            RunAction("列头排序：关掉这一页、用同一份记忆重新打开（模拟下次启动）——清单直接按上次那一列同一方向排、表头带同一个方向标记，一次都没再点", () =>
+            {
+                page?.Dispose();
+                host?.Dispose();
+                page = null;
+                host = null;
+
+                host = new Form { Width = 1400, Height = 800, Text = "任务列表列头排序冒烟（重开）" };
+                page = NewPage();
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                page.RefreshData();
+                Application.DoEvents();
+
+                var list = TaskList(page);
+                if (list.Items.Count != 3)
+                {
+                    throw new InvalidOperationException(
+                        $"重开之后任务清单有 {list.Items.Count} 行，夹具是三个任务：量到的不是这一屏。");
+                }
+
+                // 这一段从头到尾没有调 ClickColumnHeader：表头带着标记、行序按它排，只能是记忆生效。
+                if (list.Columns[profileColumn].Text != "配置 " + ListSort.AscendingMark)
+                {
+                    throw new InvalidOperationException(
+                        $"重开之后表头是「{list.Columns[profileColumn].Text}」，期望「配置 {ListSort.AscendingMark}」："
+                        + "上次点的那一列那一方向没有跨启动生效，用户每次打开都要重新点一次。");
+                }
+
+                var marked = list.Columns.Cast<ColumnHeader>()
+                    .Where(column => column.Text.Contains(ListSort.AscendingMark, StringComparison.Ordinal)
+                        || column.Text.Contains(ListSort.DescendingMark, StringComparison.Ordinal))
+                    .ToList();
+                if (marked.Count != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"重开之后带方向标记的表头有 {marked.Count} 个（{string.Join("、", marked.Select(column => column.Text))}）："
+                        + "同一时刻只能有一列带方向标记。");
+                }
+
+                var after = list.Items.Cast<ListViewItem>().Select(item => item.Text).ToList();
+                var expected = new[] { "排序任务2", "排序任务1", "排序任务10" };
+                if (!after.SequenceEqual(expected, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"重开之后清单是「{string.Join("、", after)}」，期望「{string.Join("、", expected)}」："
+                        + "表头带着标记、行序却是数据源顺序——标记与行序对不上，比不记还糟。");
+                }
+
+                _lines.Add($"     重开（同一份记忆）：表头「{list.Columns[profileColumn].Text}」，行序 {string.Join(" → ", after)}，一次都没点");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 清单此刻的「排序样子」：表头标题串 + 行序串。
+    /// <para>
+    /// 用它判断「这一次点击有没有落到表头上」：行序或表头标题变了才算落到了。
+    /// 只看行序不够（换一列排可能行序没变），只看表头也不够（方向反了行序会变），
+    /// 两样一起看，才是「点到了，而且点的是这一列」。
+    /// </para>
+    /// </summary>
+    private static string SortSignature(ListView list) =>
+        string.Join("|", list.Columns.Cast<ColumnHeader>().Select(column => column.Text))
+        + " / " + string.Join(",", list.Items.Cast<ListViewItem>().Select(item => item.Text));
 
     /// <summary>
     /// 接口追踪明细这一屏「真的显示出来」（第二百五十轮，简报 P0-1）。
