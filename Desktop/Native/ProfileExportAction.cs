@@ -67,6 +67,15 @@ public static class ProfileExportAction
             ? $"已导出「{name}」的已保存版本（不含模型服务密钥）；屏幕上的改动还没保存，不在其中。"
             : $"已导出「{name}」的已保存版本（不含模型服务密钥）。";
 
-    /// <summary>导出这一颗按钮的落点：文件名、字节、写完那一句（三件事同源，页面不再自己拼）。</summary>
+    /// <summary>
+    /// 导出这一颗按钮的落点：文件名、字节、写完那一句（三件事同源，页面不再自己拼）。
+    /// <para>
+    /// <b>不要拿它做值相等比较</b>（第三百三十二轮，简报 P1-2）：<see cref="Bytes"/> 是 <c>byte[]</c>，
+    /// 引用类型，而 <c>record struct</c> 自动生成的 <c>Equals</c> 对引用类型字段走的是
+    /// <see cref="object.Equals(object)"/>——两次 <see cref="Plan"/> 即使字节逐字相同也不相等。
+    /// 今天不爆（用例判的是逐字节 <c>Assert.Equal</c>），但把它丢进 <c>HashSet</c> 或用 <c>==</c> 比较
+    /// 会得到反直觉的结果；要比「两份导出是不是同一份」，比 <see cref="Bytes"/> 本身。
+    /// </para>
+    /// </summary>
     public readonly record struct ExportPlan(string FileName, byte[] Bytes, string StatusText);
 }
