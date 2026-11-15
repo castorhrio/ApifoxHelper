@@ -84,6 +84,7 @@ internal sealed class BuildLogDialog : DpiAwareForm
         var outputHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, UiTokens.Sm) };
         outputHost.Controls.Add(Ui.Hairline(_output));
         outputHost.Controls.Add(_hint);
+        _hint.BringToFront();
         _hint.Visible = false;
 
         var closeButton = Ui.Ghost("关闭");

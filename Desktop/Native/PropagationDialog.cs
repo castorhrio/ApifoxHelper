@@ -113,6 +113,7 @@ internal sealed class PropagationDialog : DpiAwareForm
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
         listHost.Controls.Add(_hint);
+        _hint.BringToFront();
         _hint.Visible = false;
 
         var detailCaption = Ui.Caption("选中条目的说明文字、Swagger 对应位置与备注");

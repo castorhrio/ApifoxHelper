@@ -470,6 +470,17 @@ internal static class Ui
         return HairlineCore(inner);
     }
 
+    /// <summary>
+    /// 发丝边包裹面板本体：<c>Dock = Fill</c> 且 <c>BackColor = Line</c>——不透明、填满宿主。
+    /// <para>
+    /// 因此任何要与清单同矩形叠在它上面的东西（提示、空态）必须显式 <c>BringToFront()</c>：
+    /// <c>Control.Controls</c> 的索引 0 才是 z 序最前，后加入的排在后面，不提到最前就被这一块整块盖住。
+    /// 本轮（第三百四十七轮）在 wine 10.0 + Xvfb 下拿探针实测过两侧：不加那一句，叠层中心像素量到的是发丝边的
+    /// <c>#E3E8F0</c>（一个字都看不见）；加上之后同一坐标量到宿主的 <c>#F5F7FB</c>。
+    /// 主页面的形状走 <see cref="ListHost"/>（z 序在那一处定）；对话框各自手拼宿主时，
+    /// 由 <c>HintOverlayZOrderTests</c> 逐处对账——新增一处「加了发丝边又加同矩形叠层」而没提到最前，那条门当场红。
+    /// </para>
+    /// </summary>
     private static Panel HairlineCore(Control inner)
     {
         var panel = new Panel

@@ -171,6 +171,7 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
         listHost.Controls.Add(_hint);
+        _hint.BringToFront();
         _hint.Visible = false;
 
         // 上一条 / 下一条（第一百一十五轮）：与冻结页面的注释位置详情同一形状——两个 ghost 按钮夹一句位置指示，

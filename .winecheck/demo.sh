@@ -136,9 +136,16 @@ for TIER in $TIERS; do
   # 而那块屏上没有 Xvfb——在死显示里先写注册表，会把 wineserver 的显示状态带坏，
   # 之后同一前缀下的每一扇窗口都构造不出来（报告整片「Error creating window handle」）。
   # 那不是产品回归，是环境差异：把它读成回归会带偏一整场答辩（同 README 记的前缀误用那一族）。
+  #
+  # 屏尺寸必须显式给（第三百四十八轮）：不带 `-s` 时 xvfb-run 用它自己的缺省 `-screen 0 1280x1024x24`，
+  # 而这一支脚本从头到尾念的是「屏幕固定 1600×1000」（本文件末尾的录制口径、README 同一句）。
+  # 那个缺省屏不是笔误那么轻：200% 档对话框的设计宽按缩放因子放大后要 2040，被 1280 那一块屏连同最大窗口限制
+  # 一起夹到 1288，说明行于是量成「文字 1304px、可用 1256px（对话框上界）」——读数是**屏**给的，不是产品给的。
+  # 同一支冒烟器、同一个前缀、同一版源码当场两侧实测：1280×1024 → 386 通过 / 1 失败，1600×1000 → 387 通过 / 0 失败。
+  # 数留在 .winecheck/README.md「Xvfb 屏尺寸」那一节，这一处只把它钉成运行时的实物。
   # 写法保持可核对：这一段里仍然逐字出现 `LogPixels /t REG_DWORD /d "$TIER"` 与 `"--report=$REPORT"`。
   export WINE_BIN SMOKE_EXE
-  TIER="$TIER" REPORT="$REPORT" xvfb-run -a bash -c '
+  TIER="$TIER" REPORT="$REPORT" xvfb-run -a -s "-screen 0 1600x1000x24" bash -c '
     set -u
     export WINEPREFIX DISPLAY
     "$WINE_BIN" reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d "$TIER" -f >/dev/null 2>&1 || exit 3
@@ -219,7 +226,9 @@ done
 # 把缩放改回 100%，别把下一个用同一前缀的人留在 200% 档。
 # 这一步同样要在活显示里写：否则它会把常驻 wineserver 的显示状态带坏，
 # 下一个用同一前缀的人会撞上「每扇窗口都构造不出来」（与上面同一族原因）。
-xvfb-run -a bash -c '
+# 屏尺寸同样显式给：本脚本里「每一次 xvfb-run 都用录制口径声明的那一块屏」是一条整体判据（门按它两侧对账），
+# 收尾这一支漏掉 `-s` 就等于「三档量的是 1600×1000、收尾默默回到 1280」——下一轮读不出当时是哪一块屏。
+xvfb-run -a -s "-screen 0 1600x1000x24" bash -c '
   set -u
   export WINEPREFIX DISPLAY
   "$WINE_BIN" reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d 96 -f >/dev/null 2>&1 || true

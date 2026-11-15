@@ -216,6 +216,7 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
         listHost.Controls.Add(_hint);
+        _hint.BringToFront();
         _hint.Visible = false;
 
         // 差异预览区 = 说明行 + 发丝边只读框（与检查结果、核对传播、代码证据、同步预览的底部预览区同一形状）：

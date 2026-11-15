@@ -386,6 +386,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_selectList));
         listHost.Controls.Add(_selectHint);
+        _selectHint.BringToFront();
         _selectHint.Visible = false;
         // 停靠按集合倒序生效：说明行最先停靠（顶部），筛选行其次，清单填满剩余空间。
         page.Controls.Add(listHost);
@@ -440,6 +441,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         var actionHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         actionHost.Controls.Add(Ui.Hairline(_actionList));
         actionHost.Controls.Add(_actionHint);
+        _actionHint.BringToFront();
         _actionHint.Visible = false;
         actionHost.Controls.Add(actionCaption);
         // 筛选行取工厂（第六十八轮立的形状）：这一屏只有关键词框、没有筛选下拉，计数在表头行，故 counts 传 null。

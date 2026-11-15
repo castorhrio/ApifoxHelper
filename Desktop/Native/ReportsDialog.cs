@@ -102,6 +102,7 @@ internal sealed class ReportsDialog : DpiAwareForm
         var previewHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, UiTokens.Sm) };
         previewHost.Controls.Add(Ui.Hairline(_preview));
         previewHost.Controls.Add(_hint);
+        _hint.BringToFront();
         _hint.Visible = false;
 
         // 停靠按集合倒序生效：标题行最先停靠（顶部），其次按钮行（最底部）、状态行，预览区填满剩余空间。

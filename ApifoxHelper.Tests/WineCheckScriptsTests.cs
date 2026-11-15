@@ -1969,6 +1969,171 @@ public class WineCheckScriptsTests
         Assert.NotEmpty(FreezeBaselines());
     }
 
+    // ── 第三百四十八轮（192 档那条入库读数的红，归因到测量环境）：声明的屏尺寸 ↔ 真正给出去的屏尺寸 ──
+
+    /// <summary>脚本正文里那一行「屏幕固定 <c>W</c>×<c>H</c>（Xvfb）」——这一支脚本对自己量测几何的自述。</summary>
+    private static readonly Regex DeclaredScreen = new(@"屏幕固定\s*(?<w>\d+)×(?<h>\d+)");
+
+    private static readonly Regex ScreenArg = new(@"-screen 0\s+(?<w>\d+)x(?<h>\d+)x\d+");
+
+    /// <summary>
+    /// 取脚本里每一次 <c>xvfb-run</c> 调用真正给出去的屏尺寸；取不到 = 这一跑走发行版打包的缺省
+    /// <c>-screen 0 1280x1024x24</c>，而那个缺省从来不是任何一份文档念过的那一块屏。
+    /// 注释行不算：本仓把那一句缺省值留在注释里当证据，抓注释会把「已经改对」读成「还有一跑没带 <c>-s</c>」。
+    /// </summary>
+    private static List<(int Line, (int W, int H)? Size)> XvfbRuns(string text)
+    {
+        var runs = new List<(int, (int, int)?)>();
+        var lines = text.ReplaceLineEndings("\n").Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].TrimStart().StartsWith('#')) continue;
+            if (!lines[i].Contains("xvfb-run", StringComparison.Ordinal)) continue;
+            var arg = ScreenArg.Match(lines[i]);
+            runs.Add((i + 1, arg.Success ? (int.Parse(arg.Groups["w"].Value), int.Parse(arg.Groups["h"].Value)) : null));
+        }
+
+        return runs;
+    }
+
+    /// <summary>
+    /// <b>判据本体</b>（纯函数：脚本的自述 / 每一次 xvfb-run 的实给 / README 的自述 → 违例句，空 = 一致）。
+    /// <para>
+    /// 判的是同一件事的三个说法必须同为一个数：<c>demo.sh</c> 末尾打印的录制口径「屏幕固定 1600×1000（Xvfb）」、
+    /// 它每一跑真的传给 Xvfb 的那一块屏、以及 <c>.winecheck/README.md</c> 抄给答辩现场念的那一句。
+    /// 第三百四十八轮之前这三样不一致：两处都念 1600×1000，而 <c>xvfb-run</c> 一次 <c>-s</c> 都没带，
+    /// 于是三档读数实际量在发行版缺省的 1280×1024 上。后果当场量到——同一支冒烟器、同一个前缀、同一版源码
+    /// （指纹 <c>72a2b99b16…</c>），1280 那一跑 192 档 386 通过 / 1 失败
+    /// （「同步预览…文字 1304px、可用 1256px（对话框上界）」），1600×1000 那一跑同一档 387 / 0。
+    /// 那一句失败消息自己写着「对话框上界」：客户区被那块屏与 <c>MaxWindowTrackSize</c> 夹住了，
+    /// <b>读数是屏给的，不是产品给的</b>。
+    /// </para>
+    /// <para>
+    /// 按 <c>docs/NOTES.md</c> 五步判法第 ②③ 步判过归属：这里没有出现第四个屏幕尺寸字面量——三个数全部现读自
+    /// 被它判的那两份文件本身，判的是它们互相对不对得上（任一处单独改数、另两处不跟，当场红），
+    /// 所以它是对账门，不是恒等式门，也不属「判据判自己」那一族。缺 <c>-s</c> 之所以要单独点出来，
+    /// 是因为那一跑的失败方式恰好是「脚本跑起来、数也念得出口、只是量在另一块屏上」——静默错，最难发现那一种。
+    /// </para>
+    /// </summary>
+    private static List<string> ScreenDrift(
+        string readmeText,
+        (int W, int H)? demoDeclared,
+        List<(int Line, (int W, int H)? Size)> runs)
+    {
+        var bad = new List<string>();
+
+        if (demoDeclared is null)
+        {
+            bad.Add("demo.sh 里没有「屏幕固定 W×H（Xvfb）」那一句：录制口径的几何没有自述，"
+                    + "README 与讲稿念的那一块屏就成了无处可对的一句话。");
+            return bad;
+        }
+
+        if (runs.Count == 0)
+        {
+            bad.Add($"demo.sh 一次 xvfb-run 都没抓到，而它自述的是 {demoDeclared.Value.W}×{demoDeclared.Value.H}："
+                    + "那句几何口径没有实物承接。");
+            return bad;
+        }
+
+        foreach (var (line, size) in runs)
+        {
+            if (size is null)
+            {
+                bad.Add($"demo.sh 第 {line} 行的 xvfb-run 没带 -s：这一跑落在发行版打包的缺省屏（1280x1024）上，"
+                        + $"与脚本自述的 {demoDeclared.Value.W}×{demoDeclared.Value.H} 不是同一块屏——"
+                        + "200% 档会在那里量出一条「对话框上界」撑出来的假红（两个数在 .winecheck/README.md「Xvfb 屏尺寸」那一节）。");
+                continue;
+            }
+
+            if (size.Value != demoDeclared.Value)
+            {
+                bad.Add($"demo.sh 第 {line} 行给 Xvfb 的是 {size.Value.W}×{size.Value.H}，"
+                        + $"而它自己念的是 {demoDeclared.Value.W}×{demoDeclared.Value.H}：讲稿与读数量在两块屏上。");
+            }
+        }
+
+        var readmeDeclared = DeclaredScreen.Match(readmeText);
+        if (!readmeDeclared.Success)
+        {
+            bad.Add(".winecheck/README.md 里没有「屏幕固定 W×H」那一句：答辩现场那一跑该在哪块屏上量，登记里读不出来了。");
+        }
+        else
+        {
+            var w = int.Parse(readmeDeclared.Groups["w"].Value);
+            var h = int.Parse(readmeDeclared.Groups["h"].Value);
+            if (w != demoDeclared.Value.W || h != demoDeclared.Value.H)
+            {
+                bad.Add($"README 念的是 {w}×{h}，demo.sh 念的是 {demoDeclared.Value.W}×{demoDeclared.Value.H}："
+                        + "同一件事两份口径，读的人不知道按哪一块屏复跑。");
+            }
+        }
+
+        return bad;
+    }
+
+    /// <summary>
+    /// 入库那一份三档读数量在哪一块屏上，三处说法必须同为一个数（脚本自述 / 每一跑实给 / README 登记）。
+    /// </summary>
+    [Fact]
+    public void DemoScript_DeclaredScreen_MatchesEveryXvfbRunAndTheReadme()
+    {
+        var demo = Repo.Source(".winecheck", "demo.sh");
+        var readme = File.ReadAllText(Path.Combine(Directory, "README.md"));
+        var declared = DeclaredScreen.Match(demo);
+        var runs = XvfbRuns(demo);
+        var problems = ScreenDrift(readme,
+            declared.Success ? (int.Parse(declared.Groups["w"].Value), int.Parse(declared.Groups["h"].Value)) : null,
+            runs);
+
+        Assert.True(problems.Count == 0, "Xvfb 屏尺寸三处对不上：" + string.Join("；", problems));
+        // 三档那一跑与收尾改回 96 那一跑，两支都得带着同一块屏。
+        Assert.Equal(2, runs.Count);
+    }
+
+    /// <summary>
+    /// 这一族抓不抓得住，靠把四发破坏喂进<b>同一个判据本体</b>当场验一遍（本仓对检测器的统一做法）：
+    /// ① 某一次 <c>xvfb-run</c> 漏掉 <c>-s</c>（第三百四十八轮之前真实存在的那一种，也是唯一会静默错的那一种）；
+    /// ② 实给的数与自述不等；③ 自述那一句被删；④ README 与脚本各念一个数。外加一条「注释不算一次调用」。
+    /// </summary>
+    [Fact]
+    public void ScreenDrift_Detector_ReportsTheBreaksItMustCatch()
+    {
+        const string Demo = """
+            屏幕固定 1600×1000（Xvfb）；
+            xvfb-run -a -s "-screen 0 1600x1000x24" bash -c 'wine x'
+            xvfb-run -a -s "-screen 0 1600x1000x24" bash -c 'wine y'
+            """;
+        const string Readme = "1. 三档各录一段；屏幕固定 1600×1000（Xvfb）。";
+        var good = XvfbRuns(Demo);
+        Assert.Empty(ScreenDrift(Readme, (1600, 1000), good));
+        Assert.Equal(2, good.Count);
+
+        // 破坏一：收尾那一次没带 -s（改之前真实存在的那一种）。
+        var noArgs = Demo.Replace(@"xvfb-run -a -s ""-screen 0 1600x1000x24"" bash -c 'wine y'",
+            @"xvfb-run -a bash -c 'wine y'", StringComparison.Ordinal);
+        Assert.Contains(ScreenDrift(Readme, (1600, 1000), XvfbRuns(noArgs)),
+            s => s.Contains("没带 -s", StringComparison.Ordinal));
+
+        // 破坏二：两次实给的数都改成另一块屏，而自述没改（讲稿与读数量在两块屏上）。
+        var other = Demo.Replace("-screen 0 1600x1000x24", "-screen 0 1280x1024x24", StringComparison.Ordinal);
+        Assert.Contains(ScreenDrift(Readme, (1600, 1000), XvfbRuns(other)),
+            s => s.Contains("两块屏", StringComparison.Ordinal));
+
+        // 破坏三：脚本自述那一句被删——没有对照物，实给什么也无从判。
+        var noClaim = Demo.Replace("屏幕固定 1600×1000（Xvfb）；", "", StringComparison.Ordinal);
+        Assert.Contains(ScreenDrift(Readme, null, XvfbRuns(noClaim)),
+            s => s.Contains("没有「屏幕固定", StringComparison.Ordinal));
+
+        // 破坏四：README 与脚本各念一个数（两份口径漂移，第一百九十九轮那一族）。
+        Assert.Contains(ScreenDrift("屏幕固定 1392×866（Xvfb）。", (1600, 1000), good),
+            s => s.Contains("两份口径", StringComparison.Ordinal));
+
+        // 注释里写着缺省值的那一行不算一次调用（本仓把缺省值留在注释里当证据）。
+        var commented = Demo + "\n# 不带 -s 时 xvfb-run 用的是缺省 -screen 0 1280x1024x24\n";
+        Assert.Equal(2, XvfbRuns(commented).Count);
+    }
+
     /// <summary>临时树清不掉不影响判据（与 <c>PreflightScriptTests.FakeTree.Dispose</c> 同一取舍）。</summary>
     private static void TryDelete(string root)
     {

@@ -158,6 +158,7 @@ internal sealed class CheckResultsDialog : DpiAwareForm
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
         listHost.Controls.Add(_hint);
+        _hint.BringToFront();
         _hint.Visible = false;
 
         var problemsCaption = Ui.Caption("检查问题与提示（读取失败、不支持的结构、远端独有的范围内接口都如实列出）");

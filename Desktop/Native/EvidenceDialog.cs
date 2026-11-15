@@ -92,6 +92,7 @@ internal sealed class EvidenceDialog : DpiAwareForm
         var listHost = new Panel { Dock = DockStyle.Fill, BackColor = UiTokens.Bg, Padding = new Padding(0, 0, 0, UiTokens.Sm) };
         listHost.Controls.Add(Ui.Hairline(_list));
         listHost.Controls.Add(_hint);
+        _hint.BringToFront();
         _hint.Visible = false;
 
         // 片段区补说明行（与检查结果、核对传播、同步预览的底部区同一形状）：此前是一块没有标题的框，
