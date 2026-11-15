@@ -462,6 +462,164 @@ public class ErrorCopyTests
         Assert.DoesNotContain("HttpContext", copy, StringComparison.Ordinal);
     }
 
+    // ── 原生界面侧的落点（第三百四十五轮，简报 P1-2）──────────────────────
+
+    /// <summary>
+    /// 原生界面此前<b>就地抄写</b>这批句子四处：字面量 → 单一落点（封闭清单）。
+    /// <para>
+    /// <b>补的是哪个口</b>：第三百零一轮那句「六句都收进 <c>ErrorCopy</c>」判的只有
+    /// <c>Api/ApifoxRoutes.cs</c> 一份文件，同一批句子在界面那一头另抄了四份——
+    /// <c>ApifoxPicker.cs</c> 两个前缀常量、<c>ProfileAdvancedDialog.cs</c> 两行
+    /// <c>SetStatus("读取接口失败：" + …)</c>。那一条的「就地拼接」判据是拿路由文件做的，
+    /// 界面文件一个字都没进过它的取法，所以四处全漏而全绿：<b>登记写的是「唯一落点」，实物是两份</b>，
+    /// 这一处按「登记与实物不一致」收（与第三百四十二、三百四十三轮那一族同一形状）。
+    /// </para>
+    /// <para>
+    /// <b>为什么两份是要紧事</b>：中文标点与禁词那几条在界面这一头由 <c>TypographyTests</c> 判着，
+    /// 收进常量并不改变它受不受排版口径管——改的是<b>漂移</b>。有人把 <c>ErrorCopy</c> 里那一句改准
+    /// （「读取接口失败」这一句在冻结页面路由、原生状态行与内联错误里本来就该是同一句话），
+    /// 界面那一份照旧不动，两条门各自全绿，用户在同一个产品里因为走的是路由还是对话框读到两种说法。
+    /// <c>ApifoxPicker.ProjectIdInvalid</c>（第一百七十四轮）已经立了同法的形状：名字留在界面
+    /// （界面、冒烟器与真值表都认它），字面只有一处。
+    /// </para>
+    /// <para>
+    /// <b>值逐字未变</b>：四处都改成引用常量，一个字没动
+    /// （<see cref="RouteCopy_KeepsTheExactWording"/> 与 <c>ApifoxPickerTests.FailedPrefixes_MatchRoutes</c>
+    /// 仍按原句断言，改一个标点即红）。
+    /// </para>
+    /// </summary>
+    private static readonly (string File, string Constant, string Wiring)[] NativeCopySites =
+    [
+        ("ApifoxPicker.cs", nameof(ErrorCopy.ProjectsReadFailedMessage), "ErrorCopy.ProjectsReadFailedMessage;"),
+        ("ApifoxPicker.cs", nameof(ErrorCopy.BranchesReadFailedMessage), "ErrorCopy.BranchesReadFailedMessage;"),
+        ("ProfileAdvancedDialog.cs", nameof(ErrorCopy.EndpointReadFailedMessage),
+            "ErrorCopy.EndpointReadFailedMessage + result.Describe()"),
+        ("ProfileAdvancedDialog.cs", nameof(ErrorCopy.EndpointReadFailedMessage),
+            "ErrorCopy.EndpointReadFailedMessage + Redactor.Redact(ex.Message)"),
+    ];
+
+    /// <summary>
+    /// 判据本体：原生界面源码进、问题出（空清单 = 这批句子在界面侧只有一个落点）。
+    /// <para>
+    /// 两侧都判 <see cref="NativeSource.Code"/>（剥掉注释后的代码），不判 <c>Text</c>：注释里点名一句
+    /// 文案、写一行 <c>ErrorCopy.XxxMessage</c> 形状的例子，是读者顺着注释找到实物的路，不是第二份字面量，
+    /// 也不是接线。第三百零二轮那一族收掉的就是这个形状——判代码的断言拿全文判，注释能把红写成绿。
+    /// </para>
+    /// </summary>
+    private static List<string> NativeCopyProblems(IEnumerable<NativeSource> sources)
+    {
+        var problems = new List<string>();
+        var list = sources.ToList();
+
+        // ① 清单之外不许有新的抄写：六句里任何一句出现在界面代码里都是第二份口径。
+        foreach (var (literal, constant) in RouteCopySites)
+        {
+            foreach (var source in list.Where(s =>
+                         s.Code.Contains("\"" + literal + "\"", StringComparison.Ordinal)))
+            {
+                problems.Add($"{source.Name} 就地写了「{literal}」：这一句会原样进状态行与内联错误，"
+                    + $"它是 ErrorCopy.{constant} 之外的第二份字面——改那一句时这里不会红，"
+                    + "两条门各自全绿，用户读到的却是两种说法。");
+            }
+        }
+
+        // ② 四处接线各在自己那一个文件里：只删字面量不接常量，用户读到的就是半句话。
+        foreach (var (file, constant, wiring) in NativeCopySites)
+        {
+            var source = list.FirstOrDefault(s => s.Name == file);
+            if (source is null)
+            {
+                problems.Add($"找不到 {file}：清单登记的界面文件不在 Desktop/Native 下，这一处的接线无从判起。");
+                continue;
+            }
+
+            if (!source.Code.Contains(wiring, StringComparison.Ordinal))
+            {
+                problems.Add($"{file} 没有把这一句接到 ErrorCopy.{constant}（要找的形状：{wiring}）："
+                    + "常量没引用上，界面读到的就不再是那一句。");
+            }
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 原生界面现读：六句一处都不就地抄，四处接线都在单一落点上。
+    /// </summary>
+    [Fact]
+    public void NativeCode_TakesTheseSentencesFromTheSingleSource() =>
+        Assert.Empty(NativeCopyProblems(Repo.NativeSources()));
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：四发注入各报一处，合规源码不报。
+    /// <para>
+    /// 第一发是「字面量抄回界面代码里」，第二发是「接线拆掉、只剩详情」，
+    /// 第三发是「注释里写着引用、代码里没引用」（判 <c>Code</c> 才抓得住，判全文会被骗绿——
+    /// 第三百零六轮那一族的同一教训），第四发是「清单之外的第五处新抄写」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NativeCopyDetector_ReportsTheBreaksItMustCatch()
+    {
+        var good = Repo.NativeSources();
+        Assert.Empty(NativeCopyProblems(good));
+
+        var picker = good.Single(s => s.Name == "ApifoxPicker.cs").Text;
+        var dialog = good.Single(s => s.Name == "ProfileAdvancedDialog.cs").Text;
+
+        // ① 字面量抄回界面代码里：既报这一句，也报接线断（两头都要红）。
+        var copiedBack = picker.Replace(
+            "ErrorCopy.ProjectsReadFailedMessage;",
+            "\"读取项目列表失败：\";",
+            StringComparison.Ordinal);
+        var copied = NativeCopyProblems([new NativeSource("ApifoxPicker.cs", copiedBack)]);
+        Assert.Contains(copied, p => p.Contains("就地写了", StringComparison.Ordinal));
+        Assert.Contains(copied, p => p.Contains("没有把这一句接到", StringComparison.Ordinal));
+
+        // ② 接线拆掉：详情还在，前缀没了——用户读到的是半句话。
+        var halfSentence = dialog.Replace(
+            "ErrorCopy.EndpointReadFailedMessage + result.Describe()",
+            "result.Describe()",
+            StringComparison.Ordinal);
+        Assert.Contains(
+            NativeCopyProblems([new NativeSource("ProfileAdvancedDialog.cs", halfSentence)]),
+            p => p.Contains("没有把这一句接到", StringComparison.Ordinal));
+
+        // ③ 注释里写着引用、代码里没引用：判 Code 才抓得住。
+        var commented = dialog
+            .Replace("ErrorCopy.EndpointReadFailedMessage + result.Describe()", "result.Describe()", StringComparison.Ordinal)
+            .Replace("/// <summary>从既有接口提取模板",
+                "/// <summary>ErrorCopy.EndpointReadFailedMessage + result.Describe()（注释里的形状不算接线）",
+                StringComparison.Ordinal);
+        Assert.Contains(
+            NativeCopyProblems([new NativeSource("ProfileAdvancedDialog.cs", commented)]),
+            p => p.Contains("没有把这一句接到", StringComparison.Ordinal));
+
+        // ④ 清单之外的第五处新抄写：换一张表、换一句别的话，同样报。
+        var newSite = new NativeSource("CheckResultsDialog.cs",
+            "SetStatus(\"读取目录失败：\" + result.Describe(), UiTokens.BadText);");
+        Assert.Contains(
+            NativeCopyProblems([newSite]),
+            p => p.Contains("CheckResultsDialog.cs", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 界面侧的落点与路由侧的是<b>同一批句子</b>：清单里每个常量名都必须就是路由那六句之一。
+    /// <para>
+    /// 这一条挡的是「两边各收各的」：下一轮给界面新造一个 <c>ErrorCopy.EndpointFailedMessage</c>
+    /// 而路由那句照旧，两条门各自全绿，同一句话却从此有两个口径、两个名字。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NativeCopySites_PointAtTheSameConstantsTheRoutesUse()
+    {
+        var routeConstants = RouteCopySites.Select(s => s.Constant).ToHashSet(StringComparer.Ordinal);
+        foreach (var (_, constant, _) in NativeCopySites)
+        {
+            Assert.Contains(constant, routeConstants);
+        }
+    }
+
     /// <summary>
     /// 取一个 <c>catch (…)</c> 分支的方法体（按花括号深度界定，不靠缩进猜）。
     /// 找不到就判红——提取器失效时断言会静默通过，那比没有断言更糟。

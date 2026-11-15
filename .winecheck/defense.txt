@@ -3,4 +3,4 @@
 #   不等 = 最近一次整支跑通的那一版源码不是当前源码（读数过期），重跑 PUBLISH=1 bash .winecheck/defense-day.sh。
 script=defense-day.sh
 date=2026-11-16
-source=5489a8cc2dd009dbabc77632083c93c43550d287
+source=9adfce91a26fac3c2e59f1208339b3316263d190

@@ -73,11 +73,15 @@ public static class ApifoxPicker
         : !projectIdText.Trim().All(char.IsDigit) ? ProjectIdInvalid
         : null;
 
-    /// <summary>读取项目列表失败的状态行前缀（与 /api/apifox/projects 路由同文案，后接 CLI 失败描述）。</summary>
-    public const string ProjectsFailedPrefix = "读取项目列表失败：";
+    /// <summary>读取项目列表失败的状态行前缀，后接 CLI 失败描述。<b>值不在这里</b>：单一落点是
+    /// <c>Api/ErrorCopy.ProjectsReadFailedMessage</c>（第三百四十五轮，与上面 <see cref="ProjectIdInvalid"/>
+    /// 同法）——此前这一句与 /api/apifox/projects 路由各写一遍，注释里写着「同文案」而实现是两份；
+    /// 现在名字留在这里（界面、冒烟器与真值表都认它），字面只有一处。</summary>
+    public const string ProjectsFailedPrefix = ErrorCopy.ProjectsReadFailedMessage;
 
-    /// <summary>读取分支失败的状态行前缀（与 /api/apifox/branches 路由同文案，后接 CLI 失败描述）。</summary>
-    public const string BranchesFailedPrefix = "读取分支失败：";
+    /// <summary>读取分支失败的状态行前缀，后接 CLI 失败描述。<b>值不在这里</b>：单一落点是
+    /// <c>Api/ErrorCopy.BranchesReadFailedMessage</c>，与 <see cref="ProjectsFailedPrefix"/> 同一理由。</summary>
+    public const string BranchesFailedPrefix = ErrorCopy.BranchesReadFailedMessage;
 
     /// <summary>项目列表读取完成的状态行（含已归档分支是否被过滤的如实说明由分支列表另行给出）。</summary>
     public static string ProjectsLoaded(int count) => "已读取 " + count + " 个项目，在「Apifox 项目 ID」下拉列表中选择。";

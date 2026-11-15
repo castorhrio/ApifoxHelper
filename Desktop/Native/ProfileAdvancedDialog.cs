@@ -215,7 +215,7 @@ internal sealed class ProfileAdvancedDialog : DpiAwareForm
             if (IsDisposed) return;
             if (!result.Ok || result.Data is not JsonObject data)
             {
-                SetStatus("读取接口失败：" + result.Describe(), UiTokens.BadText);
+                SetStatus(ErrorCopy.EndpointReadFailedMessage + result.Describe(), UiTokens.BadText);
                 return;
             }
             FillFromTemplate(EndpointTemplateReader.Read(data));
@@ -229,7 +229,7 @@ internal sealed class ProfileAdvancedDialog : DpiAwareForm
         catch (Exception ex)
         {
             if (IsDisposed) return;
-            SetStatus("读取接口失败：" + Redactor.Redact(ex.Message), UiTokens.BadText);
+            SetStatus(ErrorCopy.EndpointReadFailedMessage + Redactor.Redact(ex.Message), UiTokens.BadText);
         }
         finally
         {
