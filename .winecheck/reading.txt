@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-15
-source=cd239201b254c7e1e9b91a8f78399b8e1fd60784
-tier=96 passed=310 failed=0 exit=0
-tier=120 passed=310 failed=0 exit=0
-tier=192 passed=310 failed=0 exit=0
+source=2a8d1da134ed741887e61d3a3451d7555607496a
+tier=96 passed=317 failed=0 exit=0
+tier=120 passed=317 failed=0 exit=0
+tier=192 passed=317 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -39,6 +39,7 @@ section=RunApplyPlanLoadFailure tier=96 passed=6 failed=0
 section=RunCheckResultsLoadFailure tier=96 passed=7 failed=0
 section=RunEvidenceLoadFailure tier=96 passed=7 failed=0
 section=RunEndpointTraceLoadFailure tier=96 passed=7 failed=0
+section=RunSyncPreviewLoadFailure tier=96 passed=7 failed=0
 section=RunDetailBreak tier=96 passed=5 failed=0
 section=RunStatusFullText tier=96 passed=4 failed=0
 section=RunDialogStatusFullText tier=96 passed=12 failed=0
@@ -82,6 +83,7 @@ section=RunApplyPlanLoadFailure tier=120 passed=6 failed=0
 section=RunCheckResultsLoadFailure tier=120 passed=7 failed=0
 section=RunEvidenceLoadFailure tier=120 passed=7 failed=0
 section=RunEndpointTraceLoadFailure tier=120 passed=7 failed=0
+section=RunSyncPreviewLoadFailure tier=120 passed=7 failed=0
 section=RunDetailBreak tier=120 passed=5 failed=0
 section=RunStatusFullText tier=120 passed=4 failed=0
 section=RunDialogStatusFullText tier=120 passed=12 failed=0
@@ -125,6 +127,7 @@ section=RunApplyPlanLoadFailure tier=192 passed=6 failed=0
 section=RunCheckResultsLoadFailure tier=192 passed=7 failed=0
 section=RunEvidenceLoadFailure tier=192 passed=7 failed=0
 section=RunEndpointTraceLoadFailure tier=192 passed=7 failed=0
+section=RunSyncPreviewLoadFailure tier=192 passed=7 failed=0
 section=RunDetailBreak tier=192 passed=5 failed=0
 section=RunStatusFullText tier=192 passed=4 failed=0
 section=RunDialogStatusFullText tier=192 passed=12 failed=0

@@ -125,7 +125,7 @@ public class LoadFailureRetryCoverageTests
     // ---------- 发现：范围本身要钉住，否则「一条都没发现」也是绿的 ----------
 
     [Fact]
-    public void Discovery_CoversExactlyTheTwelveScreens()
+    public void Discovery_CoversExactlyTheThirteenScreens()
     {
         // 封闭清单：新增一屏带失败态时，这里会红——提醒把新屏的接线一并补上（而不是悄悄漏掉）。
         // 第一百五十七轮新增第五屏 JournalDialog.cs（任务日志对话框的读取失败态）。
@@ -140,16 +140,20 @@ public class LoadFailureRetryCoverageTests
         // 第三百一十轮补到十二屏：EndpointTraceDialog（接口追踪明细）读的就是同一份 evidence.json，
         // 第三百零九轮把这一条写在本文件「为什么只收这一屏」那一段里，本轮收的是它自己那一笔——
         // 两句收成一句，口径文件那一对因此从一屏变两屏（见 SharedEvidenceCopy 那条）。
+        // 第三百一十二轮补到十三屏：SyncPreviewDialog（同步预览勾选页）读的是 diff.json，与差异确认、
+        // 补充说明、检查结果同一份产物，而它写的是第三种说法、屏上没有入口——那一笔欠账
+        // SharedCheckCopy 的反向那一判早就预先算成「欠着的第四屏」，本轮收掉它。
         var names = FailureScreens().Select(s => s.Name).ToArray();
         Assert.Equal(
             [
                 "ApplyPlanDialog.cs", "CandidatesDialog.cs", "CheckResultsDialog.cs", "DecisionsDialog.cs",
                 "EndpointTraceDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs", "ProjectsPage.cs",
-                "ReportsDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs", "TasksPage.cs",
+                "ReportsDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs", "SyncPreviewDialog.cs",
+                "TasksPage.cs",
             ],
             names);
 
-        // 两个形状必须把这十二屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
+        // 两个形状必须把这十三屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
         // 少了这一句，往 NamedEntryScreens 里写一个不存在的文件名会静默少判一屏。
         var partition = ButtonScreens().Select(s => s.Name)
             .Concat(NamedEntryScreens)
@@ -415,8 +419,7 @@ public class LoadFailureRetryCoverageTests
     internal static List<string> CheckCopyProblems(
         string stateSource,
         IEnumerable<(string Name, string Code)> nativeScreens,
-        string[] shipped,
-        string owed)
+        string[] shipped)
     {
         const string title = "读取检查结果失败";
         var problems = new List<string>();
@@ -460,16 +463,6 @@ public class LoadFailureRetryCoverageTests
             }
         }
 
-        var owedCode = screens.FirstOrDefault(s => s.Name == owed).Code;
-        if (owedCode is null)
-        {
-            problems.Add($"欠账那一屏 {owed} 不在仓里：登记指着一屏不存在的界面。");
-        }
-        else if (!owedCode.Contains(title, StringComparison.Ordinal))
-        {
-            problems.Add($"{owed}：那一屏已经不再自己写「{title}」了，登记却还把它算成欠着的那一屏——"
-                + "接上它的那一轮要把这一条从三屏改成四屏，并删掉豁免名单里那一行（两处不许各指一处）。");
-        }
         return problems;
     }
 
@@ -494,13 +487,12 @@ public class LoadFailureRetryCoverageTests
     /// </para>
     /// </summary>
     [Fact]
-    public void SharedCheckCopy_HasOneLiteralAndTheThreeScreensThatReadDiff()
+    public void SharedCheckCopy_HasOneLiteralAndTheFourScreensThatReadDiff()
     {
         var problems = CheckCopyProblems(
             Repo.Source("Desktop", "Native", "LoadFailureState.cs"),
             Repo.NativeSources().Select(s => (s.Name, s.Code)).ToList(),
-            ["CheckResultsDialog.cs", "DecisionsDialog.cs", "SupplementsDialog.cs"],
-            "SyncPreviewDialog.cs");
+            ["CheckResultsDialog.cs", "DecisionsDialog.cs", "SupplementsDialog.cs", "SyncPreviewDialog.cs"]);
         Assert.True(problems.Count == 0,
             "「检查结果读不出来」那一句在三屏只该有一份字面，而欠着的第四屏要能被看见（DESIGN.md §7 的对面那一半："
             + "同一件事在两屏不许有两种说法，更不许其中一种屏上没有入口）：" + string.Join("；", problems));
@@ -520,7 +512,7 @@ public class LoadFailureRetryCoverageTests
             + "public const string Hint = LoadFailureState.CheckHint;\n"
             + "public const string Title = LoadFailureState.CheckTitle;\n"
             + "public const string Hint = LoadFailureState.CheckHint;\n";
-        var shipped = new[] { "CheckResultsDialog.cs", "DecisionsDialog.cs", "SupplementsDialog.cs" };
+        var shipped = new[] { "CheckResultsDialog.cs", "DecisionsDialog.cs", "SupplementsDialog.cs", "SyncPreviewDialog.cs" };
 
         var screens = new (string Name, string Code)[]
         {
@@ -532,18 +524,18 @@ public class LoadFailureRetryCoverageTests
             ("SupplementsDialog.cs",
                 "LoadFailureState.FailureMessage(LoadFailureState.Supplements.Title, error, LoadFailureState.Supplements.Hint)"),
             ("SyncPreviewDialog.cs",
-                "DisableSelect(\"读取检查结果失败：磁盘满。请关闭后在任务页重新检查再试。\", UiTokens.BadText);"),
+                "DisableSelect(LoadFailureState.FailureMessage(LoadFailureState.CheckTitle, error, LoadFailureState.CheckHint), UiTokens.BadText, canRetry: true);"),
         };
-        Assert.Empty(CheckCopyProblems(shared, screens, shipped, "SyncPreviewDialog.cs"));
+        Assert.Empty(CheckCopyProblems(shared, screens, shipped));
 
         // ① 口径侧那句话被抄成第二份。
         var twoLiterals = shared + "\npublic const string Third = \"" + title + "\";";
-        Assert.Contains(CheckCopyProblems(twoLiterals, screens, shipped, "SyncPreviewDialog.cs"),
+        Assert.Contains(CheckCopyProblems(twoLiterals, screens, shipped),
             p => p.Contains("出现 2 次", StringComparison.Ordinal));
 
         // ② 把一家的委托改回写死（写的这句不含那五个字，好让这一发只报委托这一处）。
         var notDelegated = shared.Replace("Title = LoadFailureState.CheckTitle;", "Title = \"读不回来\";");
-        Assert.Contains(CheckCopyProblems(notDelegated, screens, shipped, "SyncPreviewDialog.cs"),
+        Assert.Contains(CheckCopyProblems(notDelegated, screens, shipped),
             p => p.Contains("两家的委托", StringComparison.Ordinal));
 
         // ③ 已接的那一屏改回就地拼一句：它从此不再引用这一族（登记侧与实物侧各指一处）。
@@ -552,14 +544,14 @@ public class LoadFailureRetryCoverageTests
                 ? (Name: s.Name, Code: "ShowHint(\"读取失败：磁盘满。请关闭后重试。\", UiTokens.BadText);")
                 : s)
             .ToList();
-        Assert.Contains(CheckCopyProblems(shared, inlined, shipped, "SyncPreviewDialog.cs"),
+        Assert.Contains(CheckCopyProblems(shared, inlined, shipped),
             p => p.Contains("少一屏", StringComparison.Ordinal));
 
         // ④ 又一屏开始引用这一族却没人登记（下一轮接上第四屏时漏登记的形态）。
         var extraCaller = screens
             .Concat([(Name: "PropagationDialog.cs", Code: "LoadFailureState.FailureMessage(LoadFailureState.CheckTitle, error, LoadFailureState.CheckHint)")])
             .ToList();
-        Assert.Contains(CheckCopyProblems(shared, extraCaller, shipped, "SyncPreviewDialog.cs"),
+        Assert.Contains(CheckCopyProblems(shared, extraCaller, shipped),
             p => p.Contains("多一屏", StringComparison.Ordinal));
 
         // ⑤ 已共用的一屏另起一处把那五个字抄进自己屏里（委托还在，第二份字面也回来了）。
@@ -568,21 +560,13 @@ public class LoadFailureRetryCoverageTests
                 ? (Name: s.Name, Code: s.Code + "\n_status.Text = \"" + title + "（已停用）\";")
                 : s)
             .ToList();
-        Assert.Contains(CheckCopyProblems(shared, secondCopy, shipped, "SyncPreviewDialog.cs"),
+        Assert.Contains(CheckCopyProblems(shared, secondCopy, shipped),
             p => p.Contains("抄了第二份", StringComparison.Ordinal));
 
-        // ⑥ 欠着的那一屏被接上了、登记却没跟着改（与豁免名单那条 stale 同一读法的反向那一半）。
-        var owedWired = screens
-            .Select(s => s.Name == "SyncPreviewDialog.cs"
-                ? (Name: s.Name, Code: "ShowHint(LoadFailureState.FailureMessage(LoadFailureState.CheckTitle, error, LoadFailureState.CheckHint), UiTokens.BadText, canRetry: true);")
-                : s)
-            .ToList();
-        Assert.Contains(CheckCopyProblems(shared, owedWired, shipped, "SyncPreviewDialog.cs"),
-            p => p.Contains("还把它算成欠着的那一屏", StringComparison.Ordinal));
-
-        // ⑦ 登记里那个欠账的名字不在仓里。
-        Assert.Contains(CheckCopyProblems(shared, screens, shipped, "NoSuchDialog.cs"),
-            p => p.Contains("不在仓里", StringComparison.Ordinal));
+        // ⑥ 第四屏（同步预览勾选页）接上之后，登记里少写它一屏同样红——「少一屏」那一句与 ③ 同一形状，
+        //     这里单独喂一次，钉的是「第四屏真的进了登记」这件事本身。
+        Assert.Contains(CheckCopyProblems(shared, screens, ["CheckResultsDialog.cs", "DecisionsDialog.cs", "SupplementsDialog.cs"]),
+            p => p.Contains("少一屏", StringComparison.Ordinal));
     }
 
     // ---------- 「那份证据产物读不出来」那一句在两屏只有一份字面（第三百一十轮） ----------
@@ -870,8 +854,6 @@ public class LoadFailureRetryCoverageTests
             + "那一步在「检查任务」页的「开始扫描」上——那三颗在审阅保存成功之后确实会重读一次清单，可失败态下点不动"),
         ("PropagationDialog.cs", "生成文档核对：失败句里那个动词在界面上没有对应的那一颗按钮，屏外做这一步的是"
             + "「检查任务」页的「核对传播」（这一屏自己没有重读一次的入口）"),
-        ("SyncPreviewDialog.cs", "同步预览勾选页：读 diff.json 失败走 DisableSelect 那一句，屏外做这一步的同样是"
-            + "「检查任务」页的「开始检查」，勾选页自己没有重读那一次的入口"),
     ];
 
     /// <summary>判定本体（纯函数：源码进、命中的说法出）——注入自测直接喂夹具，不必改磁盘。</summary>

@@ -72,6 +72,8 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     private readonly Button _clearButton;
     private readonly Button _viewPlanButton;
     private readonly Button _generateButton;
+    // 读取失败态的唯一行动按钮（第三百一十二轮）：文字取自口径文件，全仓只有那一处字面。
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
     private readonly Panel _page1;
 
     // 预览页（计划生成后）。
@@ -238,6 +240,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _generateButton = Ui.Primary("生成同步预览");
         _generateButton.Enabled = false;
         _generateButton.Click += (_, _) => Generate();
+        // 那颗「重试」与打开这一屏调的是同一个读取入口（两条路不各读一份）。
+        _retry.Visible = false;
+        _retry.Click += (_, _) => LoadAll();
 
         _page1 = BuildSelectPage();
 
@@ -311,7 +316,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
 
         _page2 = BuildPlanPage();
 
-        var buttonRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 8, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, UiTokens.Md), Margin = new Padding(0) };
+        var buttonRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 9, Padding = new Padding(UiTokens.Lg, UiTokens.Sm, UiTokens.Lg, UiTokens.Md), Margin = new Padding(0) };
         buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -320,11 +325,13 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _selectedCount.Margin = new Padding(0, 0, UiTokens.Md, 0);
         _selectAllButton.Margin = new Padding(0, 0, UiTokens.Sm, 0);
         _clearButton.Margin = new Padding(0, 0, UiTokens.Sm, 0);
         _viewPlanButton.Margin = new Padding(0, 0, UiTokens.Sm, 0);
         _backButton.Margin = new Padding(0, 0, UiTokens.Sm, 0);
+        _retry.Margin = new Padding(0, 0, UiTokens.Sm, 0);
         _closeButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         buttonRow.Controls.Add(_selectedCount, 0, 0);
         buttonRow.Controls.Add(_selectAllButton, 1, 0);
@@ -334,7 +341,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         // 第 5 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
         // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
         buttonRow.Controls.Add(_generateButton, 6, 0);
-        buttonRow.Controls.Add(_closeButton, 7, 0);
+        // 那颗「重试」落在「关闭」左边（RightToLeft 流向里后加的在左）：这一屏没有第二颗「重试」。
+        buttonRow.Controls.Add(_retry, 7, 0);
+        buttonRow.Controls.Add(_closeButton, 8, 0);
 
         var statusRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 2, Padding = new Padding(UiTokens.Lg, 0, UiTokens.Lg, 0), Margin = new Padding(0) };
         statusRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -475,6 +484,26 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 这一屏的<b>唯一读取入口</b>（第三百一十二轮）：打开（<see cref="OnLoad"/>）与失败态那颗「重试」调的是同一个方法。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一屏读的是 <c>diff.json</c>（与差异确认、补充说明、检查结果同一份产物），
+    /// 读不出来时写的是第三种说法「请关闭后在「检查任务」页重新检查再试」——<b>屏上没有任何可点的入口</b>，
+    /// 把「再读一次」交给用户手动重开窗口。那三家自第三百零三 / 三百零八轮起就有那颗取自口径的「重试」，
+    /// 而这一屏没有：同一份产物、同一句下一步，一种说法有按钮、另一种没有，正是第三百零三轮点名的盲区。
+    /// </para>
+    /// <para>
+    /// <b>为什么读取收进一个方法</b>：两条路各读一份，失败态与正常态就会各自漂移（第三百零三 / 三百零五 /
+    /// 三百零八 / 三百零九 / 三百一十轮同一形状）。<b>开头先收起那颗按钮</b>：成功路径不经提示出口，
+    /// 那里是唯一的收起处——第三百零四轮在注释候选那一屏实测到的「恢复后按钮还亮着」就是这个成因。
+    /// </para>
+    /// </summary>
+    private void LoadAll()
+    {
+        _retry.Visible = false;
         try
         {
             _diff = _tasks.Read<CheckResult>(_taskId, TaskFiles.Diff);
@@ -482,9 +511,15 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            DisableSelect("读取检查结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在「" + PageNames.Tasks + "」页重新检查再试。", UiTokens.BadText);
+            // 文案不抄第二份：标题与说明都取口径文件那一对（与差异确认、补充说明、检查结果同一句话）。
+            DisableSelect(
+                LoadFailureState.FailureMessage(LoadFailureState.CheckTitle, Redactor.Redact(ex.Message), LoadFailureState.CheckHint),
+                UiTokens.BadText,
+                canRetry: true);
             return;
         }
+        // 读得出来就把关键词框交回来（失败态那句「整份数据不可得」已经不再成立）。
+        _keyword.Enabled = ListFilter.KeywordEnabled(_diff is not null, _busy);
         if (_diff is null || _diff.Endpoints.Count == 0)
         {
             DisableSelect("请先完成契约检查：在「" + PageNames.Tasks + "」页点「开始检查」，检查完成后在这里勾选要同步的接口。", UiTokens.Muted);
@@ -554,7 +589,16 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         return base.ProcessDialogKey(keyData);
     }
 
-    private void DisableSelect(string message, Color color)
+    /// <summary>
+    /// 勾选页的提示出口：三种状态（读取失败 / 尚未检查 / 离线）共用这一处。
+    /// <para>
+    /// <b><paramref name="canRetry"/> 是第三百一十二轮加的</b>：只有「读取失败」那一支才点亮那颗「重试」——
+    /// 另外两种不是失败（数据本来就没有 / 这一屏不支持），再读一次读不出新东西，那一步在屏外
+    /// （「检查任务」页的「开始检查」），由那两句提示自己指名。末尾统一收起，于是「同一时刻只有一个下一步」
+    /// 在三种状态上都成立（DESIGN.md §7）。
+    /// </para>
+    /// </summary>
+    private void DisableSelect(string message, Color color, bool canRetry = false)
     {
         _selectHint.Text = message;
         _selectHint.ForeColor = color;
@@ -565,6 +609,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _selectAllButton.Enabled = false;
         _clearButton.Enabled = false;
         _generateButton.Enabled = false;
+        _retry.Visible = canRetry;
     }
 
     /// <summary>
@@ -925,7 +970,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
                     SyncPlan? plan = null;
                     try { plan = _tasks.Read<SyncPlan>(_taskId, TaskFiles.Plan); }
                     catch { /* 读取失败时按无计划处理，走下方提示。 */ }
-                    if (plan is null) SetStatus("同步计划已生成，但读取计划失败。请点「查看已有计划」重试。", UiTokens.BadText);
+                    // 「重试」这个字面全仓只在口径文件里出现一次（LoadFailureRetryCoverageTests 判着）：
+                    // 这一句指名的是屏上那颗「查看已有计划」，点它就是重读一次，故取 RetryHint 那一份口径。
+                    if (plan is null) SetStatus("同步计划已生成，但读取计划失败。" + LoadFailureState.RetryHint("查看已有计划"), UiTokens.BadText);
                     else ShowPlan(plan);
                     break;
                 }
@@ -966,7 +1013,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         catch { plan = null; }
         if (plan is null)
         {
-            SetStatus("读取同步计划失败。请点「查看已有计划」重试。", UiTokens.BadText);
+            SetStatus("读取同步计划失败。" + LoadFailureState.RetryHint("查看已有计划"), UiTokens.BadText);
             return null;
         }
         ShowPlan(plan);

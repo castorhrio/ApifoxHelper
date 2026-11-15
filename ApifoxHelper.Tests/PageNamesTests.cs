@@ -57,7 +57,10 @@ public class PageNamesTests
         ("SupplementsDialog.cs", "PageNames.Tasks", 1),
         ("CandidatesDialog.cs", "PageNames.Tasks", 2),
         ("BuildLogDialog.cs", "PageNames.Tasks", 2),
-        ("SyncPreviewDialog.cs", "PageNames.Tasks", 2),
+        // 第三百一十二轮：勾选页的读取失败提示改从口径文件那一对共用常量交出（与差异确认、补充说明、
+        // 检查结果同一句话），句子不再指页面——剩下那一处是「尚未检查」那一句空态（那一种的下一步
+        // 确实不在「再读一次」上，而在任务页那颗「开始检查」上）。
+        ("SyncPreviewDialog.cs", "PageNames.Tasks", 1),
         // 失败态口径文件（第三百零三轮）：注释候选与补充说明那两句「仍读不到时回哪一页」现在从这一份交出，
         // 界面文件不再各写一遍——指路的文字换了落点，登记跟着走，否则这一格就停在旧位置上骗下一轮。
         ("LoadFailureState.cs", "PageNames.Tasks", 2),

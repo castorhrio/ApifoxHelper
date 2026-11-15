@@ -292,6 +292,9 @@ internal static class Program
         Section("接口追踪明细读取失败态（正常 → 那份产物坏 → 点一次换一种失败、原因跟着换 → 修好后点一次清单、计数与明细一起回来且关键词框可用 → 筛到零行不给那颗按钮 → 没有追踪数据不给那颗按钮，真实控件）", nameof(RunEndpointTraceLoadFailure));
         RunEndpointTraceLoadFailure(services, dataRoot);
 
+        Section("同步预览勾选页读取失败态（正常 → 检查结果坏 → 点一次换一种失败、原因跟着换 → 修好后点一次清单与关键词框一起回来且那颗按钮收起 → 筛到零行不给那颗按钮 → 尚未检查不给那颗按钮，真实控件）", nameof(RunSyncPreviewLoadFailure));
+        RunSyncPreviewLoadFailure(services, dataRoot);
+
         Section("极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）", nameof(RunDetailBreak));
         RunDetailBreak(services, dataRoot);
 
@@ -5258,6 +5261,285 @@ internal static class Program
         }
         finally
         {
+            hold?.Dispose();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 同步预览勾选页读取失败态的真实控件交互（第三百一十二轮，简报 P1-2）。
+    /// <para>
+    /// 接线那一半在 <c>Desktop/Native/SyncPreviewDialog.cs</c>，本段是它在模拟器上被真的点过一次的那一半：
+    /// 形状照第三百零八轮检查结果那一屏（正常 → 读不出来 → 点一次换一种失败 → 修好后点一次 →
+    /// 非失败态不给那颗按钮）。失败是真的——把任务目录里那份 diff.json 写成不是 JSON 的字节，
+    /// 让 <c>TaskStore.Read</c> 抛它本来会抛的异常，不伪造异常类型、不调私有方法、不换实现。
+    /// </para>
+    /// <para>
+    /// <b>这一屏与那几屏有一处不同</b>：它的提示出口是 <c>DisableSelect</c>，三种状态（读取失败 / 尚未检查 /
+    /// 离线）共用那一处，所以本段第 3 段判的是「失败那一支点亮它」，第 6、7 段判的是「另外两种不点亮它」——
+    /// 同一屏三个状态各念一句、只有一句带那颗按钮，正是 §7「同一时刻只有一个下一步」在这一屏的落点。
+    /// </para>
+    /// </summary>
+    private static void RunSyncPreviewLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "同步预览失败态冒烟" });
+        var diffPath = tasks.FilePath(task.Id, TaskFiles.Diff);
+
+        // 勾选页的清单与它那一句提示：这一屏两张页各有一块「填满剩余空间」的宿主，按清单自己的父级认，
+        // 不按 FindAll 的次序猜（预览页那张写入清单是七列、未纳入清单两列，勾选页这张四列）。
+        static (ListView List, Label Hint) SelectPane(SyncPreviewDialog form)
+        {
+            var list = FindAll<ListView>(form).FirstOrDefault(candidate => candidate.Columns.Count == 4)
+                ?? throw new InvalidOperationException("这一屏找不到四列的接口勾选清单：列增删或改名了，本段判据需要重定。");
+            var host = list.Parent?.Parent
+                ?? throw new InvalidOperationException("勾选清单外面没有那层宿主面板：清单区的形状变了，本段判据需要重定。");
+            var hint = host.Controls.OfType<Label>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("勾选清单宿主里没有那句铺满列表区的提示行：提示出口的形状变了。");
+            return (list, hint);
+        }
+
+        // 勾选页的关键词框：这一屏两页各有一只（勾选页筛接口、预览页筛写入清单），按勾选页那一块认。
+        static TextBox SelectKeyword(SyncPreviewDialog form)
+        {
+            var (list, _) = SelectPane(form);
+            var page = list.Parent?.Parent?.Parent
+                ?? throw new InvalidOperationException("勾选清单外面没有那一页：页面分法变了，本段判据需要重定。");
+            return FindAll<TextBox>(page).SingleOrDefault(control => !control.Multiline)
+                ?? throw new InvalidOperationException("勾选页的关键词框不唯一（或没了）：Ui.FilterRow 的形状变了，本段判据需要重定。");
+        }
+
+        SyncPreviewDialog? dialog = null;
+        FileStream? hold = null;
+        string? good = null;
+        string? jsonFailureSentence = null;
+        int endpointCount = 0;
+        try
+        {
+            RunAction("同步预览失败态：准备一份真实检查结果（产品自己的写入口径落盘）", () =>
+            {
+                tasks.Write(task.Id, TaskFiles.Diff, CheckResultsFixture());
+                var reread = tasks.Read<CheckResult>(task.Id, TaskFiles.Diff)
+                    ?? throw new InvalidOperationException("写入后读不回检查结果。");
+                endpointCount = reread.Endpoints.Count;
+                if (endpointCount < 2)
+                {
+                    throw new InvalidOperationException($"夹具只有 {endpointCount} 个接口，不足以验证「清单回来」那一发。");
+                }
+                good = File.ReadAllText(diffPath);
+                _lines.Add($"     磁盘副本留了一份原文 {good.Length} 字：检查结果 {endpointCount} 个接口");
+            });
+
+            RunAction("同步预览失败态：正常打开时勾选清单可见且不显示「重试」（真实控件）", () =>
+            {
+                dialog = new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = SelectPane(dialog);
+                if (!list.Visible || list.Items.Count != endpointCount)
+                {
+                    throw new InvalidOperationException($"正常打开时勾选清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {endpointCount} 行。");
+                }
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"正常打开时提示区却可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("检查结果读出来了，「重试」却亮着：它只在读取失败时才是下一步。");
+                }
+                if (!SelectKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("有接口可筛时关键词框却停着：那一种状态整份数据是读得出来的（口径见 ListFilter.KeywordEnabled）。");
+                }
+                _lines.Add($"     正常打开：勾选清单 {list.Items.Count} 行，提示区收起，那颗按钮没亮");
+            });
+
+            RunAction("同步预览失败态：检查结果读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                File.WriteAllText(diffPath, "这不是 JSON");
+                dialog = new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = SelectPane(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("检查结果读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                // 本轮的主张就在这一判里：这一屏念的是口径文件那一句，不再自己拼「请关闭后在…页重新检查再试」。
+                if (!hint.Text.StartsWith(LoadFailureState.CheckTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.CheckTitle}：」开头（与差异确认、补充说明、检查结果同一句话）。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名屏上那颗按钮，用户读不到该点哪一颗：「{hint.Text}」。");
+                }
+                foreach (var phrase in new[] { "请关闭后", "关闭后重试", "关闭本窗口重新打开" })
+                {
+                    if (hint.Text.Contains(phrase, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException($"失败提示仍然把用户支去重开窗口（「{phrase}」）：「{hint.Text}」。");
+                    }
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                if (list.Visible)
+                {
+                    throw new InvalidOperationException("检查结果读不出来时勾选清单仍可见：半份结果被留在屏上。");
+                }
+                if (SelectKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("整份数据不可得时关键词框仍可用：框里敲字筛不到任何东西（口径见 ListFilter.KeywordEnabled）。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     检查结果读不出来：提示「{hint.Text}」，那颗按钮亮着");
+            });
+
+            RunAction("同步预览失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 判据不能只看「还是不是失败」——成功路径只收起提示区、不清那格文字，按文字判会把
+                // 「重读成功」也读成「仍是失败」。这里换成换一种失败：文件还在、却被独占占用（第三百零四轮那条）。
+                hold = new FileStream(diffPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var (_, hint) = SelectPane(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.CheckTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"文件被占用时重试，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍读不出来，重试后「重试」却不见了：用户没有第二次机会。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("同步预览失败态：修好后点「重试」退出失败态、勾选清单与关键词框一起回来且那颗按钮收起（真实控件）", () =>
+            {
+                if (dialog is null || good is null) throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                File.WriteAllText(diffPath, good);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var (list, hint) = SelectPane(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好检查结果后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                // 第三百零四轮那一发的成因在这一屏同样成立（成功路径不经 DisableSelect，那里是唯一的收起处）：
+                // 清单与关键词框都回来了，那颗按钮却还亮着，等于同一屏给两个下一步。
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                if (!list.Visible || list.Items.Count != endpointCount)
+                {
+                    throw new InvalidOperationException($"恢复后勾选清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {endpointCount} 行。");
+                }
+                if (!SelectKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("恢复后关键词框还停着：失败态那句「整份数据不可得」已经不再成立，框却没人把它交回来。");
+                }
+                _lines.Add($"     修好后重试：勾选清单回到 {list.Items.Count} 行，提示区与那颗按钮一起收起，关键词框可用");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("同步预览失败态：筛到零行不给那颗按钮而关键词框留着（真实控件）", () =>
+            {
+                // 「筛到零行」不是失败：那份产物读得出来，只是这一屏当下没有行——那一步在框里那个词上，
+                // 再读一次读不出新东西。走的是 ApplyFilter 里那条口，根本不经提示出口。
+                dialog = new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task);
+                dialog.Show();
+                Application.DoEvents();
+                SelectKeyword(dialog).Text = "绝不可能命中任何接口的关键词";
+                Application.DoEvents();
+                var (list, hint) = SelectPane(dialog);
+                if (!hint.Visible || list.Visible)
+                {
+                    throw new InvalidOperationException("筛到零行时没有换成那一句说明（或清单还留着）：这一屏的空态形状变了。");
+                }
+                if (hint.Text != ListFilter.FilteredEmptyKeywordHint(ListFilter.EndpointNoun))
+                {
+                    throw new InvalidOperationException($"筛到零行那句不是共享口径那一句：「{hint.Text}」。");
+                }
+                if (hint.Text.StartsWith(LoadFailureState.CheckTitle + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"筛到零行被当成读取失败处理了：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("筛到零行不是失败态，却显示了「重试」：同一屏给了两个下一步。");
+                }
+                if (!SelectKeyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("筛到零行时关键词框被禁用：那句提示指名的下一步按不动（§7「禁用不得移除下一步」）。");
+                }
+                _lines.Add($"     筛到零行：提示「{hint.Text}」，框留着，那颗按钮没亮");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("同步预览失败态：还没有检查结果时不给那颗按钮（那一步在任务页那颗「开始检查」上，真实控件）", () =>
+            {
+                // 「没有检查结果」不是读取失败：文件本来可以不存在，Read 交出 null。那一屏的下一步写在
+                // 「检查任务」页那颗「开始检查」上，本轮接的那一句只说再读一次，两种状态因此不共用一句话。
+                File.Delete(diffPath);
+                dialog = new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task);
+                dialog.Show();
+                Application.DoEvents();
+                var (_, hint) = SelectPane(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith("请先完成契约检查", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"没有检查结果时提示是「{hint.Text}」，期望以「请先完成契约检查」开头。");
+                }
+                if (!hint.Text.Contains(PageNames.Tasks, StringComparison.Ordinal) || !hint.Text.Contains("开始检查", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"那一种状态的下一步有两样（哪一页、点哪一颗），提示只该把两处都指名：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「尚未检查」不是失败态，却显示了「重试」：再读一次读不出新东西。");
+                }
+                _lines.Add($"     还没有检查结果：提示以「{hint.Text[..7]}」开头（那一页与那一颗都指到了），那颗按钮没亮");
+            });
+        }
+        finally
+        {
+            // 句柄留着，后面每一段读这个任务都会失败；中途红的那一发也必须把它放开。
             hold?.Dispose();
             dialog?.Dispose();
         }
