@@ -198,6 +198,114 @@ public class DemoWorkspaceTests
     }
 
     /// <summary>
+    /// 剧本点到哪个归档目录，那个目录就得真有东西——「承诺的实物在不在」（第三百四十二轮，简报 P0-1）。
+    /// <para>
+    /// <b>要修的那处真实不一致</b>：这一页此前写着「这一页在 Linux 容器里按 wine 10.0 + Xvfb 模拟器走过一遍，
+    /// 截图归档在 <c>docs/evidence/demo-run/</c>」——而那个目录<b>不存在</b>，那一跑也<b>没有发生</b>
+    /// （第三百四十一轮自己的账本里写着「wine 未跑」）。一句没有实物的话写在答辩材料里，现场一翻就穿。
+    /// 本轮按简报的收法 B 把那一句改成如实描述（「本页未附截图归档，演示现场按本页剧本走」），
+    /// 并把「不许再写回去」落成这一条门。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：<c>docs/DEMO.md</c> 正文里出现的每一个 <c>docs/evidence/&lt;子目录&gt;/</c> 路径，
+    /// 磁盘上必须真有这个目录、且目录里除隐藏占位（<c>.gitkeep</c> 这类以 <c>.</c> 开头的文件）之外有文件。
+    /// 判的是<b>被承诺的实物</b>（目录与文件在它自己之外），不是判据判自己——按第二百八十二轮五步法：
+    /// ① 口径名 = 剧本里那个路径字面；② 它的定义在磁盘上，不在剧本里，答「不是」；③ 按第 ③ 步当对账门处理；
+    /// ④ 注入实测见 <see cref="ArchiveClaimDetector_ReportsTheBreaksItMustCatch"/>；⑤ 结论写在这一句。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判截图里画的是什么、不判那一跑是不是真跑出来的（门看不出来），
+    /// 也不判真机——真机 0 台，<c>G-D5</c> 仍是 <c>[ ]</c>。它只保证「写了归档目录，就得有东西」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoScript_ClaimsNoArchiveDirectoryItDoesNotHold()
+    {
+        var claims = ArchiveClaims(DemoDoc);
+        var problems = ArchiveProblems(claims, Repo.Root);
+        Assert.True(problems.Count == 0,
+            "docs/DEMO.md 点到的归档目录没有实物：\n  " + string.Join("\n  ", problems)
+            + "\n两条合法的收法：① 真跑一遍把截图放进那个目录；② 把那一句改成如实描述"
+            + "（「本页未附截图归档，演示现场按本页剧本走」）——不许两处都空。");
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住：三发注入各报一处，合规的两发不报。
+    /// <para>
+    /// 这一族的老毛病是「判据写错时门看起来是绿的」：正则写宽了会把正文里任何一句都读成归档承诺，
+    /// 写窄了则一个都读不到——两种都让上面那条门永远绿。所以这里拿临时假树把两个方向都跑活。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ArchiveClaimDetector_ReportsTheBreaksItMustCatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ah-demo-claim-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            // ① 写了归档目录、目录不存在 → 报。
+            var missing = ArchiveProblems(ArchiveClaims("截图归档在 `docs/evidence/demo-run/`。"), root);
+            Assert.Single(missing);
+            Assert.Contains("docs/evidence/demo-run/", missing[0], StringComparison.Ordinal);
+
+            // ② 目录在、但只有隐藏占位 → 照样报（空目录 = 未达成，与真机证据那一页同一口径）。
+            Directory.CreateDirectory(Path.Combine(root, "docs", "evidence", "demo-run"));
+            File.WriteAllText(Path.Combine(root, "docs", "evidence", "demo-run", ".gitkeep"), "");
+            var placeholder = ArchiveProblems(ArchiveClaims("截图归档在 `docs/evidence/demo-run/`。"), root);
+            Assert.Single(placeholder);
+            Assert.Contains("只有隐藏占位", placeholder[0], StringComparison.Ordinal);
+
+            // ③ 目录里真有文件 → 不报。
+            File.WriteAllText(Path.Combine(root, "docs", "evidence", "demo-run", "站1-项目设置.png"), "x");
+            Assert.Empty(ArchiveProblems(ArchiveClaims("截图归档在 `docs/evidence/demo-run/`。"), root));
+
+            // ④ 正文里没点任何归档目录 → 不报（本轮改成的写法就是这一种）。
+            Assert.Empty(ArchiveClaims("本页未附截图归档，演示现场按本页剧本走。"));
+            Assert.Empty(ArchiveProblems(ArchiveClaims("本页未附截图归档，演示现场按本页剧本走。"), root));
+
+            // ⑤ 只写 `docs/evidence/` 这个前缀（不带子目录）不算承诺：那是路径前缀，不是归档落点。
+            Assert.Empty(ArchiveClaims("本页写到的每一个 `docs/evidence/` 下的子目录都得真有文件。"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>剧本正文里点到的归档目录（去重、顺序稳定）：<c>docs/evidence/&lt;子目录&gt;/</c>。</summary>
+    private static List<string> ArchiveClaims(string doc) => Regex
+        .Matches(doc, @"docs/evidence/(?<dir>[^/\s`）)]+)/")
+        .Select(m => $"docs/evidence/{m.Groups["dir"].Value}/")
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(p => p, StringComparer.Ordinal)
+        .ToList();
+
+    /// <summary>归档承诺的实物核对：目录在不在、里面除隐藏占位之外有没有文件。</summary>
+    private static List<string> ArchiveProblems(IEnumerable<string> claims, string root)
+    {
+        var problems = new List<string>();
+        foreach (var claim in claims)
+        {
+            var dir = Path.Combine(root, claim.TrimEnd('/').Replace('/', Path.DirectorySeparatorChar));
+            if (!Directory.Exists(dir))
+            {
+                problems.Add($"「{claim}」在磁盘上不存在——剧本说截图归档在这里，这里什么都没有。");
+                continue;
+            }
+
+            var files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
+                .Where(f => !Path.GetFileName(f).StartsWith('.'))
+                .ToList();
+            if (files.Count == 0)
+            {
+                problems.Add($"「{claim}」里只有隐藏占位、没有文件——空目录 = 未达成，与真机证据那一页同一口径。");
+            }
+        }
+
+        return problems;
+    }
+
+    /// <summary>
     /// 演示工作区里只有源码与一份远端快照：不放构建产物、不放任务目录。
     /// <para>
     /// 这一条挡的是「把某次跑出来的 <c>bin/</c> / <c>obj/</c> / 任务资料一起提交」——

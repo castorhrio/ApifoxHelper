@@ -25,6 +25,15 @@ namespace ApifoxHelper.Tests;
 /// 还有什么没做）；④ 判据自己被抓得住（四发注入各报一处，合规行不报）。
 /// </para>
 /// <para>
+/// <b>跳号与断档是两件事（第三百四十二轮补）</b>：本仓的轮次号从第三百三十三轮直接跳到第三百四十一轮——
+/// 第三百三十四至三百四十轮<b>没有发生</b>（无提交、无账本条目、代码里也没有任何一处引用）。
+/// 此前这条门把它们读成「断档」，于是 HEAD 上一直红着一条，而红的原因不是「漏记了一轮做过的事」，
+/// 是「这七个数从来没被用过」。两种情形在答辩现场的含义完全不同：断档 = 翻不到做过什么，
+/// 跳号 = 本来就没有那件事。所以 <c>docs/NOTES.md</c> 里有一行<b>跳号登记</b>（形如
+/// 「跳号的是：第三百三十四轮、……、第三百四十轮。」），登记过的轮次不再报断档；
+/// <b>登记之外的任何一轮缺席仍然红</b>，而「登记了却又有账本条目」同样红（死条目）。
+/// </para>
+/// <para>
 /// <b>它不判什么</b>：不判条目写得对不对、也不判历史断档（第二百五十五轮之前本账本本来就有多处断档，
 /// 那是历史事实，回填它们不是这一轮的事，也不该由一条门假装已经补上）；不判 commit 与账本是否一一对应
 /// （测试进程不读 <c>git</c>——那会让这条门在无 <c>git</c> 的环境里静默绿）。
@@ -85,7 +94,27 @@ public class RoundLedgerTests
 
         // ④ 合规账本：六轮都在、都有两行、账本不落后——一处都不报。
         Assert.Empty(Problems(Ledger(255, 256, 257, 258, 259, 260), [260], RecentWindow));
+
+        // ⑤ 跳号登记过的轮次不报断档：账本写到 259，260 登记成「没发生」——一处都不报。
+        var skipped = Ledger(255, 256, 257, 258, 259) + SkipLine(260);
+        Assert.Empty(Problems(skipped, [259], RecentWindow));
+
+        // ⑥ 登记了却又有账本条目 → 死条目，报。
+        var deadEntry = Ledger(255, 256, 257, 258, 259, 260) + SkipLine(260);
+        var deadProblems = Problems(deadEntry, [260], RecentWindow);
+        Assert.Contains(deadProblems, p => p.Contains("第二百六十轮", StringComparison.Ordinal)
+                                           && p.Contains("跳号", StringComparison.Ordinal));
+
+        // ⑦ 登记只兜登记过的那几轮：登记 260、缺席的是 259，照样报 259（登记不是豁免）。
+        var partial = Ledger(255, 256, 257, 258) + SkipLine(260);
+        var partialProblems = Problems(partial, [260], RecentWindow);
+        Assert.Contains(partialProblems, p => p.Contains("第二百五十九轮", StringComparison.Ordinal));
+        Assert.DoesNotContain(partialProblems, p => p.Contains("第二百六十轮没有条目", StringComparison.Ordinal));
     }
+
+    /// <summary>夹具：一行跳号登记（形状与 <c>docs/NOTES.md</c> 里那一行同一取法）。</summary>
+    private static string SkipLine(params int[] rounds) =>
+        "\n跳号的是：" + string.Join("、", rounds.Select(r => $"第{Chinese(r)}轮")) + "。\n";
 
     /// <summary>
     /// 中文轮次号的解析：账本里出现过的每一种写法都要读得出来。
@@ -129,6 +158,7 @@ public class RoundLedgerTests
     {
         var problems = new List<string>();
         var entries = LedgerEntries(notes);
+        var skips = RegisteredSkips(notes);
         if (entries.Count == 0)
         {
             problems.Add("docs/NOTES.md 里一个「## 第N轮」条目都读不出来——判据退化了，"
@@ -136,7 +166,7 @@ public class RoundLedgerTests
             return problems;
         }
 
-        var latest = entries.Keys.Max();
+        var latest = entries.Keys.Concat(skips).Max();
 
         // ① 账本不落后于代码：代码里已经提到第 N 轮，账本最新一轮却还停在更早的地方。
         if (codeRounds.Count > 0)
@@ -150,15 +180,24 @@ public class RoundLedgerTests
             }
         }
 
-        // ② 最近 window 轮每一轮都要有 ## 条目。
+        // ② 最近 window 轮每一轮都要有 ## 条目——除非它在跳号登记里（那一轮本来就没发生）。
         for (var round = latest - window + 1; round <= latest; round++)
         {
-            if (!entries.ContainsKey(round))
+            if (!entries.ContainsKey(round) && !skips.Contains(round))
             {
                 problems.Add(
                     $"账本最近 {window} 轮里第{Chinese(round)}轮没有条目（最新一轮是第{Chinese(latest)}轮）——"
-                    + "轮次账本断档：现场被问「最近几轮做了什么」时，这一轮在账本里翻不到。");
+                    + "轮次账本断档：现场被问「最近几轮做了什么」时，这一轮在账本里翻不到。"
+                    + "（若这一轮本来就没发生，把它登记进 docs/NOTES.md 的「跳号的是：」那一行。）");
             }
+        }
+
+        // ②b 跳号登记不许留死条目：登记说这一轮没发生，账本里却有它的条目，两处必有一处是错的。
+        foreach (var round in skips.Where(entries.ContainsKey).OrderBy(r => r))
+        {
+            problems.Add(
+                $"第{Chinese(round)}轮被登记成「跳号、没发生」，账本里却有它的条目——"
+                + "两处必有一处是错的：要么删掉那条登记，要么那一轮真的发生过、该按断档处理。");
         }
 
         // ③ 最近这几轮的条目里必须有「读数」与「本轮未做」。
@@ -177,6 +216,33 @@ public class RoundLedgerTests
 
         return problems;
     }
+
+    /// <summary>
+    /// 跳号登记：<c>docs/NOTES.md</c> 里「跳号的是：」之后、第一个句号之前点到的那些轮次。
+    /// <para>
+    /// <b>为什么要有这一格</b>：轮次号是<b>人写的</b>，它会跳号（第三百三十三轮之后直接是第三百四十一轮）。
+    /// 没有这一格时，这条门把「跳号」读成「断档」，于是它红着，而红的原因不是漏记——一条永远红着的门
+    /// 与没有门一样没用。登记的是<b>事实</b>（这七个数没被用过），不是豁免：登记之外的缺席照样红。
+    /// </para>
+    /// <para>
+    /// <b>取法只有一处</b>：标记串 + 第一个句号，不认表格、不认列表——形状越窄，下一轮越不会「顺手」把
+    /// 一个真的漏记的轮次塞进来。读不到标记时返回空集合（= 没有跳号登记，行为与加这一格之前一致）。
+    /// </para>
+    /// </summary>
+    private static HashSet<int> RegisteredSkips(string notes)
+    {
+        var at = notes.IndexOf(SkipMarker, StringComparison.Ordinal);
+        if (at < 0) return [];
+        var rest = notes[(at + SkipMarker.Length)..];
+        var end = rest.IndexOf('。');
+        var segment = end < 0 ? rest : rest[..end];
+        return Regex.Matches(segment, @"第(?<num>[零一二三四五六七八九十百]+)轮")
+            .Select(m => RoundNumber(m.Groups["num"].Value))
+            .ToHashSet();
+    }
+
+    /// <summary>跳号登记的标记串（<c>docs/NOTES.md</c> 里那一行的形状由它定）。</summary>
+    private const string SkipMarker = "跳号的是：";
 
     /// <summary>
     /// 账本条目：<c>## </c> 标题行里<b>第一个</b>「第N轮」就是这一节的轮次，正文取到下一个 <c>## </c> 之前。

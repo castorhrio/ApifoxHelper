@@ -37,8 +37,15 @@ namespace ApifoxHelper.Tests;
 /// </summary>
 public class DocsSpacingTests
 {
-    /// <summary>被扫的两份对外文本（封闭名单：新增一份对外文本要在这里登记，否则它不会被判）。</summary>
-    private static readonly string[] Docs = ["README.md", "docs/NOTES.md"];
+    /// <summary>
+    /// 被扫的对外文本（封闭名单：新增一份对外文本要在这里登记，否则它不会被判）。
+    /// <para>
+    /// <b>第三百四十二轮补进第三份 <c>docs/DEMO.md</c></b>：它是答辩现场照着念的那一页剧本，
+    /// 与 <c>README.md</c> 同一交付面，却一直落在本门的扫描面之外——新文档不纳入现有排版门，
+    /// 下一轮它就成了排版口径的空白区（简报 P0-2 的原话）。
+    /// </para>
+    /// </summary>
+    private static readonly string[] Docs = ["README.md", "docs/NOTES.md", "docs/DEMO.md"];
 
     /// <summary>
     /// 当年那张登记表的形状。拆成三段拼出来：<b>判据不许与它判的东西同名</b>——判据里若原样写着那一串，
@@ -112,7 +119,7 @@ public class DocsSpacingTests
     {
         var found = Violations(Actual());
         Assert.True(found.Count == 0,
-            $"对外文本（README.md / docs/NOTES.md）的中文排版有 {found.Count} 处违例：\n  " + string.Join("\n  ", found)
+            $"对外文本（README.md / docs/NOTES.md / docs/DEMO.md）的中文排版有 {found.Count} 处违例：\n  " + string.Join("\n  ", found)
             + "\n口径：中英文之间留一个半角空隙、中文与全角标点之间不留空隙（DESIGN.md §3、§6「中文排版」第 ⑤ 条）。"
             + "\n第二百三十四轮已把历史那 11 条清零、登记表删掉——这一条从此是硬判，没有「先登记着」那条路。"
             + "\n引用源码字面量、报告行标签或格式占位时写成行内代码（反引号）逐字引：那不算正文，字也一个没改。");
@@ -129,7 +136,7 @@ public class DocsSpacingTests
     [Fact]
     public void ScannedDocs_AreTheTwoExternalOnes_AndNoLegacyTableCameBack()
     {
-        Assert.Equal(["README.md", "docs/NOTES.md"], Docs);
+        Assert.Equal(["README.md", "docs/NOTES.md", "docs/DEMO.md"], Docs);
         foreach (var file in Docs)
         {
             Assert.True(File.Exists(Path.Combine(Repo.Root, file)), $"扫描名单里的「{file}」不在仓里。");
