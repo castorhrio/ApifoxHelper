@@ -1,0 +1,87 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "演示用 Apifox 远端快照",
+    "version": "1.0.0",
+    "description": "演示工作区的「远端」文档快照。演示时经「导入离线远端 JSON」读入，只比较结构，不连接、不写入任何 Apifox 项目。"
+  },
+  "paths": {
+    "/api/orders/{id}": {
+      "get": {
+        "summary": "按订单号查询单个订单",
+        "description": "按订单号查询单个订单。",
+        "tags": ["订单"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "订单号，形如 SO-20260101-0001。",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "订单概要",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OrderSummary" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders": {
+      "get": {
+        "summary": "查询订单列表",
+        "description": "按状态筛选订单列表。",
+        "tags": ["订单"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "订单状态：paid 已支付、pending 待支付。",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "订单概要列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/OrderSummary" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "OrderSummary": {
+        "type": "object",
+        "description": "订单概要。",
+        "properties": {
+          "orderNo": {
+            "type": "string",
+            "description": "订单号。"
+          },
+          "totalAmount": {
+            "type": "number",
+            "description": "订单总金额，单位：分。"
+          },
+          "status": {
+            "type": "string",
+            "description": "订单状态：paid 已支付、pending 待支付。"
+          }
+        }
+      }
+    }
+  }
+}

@@ -29,6 +29,7 @@
     <!-- JobRunner.cs 的 ILogger<JobRunner>：主工程由 Microsoft.AspNetCore.App 框架引用带到，
          本工程是 net8.0，共享编译它就得显式引用。 -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
@@ -167,6 +168,19 @@
     <Compile Include="..\Sync\TargetBuilder.cs" Link="Shared\TargetBuilder.cs" />
     <Compile Include="..\Sync\SyncPlanService.cs" Link="Shared\SyncPlanService.cs" />
     <Compile Include="..\Sync\SyncExecutor.cs" Link="Shared\SyncExecutor.cs" />
+    <!-- 源码扫描链路（第三百四十一轮）：演示工作区的两处「故意留的缺口」要由**真的扫描器**扫出来，
+         不是由测试自己按文件名猜。这一批文件只依赖 BCL 与 Roslyn（主工程同一份包、同一版本），
+         不引用 WinForms 与 ASP.NET，因此可以编进 net8.0 测试工程在 Linux 上真跑。 -->
+    <Compile Include="..\Source\ProjectLoader.cs" Link="Shared\ProjectLoader.cs" />
+    <Compile Include="..\Source\EndpointDiscovery.cs" Link="Shared\EndpointDiscovery.cs" />
+    <Compile Include="..\Source\SlotScanner.cs" Link="Shared\SlotScanner.cs" />
+    <Compile Include="..\Source\EvidenceCollector.cs" Link="Shared\EvidenceCollector.cs" />
+    <Compile Include="..\Source\ResponseTracer.cs" Link="Shared\ResponseTracer.cs" />
+    <Compile Include="..\Source\SymbolUtil.cs" Link="Shared\SymbolUtil.cs" />
+    <Compile Include="..\Source\DocComments.cs" Link="Shared\DocComments.cs" />
+    <Compile Include="..\Source\SchemaBuilder.cs" Link="Shared\SchemaBuilder.cs" />
+    <Compile Include="..\Source\SourceScanService.cs" Link="Shared\SourceScanService.cs" />
+    <Compile Include="..\Infrastructure\TextFiles.cs" Link="Shared\TextFiles.cs" />
   </ItemGroup>
 
 </Project>
