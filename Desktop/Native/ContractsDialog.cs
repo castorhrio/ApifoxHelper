@@ -10,7 +10,8 @@ namespace ApifoxHelper.Desktop.Native;
 /// 数据来自任务目录 responseContract.json（扫描时静态追踪落盘）；审阅经 ContractReviewService 的唯一校验口径
 /// （阻断契约不能确认；确认/拒绝只写任务数据并递增任务版本），不写源码、不访问 Apifox。
 /// 确认后的契约在后续 Apifox 检查中替换该接口的 200 响应体，不修改共享封装。
-/// 状态表：读取失败=内联错误与下一步；没有契约=与冻结页面同一口径的说明；正常=计数行 + 筛选 + 列表 + 详情与审阅动作。
+/// 状态表：读取失败=内联错误与那颗取自口径的「重试」（第三百一十四轮）；尚未检查=产物不存在、下一步在任务页的
+/// 「开始扫描」上；没有契约=与冻结页面同一口径的说明；正常=计数行 + 筛选 + 列表 + 详情与审阅动作。
 /// 契约清单支持点击列头排序（第一百零一轮，口径见 <see cref="ContractSort"/> 与 <see cref="ListSort"/>）：
 /// 与差异确认、注释候选同一只壳，同一个手势在别处有、在这一处没有属同壳不同行为。
 /// </summary>
@@ -31,6 +32,9 @@ internal sealed class ContractsDialog : DpiAwareForm
     private readonly Button _rejectButton;
     private readonly Button _resetButton;
     private readonly Button _evidenceButton;
+    // 失败态那颗「重试」（第三百一十四轮）：文字取自口径文件，全仓只有那一处字面。
+    // 它与打开这一屏调的是同一个读取入口（见 LoadAll），两条路不各读一份。
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
     private readonly Label _status = Ui.StatusLine();
     // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
     // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
@@ -97,6 +101,9 @@ internal sealed class ContractsDialog : DpiAwareForm
         _evidenceButton = Ui.Ghost("查看代码证据");
         _evidenceButton.Enabled = false;
         _evidenceButton.Click += (_, _) => ShowEvidence();
+        // 那颗「重试」与打开这一屏调的是同一个读取入口（两条路不各读一份）。
+        _retry.Visible = false;
+        _retry.Click += (_, _) => LoadAll();
 
         var closeButton = Ui.Ghost("关闭");
         closeButton.Click += (_, _) => Close();
@@ -126,16 +133,18 @@ internal sealed class ContractsDialog : DpiAwareForm
         _statusHost.Dock = DockStyle.Fill;
         AddCaptionRow(detailGrid, _statusHost);
 
-        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 6, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
+        var actionRow = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, BackColor = UiTokens.Panel, ColumnCount = 7, Padding = new Padding(UiTokens.Lg, UiTokens.Xs, UiTokens.Lg, UiTokens.Lg), Margin = new Padding(0) };
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        actionRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         _rejectButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _resetButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _evidenceButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         closeButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         actionRow.Controls.Add(_confirmButton, 0, 0);
         actionRow.Controls.Add(_rejectButton, 1, 0);
@@ -143,7 +152,9 @@ internal sealed class ContractsDialog : DpiAwareForm
         // 第 3 列是 Percent 100 的「把按钮推到右边」那一列：空着就够，不往里放占位控件——
         // 默认尺寸的 Panel 是 200×100，而本行 AutoSize，那一格的高度会变成整行的高度（第二百二十二轮实测 120px 对按钮 40px）。
         actionRow.Controls.Add(_evidenceButton, 4, 0);
-        actionRow.Controls.Add(closeButton, 5, 0);
+        // 那颗「重试」落在「关闭」左边：这一屏没有第二颗「重试」。
+        actionRow.Controls.Add(_retry, 5, 0);
+        actionRow.Controls.Add(closeButton, 6, 0);
 
         // 停靠按集合倒序生效：筛选行最先停靠（顶部），其次按钮行（最底部）、详情区，列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -155,9 +166,48 @@ internal sealed class ContractsDialog : DpiAwareForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
-        if (!ReloadContracts(out var error))
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 这一屏的<b>唯一读取入口</b>（第三百一十四轮）：打开（<see cref="OnLoad"/>）与失败态那颗「重试」调的是同一个方法。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一屏读的是任务目录里的 <c>responseContract.json</c>，读不出来时写的是
+    /// 「请关闭后重新扫描再试」——<b>屏上只剩「关闭」可点</b>：提示出口末尾那句 <c>SetButtons(null)</c>
+    /// 把三颗审阅按钮一并禁用，点不动。那三颗在审阅保存成功之后确实会重读一次清单（<see cref="RunReview"/>
+    /// 调 <see cref="ReloadContracts"/>），可失败态下它们点不动，所以这一屏没有等价入口。
+    /// 它是「读取失败 → 重试」那一族里<b>最后</b>一屏：收掉它，这一族每一屏的失败态都有一颗点得动的下一步。
+    /// </para>
+    /// <para>
+    /// <b>为什么读取收进一个方法</b>：两条路各读一份，失败态与正常态就会各自漂移（第三百零三 / 三百零五 /
+    /// 三百零八 / 三百零九 / 三百一十 / 三百一十二 / 三百一十三轮同一形状）。<b>开头先收起那颗按钮</b>：
+    /// 成功路径不经提示出口，那里是唯一的收起处——第三百零四轮在注释候选那一屏实测到的「恢复后按钮还亮着」
+    /// 就是这个成因。
+    /// </para>
+    /// <para>
+    /// <b>三种非失败态各说各的下一步</b>（第三百一十四轮按实物分开）：<b>尚未检查</b>（那份产物根本不存在，
+    /// 扫描还没跑过）→ 那一步在「检查任务」页那颗「开始扫描」上；<b>没有需要补充的响应契约</b>（扫描跑过、
+    /// 产物里一条都没有）→ 那一步在「项目设置」页填「通用响应封装」并重新扫描；<b>筛到零行</b> → 走
+    /// <see cref="ApplyFilter"/> 那条口，根本不经这里。三种都不是读取失败，再读一次读不出新东西，
+    /// 所以都不点亮那颗按钮（DESIGN.md §7「同一时刻只有一个下一步」）。
+    /// </para>
+    /// </summary>
+    private void LoadAll()
+    {
+        _retry.Visible = false;
+        if (!ReloadContracts(out var error, out var missing))
         {
-            ShowHint("读取响应契约失败：" + error + "。请关闭后重新扫描再试。", UiTokens.BadText);
+            // 文案不抄第二份：标题与说明都取口径文件那一对（「重试」这个字面全仓只有一处）。
+            ShowHint(
+                LoadFailureState.FailureMessage(LoadFailureState.Contracts.Title, error, LoadFailureState.Contracts.Hint),
+                UiTokens.BadText,
+                canRetry: true);
+            return;
+        }
+        if (missing)
+        {
+            // 产物不存在 = 扫描还没跑过：那一步在任务页那颗「开始扫描」上，不在「再读一次」上。
+            ShowHint("尚未检查。先在「" + PageNames.Tasks + "」页点「开始扫描」：响应契约在扫描时静态追踪落盘，扫描之后这一屏才有可审阅的条目。", UiTokens.Muted);
             return;
         }
         if (_contracts.Count == 0)
@@ -194,18 +244,25 @@ internal sealed class ContractsDialog : DpiAwareForm
         Ui.KeepKeyboardOnQueue(_list);
     }
 
-    /// <summary>从任务目录重新读取契约清单；读取失败时返回 false 并带出脱敏错误。</summary>
-    private bool ReloadContracts(out string error)
+    /// <summary>
+    /// 从任务目录重新读取契约清单；读取失败时返回 false 并带出脱敏错误。
+    /// <paramref name="missing"/> 为真表示<b>那份产物根本不存在</b>（扫描还没跑过）——
+    /// 它与「读得出来但一条都没有」是两种状态，下一步各在一处（见 <see cref="LoadAll"/>）。
+    /// </summary>
+    private bool ReloadContracts(out string error, out bool missing)
     {
         try
         {
-            _contracts = _tasks.Read<List<ResponseContract>>(_task.Id, TaskFiles.ResponseContract) ?? [];
+            var stored = _tasks.Read<List<ResponseContract>>(_task.Id, TaskFiles.ResponseContract);
+            missing = stored is null;
+            _contracts = stored ?? [];
             error = "";
             return true;
         }
         catch (Exception ex)
         {
             _contracts = [];
+            missing = false;
             error = Redactor.Redact(ex.Message);
             return false;
         }
@@ -214,9 +271,15 @@ internal sealed class ContractsDialog : DpiAwareForm
     /// <summary>
     /// 提示出口。<c>keepAggregate</c> 为真表示「契约还在，只是当前筛选一条都不命中」：筛选器与关键词框要留着
     /// （提示语「换一个关键词或筛选再试」指的就是它们），计数行的聚合数字也要留着（「待确认 0」是清完队列的凭据）。
-    /// 缺省为假：打开期读取失败与「没有需要补充的响应契约」仍是原来的形状。
+    /// 缺省为假：打开期读取失败与两种空态（尚未检查 / 没有需要补充的响应契约）仍是原来的形状。
+    /// <para>
+    /// <b><paramref name="canRetry"/> 是第三百一十四轮加的</b>：只有「读取失败」那一支才点亮那颗「重试」——
+    /// 另外两种不是失败（产物本来就没有 / 扫描跑过但一条都没有），再读一次读不出新东西，那一步在屏外
+    /// （任务页的「开始扫描」、项目设置页的「通用响应封装」），由那两句提示自己指名。末尾统一收起，
+    /// 于是「同一时刻只有一个下一步」在三种状态上都成立（DESIGN.md §7）。
+    /// </para>
     /// </summary>
-    private void ShowHint(string message, Color color, bool keepAggregate = false)
+    private void ShowHint(string message, Color color, bool keepAggregate = false, bool canRetry = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
@@ -227,6 +290,7 @@ internal sealed class ContractsDialog : DpiAwareForm
         SetButtons(null);
         if (!keepAggregate) _counts.Text = "";
         _detail.Text = "";
+        _retry.Visible = canRetry;
     }
 
     /// <summary>计数行按全部契约统计（不随筛选变化），等宽数字不跳宽。</summary>
@@ -416,7 +480,7 @@ internal sealed class ContractsDialog : DpiAwareForm
             return;
         }
         if (IsDisposed) return;
-        if (!ReloadContracts(out var error))
+        if (!ReloadContracts(out var error, out _))
         {
             // 写入已成功，重新读取失败时如实说明，不显示成审阅失败。
             SetStatus("审阅结果已保存，但重新读取契约失败：" + error, UiTokens.BadText);

@@ -46,6 +46,9 @@ public class PageNamesTests
         ("TasksPage.cs", "PageNames.Projects", 2),
         // 响应契约 / 接口追踪：分析设置在哪一页。
         ("ContractsDialog.cs", "PageNames.Projects", 1),
+        // 第三百一十四轮：这一屏多了一种状态——那份产物根本不存在（扫描还没跑过），那一步在任务页那颗
+        // 「开始扫描」上。读取失败那一句改从口径文件取，不再自己指页，所以这一屏只多这一处。
+        ("ContractsDialog.cs", "PageNames.Tasks", 1),
         ("EndpointTrace.cs", "PageNames.Projects", 1),
         ("EndpointTraceDialog.cs", "PageNames.Projects", 1),
         // 七个任务阶段对话框：「先在某一页点某个按钮」。

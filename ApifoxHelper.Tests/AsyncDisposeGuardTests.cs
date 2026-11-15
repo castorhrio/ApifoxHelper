@@ -48,7 +48,8 @@ public class AsyncDisposeGuardTests
         // 契约审阅：同一形态；成功守卫在按磁盘重读契约之前。
         var contracts = MethodBody("ContractsDialog.cs", "private async void RunReview(string reviewState)", "private bool SelectContract(string endpointKey)");
         AssertThreeGuards(contracts, "ContractsDialog.RunReview", @"await _reviews\.ReviewAsync\(_task\.Id, endpointKey, reviewState, CancellationToken\.None\);");
-        Assert.Matches(@"(?m)^\s*if \(IsDisposed\) return;\s*\n\s*if \(!ReloadContracts\(out var error\)\)", contracts);
+        // 第三百一十四轮：读取入口多带一个「那份产物根本不存在」的出参，守卫的位置与判据一字未变。
+        Assert.Matches(@"(?m)^\s*if \(IsDisposed\) return;\s*\n\s*if \(!ReloadContracts\(out var error, out _\)\)", contracts);
 
         // 差异确认保存：成功守卫在按磁盘重读决策之前。
         var decisions = MethodBody("DecisionsDialog.cs", "private async void SaveDecision(string description, Action<DecisionStore> mutate)", "private static DecisionStore CloneStore(DecisionStore store)");

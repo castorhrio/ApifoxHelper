@@ -15,7 +15,7 @@ namespace ApifoxHelper.Desktop.Native;
 /// 本文件只放<b>通用机制</b>（按钮文字、三态门控、状态行拼装、指名入口的指引）与<b>各屏文案</b>
 /// （<see cref="Tasks"/> / <see cref="Reports"/> / <see cref="Journal"/> / <see cref="Decisions"/> /
 /// <see cref="Candidates"/> / <see cref="Supplements"/> / <see cref="ApplyPlan"/> / <see cref="Evidence"/> /
-/// <see cref="Propagation"/>），不依赖 WinForms，
+/// <see cref="Propagation"/> / <see cref="Contracts"/>），不依赖 WinForms，
 /// 以共享源码编入测试工程在 Linux 断言；配置页的文案仍在 <see cref="ProfileLoadState"/>，
 /// 它把通用机制委托到这里——「重试」这个字面全仓只有一处。
 /// <b>这份枚举与那份封闭清单是一件事的两头</b>（第三百零三轮补的一句）：
@@ -28,8 +28,9 @@ public static class LoadFailureState
 {
     /// <summary>
     /// 失败态的唯一行动按钮文字：配置页、任务页，以及报告 / 差异确认 / 任务日志 / 注释候选 / 补充说明 /
-    /// 注释缺口 / 检查结果 / 代码证据 / 接口追踪明细 / 生成文档核对 十处对话框同一颗、同一字面（第三百零五轮补上注释缺口，
-    /// 第三百零八轮补上检查结果，第三百零九轮补上代码证据，第三百一十轮补上接口追踪明细，第三百一十三轮补上生成文档核对）。
+    /// 注释缺口 / 检查结果 / 代码证据 / 接口追踪明细 / 生成文档核对 / 响应契约 十一处对话框同一颗、同一字面
+    /// （第三百零五轮补上注释缺口，第三百零八轮补上检查结果，第三百零九轮补上代码证据，第三百一十轮补上接口追踪明细，
+    /// 第三百一十三轮补上生成文档核对，第三百一十四轮补上响应契约）。
     /// 唯一的例外是注释回写对话框——那一屏不新增这颗按钮，
     /// 失败提示指名它自己那颗「重新生成计划」（形状见 <see cref="RetryHint"/> 与 <see cref="ApplyPlan"/>）。
     /// </summary>
@@ -261,6 +262,35 @@ public static class LoadFailureState
     public static class Propagation
     {
         public const string Title = "读取核对结果失败";
+        public const string Hint = DirectoryHint;
+    }
+
+    /// <summary>
+    /// 响应契约（<c>ContractsDialog</c>）的失败态文案（第三百一十四轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一屏读的是任务目录里的 <c>responseContract.json</c>，读不出来时写的是
+    /// 「读取响应契约失败：…。请关闭后重新扫描再试。」——<b>屏上只剩「关闭」可点</b>：提示出口末尾那句
+    /// <c>SetButtons(null)</c> 把三颗审阅按钮一并禁用，点不动。那正是第三百零三轮点名的盲区，
+    /// 也是「读取失败 → 重试」那一族里<b>最后</b>一屏（收掉它，这一族每一屏的失败态都有一颗点得动的下一步）。
+    /// </para>
+    /// <para>
+    /// <b>标题为什么不与别处共用</b>：全原生界面只有这一处读 <c>responseContract.json</c>
+    /// （<c>TaskFiles.ResponseContract</c>），屏幕上那一格被读作「响应契约」，共用会把这一屏自己的名字弄丢。
+    /// <b>说明为什么直接取 <see cref="DirectoryHint"/></b>：契约产物就落在任务目录里，那句「任务目录可能被占用或
+    /// 权限不足；点「重试」再读一次」正是这一步，不另起一份字面——本文件里那句已经有六处取它
+    /// （<see cref="Tasks"/> / <see cref="Journal"/> / <see cref="Candidates.DraftsHint"/> /
+    /// <see cref="CheckHint"/> / <see cref="Evidence.Hint"/> / <see cref="Propagation.Hint"/>）。
+    /// </para>
+    /// <para>
+    /// <b>两种空态都不走这一句</b>：<b>尚未检查</b>（那份产物根本不存在，扫描还没跑过）的下一步在
+    /// 「检查任务」页那颗「开始扫描」上；<b>没有需要补充的响应契约</b>（扫描跑过、产物里一条都没有）的下一步在
+    /// 「项目设置」页填「通用响应封装」并重新扫描——两种都由这一屏自己的空态说，各写一句
+    /// （与 <see cref="Candidates"/> 那一对「两种失败各写一句」同一分别）。
+    /// </para>
+    /// </summary>
+    public static class Contracts
+    {
+        public const string Title = "读取响应契约失败";
         public const string Hint = DirectoryHint;
     }
 }

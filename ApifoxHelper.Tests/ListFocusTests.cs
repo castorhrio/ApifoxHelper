@@ -206,7 +206,9 @@ public class ListFocusTests
 
         var reload = file switch
         {
-            "ContractsDialog.cs" => @"if \(!ReloadContracts\(out var error\)\)\s*\{(?<b>[^}]*)\}",
+            // 第三百一十四轮：读取入口多带一个「那份产物根本不存在」的出参（尚未检查与「读得出来但一条都没有」
+            // 是两种状态），这一条判的仍是「回读失败那一支不交回键盘」，取法跟着签名走。
+            "ContractsDialog.cs" => @"if \(!ReloadContracts\(out var error, out _\)\)\s*\{(?<b>[^}]*)\}",
             "DecisionsDialog.cs" => @"if \(!ReloadDecisions\(out var error\)\)\s*\{(?<b>[^}]*)\}",
             _ => null,
         };

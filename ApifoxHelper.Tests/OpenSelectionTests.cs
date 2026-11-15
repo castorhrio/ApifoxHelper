@@ -135,10 +135,11 @@ public class OpenSelectionTests
     // ---------- 接线：两个审阅视图在打开时落一次，重建路径不落 ----------
 
     [Theory]
-    // 读取入口一栏：响应契约的读取自第九十一轮起就写在 OnLoad 里；注释候选自第三百零三轮起把它收进
+    // 读取入口一栏：注释候选自第三百零三轮起把读取收进 LoadAll，响应契约自第三百一十四轮起同样收进
     // LoadAll——「打开」与那颗「重试」共用同一个入口（口径见 LoadFailureState），落点跟着在那一个体里。
+    // 两屏都不再是「OnLoad 里就地读」：那一栏留着 OnLoad 会让这一条判的是一个只剩一句委托的方法。
     [InlineData("CandidatesDialog.cs", "LoadAll")]
-    [InlineData("ContractsDialog.cs", "OnLoad")]
+    [InlineData("ContractsDialog.cs", "LoadAll")]
     public void ReviewQueues_LandOnTheFirstRowWhenTheyOpen(string file, string readEntry)
     {
         var onLoad = MethodBody(file, "OnLoad");

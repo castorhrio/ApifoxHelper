@@ -298,6 +298,9 @@ internal static class Program
         Section("生成文档核对读取失败态（正常 → 核对结果坏 → 点一次换一种失败、原因跟着换 → 失败态下那颗「重试」在 Tab 链里且紧挨着「关闭」 → 修好后点一次清单与计数行一起回来、那颗按钮收起并退出 Tab 链 → 筛到零行不给那颗按钮 → 整份数据没有条目不给那颗按钮 → 尚未核对不给那颗按钮，真实控件）", nameof(RunPropagationLoadFailure));
         RunPropagationLoadFailure(services, dataRoot);
 
+        Section("响应契约读取失败态（正常 → 契约坏 → 点一次换一种失败、原因跟着换 → 修好后点一次清单与计数行一起回来且那颗按钮收起 → 没有需要补充的契约不给那颗按钮 → 尚未检查不给那颗按钮，真实控件）", nameof(RunContractsLoadFailure));
+        RunContractsLoadFailure(services, dataRoot);
+
         Section("极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）", nameof(RunDetailBreak));
         RunDetailBreak(services, dataRoot);
 
@@ -5899,6 +5902,299 @@ internal static class Program
                     throw new InvalidOperationException("「尚未核对」不是失败态，却显示了「重试」：再读一次读不出新东西。");
                 }
                 _lines.Add($"     尚未核对：提示以「{hint.Text[..4]}」开头（那一页与那一颗都指到了），那颗按钮没亮");
+            });
+        }
+        finally
+        {
+            // 句柄留着，后面每一段读这个任务都会失败；中途红的那一发也必须把它放开。
+            hold?.Dispose();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 响应契约（<c>ContractsDialog</c>）的读取失败态（第三百一十四轮）：这一屏是「读取失败 → 重试」那一族里
+    /// <b>最后</b>接上的一屏，本段是它第一次在模拟器上被真的点了一次「重试」。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一屏读的是任务目录里的 <c>responseContract.json</c>，读不出来时此前写的是
+    /// 「请关闭后重新扫描再试」——屏上只剩「关闭」可点（提示出口末尾那句 <c>SetButtons(null)</c> 把三颗审阅按钮
+    /// 一并禁用）。那三颗在审阅保存成功之后确实会重读一次清单，可失败态下点不动，所以这一屏没有等价入口。
+    /// </para>
+    /// <para>
+    /// <b>七段各判什么</b>：① 夹具按产品自己的写入口径落盘并回读；② 正常打开时清单与计数行都在、那颗按钮不亮；
+    /// ③ 契约读不出来时换成失败态、那句以口径文件「读取响应契约失败」开头并指名屏上那颗按钮；
+    /// ④ 点一次换一种失败（<c>FileShare.None</c> 独占占用）、句里的原因跟着换——判据不能只看「还是不是失败」，
+    /// 成功路径只收起提示区、不清那格文字；⑤ 修好后点一次，清单与计数行一起回来、那颗按钮收起；
+    /// ⑥ 没有需要补充的响应契约（扫描跑过、产物里一条都没有）不给那颗按钮；⑦ 尚未检查（产物根本不存在）
+    /// 不给那颗按钮，那一步在「检查任务」页那颗「开始扫描」上。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那颗按钮在 Tab 链里的位置（第三百一十三轮在生成文档核对那一屏量过一次，
+    /// 推广到其余失败态屏要与真机键盘手感一起量，模拟器读数说服力有限，登记在 NOTES 的 P2-3）；
+    /// 也不判「量到的数对不对」——那是人读出来的。
+    /// </para>
+    /// </summary>
+    private static void RunContractsLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var reviews = services.GetRequiredService<ContractReviewService>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "响应契约失败态冒烟" });
+        var contractPath = tasks.FilePath(task.Id, TaskFiles.ResponseContract);
+
+        // 主清单与它那一句提示：这一屏只有一块「填满剩余空间」的宿主（契约清单），按宿主认，不按次序猜。
+        static (ListView List, Label Hint) MainPane(ContractsDialog form)
+        {
+            var host = form.Controls.OfType<Panel>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的契约清单宿主：停靠分法变了，本段判据需要重定。");
+            var hint = host.Controls.OfType<Label>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("契约清单宿主里没有那句铺满列表区的提示行：提示出口的形状变了。");
+            var list = FindAll<ListView>(host).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["接口", "封装", "data 类型", "分支", "审阅状态"]))
+                ?? throw new InvalidOperationException("这一屏找不到表头为「接口 / 封装 / data 类型 / 分支 / 审阅状态」的契约清单：列增删或改名了，本段判据需要重定。");
+            return (list, hint);
+        }
+
+        // 计数行按形状认，不按文字认：提示出口把那一格清成空串（不留半份数字），按「契约 」开头取法在失败态找不到落点。
+        static Label Counts(ContractsDialog form)
+        {
+            var cells = FindAll<Label>(form)
+                .Where(control => control.TextAlign == ContentAlignment.MiddleRight && !control.AutoSize)
+                .ToList();
+            return cells.Count switch
+            {
+                1 => cells[0],
+                0 => throw new InvalidOperationException("这一屏没有那块右对齐、不自适应宽度的计数行格：筛选行的形状变了，本段判据需要重定。"),
+                _ => throw new InvalidOperationException($"这一屏有 {cells.Count} 块右对齐、不自适应宽度的 Label，计数行按形状认不再唯一：本段判据需要重定。"),
+            };
+        }
+
+        // 关键词框：这一屏唯一的单行输入框（详情区那块是多行只读预览）。
+        static TextBox Keyword(ContractsDialog form) =>
+            FindAll<TextBox>(form).SingleOrDefault(control => !control.Multiline)
+            ?? throw new InvalidOperationException("这一屏找不到那只单行关键词框：Ui.FilterRow 的形状变了，本段判据需要重定。");
+
+        ContractsDialog? dialog = null;
+        FileStream? hold = null;
+        string? good = null;
+        string? jsonFailureSentence = null;
+        string? countsWhenGood = null;
+        const int rowCount = 3;
+        try
+        {
+            RunAction("响应契约失败态：准备一份真实契约清单（产品自己的写入口径落盘）", () =>
+            {
+                tasks.Write(task.Id, TaskFiles.ResponseContract, ContractsFixture());
+                var reread = tasks.Read<List<ResponseContract>>(task.Id, TaskFiles.ResponseContract)
+                    ?? throw new InvalidOperationException("写入后读不回契约清单。");
+                if (reread.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"夹具回读到 {reread.Count} 条契约，期望 {rowCount} 条。");
+                }
+                good = File.ReadAllText(contractPath);
+                _lines.Add($"     磁盘副本留了一份原文 {good.Length} 字：契约 {reread.Count} 条（待确认 / 已阻断 / 已拒绝）");
+            });
+
+            RunAction("响应契约失败态：正常打开时契约清单与计数行可见且不显示「重试」（真实控件）", () =>
+            {
+                dialog = new ContractsDialog(tasks, task, reviews);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!list.Visible || list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"正常打开时契约清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {rowCount} 行。");
+                }
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"正常打开时提示区却可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("契约读出来了，「重试」却亮着：它只在读取失败时才是下一步。");
+                }
+                countsWhenGood = Counts(dialog).Text;
+                var expected = "契约 3 · 待确认 1 · 已确认 0 · 已拒绝 1 · 已阻断 1 · 已失效 0";
+                if (countsWhenGood != expected)
+                {
+                    throw new InvalidOperationException($"正常打开时计数行是「{countsWhenGood}」，期望「{expected}」（按整份契约统计）。");
+                }
+                if (!Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("有契约可筛时关键词框却停着：那一种状态整份数据是读得出来的（口径见 ListFilter.KeywordEnabled）。");
+                }
+                _lines.Add($"     正常打开：契约清单 {list.Items.Count} 行，计数行「{countsWhenGood}」，那颗按钮没亮");
+            });
+
+            RunAction("响应契约失败态：契约读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                File.WriteAllText(contractPath, "这不是 JSON");
+                dialog = new ContractsDialog(tasks, task, reviews);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("契约读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                // 本轮的主张就在这一判里：这一屏念的是口径文件那一句，不再自己拼「请关闭后重新扫描再试」。
+                if (!hint.Text.StartsWith(LoadFailureState.Contracts.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Contracts.Title}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名屏上那颗按钮，用户读不到该点哪一颗：「{hint.Text}」。");
+                }
+                // 那一句静态门（NoScreen_SendsTheUserAwayToReopenTheWindow）判的是源码里有没有那几种说法；
+                // 这一判判的是屏幕上念出来的那一句里也确实没有——源码改了、句子还是从别处拼回来的那种红它抓不到。
+                foreach (var phrase in new[] { "请关闭后", "关闭后重试", "关闭本窗口重新打开" })
+                {
+                    if (hint.Text.Contains(phrase, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException($"失败提示仍然把用户支去重开窗口（「{phrase}」）：「{hint.Text}」。");
+                    }
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                if (list.Visible)
+                {
+                    throw new InvalidOperationException("契约读不出来时契约清单仍可见：半份结果被留在屏上。");
+                }
+                if (Counts(dialog).Text.Length != 0)
+                {
+                    throw new InvalidOperationException($"失败态下计数行还留着「{Counts(dialog).Text}」：半份数字比没有数字更坏。");
+                }
+                if (Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("整份数据不可得时关键词框仍可用：框里敲字筛不到任何东西（口径见 ListFilter.KeywordEnabled）。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     契约读不出来：提示「{hint.Text}」，那颗按钮亮着");
+            });
+
+            RunAction("响应契约失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 判据不能只看「还是不是失败」——成功路径只收起提示区、不清那格文字，按文字判会把
+                // 「重读成功」也读成「仍是失败」。这里换成换一种失败：文件还在、却被独占占用（第三百零四轮那条）。
+                hold = new FileStream(contractPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var (_, hint) = MainPane(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.Contracts.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"文件被占用时重试，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍读不出来，重试后「重试」却不见了：用户没有第二次机会。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("响应契约失败态：修好后点「重试」退出失败态、契约清单与计数行一起回来且那颗按钮收起（真实控件）", () =>
+            {
+                if (dialog is null || good is null || countsWhenGood is null) throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                File.WriteAllText(contractPath, good);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好契约后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                // 第三百零四轮那一发的成因在这一屏同样成立（成功路径不经 ShowHint，那里是唯一的收起处）：
+                // 清单与计数行都回来了，那颗按钮却还亮着，等于同一屏给两个下一步。
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                if (!list.Visible || list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"恢复后契约清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {rowCount} 行。");
+                }
+                if (Counts(dialog).Text != countsWhenGood)
+                {
+                    throw new InvalidOperationException($"恢复后计数行是「{Counts(dialog).Text}」，期望与失败前逐字相同（「{countsWhenGood}」）。");
+                }
+                if (!Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("恢复后关键词框还停着：失败态那句「整份数据不可得」已经不再成立，框却没人把它交回来。");
+                }
+                _lines.Add($"     修好后重试：契约清单回到 {list.Items.Count} 行，计数行「{Counts(dialog).Text}」，提示区与那颗按钮一起收起，关键词框可用");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("响应契约失败态：没有需要补充的响应契约时不给那颗按钮（真实控件）", () =>
+            {
+                // 「没有需要补充的响应契约」不是读取失败：文件读得出来，只是里面一条都没有。再读一次读不出新东西，
+                // 那一步在「项目设置」页填「通用响应封装」并重新扫描，由那一句提示自己指名。
+                tasks.Write(task.Id, TaskFiles.ResponseContract, new List<ResponseContract>());
+                dialog = new ContractsDialog(tasks, task, reviews);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible || list.Visible)
+                {
+                    throw new InvalidOperationException("整份数据没有契约时没有换成那一句说明（或清单还留着）：这一屏的空态形状变了。");
+                }
+                if (!hint.Text.StartsWith("没有需要补充的响应契约", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"整份数据没有契约时提示是「{hint.Text}」，期望以「没有需要补充的响应契约」开头。");
+                }
+                if (!hint.Text.Contains(PageNames.Projects, StringComparison.Ordinal) || !hint.Text.Contains("通用响应封装", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"那一种状态的下一步有两样（哪一页、填哪一格），提示只该把两处都指名：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「没有需要补充的响应契约」不是失败态，却显示了「重试」：再读一次读不出新东西。");
+                }
+                if (Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("整份数据没有契约时关键词框仍可用：框里敲字筛不到任何东西（口径见 ListFilter.KeywordEnabled）。");
+                }
+                _lines.Add($"     没有需要补充的响应契约：提示「{hint.Text}」，框一起停，那颗按钮没亮");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("响应契约失败态：尚未检查时不给那颗按钮（那一步在任务页那颗「开始扫描」上，真实控件）", () =>
+            {
+                // 「尚未检查」不是读取失败：文件本来可以不存在，Read 交出 null。那一屏的下一步写在
+                // 「检查任务」页那颗「开始扫描」上，本轮接的那一句只说再读一次，两种状态因此不共用一句话。
+                File.Delete(contractPath);
+                dialog = new ContractsDialog(tasks, task, reviews);
+                dialog.Show();
+                Application.DoEvents();
+                var (_, hint) = MainPane(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith("尚未检查", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"尚未检查时提示是「{hint.Text}」，期望以「尚未检查」开头。");
+                }
+                if (!hint.Text.Contains(PageNames.Tasks, StringComparison.Ordinal) || !hint.Text.Contains("开始扫描", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"那一种状态的下一步有两样（哪一页、点哪一颗），提示只该把两处都指名：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「尚未检查」不是失败态，却显示了「重试」：再读一次读不出新东西。");
+                }
+                _lines.Add($"     尚未检查：提示以「{hint.Text[..4]}」开头（那一页与那一颗都指到了），那颗按钮没亮");
             });
         }
         finally
