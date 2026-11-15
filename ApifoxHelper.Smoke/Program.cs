@@ -3167,26 +3167,25 @@ internal static class Program
     }
 
     /// <summary>
-    /// 这一行是不是提示行：<b>标签列没有控件</b>、字段列里是一个 <c>Label</c>——
-    /// 即 <see cref="Ui.HintRow"/> 出厂的那个形状（第二百零六轮之前，三份私有 AddHint 与新建任务的
-    /// AddRow 会在标签列再放一个占位 Panel，这一判据正好把它们与字段行分开）。
+    /// 这一行是不是提示行：<b>那一格上的标记是 <see cref="Ui.HintRowMarker"/></b>——即
+    /// <see cref="Ui.HintRow"/> 出厂的那一行（第三百四十九轮起说明行跨两列，与分区标题同列同跨度，
+    /// 按「标签列没有控件、字段列里是一个 Label」那一条旧判据会把分区标题一起算进来，
+    /// 200% 档因此多念出一条本来不存在的假红；标记只有工厂那一处会设，<c>HintRowTests</c> 钉住）。
     /// <para>
     /// <b>为什么不按字号认</b>：第一版按「那一格是 Caption 磅值」判，wine 实测 96 档认得出五行、
     /// 120 与 192 档一条都认不出（冒烟器自己报「没有一条提示行」）。<c>Font.SizeInPoints</c> 随档位变
-    /// （窗体经 <c>DpiScale.Apply</c> 缩放后不再是 9），而「这一行的控件在哪一列」不变。
+    /// （窗体经 <c>DpiScale.Apply</c> 缩放后不再是 9），而「这一行是工厂交出来的哪一种形状」不变。
     /// 判断要看形状，不能看一个会随缩放漂走的读数。
     /// </para>
     /// </summary>
     private static bool IsHintRow(TableLayoutPanel grid, int row)
     {
-        var hint = false;
         foreach (Control control in grid.Controls)
         {
             if (grid.GetRow(control) != row) continue;
-            if (grid.GetColumn(control) == 0) return false;
-            if (control is Label) hint = true;
+            if (control is Label && (control.Tag as string) == Ui.HintRowMarker) return true;
         }
-        return hint;
+        return false;
     }
 
     /// <summary>字段名所在的行号（找不到返回 -1）。</summary>

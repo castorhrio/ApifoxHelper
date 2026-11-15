@@ -2134,6 +2134,156 @@ public class WineCheckScriptsTests
         Assert.Equal(2, XvfbRuns(commented).Count);
     }
 
+    /// <summary>取一支脚本自己念出来的那块屏（「屏幕固定 W×H（Xvfb）」那一句）；念不出来就是没有自述。</summary>
+    private static (int W, int H)? DeclaredScreenOf(string text)
+    {
+        var match = DeclaredScreen.Match(text);
+        return match.Success
+            ? (int.Parse(match.Groups["w"].Value), int.Parse(match.Groups["h"].Value))
+            : null;
+    }
+
+    /// <summary>README 里登记的那块屏（取第一处「屏幕固定 W×H」，与上面那条门同一个取法）。</summary>
+    private static (int W, int H)? ReadmeDeclaredScreen(string readmeText) => DeclaredScreenOf(readmeText);
+
+    /// <summary>
+    /// <b>判据本体（<c>demo.ps1</c> 那一侧的屏尺寸对账，第三百四十九轮，简报 P0-2）</b>：
+    /// 纯函数——ps1 的自述 / sh 的自述 / sh 每一次 <c>xvfb-run</c> 实给的屏 / README 的登记 → 违例句，空 = 一致。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第三百四十八轮那条门判的是 <c>demo.sh</c> 一侧的三处同数（自述 ↔ 每一跑实给 ↔
+    /// README），而 <c>demo.ps1</c> 里同样印着一句「跑 wine 那一支时屏幕固定 1600×1000（Xvfb）」——
+    /// 两支是<b>同一份讲稿</b>（本文件 <c>DemoPs1_NamesTheSameSectionsAsDemoSh</c> 判的就是这件事），
+    /// 那一族六格表的结论又写着「同档两支的三个数逐字相同」。可那一句在 ps1 里<b>没有任何一处对账</b>：
+    /// 谁改了 ps1 那一句而 sh 与 README 不跟，答辩现场念的是 A 屏、Windows 那一跑的量在 B 屏上，
+    /// 而所有门照旧全绿——第三百四十八轮那一族抓的正是这一种「静默量在另一块屏上」。
+    /// </para>
+    /// <para>
+    /// <b>ps1 这一侧为什么只有自述、没有实给</b>：它不自己开 Xvfb。<c>demo.ps1</c> 开头第 2 条自己写着
+    /// 「Xvfb：那是 Linux 的假显示器，Windows 上有真桌面，不叫 xvfb-run」——Windows 上那块屏是那台机器
+    /// 自己的事（真机当天要把实际屏尺寸一并抄进读数，见 README「Xvfb 屏尺寸」那一节第 ① 条），
+    /// 走 WSL / Git Bash 里那一支时屏由<b>外部</b>给它、脚本只接 <c>DISPLAY</c>。所以这里判的是
+    /// 「ps1 念的那一块，是不是 sh 真的给出去的那一块，是不是 README 登记的那一块」，
+    /// <b>不假装 ps1 也设置过屏幕</b>——它没有那一步，硬造一条「ps1 的实给」就是判据在判自己。
+    /// </para>
+    /// </summary>
+    private static List<string> Ps1ScreenDrift(
+        (int W, int H)? ps1Declared,
+        (int W, int H)? shDeclared,
+        List<(int Line, (int W, int H)? Size)> shRuns,
+        (int W, int H)? readmeDeclared)
+    {
+        var bad = new List<string>();
+
+        if (ps1Declared is null)
+        {
+            bad.Add("demo.ps1 的录制口径里没有「屏幕固定 W×H（Xvfb）」那一句：同一份讲稿只剩一支自述了屏尺寸，"
+                    + "Windows 那一跑该落在哪块屏上，仓里读不出来了。");
+            return bad;
+        }
+
+        if (shDeclared is null)
+        {
+            bad.Add("demo.sh 没有「屏幕固定 W×H」那一句，demo.ps1 自述的 "
+                    + $"{ps1Declared.Value.W}×{ps1Declared.Value.H} 没有对照物——先修 sh 那一侧的门。");
+            return bad;
+        }
+
+        if (ps1Declared.Value != shDeclared.Value)
+        {
+            bad.Add($"demo.ps1 念的是 {ps1Declared.Value.W}×{ps1Declared.Value.H}，demo.sh 念的是 "
+                    + $"{shDeclared.Value.W}×{shDeclared.Value.H}：同一份讲稿的两支各念一块屏，"
+                    + "六格表那句「同档两支的三个数逐字相同」就成了拿两块屏上的读数相比。");
+        }
+
+        // 实给的那一侧：sh 每跑一次都是 ps1 那句自述的承接物（ps1 自己不开屏，它印的那一句讲的就是 sh 那一跑）。
+        foreach (var (line, size) in shRuns)
+        {
+            if (size is null)
+            {
+                bad.Add($"demo.sh 第 {line} 行的 xvfb-run 没带 -s，而 demo.ps1 自述的是 "
+                        + $"{ps1Declared.Value.W}×{ps1Declared.Value.H}：那一跑落在发行版缺省的 1280×1024 上，"
+                        + "两支讲稿的量数落点又分开了（第三百四十八轮那一族）。");
+                continue;
+            }
+
+            if (size.Value != ps1Declared.Value)
+            {
+                bad.Add($"demo.sh 第 {line} 行实给 Xvfb 的是 {size.Value.W}×{size.Value.H}，"
+                        + $"demo.ps1 自述的却是 {ps1Declared.Value.W}×{ps1Declared.Value.H}："
+                        + "讲稿念这一块、读数落那一块，Windows 那一跑没有人能说出它量在哪。");
+            }
+        }
+
+        if (readmeDeclared is null)
+        {
+            bad.Add(".winecheck/README.md 里没有「屏幕固定 W×H」那一句：答辩现场按哪块屏复跑，登记里读不出来了。");
+        }
+        else if (readmeDeclared.Value != ps1Declared.Value)
+        {
+            bad.Add($"README 登记的是 {readmeDeclared.Value.W}×{readmeDeclared.Value.H}，demo.ps1 念的是 "
+                    + $"{ps1Declared.Value.W}×{ps1Declared.Value.H}：同一件事两份口径，读的人不知道按哪一块屏复跑。");
+        }
+
+        return bad;
+    }
+
+    /// <summary>
+    /// 入库那三档读数量在哪一块屏上，<c>demo.ps1</c> 自述的那一句必须与其余三处同为一个数
+    /// （第三百四十九轮，简报 P0-2；上面那条门管 sh 一侧，这一条管 ps1 一侧，两支合起来把「同一份讲稿」钉住）。
+    /// </summary>
+    [Fact]
+    public void DemoPs1_DeclaredScreen_IsTheOneDemoShRunsAndTheReadmeRegisters()
+    {
+        var sh = Repo.Source(".winecheck", "demo.sh");
+        var ps1 = Repo.Source(".winecheck", "demo.ps1");
+        var readme = File.ReadAllText(Path.Combine(Directory, "README.md"));
+
+        var problems = Ps1ScreenDrift(
+            DeclaredScreenOf(ps1), DeclaredScreenOf(sh), XvfbRuns(sh), ReadmeDeclaredScreen(readme));
+
+        Assert.True(problems.Count == 0, "Windows 侧那一支的屏尺寸与其余三处对不上：" + string.Join("；", problems));
+    }
+
+    /// <summary>
+    /// 这一族抓不抓得住，照本仓对检测器的统一做法：把四发破坏喂进<b>同一个判据本体</b>当场验一遍。
+    /// 破坏一就是简报点名的那一发（把 <c>demo.ps1</c> 的屏尺寸改掉当场红）；另外三发是这一族的其余形状。
+    /// </summary>
+    [Fact]
+    public void Ps1ScreenDrift_Detector_ReportsTheBreaksItMustCatch()
+    {
+        var shDeclared = (1600, 1000);
+        var readmeDeclared = (1600, 1000);
+        var runs = XvfbRuns("""
+            屏幕固定 1600×1000（Xvfb）；
+            xvfb-run -a -s "-screen 0 1600x1000x24" bash -c 'wine x'
+            xvfb-run -a -s "-screen 0 1600x1000x24" bash -c 'wine y'
+            """);
+
+        // 干净：四处同为一个数。
+        Assert.Empty(Ps1ScreenDrift(shDeclared, shDeclared, runs, readmeDeclared));
+
+        // 破坏一（简报点名的那一发）：demo.ps1 的自述被改成另一块屏，sh 与 README 没跟。
+        Assert.Contains(Ps1ScreenDrift((1392, 866), shDeclared, runs, readmeDeclared),
+            s => s.Contains("同一份讲稿的两支各念一块屏", StringComparison.Ordinal));
+
+        // 破坏二：ps1 那一句被删——同一份讲稿只剩一支自述了屏尺寸。
+        Assert.Contains(Ps1ScreenDrift(null, shDeclared, runs, readmeDeclared),
+            s => s.Contains("demo.ps1 的录制口径里没有「屏幕固定", StringComparison.Ordinal));
+
+        // 破坏三：sh 收尾那一次漏了 -s，ps1 照旧念 1600×1000——量数落在缺省屏上，两支又分开了。
+        var missingArgs = XvfbRuns("""
+            屏幕固定 1600×1000（Xvfb）；
+            xvfb-run -a -s "-screen 0 1600x1000x24" bash -c 'wine x'
+            xvfb-run -a bash -c 'wine y'
+            """);
+        Assert.Contains(Ps1ScreenDrift(shDeclared, shDeclared, missingArgs, readmeDeclared),
+            s => s.Contains("两支讲稿的量数落点又分开了", StringComparison.Ordinal));
+
+        // 破坏四：README 与 ps1 各登记一个数（两份口径漂移，与上面那条门同一族）。
+        Assert.Contains(Ps1ScreenDrift(shDeclared, shDeclared, runs, (1280, 1024)),
+            s => s.Contains("同一件事两份口径", StringComparison.Ordinal));
+    }
+
     /// <summary>临时树清不掉不影响判据（与 <c>PreflightScriptTests.FakeTree.Dispose</c> 同一取舍）。</summary>
     private static void TryDelete(string root)
     {

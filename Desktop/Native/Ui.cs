@@ -279,8 +279,20 @@ internal static class Ui
     }
 
     /// <summary>
-    /// 两列字段网格里的提示行（说明某一行怎么填、留空会怎样）：一句 Caption 档文字放进<b>字段列</b>，
-    /// 标签列空着——不放任何占位控件。
+    /// 两列字段网格里的说明行工厂在那一格上留的标记：<see cref="HintRow"/> 是产品源码里<b>唯一</b>的赋值点。
+    /// <para>
+    /// <b>为什么需要它</b>（第三百四十九轮）：冒烟器要逐条量说明行的真实行高，此前按「标签列没有控件、
+    /// 字段列里是一个 Label」认那一行。改成跨两列之后，说明行与分区标题<b>形状完全相同</b>
+    /// （同一个 Label、同一列、同一跨度），照旧判会把分区标题算成说明行，200% 档因此多念出一条假红。
+    /// 按字号分也不行——第二百零六轮量过：<c>Font.SizeInPoints</c> 随缩放档漂，120 与 192 档
+    /// 曾经一条提示行都认不出。判断要看形状，不能看一个会随缩放漂走的读数。
+    /// </para>
+    /// </summary>
+    public const string HintRowMarker = "hint-row";
+
+    /// <summary>
+    /// 两列字段网格里的提示行（说明某一行怎么填、留空会怎样）：一句 Caption 档文字<b>跨两列</b>出厂，
+    /// 那一格里不放任何占位控件。
     /// <para>
     /// <b>为什么要有这一处</b>（第二百零六轮，具名 pass：distill）：同一件事此前有四种写法——配置编辑
     /// 对话框借 <c>AddRow</c> 传一个空标签把说明塞进字段列、「模块与模板 / 序列化与分析 / 模型服务」三个配置
@@ -289,6 +301,15 @@ internal static class Ui
     /// 都被撑到 100px 高（三个子对话框 17 行提示、新建任务 5 行提示与那一行离线模式勾选）——正是第一百四十八轮
     /// 在配置页修掉的那个根因（<see cref="ProfileFormLayout.SpacerSize"/>），当时只改了那一个文件，同一族的
     /// 三处没跟上。取的形状就是配置页那一种——四种写法里唯一在 wine 三档逐行量过行高的一种。
+    /// </para>
+    /// <para>
+    /// <b>为什么从字段列改成跨两列</b>（第三百四十九轮，具名 pass：layout；判据与逐处代价清点在
+    /// <c>docs/NOTES.md</c> 第三百四十九轮那一节）：说明行不是字段，它要的宽度是整张网格的宽度。
+    /// 200% 档 wine 实测两句长过字段列那一格（需宽 1220 与 1113 对可用 1078），于是折成两行、超出行高预算；
+    /// 而 <c>docs/DECISIONS/D2-行高预算按字号档给.md</c> §4 已经把另两条路堵死（收窄文案、放宽 Caption 档）。
+    /// 跨两列把可用宽变成 1318px，两句都放得下。<b>这笔代价如实写下</b>：所有权通道从水平对齐换成竖向邻接
+    /// ——这二十六句里有二十句此前靠缩进指向它上面那一个字段，改完之后靠「它就是那一行的下一行」；
+    /// 换来的是另外六句不再被缩进谎指最后一个字段（那六句一次管两三个编辑位，讲的是整个分区）。
     /// </para>
     /// <para>
     /// 本工厂只管形状不管文字：二十六句提示逐字留在调用处（四处取共享口径、其余就地字面量），
@@ -300,11 +321,13 @@ internal static class Ui
         var row = grid.RowCount;
         grid.RowCount = row + 1;
         grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        // 标签列留空：放一个默认尺寸的 Panel 进去，这一行就按那个面板的 100px 高排。
+        // 不放占位控件：一个默认尺寸的 Panel 就把这一行按它的 100px 高排（第二百零六轮那个根因）。
         // 带 Ui. 限定名是刻意的：说明行的长度门按「Ui.Caption（」这个记号取字，工厂这一处也要留在它视野里。
         var hint = Ui.Caption(text);
         hint.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
-        grid.Controls.Add(hint, 1, row);
+        grid.Controls.Add(hint, 0, row);
+        grid.SetColumnSpan(hint, 2);
+        hint.Tag = HintRowMarker;
         return hint;
     }
 

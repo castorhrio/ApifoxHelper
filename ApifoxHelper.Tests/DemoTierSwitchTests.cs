@@ -468,12 +468,17 @@ public class DemoTierSwitchTests
     /// <summary>
     /// 修复后那一行的全部破坏形状（<paramref name="readme"/> 可以是注入过的那份）。
     /// <para>
-    /// <b>三档现在都硬判 0，而那个 0 是两步换来的</b>：甲组（字段名折行）第二百三十五轮由「标签列随字号放大」归零，
+    /// <b>三档现在都硬判 0，而那个 0 是三步换来的</b>：甲组（字段名折行）第二百三十五轮由「标签列随字号放大」归零，
     /// 乙组（分区标题单行就比正文预算高一档）第二百三十六轮由「预算按行所属字号档给」归零
     /// （<c>docs/DECISIONS/D2-行高预算按字号档给.md</c>）。破坏消息按档位各指一个根因，多出第四行时门红在
     /// 「先回报告看清是哪一行」那一句上，而不是让人顺手把数改大（写成「≤ N」就是谁都能塞的免检通道）。
-    /// <b>hint 那一列反过来必须仍是 0 / 0 / 4</b>：那是放大列宽从同一笔可视宽度里扣走的代价，
-    /// 本轮明确不跟着放宽 Caption 档（D2 §4 第三条）——把它一起写成 0 就是替没做的事背书。
+    /// <b>hint 那一列：第二百三十五、三百四十八轮记的是 0 / 0 / 4 与 0 / 0 / 2，第三百四十九轮起三档都是 0</b>——
+    /// 变的不是预算，是那一格的<b>可用宽</b>：`Ui.HintRow` 出厂的说明行从字段列那一格改成跨两列
+    /// （200% 档可用宽 1078 → 1318px），那两句因此一行放得下。<b>放宽预算这一条仍判死</b>（D2 §4 第三条，
+    /// Caption 档不在登记的两档里），所以这里的 0 不是「把预算调大了事」换来的；那一笔代价改记在形状上
+    /// （所有权通道从水平对齐换成竖向邻接），清点在 `docs/NOTES.md` 第三百四十九轮那一节。
+    /// 旧那句「把它一起写成 0 就是替没做的事背书」在当轮成立——那时确实什么都没做，只把列宽放大从读数里抹掉就是撒谎；
+    /// 第三百四十九轮把那一格真做掉了，照抄那句就把门变成挡住正确修法的墙，所以按实物改写，不是把 4 改成 0 就完事。
     /// </para>
     /// </summary>
     private static List<string> PostFixOverbudgetBreaks(string readme)
@@ -512,14 +517,15 @@ public class DemoTierSwitchTests
                   + "先回 Desktop/Native/ProfileGridColumns.cs 的 ScaledLabelWidth 与 Ui.cs 的接线看是不是被改回固定像素。");
         }
 
-        // 提示行那一列：代价必须还在读数里（0 / 0 / 4），谁把它抹平成 0 就红在这里。
-        var expectedHints = new Dictionary<int, int> { [96] = 0, [120] = 0, [192] = 4 };
+        // 提示行那一列：第三百四十九轮起三档都是 0——代价不再由条数承担，改由形状承担（说明行跨两列出厂）。
+        var expectedHints = new Dictionary<int, int> { [96] = 0, [120] = 0, [192] = 0 };
         foreach (var run in readings)
         {
             if (!expectedHints.TryGetValue(run.Tier, out var want) || run.Hint == want) continue;
-            breaks.Add($"{run.Tier} 档 hint={run.Hint}（这一段记下的是 {want} 条）：提示行那一族本轮没有放宽"
-                + "（Caption 档不在预算登记的字号档里，见 D2 §4 第三条）。它变成 0 只有两种可能——"
-                + "有人动了提示行的预算，或者这一段不是照那三份报告念的。");
+            breaks.Add($"{run.Tier} 档 hint={run.Hint}（这一段记下的是 {want} 条）：说明行自第三百四十九轮起跨两列出厂，"
+                + "可用宽是整张网格的宽度（200% 档 1078 → 1318px），那两句因此一行放得下。它回到非 0 只有两种可能——"
+                + "有人把说明行放回字段列那一格（`HintRowTests.HintRow_IsTheOnlyFactoryAndCarriesNoSpacer` 同时该红），"
+                + "或者这一段不是照那三份报告念的。Caption 档照旧没有放宽（D2 §4 第三条），所以别把这条红读成「把预算调大」的邀请。");
         }
 
         foreach (var needle in new[] { "乙组", "决定项", "预算那条算式只按正文档算", "D2-行高预算按字号档给.md", "认不出的字号" })
@@ -654,16 +660,18 @@ public class DemoTierSwitchTests
         Assert.Contains(PostFixOverbudgetBreaks(postFix125), b => b.Contains("120 档 form=4", StringComparison.Ordinal));
 
         // ⑤ 修复后读数：192 档又冒出超预算的行（第二百三十六轮的 D2 修法没兑现，或是一族新的行）。
-        var postFix192 = Readme.Replace("overbudget=tier=192 form=0 hint=4", "overbudget=tier=192 form=4 hint=4",
+        var postFix192 = Readme.Replace("overbudget=tier=192 form=0 hint=0", "overbudget=tier=192 form=4 hint=0",
             StringComparison.Ordinal);
         Assert.NotEqual(Readme, postFix192);
         Assert.Contains(PostFixOverbudgetBreaks(postFix192), b => b.Contains("192 档 form=4", StringComparison.Ordinal));
 
-        // ⑤ 修复后读数：把 200% 档提示行那 4 条代价抹平成 0（读的人会以为三档都干净了）。
-        var postFixNoHintCost = Readme.Replace("overbudget=tier=192 form=0 hint=4", "overbudget=tier=192 form=0 hint=0",
+        // ⑤ 修复后读数：192 档提示行回到超预算（第三百四十九轮那一格被改回去——说明行放回字段列那一格）。
+        // 这一发的方向与第二百三十五轮相反：那时 0 是假的（没人做过），所以「写成 0」必须红；
+        // 本轮跨两列真做完了，0 是实测读数，所以红的是「写回 4」。判据跟着实物转，不是跟着上一轮的句子转。
+        var postFixHintBack = Readme.Replace("overbudget=tier=192 form=0 hint=0", "overbudget=tier=192 form=0 hint=4",
             StringComparison.Ordinal);
-        Assert.NotEqual(Readme, postFixNoHintCost);
-        Assert.Contains(PostFixOverbudgetBreaks(postFixNoHintCost), b => b.Contains("192 档 hint=0", StringComparison.Ordinal));
+        Assert.NotEqual(Readme, postFixHintBack);
+        Assert.Contains(PostFixOverbudgetBreaks(postFixHintBack), b => b.Contains("192 档 hint=4", StringComparison.Ordinal));
 
         // ⑤ 修复后读数：段内的定案出处被换掉（192 档凭什么从今天起是 0，那句话没有文件可指了）。
         var postFixNoDecision = Readme.Replace("docs/DECISIONS/D2-行高预算按字号档给.md", "docs/DECISIONS/D1-桌面技术栈.md",

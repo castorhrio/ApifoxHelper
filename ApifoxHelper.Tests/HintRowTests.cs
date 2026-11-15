@@ -15,11 +15,19 @@ namespace ApifoxHelper.Tests;
 /// 记着理由），当时只改了那一个文件，同一族的三处没跟上——属同壳不同行为，也是「没有一处是选过的」那种脚手架感。
 /// </para>
 /// <para>
-/// <b>本文件判什么</b>：① 工厂只交出形状（字段列一句 Caption、标签列不放控件、上下留白取令牌），不碰文字；
+/// <b>本文件判什么</b>：① 工厂只交出形状（一句 Caption <b>跨两列</b>出厂、带上说明行标记、上下留白取令牌），不碰文字；
 /// ② 二十六处提示行全部经工厂出厂，三份私有 <c>AddHint</c> 不再存在；③ 「空标签 + Caption」这条路不得复活；
 /// ④ 行容器不得再往标签列塞占位控件；⑤ 二十六句提示文字逐字与本轮改动之前相同（distill 改的是形状不是话）；
 /// ⑥ 设计基线记下这条口径；⑦ wine 侧那一段真实行高量测删不掉（长度与句数在 Linux 判得了，
-/// 「这一行实际多高」只有真实控件答得出）。
+/// 「这一行实际多高」只有真实控件答得出）；⑧ 那两句最长的说明<b>只有跨两列才同时放得下</b>——可用宽与需宽
+/// 四个数都是 192 档那一跑的读数，标签列按 <c>ProfileGridColumns</c> 现算不写死（第三百四十九轮）；
+/// ⑨ 说明行那一格上的标记只有工厂那一处会设，冒烟器只读它，旧的「按标签列有没有控件」判据不得复活。
+/// </para>
+/// <para>
+/// <b>第三百四十九轮把形状从字段列改成跨两列，这一改的代价记在这里</b>：所有权通道从水平对齐换成竖向邻接——
+/// 二十六句里有二十句此前靠缩进指向它上面那一个字段（逐处清点与为什么不采用「分区级跨、字段级留」那一种两形
+/// 形状，都在 <c>docs/NOTES.md</c> 第三百四十九轮那一节），换来的是另外六句不再被缩进谎指最后一个字段、
+/// 以及 200% 档那两条超预算的说明行归零。
 /// </para>
 /// </summary>
 public class HintRowTests
@@ -72,7 +80,7 @@ public class HintRowTests
         "每次请求最多包含的注释位置数；数字留空用默认值。",
     ];
 
-    /// <summary>工厂只交出形状：加一行、AutoSize、Caption 进字段列、上下留白取令牌——不碰文字、不放占位控件。</summary>
+    /// <summary>工厂只交出形状：加一行、AutoSize、Caption 跨两列出厂、带上标记、上下留白取令牌——不碰文字、不放占位控件。</summary>
     [Fact]
     public void HintRow_IsTheOnlyFactoryAndCarriesNoSpacer()
     {
@@ -80,14 +88,82 @@ public class HintRowTests
         var body = FactoryBody();
         Assert.Contains("grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));", body, StringComparison.Ordinal);
         Assert.Contains("var hint = Ui.Caption(text);", body, StringComparison.Ordinal);
-        Assert.Contains("grid.Controls.Add(hint, 1, row);", body, StringComparison.Ordinal);
+        // 第三百四十九轮：说明行不是字段，它要的宽度是整张网格的宽度——从字段列那一格改成跨两列。
+        // 判据与逐处代价清点在 docs/NOTES.md 第三百四十九轮那一节，可用宽那笔账见下面
+        // HintRow_FitsBothLongTextsOnlyWhenItSpansBothColumns。
+        Assert.Contains("grid.Controls.Add(hint, 0, row);", body, StringComparison.Ordinal);
+        Assert.Contains("grid.SetColumnSpan(hint, 2);", body, StringComparison.Ordinal);
+        Assert.Contains("hint.Tag = HintRowMarker;", body, StringComparison.Ordinal);
         Assert.Contains("hint.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);", body, StringComparison.Ordinal);
+        // 退回「只放字段列」即红：那一格在 200% 档只有 1078px，两句说明因此折成两行、超出行高预算。
+        Assert.False(body.Contains("Add(hint, 1, row)", StringComparison.Ordinal),
+            "Ui.HintRow 又把说明行放回字段列那一格——200% 档那两句（需宽 1220 与 1113 对可用 1078）会重新折成两行。");
         // 占位控件不得回来：默认尺寸的 Panel（200×100）会把这一行撑到 100px 高。
         Assert.False(body.Contains("new Panel", StringComparison.Ordinal),
-            "Ui.HintRow 又往标签列放了占位控件——提示行的死空白正是这么来的（ProfileFormLayout 记着同一根因）。");
+            "Ui.HintRow 又往那一格放了占位控件——提示行的死空白正是这么来的（ProfileFormLayout 记着同一根因）。");
         // 文字是调用方交进来的：工厂不加工文字，否则各屏那句提示会被悄悄改写。
         Assert.False(Regex.IsMatch(body, @"Trim\(|Replace\(|Substring|\+ """),
             "Ui.HintRow 改写了传入的提示文字——这一处只管形状，文字口径在各屏自己那一份。");
+    }
+
+    /// <summary>
+    /// 200% 档那两句最长的说明，<b>只有跨两列才同时放得下</b>（第三百四十九轮，简报 P0-1 的交付判据）。
+    /// <para>
+    /// <b>四个数都是读数，不是这里定义的</b>：字段列可用宽 1078px 与跨两列 1318px 出自第三百四十八轮
+    /// 「重启前缀 + 单档跑」那一跑 192 档的失败消息原文（屏 1600×1000），需宽 1220 与 1113 是同一条消息里
+    /// 那两行自己念出来的（出处 `.winecheck/README.md`「Xvfb 屏尺寸」那一条与 `docs/NOTES.md` 第三百四十八轮
+    /// 那一节）。标签列那一格<b>不写死</b>：按 <c>ProfileGridColumns.ScaledLabelWidth</c> 现算，
+    /// 跨两列的可用宽 = 字段列 + 标签列（两列之间没有额外的间距属性，间隙来自控件留白——与冒烟器
+    /// <c>TallestInRow</c> 取跨列控件可用宽同一算法）。所以这一条是<b>对账门</b>：算式在产品那一头、
+    /// 数在报告那一头，两头任一头变了它都红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HintRow_FitsBothLongTextsOnlyWhenItSpansBothColumns()
+    {
+        const int FieldColumnAt192 = 1078;
+        const int SpanningAt192 = 1318;
+        var longest = new[] { 1220, 1113 };
+
+        var labelColumn = ApifoxHelper.Desktop.Native.ProfileGridColumns.ScaledLabelWidth(
+            ApifoxHelper.Desktop.Native.ProfileGridColumns.LabelWidth, 2f);
+        Assert.True(FieldColumnAt192 + labelColumn == SpanningAt192,
+            $"按口径现算的跨两列可用宽是 {FieldColumnAt192 + labelColumn}px（字段列 {FieldColumnAt192} + 标签列 {labelColumn}），"
+            + $"而 192 档那一跑念到的是 {SpanningAt192}px：列宽口径与读数不是同一件事了，先回报告看清是哪一个变了，"
+            + "别把这里的数改大了事。");
+
+        Assert.True(longest.All(w => w <= SpanningAt192),
+            $"跨两列也放不下那两句说明（需宽 {string.Join(" 与 ", longest)} 对可用 {SpanningAt192}px）："
+            + "形状改了不等于问题解了——这一片要的正是 192 档 hint 归零。");
+
+        // 两句都在字段列那一格之外：这就是「分区级跨两列、字段级留在字段列」那一种两形形状救不了这一族的原因
+        // （需宽 1113 那一句在冻结基线里恰恰是挂在「通用响应封装」那一格上的字段级说明）。
+        Assert.True(longest.All(w => w > FieldColumnAt192),
+            $"那两句如今在字段列那一格里也都放得下了（最宽 {longest.Max()} 对 {FieldColumnAt192}）："
+            + "上面那条「必须跨两列」的读数已经过期，这一片的成因不再是可用宽——先重量，再决定这条门留不留。");
+    }
+
+    /// <summary>
+    /// 说明行的标记<b>只有工厂那一处会设</b>，冒烟器只读不写；旧的「按标签列有没有控件」判据不得复活。
+    /// <para>
+    /// 为什么这条要单独判：跨两列之后说明行与分区标题同列、同跨度、同是 Label，唯一能分开它们的就是这一格上的
+    /// 标记。冒烟器 ⑧ 那一段「没有一条提示行」是硬失败，可要是判据认错了对象——把分区标题当成提示行——它不会说
+    /// 「认不出」，它会照量照报，只是量的是另一族行。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HintRowMarker_IsWrittenByTheFactoryAloneAndOnlyReadByTheSmoke()
+    {
+        var writers = Repo.NativeSources()
+            .SelectMany(s => Regex.Matches(s.Text, @"\.Tag\s*=\s*HintRowMarker").Cast<Match>().Select(_ => s.Name))
+            .Distinct().OrderBy(n => n, StringComparer.Ordinal).ToList();
+        Assert.Equal(["Ui.cs"], writers);
+
+        Assert.Equal(1, Regex.Matches(SmokeSource, @"Tag as string\) == Ui\.HintRowMarker").Count);
+        Assert.False(SmokeSource.Contains(".Tag = Ui.HintRowMarker", StringComparison.Ordinal),
+            "冒烟器自己给一格写上说明行标记——那一段量的就是它自己造出来的行，不再是产品出厂的那二十六处。");
+        Assert.False(SmokeSource.Contains("if (grid.GetColumn(control) == 0) return false;", StringComparison.Ordinal),
+            "旧判据回来了：跨两列之后说明行就在列 0，那一句会把每一行的分区标题都算成提示行。");
     }
 
     /// <summary>

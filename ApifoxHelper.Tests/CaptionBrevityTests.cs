@@ -78,7 +78,7 @@ public class CaptionBrevityTests
     /// </summary>
     private static readonly (string File, string Argument, string Why)[] DynamicCaptions =
     [
-        ("Ui.cs", "text", "提示行工厂 Ui.HintRow：本处只交出形状（字段列一句 Caption、标签列留空），文字由调用处传入；"
+        ("Ui.cs", "text", "提示行工厂 Ui.HintRow：本处只交出形状（一句 Caption 跨两列出厂、那一格带上说明行标记），文字由调用处传入；"
             + "调用点的字面量与共享常量由 ExtractCaptions 按 HintRowCallSite 逐条提取，不藏在工厂里"),
         ("SupplementsDialog.cs", "editor.Label", "编辑位标题：文字来自编辑位自身"),
         ("GenerationDialog.cs", "GenerationEntries.KeyHint + \"。\"", "密钥提示：取共享常量再补一个句号，句子本体在 GenerationEntries 一份，界面不另抄一遍"),
