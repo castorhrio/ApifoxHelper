@@ -999,6 +999,40 @@ internal static class Ui
     }
 
     /// <summary>
+    /// 把一条 <c>FlowDirection.RightToLeft</c> 按钮行的 Tab 次序改回<b>左 → 右</b>（第三百一十五轮，唯一触达点）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：全原生界面的按钮行都是 <c>FlowLayoutPanel</c> + <c>FlowDirection.RightToLeft</c>
+    /// （Windows 惯例：确认类按钮在右），而 <c>Controls.Add</c> 的次序决定停靠位置——先加的在最右。
+    /// WinForms 的 Tab 次序在 <c>TabIndex</c> 相同时按<b>加入次序</b>走，于是「先加的在最右」同时意味着
+    /// 「先加的最先被 Tab 到」：Tab 键在按钮行里走的是<b>右 → 左</b>，与屏幕上的左右次序相反。
+    /// 第三百一十三轮在生成文档核对那一屏的失败态上量到过这一条（Tab 链是「… → 「关闭」 → 「重试」」，
+    /// 而屏幕上「重试」在「关闭」左边），当时只登记了「在链里、与「关闭」相邻」，没有判方向。
+    /// </para>
+    /// <para>
+    /// <b>为什么方向该是左 → 右</b>：Tab 键走的是阅读次序，与控件在屏幕上从左到右的排布一致；
+    /// 右 → 左意味着键盘用户先落到最右那颗（在失败态里是「关闭」），再往左退到屏上唯一的下一步。
+    /// 同一只壳里两种方向（<c>TableLayoutPanel</c> 那几屏按列号加入，本来就是左 → 右）也属同壳不同行为。
+    /// </para>
+    /// <para>
+    /// <b>为什么只改 <c>TabIndex</c>、不动加入次序</b>：加入次序同时决定停靠位置，动它就把按钮在屏幕上
+    /// 左右对调了——那是改观感，不是改键盘次序。判定本身在 <see cref="ButtonRowOrder"/>（纯逻辑、
+    /// 与测试工程单一编译），这里只负责把它落到控件上，界面不各写一套。
+    /// </para>
+    /// <para>
+    /// <b>调用时机</b>：这一行<b>全部</b>按钮加完之后调一次（含「只在某种情况下才加进来」的那几颗，
+    /// 例如提示对话框的「复制路径」）——先定次序再加一颗，新加的那颗拿的是默认 <c>TabIndex</c>，
+    /// 次序又回到隐式那一套。
+    /// </para>
+    /// </summary>
+    public static void TabOrderLeftToRight(FlowLayoutPanel row)
+    {
+        for (var i = 0; i < row.Controls.Count; i++)
+        {
+            row.Controls[i].TabIndex = ButtonRowOrder.TabIndexFor(i, row.Controls.Count);
+        }
+    }
+
+    /// <summary>
     /// 列表行激活（唯一入口）：双击只在命中行时回调该行。ListView.DoubleClick 不区分命中行，
     /// 双击空白区（首击已清空选中）同样触发——配置页此前会借这个空选中打开「新建配置」对话框；
     /// 命中哪行就激活哪行，双击空白区不动作。

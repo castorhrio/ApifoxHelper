@@ -1489,6 +1489,8 @@ internal sealed class NewTaskDialog : DpiAwareForm
         buttons.Controls.Add(scanButton);
         buttons.Controls.Add(createButton);
         buttons.Controls.Add(cancelButton);
+        // Tab 次序左 → 右（第三百一十五轮）：RightToLeft 流向里先加的在最右，隐式 Tab 次序因此是右 → 左。
+        Ui.TabOrderLeftToRight(buttons);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, 0, UiTokens.Xl, 0) };
         _statusHost = new StatusLineHost(_status);

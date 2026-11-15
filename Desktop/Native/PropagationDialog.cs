@@ -145,6 +145,8 @@ internal sealed class PropagationDialog : DpiAwareForm
         buttonRow.Controls.Add(closeButton);
         // 那颗「重试」落在「关闭」左边（RightToLeft 流向里后加的在左）：这一屏没有第二颗「重试」。
         buttonRow.Controls.Add(_retry);
+        // Tab 次序左 → 右（第三百一十五轮）：RightToLeft 流向里先加的在最右，隐式 Tab 次序因此是右 → 左。
+        Ui.TabOrderLeftToRight(buttonRow);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次 XML 清单、条目详情、筛选行、标题行，条目列表最后填满剩余空间。
         Controls.Add(listHost);

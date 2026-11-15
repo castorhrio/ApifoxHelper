@@ -120,6 +120,8 @@ internal sealed class EvidenceDialog : DpiAwareForm
         // 「重试」落在「关闭」左边（RightToLeft 流向里后加的在左）：这一屏没有第二颗「重试」。
         _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         buttonRow.Controls.Add(_retry);
+        // Tab 次序左 → 右（第三百一十五轮）：RightToLeft 流向里先加的在最右，隐式 Tab 次序因此是右 → 左。
+        Ui.TabOrderLeftToRight(buttonRow);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次片段区、标题行，列表最后填满剩余空间。
         Controls.Add(listHost);

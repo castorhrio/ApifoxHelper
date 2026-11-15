@@ -211,6 +211,8 @@ internal sealed class ScanResultsDialog : DpiAwareForm
         _warningsButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _traceButton.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
         _retry.Margin = new Padding(UiTokens.Sm, 0, 0, 0);
+        // Tab 次序左 → 右（第三百一十五轮）：RightToLeft 流向里先加的在最右，隐式 Tab 次序因此是右 → 左。
+        Ui.TabOrderLeftToRight(buttonRow);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次状态行、导航行、详情框、筛选行，列表最后填满剩余空间。
         // 导航行排在详情框之后加入，倒序生效后正好落在详情框正上方（那一行讲的就是详情区里这一条）。
@@ -681,6 +683,8 @@ internal sealed class ManualDraftDialog : DpiAwareForm
         // RightToLeft 流向：先加的在最右，主行动（添加为候选）在最右。
         buttons.Controls.Add(okButton);
         buttons.Controls.Add(cancelButton);
+        // Tab 次序左 → 右（第三百一十五轮）：RightToLeft 流向里先加的在最右，隐式 Tab 次序因此是右 → 左。
+        Ui.TabOrderLeftToRight(buttons);
 
         var statusHost = new Panel { Dock = DockStyle.Bottom, Height = _status.Height + UiTokens.Xs, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, 0, UiTokens.Xl, 0) };
         _statusHost = new StatusLineHost(_status);
@@ -751,6 +755,8 @@ internal sealed class ScanWarningsDialog : DpiAwareForm
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, 0, UiTokens.Md) };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
+        // Tab 次序左 → 右（第三百一十五轮）：RightToLeft 流向里先加的在最右，隐式 Tab 次序因此是右 → 左。
+        Ui.TabOrderLeftToRight(buttonRow);
 
         var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, BackColor = UiTokens.Panel, Padding = new Padding(UiTokens.Xl, UiTokens.Lg, UiTokens.Xl, UiTokens.Sm) };
         content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));

@@ -124,6 +124,9 @@ internal sealed class NoticeDialog : DpiAwareForm
                 copyButton.Text = Ui.CopyToClipboard(target) ? NoticeCopy.CopiedLabel : NoticeCopy.FailedLabel;
             buttonRow.Controls.Add(copyButton);
         }
+        // Tab 次序左 → 右（第三百一十五轮）：RightToLeft 流向里先加的在最右，隐式 Tab 次序因此是右 → 左。
+        // 这一行在「复制路径」那颗按钮之后才定次序：它只在调用方给了可复制文字时才加进来。
+        Ui.TabOrderLeftToRight(buttonRow);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），内容区填满剩余空间。
         Controls.Add(host);

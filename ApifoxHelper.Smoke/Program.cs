@@ -4840,6 +4840,41 @@ internal static class Program
                 _lines.Add($"     证据读不出来：提示「{hint.Text}」，那颗按钮亮着");
             });
 
+            RunAction("代码证据失败态：按钮行的 Tab 次序是左 → 右（「重试」在「关闭」之前，真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 第三百一十三轮量到过「那颗「重试」在链里、与「关闭」相邻」，没有判方向：按钮行是
+                // FlowLayoutPanel + RightToLeft，先加的在最右，隐式 Tab 次序因此是右 → 左。第三百一十五轮
+                // 把方向改回左 → 右（触达控件的那一步在 Ui.TabOrderLeftToRight 一处），这一段判的就是
+                // 「屏幕上谁在左边，Tab 就先到谁」——两件事分开判，屏幕排布变了与次序没接上不会互相冒充。
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                var close = ButtonOf(dialog, "关闭");
+                if (retry.Left >= close.Left)
+                {
+                    throw new InvalidOperationException(
+                        $"屏幕上「重试」不在「关闭」左边（Left {retry.Left} 对 {close.Left}）：这一屏的按钮行排布变了，本段判据需要重定。");
+                }
+                var chain = TabChain(dialog);
+                var retryAt = chain.IndexOf(retry);
+                var closeAt = chain.IndexOf(close);
+                if (retryAt < 0 || closeAt < 0)
+                {
+                    throw new InvalidOperationException(
+                        "失败态下按钮行整行或其中一颗不在 Tab 链里：键盘用户走不到屏上唯一的下一步（链上是 "
+                        + string.Join(" → ", chain.Select(StationName)) + "）。");
+                }
+                if (retryAt > closeAt)
+                {
+                    throw new InvalidOperationException(
+                        $"Tab 键先落到「关闭」（第 {closeAt + 1} 位）再往左退到「重试」（第 {retryAt + 1} 位）："
+                        + "方向仍是右 → 左，与屏幕上的左右次序相反（链上是 "
+                        + string.Join(" → ", chain.Select(StationName)) + "）。");
+                }
+                _lines.Add($"     失败态 Tab 链 {chain.Count} 站："
+                    + string.Join(" → ", chain.Select(StationName))
+                    + $"（屏幕上「重试」Left {retry.Left} 在「关闭」Left {close.Left} 左边，Tab 也先到「重试」第 {retryAt + 1} 位）");
+            });
+
             RunAction("代码证据失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
             {
                 if (dialog is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
