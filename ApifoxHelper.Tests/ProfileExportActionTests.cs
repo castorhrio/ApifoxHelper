@@ -222,7 +222,28 @@ public class ProfileExportActionTests
         Assert.Contains("第一个实参", ExportPathProblem(wrongArg)!, StringComparison.Ordinal);
     }
 
-    /// <summary>判据本体：导出路径的源码片段进，问题出（<c>null</c> = 合规）。</summary>
+    /// <summary>
+    /// 判据本体：导出路径的源码片段进，问题出（<c>null</c> = 合规）。
+    /// <para>
+    /// <b>假定（第三百三十三轮，简报 P0-1：只登记，不加门）</b>：下面抽 <c>ProfileExportAction.Plan</c>
+    /// 第一个实参的那条正则（<c>ProfileExportAction\.Plan\(\s*(?&lt;arg&gt;[^,)]+)</c>）用的是
+    /// <b>「读到第一个 <c>,</c> 或 <c>)</c> 就停」</b>，因此<b>假定第一个实参里不含 <c>,</c> 或 <c>)</c></b>。
+    /// 今天过，是因为合规写法只有两种：变量名（<c>saved</c>）与就地调用（<c>_profiles.Get(_profile.Id)</c>）——
+    /// 后者的 <c>)</c> 正好是实参自己的收尾，截出来的 <c>_profiles.Get(_profile.Id</c> 仍以
+    /// <c>_profiles.Get(</c> 开头，所以 <c>StartsWith</c> 那一判照旧成立。
+    /// <b>改一处调用就会漏判或误报</b>：若第一个实参变成 <c>Foo()</c> 这种不以 <c>_profiles.Get(</c> 开头的调用，
+    /// 截出来的是 <c>Foo(</c>，于是合规写法被误报成「第一个实参不是磁盘上那一份」；
+    /// 若第一个实参里出现顶层逗号（如 <c>_profiles.Get(a, b)</c>），截出来的只是前半截，
+    /// 判据读到的是半句话而不是那个实参。将来真出现这两种写法，须改成括号配对取第一实参
+    /// （或改用 Roslyn 语法解析），而不是在这里加一层转义猜测。
+    /// </para>
+    /// <para>
+    /// <b>为什么只登记不加门</b>：这一条假定判的是「判据自己的取法」，给它加门就是「判据判自己」——
+    /// 按 <c>docs/NOTES.md</c>「假门防护这一族」那五步的第 ② 步，名字的定义就在被它判的那个对象里，
+    /// 属本族，停在这里。真正该长的是「页面真的经过这里」那条对账门（<see cref="ExportPath_GoesThroughTheSharedPlan"/>），
+    /// 它随 <c>ProjectsPage</c> 的实物一起长。
+    /// </para>
+    /// </summary>
     private static string? ExportPathProblem(string source)
     {
         var body = ExportMethodBody(source);

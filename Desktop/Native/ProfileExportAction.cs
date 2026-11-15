@@ -40,6 +40,22 @@ public static class ProfileExportAction
     /// 「文件会不会不一样」与「字段有没有不一样」在这里是同一个问题；逐字段比还得跟着
     /// <see cref="ProjectProfile"/> 的字段增删改一遍，改漏一处就静默判成「没有改动」。
     /// </para>
+    /// <para>
+    /// <b>未登记的依赖，本轮登记（第三百三十三轮，简报 P1-2：只登记，不加门）</b>：
+    /// 本判定的行为<b>随 <see cref="ProfileExport.Render"/> 的字段集合走</b>——它比的是
+    /// <c>Render</c> 吐出来的那串字节，所以「哪些字段算改动」这件事不在本文件里定，在
+    /// <c>ProfileExport.Render</c> 里定。<b>改 <c>Render</c> 的字段集合要同时看这一条</b>：
+    /// 往 <c>Render</c> 里加一个字段，本判定就跟着开始对那个字段敏感（状态行会开始说「屏幕上的改动不在其中」）；
+    /// 从 <c>Render</c> 里拿掉一个字段，本判定就对那个字段彻底失明（改了它也说「没有未保存改动」）。
+    /// 两种都不是缺陷，是这条依赖的必然结果——今天<b>没有任何一条门钉住 <c>Render</c> 的字段集合</b>
+    /// （<c>ProfileAnalysisTests</c> 判的是文件名与字节，判不到字段集合），所以这里只登记一句，
+    /// 让改字段集合的人知道还有这一处要一起看。
+    /// </para>
+    /// <para>
+    /// <b>为什么只登记不加门</b>：给它加门也只判「这行字在不在」，判不到下一轮改字段集合的人会不会真的看这一条；
+    /// 而真去钉「<c>Render</c> 的字段集合」等于把 <see cref="ProjectProfile"/> 的字段表抄第二份，
+    /// 那正是本判定当初避开逐字段比要躲的东西。
+    /// </para>
     /// </summary>
     public static bool HasUnsavedEdits(ProjectProfile onScreen, ProjectProfile saved) =>
         !ProfileExport.Render(onScreen).AsSpan().SequenceEqual(ProfileExport.Render(saved));
