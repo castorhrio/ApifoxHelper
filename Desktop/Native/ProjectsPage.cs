@@ -760,21 +760,27 @@ internal sealed class ProfileDialog : DpiAwareForm
         SetStatus("序列化与分析设置已更新，随「保存」写入。", UiTokens.OkText);
     }
 
-    /// <summary>导出配置（不含凭据）：导出已保存的配置，文件名与字节经 ProfileExport 与 REST 下载同一口径。</summary>
+    /// <summary>
+    /// 导出配置（不含凭据）：导出<b>磁盘上已保存</b>的那一份，文件名与字节经 <see cref="ProfileExport"/>
+    /// 与 REST 下载同一口径。写什么、叫什么名字、写完说什么三件事都在 <see cref="ProfileExportAction"/> 一处
+    /// （第三百三十一轮，具名 pass：clarify）——此前状态行只说「配置已导出」，屏幕上有未保存改动时
+    /// 用户无从分辨拿到的是哪一版。
+    /// </summary>
     private void ExportProfile()
     {
         try
         {
             var saved = _profiles.Get(_profile.Id);
+            var plan = ProfileExportAction.Plan(saved, _profile);
             using var dialog = new SaveFileDialog
             {
                 Title = "导出配置（不含凭据）",
                 Filter = "JSON 文件|*.json",
-                FileName = ProfileExport.FileName(saved),
+                FileName = plan.FileName,
             };
             if (dialog.ShowDialog(this) != DialogResult.OK) return;
-            File.WriteAllBytes(dialog.FileName, ProfileExport.Render(saved));
-            SetStatus("配置已导出，模型服务密钥不在其中。", UiTokens.OkText);
+            File.WriteAllBytes(dialog.FileName, plan.Bytes);
+            SetStatus(plan.StatusText, UiTokens.OkText);
         }
         catch (UserException ex)
         {

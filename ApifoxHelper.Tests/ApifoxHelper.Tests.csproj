@@ -55,6 +55,8 @@
     <Compile Include="..\Desktop\Native\LoadFailureState.cs" Link="Shared\LoadFailureState.cs" />
     <!-- 按钮行的 Tab 次序口径（第三百一十五轮）：纯逻辑、不依赖 WinForms，门在 ButtonRowOrderTests。 -->
     <Compile Include="..\Desktop\Native\ButtonRowOrder.cs" Link="Shared\ButtonRowOrder.cs" />
+    <!-- 「导出配置」那颗按钮的口径（第三百三十一轮）：纯逻辑、不依赖 WinForms，门在 ProfileExportActionTests。 -->
+    <Compile Include="..\Desktop\Native\ProfileExportAction.cs" Link="Shared\ProfileExportAction.cs" />
     <Compile Include="..\Desktop\Native\ScanOverview.cs" Link="Shared\ScanOverview.cs" />
     <Compile Include="..\Desktop\Native\EndpointTrace.cs" Link="Shared\EndpointTrace.cs" />
     <Compile Include="..\Desktop\Native\PropagationEntries.cs" Link="Shared\PropagationEntries.cs" />
