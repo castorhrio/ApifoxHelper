@@ -316,6 +316,257 @@ public class WineCheckScriptsTests
     }
 
     /// <summary>
+    /// <c>prepare-real-machine.sh</c> 第 ④ 步「打印七条动作单」——把脚本<b>自己那段 awk</b> 取出来真跑一次。
+    /// <para>
+    /// <b>补的是哪一个洞</b>：上面那条门判的是 ①②③ 三步的失败分支，④ 只当第 ③ 步的收尾边界用（它自己
+    /// 注释里就写着「不判它」）。而真机到手当天<b>唯一要照着念的那一页</b>正是 ④ 打出来的东西：它读的是
+    /// <c>docs/NOTES.md</c> 的 G-D5 动作单第 3 格（动作）与第 5 格（归档到哪里）。这两格此前只由
+    /// <c>RealMachineEvidenceTests.Readme_CoversEveryArchiveDirectoryTheActionListNames</c> 在<b>文档两侧</b>对过——
+    /// 文档没漂而<b>打印器取错格</b>（列号改成一格、或行首正则改宽把别的表也收进来）时，那条门照旧绿，
+    /// 现场念出来的却是「量什么」那一格，或者只剩五条。这一条判的是打印器与产出物清单这一侧。
+    /// </para>
+    /// <para>
+    /// <b>判四件事</b>：① 脚本里那段 awk 取得出、取得唯一（取法退化就红，不许静默跳过）；
+    /// ② 拿它跑真的 <c>docs/NOTES.md</c>，打出来恰好 7 块、第 N 块第一行以「N. 」起头，
+    /// 每块「归档：」那一行点到目录集合与 <c>docs/evidence/real-machine/README.md</c> 产出物清单
+    /// <b>同一动作那一行</b>点到的集合双向相等（按动作编号对，不是按总数对——总数相等而编号错位照样红）；
+    /// ③ 两发注入把另外两条分支跑活：把动作单某一行的列数改坏 → 那段程序非零退出并把坏的那一行念出来
+    /// （「表被改坏却照样打半份」正是真机当天最贵的一种错），把那一节的标题改掉 → 打出空（脚本据此走
+    /// 「④ 未通过」那一支）；④ 脚本自己没有抄第二份动作单（打出来的每一句动作文字都不许出现在脚本源码里）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判这七条动作在真机上跑没跑（本机没有 Windows 图形子系统），也不判归档目录里
+    /// 有没有东西（那一支是 <c>collect-real-machine.sh</c>，另有门）。它判的是「机器到手当天照着念的那一页
+    /// 打出来还是不是那七条、每条说的落点还是不是产出物清单为它点到的那几个目录」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PrepareRealMachineScript_StepFour_PrintsTheArchivesTheReadmeRegisters()
+    {
+        if (LocateBash() is null || LocateAwk() is null) return; // 这台机器判不到（与本文件真跑那一族同一取法）。
+
+        var path = Path.Combine(Directory, "prepare-real-machine.sh");
+        Assert.True(File.Exists(path), ".winecheck/prepare-real-machine.sh 缺失——第 ④ 步没有可打印的动作单了。");
+        var script = File.ReadAllText(path);
+
+        // ① 那段 awk 取得出、唯一。
+        var program = ExtractFourthStepAwkProgram(script);
+
+        // ② 拿它跑真的 NOTES：七块、编号对得上、每块的归档集合与产出物清单同一行动作相等。
+        var notes = Repo.Source("docs", "NOTES.md").ReplaceLineEndings("\n");
+        var (exit, printed, _) = RunAwk(program, notes);
+        Assert.True(exit == 0, $"第 ④ 步那段 awk 在真的 docs/NOTES.md 上退出码是 {exit}（应为 0）：{printed}");
+
+        var blocks = printed.ReplaceLineEndings("\n").Split("\n\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.True(blocks.Length == 7,
+            $"第 ④ 步打出 {blocks.Length} 块（应为 7 条动作）：动作单被改过、或那段 awk 的行首正则收进了别的表——"
+            + "真机当天照这一页念，少一条就是少一条动作的落点。");
+
+        var registered = ReadmeArtifactDirectories();
+        var problems = new List<string>();
+        for (var i = 0; i < blocks.Length; i++)
+        {
+            var lines = blocks[i].ReplaceLineEndings("\n").Split('\n');
+            var number = i + 1;
+            if (!lines[0].StartsWith($"{number}. ", StringComparison.Ordinal))
+            {
+                problems.Add($"第 {number} 块第一行不是「{number}. …」起头（打出来的是「{lines[0]}」）：动作单的顺序或编号被改过，编号对不上就没法与产出物清单逐行对账。");
+                continue;
+            }
+
+            var archiveLine = lines.FirstOrDefault(l => l.TrimStart().StartsWith("归档：", StringComparison.Ordinal));
+            if (archiveLine is null)
+            {
+                problems.Add($"第 {number} 块里没有「归档：」那一行：第 ④ 步打出来的那一条不再告诉现场的人东西放哪儿。");
+                continue;
+            }
+
+            var printedDirs = ArchiveDirectoryNames(archiveLine);
+            if (!registered.TryGetValue(number, out var expected))
+            {
+                problems.Add($"产出物清单（docs/evidence/real-machine/README.md）里没有第 {number} 条动作那一行：动作单有它、清单没有它，两边已经各说一套。");
+                continue;
+            }
+
+            var missing = expected.Except(printedDirs, StringComparer.Ordinal).ToList();
+            var extra = printedDirs.Except(expected, StringComparer.Ordinal).ToList();
+            if (missing.Count > 0 || extra.Count > 0)
+            {
+                problems.Add($"第 {number} 条动作：第 ④ 步打出「{(printedDirs.Count == 0 ? "（没有归档目录）" : string.Join("、", printedDirs))}」，"
+                    + $"产出物清单为它点到「{(expected.Count == 0 ? "（没有归档目录）" : string.Join("、", expected))}」"
+                    + (missing.Count > 0 ? $"——清单点了而打印没有：{string.Join("、", missing)}" : string.Empty)
+                    + (extra.Count > 0 ? $"；打印里有而清单没有：{string.Join("、", extra)}" : string.Empty)
+                    + "。真机当天照着打印那一页放文件，放错目录的那一条永远不会被核对脚本看见。");
+            }
+
+            // 打印器不许抄第二份动作单。
+            var sentence = lines[0]["N. ".Length..];
+            var slice = sentence[..Math.Min(12, sentence.Length)];
+            Assert.True(slice.Length >= 4, $"第 {number} 条动作的文字太短，取不出可对账的一段：{lines[0]}");
+            Assert.False(script.Contains(slice, StringComparison.Ordinal),
+                $"prepare-real-machine.sh 里抄了第 {number} 条动作的一段文字「{slice}」：动作单的唯一出处是 docs/NOTES.md，"
+                + "抄进脚本，改了动作单的人不会知道这里还有一份旧的。");
+        }
+
+        Assert.True(problems.Count == 0, "第 ④ 步打印的动作单与产出物清单对不上：" + string.Join("；", problems) + "。");
+
+        // ③a 把某一行的列数改坏（去掉行尾那一格分隔竖线）→ 那段程序非零退出并把坏的那一行念出来（不打半份）。
+        var rowSeven = notes.ReplaceLineEndings("\n").Split('\n')
+            .First(l => l.StartsWith("| [ ] | 7. ", StringComparison.Ordinal));
+        Assert.True(rowSeven.EndsWith('|'), $"第 7 条动作那一行不再以分隔竖线结尾，这一发注入的形状要跟着改：{rowSeven}");
+        var (brokenExit, _, brokenError) = RunAwk(program, notes.Replace(rowSeven, rowSeven[..^1]));
+        Assert.True(brokenExit != 0,
+            $"把动作单第 7 行的列数改坏之后，第 ④ 步那段程序照样退出 {brokenExit}（应非零）：形状坏了还照样打，"
+            + "现场念到的就是缺了一格的半份动作单。");
+        Assert.True(brokenError.Contains("ERR", StringComparison.Ordinal),
+            $"那段程序非零退出却没念出坏掉的那一行（stderr=「{brokenError.Trim()}」）：改坏表的人得不到一句指向那一行的话。");
+
+        // ③b 把那一节的标题改掉 → 打出空（脚本据此走「④ 未通过」那一支，且那一支真的挂在 exit 1 上）。
+        var headerless = Regex.Replace(notes, "(?m)^## G-D5 真机复核清单", "## 改名了的真机复核清单");
+        var (emptyExit, emptyPrinted, _) = RunAwk(program, headerless);
+        Assert.True(emptyExit == 0 && emptyPrinted.Trim().Length == 0,
+            $"动作单那一节标题改掉之后，那段程序应该打出空（退出 {emptyExit}、输出 {emptyPrinted.Trim().Length} 字）："
+            + "打出别的东西 = 它不再按那一节的标题找，第 ④ 步的「未通过」那一支就永远不会被走到。");
+        Assert.True(Regex.Matches(script, "④ 未通过").Count == 2,
+            $"prepare-real-machine.sh 第 ④ 步的点名从 {Regex.Matches(script, "④ 未通过").Count} 处读出来（应为 2 处：打不出东西、条数不是 7）："
+            + "这一支失败时不点名，操作者只看到脚本停住、看不到停在哪一步。");
+        Assert.Contains("[ -z \"$ROWS\" ]", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 从脚本里取出第 ④ 步那段 awk 程序：<c>ROWS=$(awk '…' "$NOTES")</c> 之间的那一串。
+    /// <para>取法退化（改了嵌入方式、或出现两处）必须红，不许退化成「跳过这一发」——那就等于这条门不存在。</para>
+    /// </summary>
+    private static string ExtractFourthStepAwkProgram(string script)
+    {
+        const string Open = "ROWS=$(awk '";
+        var start = script.IndexOf(Open, StringComparison.Ordinal);
+        Assert.True(start >= 0,
+            $"prepare-real-machine.sh 里找不到「{Open}」：第 ④ 步不再用那段内嵌 awk 打印动作单，"
+            + "本门的取法要跟着改成新的那一处，不许静默不判。");
+        Assert.True(script.IndexOf(Open, start + Open.Length, StringComparison.Ordinal) < 0,
+            $"prepare-real-machine.sh 里有两处「{Open}」：第 ④ 步的打印器不再只有一份，取哪一份判的都是猜。");
+
+        var from = start + Open.Length;
+        var end = script.IndexOf("' \"$NOTES\")", from, StringComparison.Ordinal);
+        Assert.True(end > from,
+            "第 ④ 步那段 awk 收不出结尾（找不到 `' \"$NOTES\")`）：嵌入方式改了，本门的取法要跟着改，不许静默不判。");
+        return script[from..end];
+    }
+
+    /// <summary>把一段 awk 程序写成临时文件、对给定 NOTES 文本跑一次；返回退出码、stdout、stderr。</summary>
+    private static (int Exit, string Out, string Err) RunAwk(string program, string notesText)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ah-prepare-fourth-" + Guid.NewGuid().ToString("N")[..12]);
+        System.IO.Directory.CreateDirectory(dir);
+        try
+        {
+            var awkPath = Path.Combine(dir, "fourth.awk");
+            var notesPath = Path.Combine(dir, "NOTES.md");
+            File.WriteAllText(awkPath, program);
+            File.WriteAllText(notesPath, notesText);
+
+            var psi = new ProcessStartInfo(LocateAwk()!)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                WorkingDirectory = dir,
+            };
+            psi.ArgumentList.Add("-f");
+            psi.ArgumentList.Add(awkPath);
+            psi.ArgumentList.Add(notesPath);
+            psi.Environment["LANG"] = "C.UTF-8";
+
+            using var process = Process.Start(psi)!;
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            Assert.True(process.WaitForExit(60_000), "那段 awk 跑了 60 秒还没退出——它只该扫一份 Markdown 表格。");
+            return (process.ExitCode, output, error);
+        }
+        finally
+        {
+            try
+            {
+                System.IO.Directory.Delete(dir, recursive: true);
+            }
+            catch (IOException)
+            {
+                // 临时目录清不掉不影响判据。
+            }
+        }
+    }
+
+    /// <summary>找 awk（PATH，再退三个常规位置）；找不到返回 null，调用方走「这台机器判不到」那一支。</summary>
+    /// <remarks>取法与 <see cref="LocateBash"/> 一致：这一发要跑的是脚本自己那段 awk，没有 awk 就判不到，不猜。</remarks>
+    private static string? LocateAwk()
+    {
+        var dirs = new List<string>();
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path)) dirs.AddRange(path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+        dirs.AddRange(["/bin", "/usr/bin", "/usr/local/bin"]);
+
+        foreach (var dir in dirs.Distinct(StringComparer.Ordinal))
+        {
+            try
+            {
+                var candidate = Path.Combine(dir, "awk");
+                if (File.Exists(candidate)) return candidate;
+            }
+            catch (ArgumentException)
+            {
+                // 这一台上不合法的目录写法跳过就行。
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 从「归档：…」那一行里取归档目录名。
+    /// <para><c>&lt;dpi&gt;</c> 那一格按<b>同一行里</b>点到的三档展开（与 <c>collect-real-machine.sh</c> 同一读法：
+    /// 展开的依据是那一行自己写的 <c>`100/`、`125/`、`200/`</c>，不在这里抄第二份档位名单）。</para>
+    /// </summary>
+    private static SortedSet<string> ArchiveDirectoryNames(string archiveLine)
+    {
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (Match match in Regex.Matches(archiveLine, @"docs/evidence/real-machine/(?<name>[^/`]+)/`"))
+        {
+            names.Add(match.Groups["name"].Value);
+        }
+
+        if (!names.Remove("<dpi>")) return names;
+        foreach (Match tier in Regex.Matches(archiveLine, @"`(?<t>[0-9]{3})/`"))
+        {
+            names.Add(tier.Groups["t"].Value);
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// 产出物清单：动作编号 → 那一行点到的归档目录名集合（<c>docs/evidence/real-machine/README.md</c>）。
+    /// <para>按「动作」那一列认编号、按「归档目录」那一列认目录，与那条既有门同两个方向。</para>
+    /// </summary>
+    private static Dictionary<int, SortedSet<string>> ReadmeArtifactDirectories()
+    {
+        var path = Path.Combine(Repo.Root, "docs", "evidence", "real-machine", "README.md");
+        Assert.True(File.Exists(path), "缺 docs/evidence/real-machine/README.md：产出物清单没有出处，第 ④ 步打印的东西无从对账。");
+
+        var result = new Dictionary<int, SortedSet<string>>();
+        foreach (var line in File.ReadAllText(path).ReplaceLineEndings("\n").Split('\n'))
+        {
+            var match = Regex.Match(line.Trim(), @"^\| (?<n>[0-9]+) \| (?<rest>.*)$");
+            if (!match.Success || !match.Groups["rest"].Value.Contains("docs/evidence/real-machine/", StringComparison.Ordinal)) continue;
+            result[int.Parse(match.Groups["n"].Value)] = ArchiveDirectoryNames(match.Groups["rest"].Value);
+        }
+
+        Assert.True(result.Count == 7,
+            $"产出物清单只认出 {result.Count} 行动作（应为 7 行）：那一页被改成别的形状时，本门的「按编号对」就没有对象了——先改本门的取法，别改那一页来迁就它。");
+        return result;
+    }
+
+    /// <summary>
     /// 环境变量的登记与实读两个方向都核：<c>${VAR:-默认}</c> 是这些脚本唯一的取参入口。
     /// 第一百六十九轮两处都漂了——<c>DSHOT</c> 一直在 <c>shot_dialog.sh</c> 里用而表里没有，
     /// <c>CROP</c> 随 <c>fill2.sh</c> 一起失效而表里还留着。表里多一个用不上的名字，下一个人会

@@ -21,7 +21,11 @@ namespace ApifoxHelper.Tests;
 /// ⑥ 设计基线记下这条口径；⑦ wine 侧那一段真实行高量测删不掉（长度与句数在 Linux 判得了，
 /// 「这一行实际多高」只有真实控件答得出）；⑧ 那两句最长的说明<b>只有跨两列才同时放得下</b>——可用宽与需宽
 /// 四个数都是 192 档那一跑的读数，标签列按 <c>ProfileGridColumns</c> 现算不写死（第三百四十九轮）；
-/// ⑨ 说明行那一格上的标记只有工厂那一处会设，冒烟器只读它，旧的「按标签列有没有控件」判据不得复活。
+/// ⑨ 说明行那一格上的标记只有工厂那一处会设，冒烟器只读它，旧的「按标签列有没有控件」判据不得复活；
+/// ⑩ <b>逐句的归属对照表</b>（<c>docs/NOTES.md</c>「提示行 26 句的所有权归属」那一节）与源码里的工厂调用点、
+/// 与 <see cref="CallSites"/> 那本登记、与 <c>docs/DESIGN.md</c> §6 登记的三个数（26 / 20 / 6）三方对账，
+/// 每行「管的编辑位」按「归属」那一列在源码的行序列里真的取得到（第三百五十轮，简报 P1-1）；
+/// ⑪ 上面那条抓不抓得住由注入当场验（删一行、改一个字、指错编辑位、换第六种归属写法、把 §6 那个数改小）。
 /// </para>
 /// <para>
 /// <b>第三百四十九轮把形状从字段列改成跨两列，这一改的代价记在这里</b>：所有权通道从水平对齐换成竖向邻接——
@@ -308,6 +312,348 @@ public class HintRowTests
         // 阈值取同一份口径，不在冒烟器里另写一个数。
         Assert.Contains("ProfileFormLayout.MaxRowHeight(UiTokens.Body.Value.Height)", SmokeSource, StringComparison.Ordinal);
     }
+
+    // ── 第三百五十轮（简报 P1-1）：把那 20 / 6 的分类落成逐句表，并把这张表接进调用点与 §6 那三个数 ──
+
+    /// <summary>归属对照表在 <c>docs/NOTES.md</c> 里的那一节标题前缀。按标题现读，表本体不在这里抄第二份。</summary>
+    private const string OwnershipHeading = "### 提示行 26 句的所有权归属";
+
+    /// <summary>
+    /// 「归属」那一列的封闭取值：每个取值都是一条能在源码行序列里核对的关系。
+    /// <para>
+    /// 写成封闭名单而不是「从表里抓出来的那些值」：抓出来的名单会跟着表漂，而这一条要防的恰恰是漂——
+    /// 第六种写法出现即红，本仓不猜新写法的含义（猜一次，往后每一行都按各自的猜法判）。
+    /// </para>
+    /// </summary>
+    private static readonly string[] OwnershipKinds =
+    [
+        "字段级·紧邻上一行", "字段级·紧邻下一行", "多字段·上方连续", "多字段·上方不连续", "分区级·标题之后",
+    ];
+
+    private sealed record OwnershipRow(string File, string Arg, string Kind, string[] Owners);
+
+    private enum RowKind { Section, Field, Hint }
+
+    /// <summary>网格里出厂的一行：字段行与分区标题那一格的 <see cref="Text"/> 是标签列（或标题）的字面，说明行那一格是工厂收到的实参。</summary>
+    private sealed record SourceRow(RowKind Kind, string Text);
+
+    /// <summary>
+    /// 逐句归属表 ↔ 源码调用点 ↔ <c>CallSites</c> 登记 ↔ §6 那三个数，四方一条链。
+    /// <para>
+    /// <b>补的是哪一个洞</b>：第三百四十九轮登记的是<b>按文件</b>的数（序列化与分析 8 里 6、模块与模板 6 里 3、
+    /// 模型服务 3 里 2、新建任务 5、项目设置 4），G-D5 真机复核要的是<b>按句</b>的对象——「这一句现在靠什么
+    /// 被读成属于哪个编辑位」。按文件的数只能数、找不到对象，那张表若只活在文档里，下一句提示行加进来它就
+    /// 悄悄过期。本条把表接回实物：表里每一行都得在源码里指得到那一行，指不到就红。
+    /// </para>
+    /// <para><b>它不判什么</b>：不判真机上那一句读起来像字段注脚还是分区注脚（那是观感，只有人眼答得出，
+    /// 这张表是给那只眼睛用的清单），也不判这 26 句该不该各有不同形状（两形的三条取舍在 NOTES 第三百四十九轮）。</para>
+    /// </summary>
+    [Fact]
+    public void HintOwnershipTable_CoversEveryCallSiteBothWays()
+    {
+        var problems = OwnershipProblems(OwnershipTableLines(), Repo.DesignSection(6));
+        Assert.True(problems.Count == 0,
+            $"提示行的归属对照表（{OwnershipHeading} 那一节）与实物对不上：{string.Join("；", problems)}。"
+            + "这张表是第三百四十九轮那笔「随 G-D5 复核」的前置材料——表与实物各说一套，真机到手那天就照着一套不存在的话逐句看。");
+    }
+
+    /// <summary>
+    /// 上面那条门自己被抓得住：六发注入各喂一次，每一发都必须报出自己那一处，合规那发不报。
+    /// <para>与本仓同一族做法（<c>..._ReportsTheBreaksItMustCatch</c>）：判据没被跑过，比没有判据更贵。</para>
+    /// </summary>
+    [Fact]
+    public void HintOwnershipTable_DetectorReportsTheBreaksItMustCatch()
+    {
+        var real = OwnershipTableLines();
+        var design = Repo.DesignSection(6);
+
+        // ① 合规：一张表都不报。
+        Assert.Empty(OwnershipProblems(real, design));
+
+        // ② 少一行（新增一屏提示行而表没跟上）→ 该文件的行数与登记对不上。
+        var dropped = real.Where((_, i) => i != 0).ToList();
+        Assert.Contains(OwnershipProblems(dropped, design), p => p.Contains("ProjectsPage.cs", StringComparison.Ordinal));
+
+        // ③ 说明句改一个字 → 逐字对不上。
+        var reworded = real.Select(l => l.Contains("分支留空表示主分支") ? l.Replace("主分支", "缺省分支") : l).ToList();
+        Assert.Contains(OwnershipProblems(reworded, design), p => p.Contains("缺省分支", StringComparison.Ordinal));
+
+        // ④ 编辑位指错一行（把「标签」那一句说成管「服务 ID」）→ 紧邻那一行不是它。
+        var mislabeled = real.Select(l => l.Contains("`用「,」分隔。`") ? l.Replace("`标签`", "`服务 ID`") : l).ToList();
+        Assert.Contains(OwnershipProblems(mislabeled, design), p => p.Contains("服务 ID", StringComparison.Ordinal));
+
+        // ⑤ 第六种归属写法 → 封闭名单不猜含义。
+        var newKind = real.Select(l => l.Contains("字段级·紧邻上一行", StringComparison.Ordinal)
+            ? l.Replace("字段级·紧邻上一行", "字段级·旁边", StringComparison.Ordinal) : l).ToList();
+        Assert.Contains(OwnershipProblems(newKind, design), p => p.Contains("旁边", StringComparison.Ordinal));
+
+        // ⑥ §6 那个 20 改成 19（登记与表各说一套）→ 三个数对不上。
+        Assert.Contains(
+            OwnershipProblems(real, design.Replace("26 句里有 20 句", "26 句里有 19 句", StringComparison.Ordinal)),
+            p => p.Contains("19", StringComparison.Ordinal));
+    }
+
+    /// <summary>整条判据：表文本 + §6 那一格 → 问题清单（空 = 四方一致）。注入走同一条路，不开第二份判据。</summary>
+    private static List<string> OwnershipProblems(IReadOnlyList<string> tableLines, string designSection)
+    {
+        var problems = new List<string>();
+        if (tableLines.Count == 0)
+        {
+            problems.Add($"{OwnershipHeading} 那一节读不出任何一行表：第三百四十九轮那句「20 / 6」就只剩散文，真机那天没有可逐句看的对象。");
+            return problems;
+        }
+
+        var rows = new List<OwnershipRow>();
+        foreach (var line in tableLines)
+        {
+            var cells = OwnershipCells(line);
+            if (cells.Count != 4)
+            {
+                problems.Add($"表有一行是 {cells.Count} 格（应为 4 格：屏 / 说明句 / 归属 / 管的编辑位）：{line.Trim()}");
+                continue;
+            }
+
+            // 首格写的是仓内全路径（本节在 G-D5 那一节里，反引号点到的文件必须能落到实物）；
+            // 与 CallSites、NativeFile 对账用的键是那一串的文件名。
+            rows.Add(new OwnershipRow(cells[0].Split('/', '\\').Last(), cells[1], cells[2],
+                cells[3].Split('、').Select(s => s.Trim().Trim('`')).Where(s => s.Length > 0).ToArray()));
+        }
+
+        if (problems.Count > 0) return problems;
+
+        // 归属取值封闭。
+        foreach (var kind in rows.Select(r => r.Kind).Where(k => !OwnershipKinds.Contains(k, StringComparer.Ordinal)).Distinct())
+        {
+            problems.Add($"表里出现没登记的归属写法「{kind}」：{nameof(OwnershipKinds)} 之外的写法不猜含义——一个取值一条源码关系，猜错的那一行整行都不可信。");
+        }
+
+        if (problems.Count > 0) return problems;
+
+        // 逐文件：表里的行数与顺序 ↔ 登记 ↔ 源码里的工厂调用点，再逐行核对「管的编辑位」。
+        var tableFiles = rows.Select(r => r.File).Distinct(StringComparer.Ordinal).ToList();
+        foreach (var file in tableFiles)
+        {
+            var registered = CallSites.FirstOrDefault(s => string.Equals(s.File, file, StringComparison.Ordinal));
+            if (registered.File is null)
+            {
+                problems.Add($"表点到 {file}，可它不在提示行调用点登记 {nameof(CallSites)} 里：这本账没跟上，下一轮没人知道这一屏的说明行是第几族的写法。");
+                continue;
+            }
+
+            var sourceRows = GridRows(NativeFile(file));
+            var hints = sourceRows
+                .Select((row, index) => (row.Kind, row.Text, index))
+                .Where(x => x.Kind == RowKind.Hint)
+                .ToList();
+            var tableRows = rows.Where(r => r.File == file).ToList();
+
+            if (tableRows.Count != registered.Calls)
+            {
+                problems.Add($"{file} 在表里 {tableRows.Count} 行，登记的是 {registered.Calls} 处工厂调用（源码现读 {hints.Count} 处）：少一行是真机那天没人看的句子，多一行是表指不到源码的说明。");
+                continue;
+            }
+
+            for (var i = 0; i < tableRows.Count; i++)
+            {
+                if (tableRows[i].Arg != hints[i].Text)
+                {
+                    problems.Add($"{file} 第 {i + 1} 行说的不是源码里那一处出厂的实参：表写「{tableRows[i].Arg}」，源码那一处是「{hints[i].Text}」——逐句表按出厂顺序排，跳序与改字在这里都露出来。");
+                    continue;
+                }
+
+                if (OwnershipMismatch(tableRows[i], hints[i].index, sourceRows) is { } mismatch) problems.Add(mismatch);
+            }
+        }
+
+        foreach (var site in CallSites.Where(s => !tableFiles.Contains(s.File, StringComparer.Ordinal)))
+        {
+            problems.Add($"{nameof(CallSites)} 登记了 {site.File}（{site.Calls} 处说明行），逐句归属表里没有它：那一屏的说明行在真机那天没有对象可逐句看。");
+        }
+
+        // §6 那三个数 ↔ 表自己数出来的数。
+        var claim = System.Text.RegularExpressions.Regex.Match(designSection, @"(\d+) 句里有 (\d+) 句");
+        var rest = System.Text.RegularExpressions.Regex.Match(designSection, @"另外 (\d+) 句");
+        if (!claim.Success || !rest.Success)
+        {
+            problems.Add("DESIGN.md §6「提示行」那一格里读不出「26 句里有 20 句」与「另外 6 句」这两个数：取法退化了，这条门会在空对空上绿。");
+        }
+        else
+        {
+            var fieldLevel = rows.Count(r => r.Kind is "字段级·紧邻上一行" or "字段级·紧邻下一行");
+            var other = rows.Count - fieldLevel;
+            if (int.Parse(claim.Groups[1].Value) != rows.Count)
+            {
+                problems.Add($"§6 说这一族有 {claim.Groups[1].Value} 句说明行，表里数出来是 {rows.Count} 句：登记与表各说一套，真机那天按哪个数逐句看？");
+            }
+
+            if (int.Parse(claim.Groups[2].Value) != fieldLevel)
+            {
+                problems.Add($"§6 说 {claim.Groups[1].Value} 句里有 {claim.Groups[2].Value} 句靠缩进指向紧邻那一个字段，表里「字段级」两类数出来是 {fieldLevel} 句：那一句代价的描述与这张表不再是一件事。");
+            }
+
+            if (int.Parse(rest.Groups[1].Value) != other)
+            {
+                problems.Add($"§6 说另外 {rest.Groups[1].Value} 句管两三个编辑位或整个分区，表里数出来是 {other} 句：这一族最贵的那笔代价被改小或改大了。");
+            }
+        }
+
+        // §6 点名的那一处最贵的代价：owner 在下面那一行，只有 `模块与模板` 那一句。
+        var below = rows.Where(r => r.Kind == "字段级·紧邻下一行").ToList();
+        if (below.Count != 1 || below[0].File != "ProfileAdvancedDialog.cs")
+        {
+            problems.Add($"§6 把「owner 在它下面那一行、跨两列后会读成分区注脚」登记成这一族最贵的一处、且只那一处；表里现在数出来 {below.Count} 行{(below.Count == 1 ? $"（{below[0].File}）" : string.Empty)}：要么表漂了，要么 §6 那句代价描述过期了。");
+        }
+
+        return problems;
+    }
+
+    /// <summary>一行表的「归属」+「管的编辑位」在源码行序列里核对；null = 对得上。</summary>
+    private static string? OwnershipMismatch(OwnershipRow row, int hintIndex, IReadOnlyList<SourceRow> all)
+    {
+        switch (row.Kind)
+        {
+            case "字段级·紧邻上一行":
+            case "字段级·紧邻下一行":
+            {
+                if (row.Owners.Length != 1)
+                {
+                    return $"{row.File}：{row.Kind} 要求只点一个编辑位，表里点了 {row.Owners.Length} 个（那一句管的不是紧邻一行）。";
+                }
+
+                var want = row.Kind.EndsWith("上一行", StringComparison.Ordinal) ? hintIndex - 1 : hintIndex + 1;
+                if (want < 0 || want >= all.Count)
+                {
+                    return $"{row.File}「{row.Arg}」：{row.Kind} 指的是网格外面那一行（这一句在网格边上）。";
+                }
+
+                var neighbour = all[want];
+                if (neighbour.Kind != RowKind.Field || neighbour.Text != row.Owners[0])
+                {
+                    return $"{row.File}「{row.Arg}」：{row.Kind} 说的那一行其实是{KindText(neighbour.Kind)}「{neighbour.Text}」，不是编辑位「{row.Owners[0]}」。";
+                }
+
+                return null;
+            }
+
+            case "多字段·上方连续":
+            {
+                if (row.Owners.Length < 2)
+                {
+                    return $"{row.File}「{row.Arg}」：{row.Kind} 要求至少两个编辑位，表里只点了 {row.Owners.Length} 个。";
+                }
+
+                for (var k = 0; k < row.Owners.Length; k++)
+                {
+                    var want = hintIndex - row.Owners.Length + k;
+                    var rowAt = want >= 0 ? all[want] : null;
+                    if (rowAt is null || rowAt.Kind != RowKind.Field || rowAt.Text != row.Owners[k])
+                    {
+                        return $"{row.File}「{row.Arg}」：上面第 {row.Owners.Length - k} 行按表应该是编辑位「{row.Owners[k]}」，实际是"
+                            + (rowAt is null ? "网格之外" : $"{KindText(rowAt.Kind)}「{rowAt.Text}」") + "（这一族说的必须是紧挨着的那几行）。";
+                    }
+                }
+
+                return null;
+            }
+
+            case "多字段·上方不连续":
+            {
+                if (row.Owners.Length < 2)
+                {
+                    return $"{row.File}「{row.Arg}」：{row.Kind} 要求至少两个编辑位，表里只点了 {row.Owners.Length} 个。";
+                }
+
+                var above = all.Take(hintIndex).Where(r => r.Kind == RowKind.Field).Select(r => r.Text).ToList();
+                var missing = row.Owners.Where(o => !above.Contains(o, StringComparer.Ordinal)).ToList();
+                return missing.Count == 0
+                    ? null
+                    : $"{row.File}「{row.Arg}」：表说这一句管「{string.Join("、", missing)}」，可那些编辑位在源码里不在它那上面（这句「填入上方字段」指的字段有一个不存在或排在下面）。";
+            }
+
+            case "分区级·标题之后":
+            {
+                if (row.Owners.Length != 1)
+                {
+                    return $"{row.File}：{row.Kind} 要求点名一个分区，表里点了 {row.Owners.Length} 个。";
+                }
+
+                var want = hintIndex - 1;
+                var above = want >= 0 ? all[want] : null;
+                if (above is null || above.Kind != RowKind.Section || above.Text != row.Owners[0])
+                {
+                    return $"{row.File}「{row.Arg}」：{row.Kind} 说它紧跟在分区「{row.Owners[0]}」的标题之后，实际上一行是"
+                        + (above is null ? "网格之外" : $"{KindText(above.Kind)}「{above.Text}」") + "。";
+                }
+
+                return null;
+            }
+
+            default:
+                return $"{row.File}：没登记的归属写法「{row.Kind}」。";
+        }
+    }
+
+    private static string KindText(RowKind kind) => kind switch
+    {
+        RowKind.Field => "字段行",
+        RowKind.Section => "分区标题",
+        _ => "另一句说明行",
+    };
+
+    /// <summary>按标题现读那一节的表行（切到下一个二级 / 三级标题之前；首格是反引号文件名的才算数据行）。</summary>
+    private static List<string> OwnershipTableLines()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").ReplaceLineEndings("\n").Split('\n');
+        var start = Array.FindIndex(lines, l => l.StartsWith(OwnershipHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0,
+            $"docs/NOTES.md 里找不到以「{OwnershipHeading}」开头的那一节：第三百五十轮那张逐句归属表不在了，"
+            + "G-D5 那天只剩「20 / 6」那两个数、没有可逐句看的对象。");
+
+        return lines[start..]
+            .Skip(1)
+            .TakeWhile(l => !l.StartsWith("## ", StringComparison.Ordinal) && !l.StartsWith("### ", StringComparison.Ordinal))
+            .Where(l => Regex.IsMatch(l, @"^\| `[^`]+` \|"))
+            .ToList();
+    }
+
+    /// <summary>一行表的格（去掉 markdown 的分隔竖线两端与行内代码的反引号）。</summary>
+    private static List<string> OwnershipCells(string line) =>
+        line.Split('|').Skip(1).Take(line.Split('|').Length - 2).Select(c => c.Trim().Trim('`')).ToList();
+
+    /// <summary>按源码行序枚举网格里出厂的每一行（字段行 / 分区标题 / 说明行；注释行与语句都不算）。</summary>
+    private static List<SourceRow> GridRows(string source)
+    {
+        var rows = new List<SourceRow>();
+        foreach (var raw in source.ReplaceLineEndings("\n").Split('\n'))
+        {
+            var line = raw.Trim();
+            var hint = Regex.Match(line, @"^Ui\.HintRow\(grid, (?<arg>.+)\);$");
+            if (hint.Success)
+            {
+                rows.Add(new SourceRow(RowKind.Hint, Unquote(hint.Groups["arg"].Value)));
+                continue;
+            }
+
+            var field = Regex.Match(line, @"^(?:Ui\.FieldRow|AddRow)\(grid, (?<label>""[^""]*"")[,)]");
+            if (field.Success)
+            {
+                rows.Add(new SourceRow(RowKind.Field, Unquote(field.Groups["label"].Value)));
+                continue;
+            }
+
+            var section = Regex.Match(line, @"^AddSection\(grid, (?<title>.+)\);$");
+            if (section.Success)
+            {
+                rows.Add(new SourceRow(RowKind.Section, Unquote(section.Groups["title"].Value)));
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>成对反引号或双引号包住的那一串取中间的字面；没包住的（取共享常量的表达式）原样返回。</summary>
+    private static string Unquote(string text) =>
+        text.Length >= 2 && text[0] == '"' && text[^1] == '"' ? text[1..^1] : text;
 
     private static string FactoryBody()
     {
