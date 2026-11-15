@@ -17,6 +17,14 @@ namespace ApifoxHelper.Tests;
 /// 交键盘会把用户正在改的那一格抢走（与第五十八轮「保存被拒的路径不交回」同一取舍）。
 /// 真机上「生成计划后不碰鼠标直接按 ↓ 就走到下一个动作、Ctrl+C 复制到的是那一行的资源」随 G-D5 复核
 /// （Linux 无 WinForms GUI 运行时）。
+/// <para>
+/// <b>第三百二十轮修了「这一页是不是刚出现」读错了哪一页</b>：此前读 <c>!_page2.Visible</c>，而 <c>_page2</c>
+/// 在构造期从来没有被隐藏过（两页互斥靠 z 序，勾选页后加、盖在上面），预览页从构造起就是 <c>Visible = true</c>——
+/// 于是那个门<b>第一次打开时恒为假</b>，第九十二轮写下的「预览页出现时把键盘交给写入清单」在
+/// 「点『查看已有计划』第一次进预览页」这条最常见的路上一次都没执行过。现在改读 <c>_page1.Visible</c>
+/// （勾选页还亮着 = 这一页第一次出现；勾选页已经暗了 = 重建路径）。下面
+/// <see cref="PreviewPage_HandsTheKeyboardOnlyWhenItAppears"/> 判的就是这一处，并当场钉住旧写法不许回来。
+/// </para>
 /// </summary>
 public class PlanOpenFocusTests
 {
@@ -50,9 +58,13 @@ public class PlanOpenFocusTests
     {
         var body = ShowPlanBody();
         // 这一页是不是刚出现：由隐藏变可见那一次才算（重建路径上它一直是可见的）。
-        Assert.Single(Regex.Matches(body, @"(?m)^\s*var opening = !_page2\.Visible;$"));
+        // 第三百二十轮：判的是**勾选页**的可见性（`_page1.Visible`），不是预览页的——预览页构造起就 Visible
+        // （两页互斥靠 z 序），读它恒为真，那个门第一次打开时恒为假（见类注释）。
+        Assert.Single(Regex.Matches(body, @"(?m)^\s*var opening = _page1\.Visible;$"));
+        // 旧写法不许回来：读预览页自己的可见性 = 那个门第一次打开时恒为假，键盘留在已隐藏的勾选清单上。
+        Assert.DoesNotContain("var opening = !_page2.Visible;", body, StringComparison.Ordinal);
         Assert.Single(Regex.Matches(body, @"(?m)^\s*if \(opening\) Ui\.KeepKeyboardOnQueue\(_actionList\);$"));
-        var judge = body.IndexOf("var opening = !_page2.Visible;", StringComparison.Ordinal);
+        var judge = body.IndexOf("var opening = _page1.Visible;", StringComparison.Ordinal);
         var show = body.IndexOf("_page2.Visible = true;", StringComparison.Ordinal);
         var hand = body.IndexOf("if (opening) Ui.KeepKeyboardOnQueue(_actionList);", StringComparison.Ordinal);
         Assert.True(judge >= 0 && show > judge, "应先判「这一页是不是刚出现」，再把这一页显示出来。");

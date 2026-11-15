@@ -384,16 +384,26 @@ public class SyncPreviewPanesTests
     /// 只是把两处各自钉到它所在的那一段里：一处是列宽实测（24 个动作 + 24 条未纳入），
     /// 一处是往返（1 个动作）。两处都必须经 <c>TaskFiles.Plan</c> 写、都不许就地拼「plan.json」。
     /// </para>
+    /// <para>
+    /// <b>第三百二十轮把「两处」改成「三处，且逐处点名」</b>：新增的「同步预览写入清单的列表 Ctrl+C 复制」
+    /// 那一段（<c>RunListCopyGestureSyncPreview</c>）同样要「任务目录里已有计划」这个前提——它点的是
+    /// 产品自己那颗「查看已有计划」，不直接调内部方法，于是冒烟器里第三次写计划夹具（3 个动作，
+    /// 资源格两两不同，好让「换一行再按跟着焦点走」量得到）。判据仍是逐字计数（第四处出现即红），
+    /// 三处各自钉到它所在的那一段里。
+    /// </para>
     /// </summary>
     [Fact]
     public void ThePlanFixture_GoesThroughTheStoreAndNamesTheFileOnce()
     {
-        Assert.Equal(2, Count(Repo.SmokeProgram, @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
+        Assert.Equal(3, Count(Repo.SmokeProgram, @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
         Assert.Equal(1, Count(
             MethodSlice(Repo.SmokeProgram, "private static void RunListColumnFit(IServiceProvider services, string dataRoot)"),
             @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
         Assert.Equal(1, Count(
             MethodSlice(Repo.SmokeProgram, "private static void RunSelectRoundTrip(IServiceProvider services, string dataRoot)"),
+            @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
+        Assert.Equal(1, Count(
+            MethodSlice(Repo.SmokeProgram, "private static void RunListCopyGestureSyncPreview(IServiceProvider services, string dataRoot)"),
             @"tasks\.Write\(task\.Id, TaskFiles\.Plan"));
         Assert.DoesNotContain("\"plan.json\"", Repo.SmokeProgram, StringComparison.Ordinal);
     }

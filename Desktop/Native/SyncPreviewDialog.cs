@@ -1050,13 +1050,26 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     /// 该按钮随即被隐藏——方向键动的是别的控件、Ctrl+C 也复制不到那一行，「有一行被标出来」只成立了一半。
     /// 重建路径（关键词框每敲一个字、执行或核对后按磁盘计划重读）不交：那一屏的下一步是换关键词或看结果，
     /// 交键盘会把用户正在改的那一格抢走（与第五十八轮「保存被拒的路径不交回」同一取舍）。
+    /// <para>
+    /// <b>「这一页是不是刚出现」读的是勾选页那一侧（第三百二十轮修）</b>：此前读的是 <c>!_page2.Visible</c>，
+    /// 而 <c>_page2</c> 在构造期<b>从来没有被隐藏过</b>——两页互斥靠的是 z 序（勾选页后加、盖在上面），
+    /// 预览页从构造起就是 <c>Visible = true</c>。于是那个门<b>第一次打开时恒为假</b>：第九十二轮写下的
+    /// 「预览页出现时把键盘交给写入清单」在「点『查看已有计划』第一次进预览页」这条最常见的路上一次都没执行过，
+    /// 键盘留在<b>已经隐藏的勾选清单</b>上（wine 实测：<c>_selectList.Focused = True</c> 而它 <c>Visible = False</c>），
+    /// 方向键与 Ctrl+C 都落不到写入清单那一行。只有「进预览页 → 退回勾选页 → 再进」这条往返路上，
+    /// <see cref="ShowSelectPage"/> 把 <c>_page2</c> 置回 <c>false</c> 之后那个门才偶然为真。
+    /// 现在改读 <c>_page1.Visible</c>：勾选页还亮着 = 这一页第一次出现（首次打开与往返都成立），
+    /// 勾选页已经暗了 = 重建路径（不交）。<b>不改成「构造期把 <c>_page2</c> 隐藏」</b>：那会动两页互斥的既有形状
+    /// （写入清单表头、四块区域行数那几段都在预览页未点开时量它），而这一处要修的只是「门读错了哪一页」。
+    /// </para>
     /// </summary>
     private void ShowPlan(SyncPlan plan)
     {
         _statusHost.SetText("", UiTokens.Text);
         _plan = plan;
         // 这一页是不是刚出现：只在「由隐藏变可见」那一次交键盘，重建路径不交（见方法注释）。
-        var opening = !_page2.Visible;
+        // 读勾选页的可见性而不是预览页的：预览页构造起就 Visible（两页互斥靠 z 序），读它恒为真。
+        var opening = _page1.Visible;
         _page1.Visible = false;
         _page2.Visible = true;
         _backButton.Visible = true;
