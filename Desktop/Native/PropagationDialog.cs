@@ -43,6 +43,9 @@ internal sealed class PropagationDialog : DpiAwareForm
         Font = UiTokens.Body.Value,
     };
 
+    // 读取失败态的唯一行动按钮（第三百一十三轮）：文字取自口径文件，全仓只有那一处字面。
+    private readonly Button _retry = Ui.Ghost(LoadFailureState.RetryLabel);
+
     private List<PropagationEntry> _entries = [];
 
     // 列排序状态（ListSort 口径，第一百零三轮）：未排序时保持核对结果自身的顺序。
@@ -134,9 +137,14 @@ internal sealed class PropagationDialog : DpiAwareForm
         closeButton.Click += (_, _) => Close();
         AcceptButton = closeButton;
         CancelButton = closeButton;
+        // 那颗「重试」与打开这一屏调的是同一个读取入口（两条路不各读一份）。
+        _retry.Visible = false;
+        _retry.Click += (_, _) => LoadAll();
         var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, BackColor = UiTokens.Panel, Padding = new Padding(0, UiTokens.Sm, 0, UiTokens.Md) };
         // RightToLeft 流向：先加的在最右（Windows 惯例：确认类按钮在右）。
         buttonRow.Controls.Add(closeButton);
+        // 那颗「重试」落在「关闭」左边（RightToLeft 流向里后加的在左）：这一屏没有第二颗「重试」。
+        buttonRow.Controls.Add(_retry);
 
         // 停靠按集合倒序生效：按钮行最先停靠（最底部），其次 XML 清单、条目详情、筛选行、标题行，条目列表最后填满剩余空间。
         Controls.Add(listHost);
@@ -150,6 +158,26 @@ internal sealed class PropagationDialog : DpiAwareForm
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        LoadAll();
+    }
+
+    /// <summary>
+    /// 这一屏的<b>唯一读取入口</b>（第三百一十三轮）：打开（<see cref="OnLoad"/>）与失败态那颗「重试」调的是同一个方法。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一屏读的是任务目录里的 <c>propagation.json</c>，读不出来时写的是
+    /// 「请关闭后在「检查任务」页重新核对再试」——<b>屏上只剩「关闭」可点</b>，把「再读一次」交给用户手动重开窗口。
+    /// 那九屏自第一百五十二 / 三百零三 / 三百零五 / 三百零八 / 三百零九 / 三百一十 / 三百一十二轮起就有那颗取自口径的
+    /// 「重试」，而这一屏没有：同一族缺陷里最硬的一处（没有任何等价入口）。
+    /// </para>
+    /// <para>
+    /// <b>为什么读取收进一个方法</b>：两条路各读一份，失败态与正常态就会各自漂移（第三百零三 / 三百零五 /
+    /// 三百零八 / 三百零九 / 三百一十 / 三百一十二轮同一形状）。<b>开头先收起那颗按钮</b>：成功路径不经提示出口，
+    /// 那里是唯一的收起处——第三百零四轮在注释候选那一屏实测到的「恢复后按钮还亮着」就是这个成因。
+    /// </para>
+    /// </summary>
+    private void LoadAll()
+    {
+        _retry.Visible = false;
         PropagationResult? result;
         try
         {
@@ -157,7 +185,11 @@ internal sealed class PropagationDialog : DpiAwareForm
         }
         catch (Exception ex)
         {
-            ShowHint("读取核对结果失败：" + Redactor.Redact(ex.Message) + "。请关闭后在「" + PageNames.Tasks + "」页重新核对再试。", UiTokens.BadText);
+            // 文案不抄第二份：标题与说明都取口径文件那一对（「重试」这个字面全仓只有一处）。
+            ShowHint(
+                LoadFailureState.FailureMessage(LoadFailureState.Propagation.Title, Redactor.Redact(ex.Message), LoadFailureState.Propagation.Hint),
+                UiTokens.BadText,
+                canRetry: true);
             return;
         }
         if (result is null)
@@ -340,7 +372,16 @@ internal sealed class PropagationDialog : DpiAwareForm
         return false;
     }
 
-    private void ShowHint(string message, Color color)
+    /// <summary>
+    /// 这一屏的提示出口：三种状态（读取失败 / 尚未核对 / 整份数据没有条目）共用这一处。
+    /// <para>
+    /// <b><paramref name="canRetry"/> 是第三百一十三轮加的</b>：只有「读取失败」那一支才点亮那颗「重试」——
+    /// 另外两种不是失败（数据本来就没有 / 还没核对过），再读一次读不出新东西，那一步在屏外
+    /// （「检查任务」页的「核对传播」），由那两句提示自己指名。末尾统一收起，于是「同一时刻只有一个下一步」
+    /// 在三种状态上都成立（DESIGN.md §7）。
+    /// </para>
+    /// </summary>
+    private void ShowHint(string message, Color color, bool canRetry = false)
     {
         _hint.Text = message;
         _hint.ForeColor = color;
@@ -353,6 +394,7 @@ internal sealed class PropagationDialog : DpiAwareForm
         _checkedAt.Text = "";
         _detail.Text = "";
         _swaggerMessage.Visible = false;
+        _retry.Visible = canRetry;
     }
 
     private void ShowDetail()

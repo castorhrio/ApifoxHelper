@@ -125,7 +125,7 @@ public class LoadFailureRetryCoverageTests
     // ---------- 发现：范围本身要钉住，否则「一条都没发现」也是绿的 ----------
 
     [Fact]
-    public void Discovery_CoversExactlyTheThirteenScreens()
+    public void Discovery_CoversExactlyTheFourteenScreens()
     {
         // 封闭清单：新增一屏带失败态时，这里会红——提醒把新屏的接线一并补上（而不是悄悄漏掉）。
         // 第一百五十七轮新增第五屏 JournalDialog.cs（任务日志对话框的读取失败态）。
@@ -143,17 +143,19 @@ public class LoadFailureRetryCoverageTests
         // 第三百一十二轮补到十三屏：SyncPreviewDialog（同步预览勾选页）读的是 diff.json，与差异确认、
         // 补充说明、检查结果同一份产物，而它写的是第三种说法、屏上没有入口——那一笔欠账
         // SharedCheckCopy 的反向那一判早就预先算成「欠着的第四屏」，本轮收掉它。
+        // 第三百一十三轮补到十四屏：PropagationDialog（生成文档核对）读的是 propagation.json，
+        // 失败态此前只剩「关闭」可点（「仍欠的两屏」里最硬的一屏，没有任何等价入口），本轮接上那颗取自口径的「重试」。
         var names = FailureScreens().Select(s => s.Name).ToArray();
         Assert.Equal(
             [
                 "ApplyPlanDialog.cs", "CandidatesDialog.cs", "CheckResultsDialog.cs", "DecisionsDialog.cs",
                 "EndpointTraceDialog.cs", "EvidenceDialog.cs", "JournalDialog.cs", "ProjectsPage.cs",
-                "ReportsDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs", "SyncPreviewDialog.cs",
-                "TasksPage.cs",
+                "PropagationDialog.cs", "ReportsDialog.cs", "ScanResultsDialog.cs", "SupplementsDialog.cs",
+                "SyncPreviewDialog.cs", "TasksPage.cs",
             ],
             names);
 
-        // 两个形状必须把这十三屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
+        // 两个形状必须把这十四屏分完：一屏既不进两个循环，也不从两个循环之间漏出去。
         // 少了这一句，往 NamedEntryScreens 里写一个不存在的文件名会静默少判一屏。
         var partition = ButtonScreens().Select(s => s.Name)
             .Concat(NamedEntryScreens)
@@ -852,8 +854,6 @@ public class LoadFailureRetryCoverageTests
     [
         ("ContractsDialog.cs", "响应契约：读不出来时这一屏只剩「关闭」可点（提示出口把三颗审阅按钮一并禁用），"
             + "那一步在「检查任务」页的「开始扫描」上——那三颗在审阅保存成功之后确实会重读一次清单，可失败态下点不动"),
-        ("PropagationDialog.cs", "生成文档核对：失败句里那个动词在界面上没有对应的那一颗按钮，屏外做这一步的是"
-            + "「检查任务」页的「核对传播」（这一屏自己没有重读一次的入口）"),
     ];
 
     /// <summary>判定本体（纯函数：源码进、命中的说法出）——注入自测直接喂夹具，不必改磁盘。</summary>

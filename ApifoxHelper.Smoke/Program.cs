@@ -295,6 +295,9 @@ internal static class Program
         Section("同步预览勾选页读取失败态（正常 → 检查结果坏 → 点一次换一种失败、原因跟着换 → 修好后点一次清单与关键词框一起回来且那颗按钮收起 → 筛到零行不给那颗按钮 → 尚未检查不给那颗按钮，真实控件）", nameof(RunSyncPreviewLoadFailure));
         RunSyncPreviewLoadFailure(services, dataRoot);
 
+        Section("生成文档核对读取失败态（正常 → 核对结果坏 → 点一次换一种失败、原因跟着换 → 失败态下那颗「重试」在 Tab 链里且紧挨着「关闭」 → 修好后点一次清单与计数行一起回来、那颗按钮收起并退出 Tab 链 → 筛到零行不给那颗按钮 → 整份数据没有条目不给那颗按钮 → 尚未核对不给那颗按钮，真实控件）", nameof(RunPropagationLoadFailure));
+        RunPropagationLoadFailure(services, dataRoot);
+
         Section("极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）", nameof(RunDetailBreak));
         RunDetailBreak(services, dataRoot);
 
@@ -5544,6 +5547,425 @@ internal static class Program
             dialog?.Dispose();
         }
     }
+
+
+    /// <summary>
+    /// 生成文档核对（<c>PropagationDialog</c>）的读取失败态（第三百一十三轮）。
+    /// <para>
+    /// <b>这一段补的是哪个缺口</b>：这一屏读的是任务目录里的 <c>propagation.json</c>，读不出来时此前写的是
+    /// 「请关闭后在「检查任务」页重新核对再试」——<b>屏上只剩「关闭」可点</b>，把「再读一次」交给用户手动重开窗口。
+    /// 那九屏自第一百五十二 / 三百零三 / 三百零五 / 三百零八 / 三百零九 / 三百一十 / 三百一十二轮起就有那颗取自
+    /// <see cref="LoadFailureState.RetryLabel"/> 的「重试」，而这一屏没有：同一族缺陷里最硬的一处（没有任何等价入口）。
+    /// 本轮接上之后，这一段是它在模拟器上第一次被真的点一次。
+    /// </para>
+    /// <para>
+    /// <b>失败是真的</b>：把 <c>propagation.json</c> 写成不是 JSON 的字节，让 <c>TaskStore.Read</c> 抛它本来会抛的异常；
+    /// 「点一次换一种失败」那一发用 <see cref="FileShare.None"/> 独占占用同一个文件——不伪造异常类型、不调私有方法、不换实现。
+    /// </para>
+    /// <para>
+    /// <b>三种非失败态各判一次</b>：筛到零行（数据读得出来、只是当下没有行）、整份数据没有条目、尚未核对——
+    /// 这三种都不是读取失败，再读一次读不出新东西，那颗按钮一个都不许亮（§7「同一时刻只有一个下一步」）。
+    /// </para>
+    /// </summary>
+    private static void RunPropagationLoadFailure(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "生成文档核对失败态冒烟" });
+        var propagationPath = tasks.FilePath(task.Id, TaskFiles.Propagation);
+
+        // 主清单与它那一句提示：这一屏只有一块「填满剩余空间」的宿主（条目清单），按宿主认，不按次序猜。
+        static (ListView List, Label Hint) MainPane(PropagationDialog form)
+        {
+            var host = form.Controls.OfType<Panel>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的条目清单宿主：停靠分法变了，本段判据需要重定。");
+            var hint = host.Controls.OfType<Label>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("条目清单宿主里没有那句铺满列表区的提示行：提示出口的形状变了。");
+            var list = FindAll<ListView>(host).FirstOrDefault(candidate =>
+                    candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                        .SequenceEqual(["位置", "标注", "源码", "XML", "Swagger"]))
+                ?? throw new InvalidOperationException("这一屏找不到表头为「位置 / 标注 / 源码 / XML / Swagger」的条目清单：列增删或改名了，本段判据需要重定。");
+            return (list, hint);
+        }
+
+        // 计数行按形状认，不按文字认：提示出口把那一格清成空串（不留半份数字），按「位置 」开头取法在失败态找不到落点。
+        static Label Counts(PropagationDialog form)
+        {
+            var cells = FindAll<Label>(form)
+                .Where(control => control.TextAlign == ContentAlignment.MiddleRight && !control.AutoSize)
+                .ToList();
+            return cells.Count switch
+            {
+                1 => cells[0],
+                0 => throw new InvalidOperationException("这一屏没有那块右对齐、不自适应宽度的计数行格：标题行的形状变了，本段判据需要重定。"),
+                _ => throw new InvalidOperationException($"这一屏有 {cells.Count} 块右对齐、不自适应宽度的 Label，计数行按形状认不再唯一：本段判据需要重定。"),
+            };
+        }
+
+        // 关键词框：这一屏唯一的单行输入框（详情区那块是多行只读预览）。
+        static TextBox Keyword(PropagationDialog form) =>
+            FindAll<TextBox>(form).SingleOrDefault(control => !control.Multiline)
+            ?? throw new InvalidOperationException("这一屏找不到那只单行关键词框：Ui.FilterRow 的形状变了，本段判据需要重定。");
+
+        PropagationDialog? dialog = null;
+        FileStream? hold = null;
+        string? good = null;
+        string? jsonFailureSentence = null;
+        string? countsWhenGood = null;
+        const int rowCount = 3;
+        try
+        {
+            RunAction("生成文档核对失败态：准备一份真实核对结果（产品自己的写入口径落盘）", () =>
+            {
+                tasks.Write(task.Id, TaskFiles.Propagation, PropagationFailureResult());
+                var reread = tasks.Read<PropagationResult>(task.Id, TaskFiles.Propagation)
+                    ?? throw new InvalidOperationException("写入后读不回核对结果。");
+                if (reread.Entries.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"夹具回读到 {reread.Entries.Count} 条核对条目，期望 {rowCount} 条。");
+                }
+                good = File.ReadAllText(propagationPath);
+                _lines.Add($"     磁盘副本留了一份原文 {good.Length} 字：核对条目 {reread.Entries.Count} 条、XML 文件 {reread.XmlFiles.Count} 个");
+            });
+
+            RunAction("生成文档核对失败态：正常打开时条目清单与计数行可见且不显示「重试」（真实控件）", () =>
+            {
+                dialog = new PropagationDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!list.Visible || list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"正常打开时条目清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {rowCount} 行。");
+                }
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"正常打开时提示区却可见：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("核对结果读出来了，「重试」却亮着：它只在读取失败时才是下一步。");
+                }
+                countsWhenGood = Counts(dialog).Text;
+                var expected = PropagationEntries.CountsLine(rowCount, 3, 1, 1);
+                if (countsWhenGood != expected)
+                {
+                    throw new InvalidOperationException($"正常打开时计数行是「{countsWhenGood}」，期望「{expected}」（按整份核对数据统计）。");
+                }
+                if (!Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("有核对条目可筛时关键词框却停着：那一种状态整份数据是读得出来的（口径见 ListFilter.KeywordEnabled）。");
+                }
+                _lines.Add($"     正常打开：条目清单 {list.Items.Count} 行，计数行「{countsWhenGood}」，那颗按钮没亮");
+            });
+
+            RunAction("生成文档核对失败态：核对结果读不出来时换成失败态并给出「重试」（真实控件）", () =>
+            {
+                File.WriteAllText(propagationPath, "这不是 JSON");
+                dialog = new PropagationDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible)
+                {
+                    throw new InvalidOperationException("核对结果读不出来时提示区却不可见：失败没有任何交代。");
+                }
+                // 本轮的主张就在这一判里：这一屏念的是口径文件那一句，不再自己拼「请关闭后在…页重新核对再试」。
+                if (!hint.Text.StartsWith(LoadFailureState.Propagation.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示是「{hint.Text}」，期望以「{LoadFailureState.Propagation.Title}：」开头。");
+                }
+                if (!hint.Text.Contains(LoadFailureState.RetryLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"失败提示没有指名屏上那颗按钮，用户读不到该点哪一颗：「{hint.Text}」。");
+                }
+                // 那一句静态门（NoScreen_SendsTheUserAwayToReopenTheWindow）判的是源码里有没有那几种说法；
+                // 这一判判的是屏幕上念出来的那一句里也确实没有——源码改了、句子还是从别处拼回来的那种红它抓不到。
+                foreach (var phrase in new[] { "请关闭后", "关闭后重试", "关闭本窗口重新打开" })
+                {
+                    if (hint.Text.Contains(phrase, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException($"失败提示仍然把用户支去重开窗口（「{phrase}」）：「{hint.Text}」。");
+                    }
+                }
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                if (!retry.Visible || !retry.Enabled)
+                {
+                    throw new InvalidOperationException("失败态下「重试」不可见或不可点：屏上没有任何下一步。");
+                }
+                if (list.Visible)
+                {
+                    throw new InvalidOperationException("核对结果读不出来时条目清单仍可见：半份结果被留在屏上。");
+                }
+                if (Counts(dialog).Text.Length != 0)
+                {
+                    throw new InvalidOperationException($"失败态下计数行还留着「{Counts(dialog).Text}」：半份数字比没有数字更坏。");
+                }
+                if (Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("整份数据不可得时关键词框仍可用：框里敲字筛不到任何东西（口径见 ListFilter.KeywordEnabled）。");
+                }
+                jsonFailureSentence = hint.Text;
+                _lines.Add($"     核对结果读不出来：提示「{hint.Text}」，那颗按钮亮着");
+            });
+
+            RunAction("生成文档核对失败态：点「重试」真的再读一次（换一种失败，原因跟着换，真实控件）", () =>
+            {
+                if (dialog is null || jsonFailureSentence is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 判据不能只看「还是不是失败」——成功路径只收起提示区、不清那格文字，按文字判会把
+                // 「重读成功」也读成「仍是失败」。这里换成换一种失败：文件还在、却被独占占用（第三百零四轮那条）。
+                hold = new FileStream(propagationPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                hold.Dispose();
+                hold = null;
+                var (_, hint) = MainPane(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith(LoadFailureState.Propagation.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"文件被占用时重试，提示是「{hint.Text}」，期望仍是失败态。");
+                }
+                if (hint.Text == jsonFailureSentence)
+                {
+                    throw new InvalidOperationException(
+                        $"点过一次之后那一句一个字没变（「{jsonFailureSentence}」）：屏上留着上一次的失败文案，重试没有真的再读一次。");
+                }
+                if (!ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("磁盘仍读不出来，重试后「重试」却不见了：用户没有第二次机会。");
+                }
+                _lines.Add($"     点过一次之后换成了：「{hint.Text}」");
+            });
+
+            RunAction("生成文档核对失败态：失败态下那颗「重试」在 Tab 链里、紧挨着「关闭」（真实控件）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有留下失败态。");
+                // 第三百一十三轮新加的那颗按钮落在 Tab 链的哪一位，此前没有任何一段量过（全仓没有一处 TabIndex，
+                // 停靠次序全由控件加入次序隐式决定）。键盘用户走不到它，等于屏上唯一的下一步只对鼠标存在。
+                var chain = TabChain(dialog);
+                var retry = ButtonOf(dialog, LoadFailureState.RetryLabel);
+                var close = ButtonOf(dialog, "关闭");
+                var retryAt = chain.IndexOf(retry);
+                if (retryAt < 0)
+                {
+                    throw new InvalidOperationException(
+                        "失败态下那颗「重试」不在 Tab 链里：键盘用户走不到屏上唯一的下一步（链上是 "
+                        + string.Join(" → ", chain.Select(StationName)) + "）。");
+                }
+                var closeAt = chain.IndexOf(close);
+                if (closeAt < 0)
+                {
+                    throw new InvalidOperationException("「关闭」不在 Tab 链里：这一屏的按钮行整行都走不到。");
+                }
+                if (Math.Abs(retryAt - closeAt) != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"那颗「重试」与「关闭」在 Tab 链里不相邻（第 {retryAt + 1} 位对第 {closeAt + 1} 位）："
+                        + "按钮行里两颗按钮之间夹了别的停靠点，Tab 过去要跨过它。");
+                }
+                _lines.Add($"     失败态 Tab 链 {chain.Count} 站："
+                    + string.Join(" → ", chain.Select(StationName))
+                    + $"（那颗「重试」第 {retryAt + 1} 位、紧挨着「关闭」第 {closeAt + 1} 位）");
+            });
+
+            RunAction("生成文档核对失败态：修好后点「重试」退出失败态、条目清单与计数行一起回来且那颗按钮收起（真实控件）", () =>
+            {
+                if (dialog is null || good is null || countsWhenGood is null) throw new InvalidOperationException("上一段没有留下可复原的磁盘副本。");
+                File.WriteAllText(propagationPath, good);
+                Click(dialog, LoadFailureState.RetryLabel);
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (hint.Visible)
+                {
+                    throw new InvalidOperationException($"修好核对结果后重试，提示区仍可见：「{hint.Text}」。");
+                }
+                // 第三百零四轮那一发的成因在这一屏同样成立（成功路径不经 ShowHint，那里是唯一的收起处）：
+                // 清单与计数行都回来了，那颗按钮却还亮着，等于同一屏给两个下一步。
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("恢复后「重试」仍可见：失败态没有随成功读取退出。");
+                }
+                if (!list.Visible || list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"恢复后条目清单是 {(list.Visible ? list.Items.Count.ToString() : "不可见")}，期望可见且 {rowCount} 行。");
+                }
+                if (Counts(dialog).Text != countsWhenGood)
+                {
+                    throw new InvalidOperationException($"恢复后计数行是「{Counts(dialog).Text}」，期望与失败前逐字相同（「{countsWhenGood}」）。");
+                }
+                if (!Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("恢复后关键词框还停着：失败态那句「整份数据不可得」已经不再成立，框却没人把它交回来。");
+                }
+                // 收起不只是「看不见」：它还得从 Tab 链里退出去，否则键盘仍会停在一颗按不动的按钮上。
+                var recoveredChain = TabChain(dialog);
+                if (recoveredChain.Contains(ButtonOf(dialog, LoadFailureState.RetryLabel)))
+                {
+                    throw new InvalidOperationException(
+                        "恢复后那颗「重试」仍在 Tab 链里：它已经不可见，键盘却还能停在它上面（链上是 "
+                        + string.Join(" → ", recoveredChain.Select(StationName)) + "）。");
+                }
+                _lines.Add($"     修好后重试：条目清单回到 {list.Items.Count} 行，计数行「{Counts(dialog).Text}」，提示区与那颗按钮一起收起，关键词框可用");
+                _lines.Add($"     恢复后 Tab 链 {recoveredChain.Count} 站："
+                    + string.Join(" → ", recoveredChain.Select(StationName))
+                    + "（那颗「重试」已退出链外）");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("生成文档核对失败态：筛到零行不给那颗按钮而关键词框留着（真实控件）", () =>
+            {
+                // 「筛到零行」不是失败：那份产物读得出来，只是这一屏当下没有行——那一步在框里那个词上，
+                // 再读一次读不出新东西。走的是 PopulateList 里那条口，根本不经提示出口。
+                dialog = new PropagationDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                Keyword(dialog).Text = "绝不可能命中任何核对条目的关键词";
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible || list.Visible)
+                {
+                    throw new InvalidOperationException("筛到零行时没有换成那一句说明（或清单还留着）：这一屏的空态形状变了。");
+                }
+                if (hint.Text != ListFilter.FilteredEmptyKeywordHint(ListFilter.PropagationNoun))
+                {
+                    throw new InvalidOperationException($"筛到零行那句不是共享口径那一句：「{hint.Text}」。");
+                }
+                if (hint.Text.StartsWith(LoadFailureState.Propagation.Title + "：", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"筛到零行被当成读取失败处理了：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("筛到零行不是失败态，却显示了「重试」：同一屏给了两个下一步。");
+                }
+                if (!Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("筛到零行时关键词框被禁用：那句提示指名的下一步按不动（§7「禁用不得移除下一步」）。");
+                }
+                _lines.Add($"     筛到零行：提示「{hint.Text}」，框留着，那颗按钮没亮");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("生成文档核对失败态：整份数据没有条目时不给那颗按钮（真实控件）", () =>
+            {
+                // 「没有核对条目」不是读取失败：文件读得出来，只是里面一条都没有。再读一次读不出新东西。
+                tasks.Write(task.Id, TaskFiles.Propagation, new PropagationResult { CheckedAt = DateTimeOffset.Now });
+                dialog = new PropagationDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var (list, hint) = MainPane(dialog);
+                if (!hint.Visible || list.Visible)
+                {
+                    throw new InvalidOperationException("整份数据没有条目时没有换成那一句说明（或清单还留着）：这一屏的空态形状变了。");
+                }
+                if (hint.Text != "没有核对条目。")
+                {
+                    throw new InvalidOperationException($"整份数据没有条目时提示是「{hint.Text}」，期望「没有核对条目。」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「没有核对条目」不是失败态，却显示了「重试」：再读一次读不出新东西。");
+                }
+                if (Keyword(dialog).Enabled)
+                {
+                    throw new InvalidOperationException("整份数据没有条目时关键词框仍可用：框里敲字筛不到任何东西（口径见 ListFilter.KeywordEnabled）。");
+                }
+                _lines.Add($"     整份数据没有条目：提示「{hint.Text}」，框一起停，那颗按钮没亮");
+                dialog.Dispose();
+                dialog = null;
+            });
+
+            RunAction("生成文档核对失败态：尚未核对时不给那颗按钮（那一步在任务页那颗「核对传播」上，真实控件）", () =>
+            {
+                // 「尚未核对」不是读取失败：文件本来可以不存在，Read 交出 null。那一屏的下一步写在
+                // 「检查任务」页那颗「核对传播」上，本轮接的那一句只说再读一次，两种状态因此不共用一句话。
+                File.Delete(propagationPath);
+                dialog = new PropagationDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+                var (_, hint) = MainPane(dialog);
+                if (!hint.Visible || !hint.Text.StartsWith("尚未核对", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"尚未核对时提示是「{hint.Text}」，期望以「尚未核对」开头。");
+                }
+                if (!hint.Text.Contains(PageNames.Tasks, StringComparison.Ordinal) || !hint.Text.Contains("核对传播", StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"那一种状态的下一步有两样（哪一页、点哪一颗），提示只该把两处都指名：「{hint.Text}」。");
+                }
+                if (ButtonOf(dialog, LoadFailureState.RetryLabel).Visible)
+                {
+                    throw new InvalidOperationException("「尚未核对」不是失败态，却显示了「重试」：再读一次读不出新东西。");
+                }
+                _lines.Add($"     尚未核对：提示以「{hint.Text[..4]}」开头（那一页与那一颗都指到了），那颗按钮没亮");
+            });
+        }
+        finally
+        {
+            // 句柄留着，后面每一段读这个任务都会失败；中途红的那一发也必须把它放开。
+            hold?.Dispose();
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 生成文档核对失败态那一段的夹具：三条核对条目，三环状态各覆盖一种（源码三条全 written、
+    /// XML 一条 present 两条 disabled、Swagger 一条 present 两条 unavailable），外加一个 XML 文件与一句
+    /// Swagger 不可用的说明——计数行因此是「位置 3 · 源码 3 · XML 1 · Swagger 1」，本段要逐字比回来。
+    /// </summary>
+    private static PropagationResult PropagationFailureResult() => new()
+    {
+        CheckedAt = DateTimeOffset.Now,
+        SwaggerMessage = "Swagger 文档不可用：本任务没有配置 Swagger 地址。",
+        XmlFiles =
+        [
+            new XmlFileInfo
+            {
+                Project = "Probe.Api",
+                Path = "Probe.Api/Probe.Api.xml",
+                Exists = true,
+                LastWrite = DateTime.Now,
+                Enabled = true,
+            },
+        ],
+        Entries =
+        [
+            new PropagationEntry
+            {
+                SlotId = "slot-propagation-1",
+                Display = "GET /api/probe",
+                Tag = "summary",
+                Text = "探针接口的摘要。",
+                SourceState = "written",
+                XmlState = "present",
+                SwaggerState = "present",
+                SwaggerLocation = "paths./api/probe.get.summary",
+            },
+            new PropagationEntry
+            {
+                SlotId = "slot-propagation-2",
+                Display = "POST /api/probe",
+                Tag = "param",
+                ParameterName = "id",
+                Text = "探针接口的参数说明。",
+                SourceState = "written",
+                XmlState = "disabled",
+                SwaggerState = "unavailable",
+                Notes = ["XML 文档生成未启用。"],
+            },
+            new PropagationEntry
+            {
+                SlotId = "slot-propagation-3",
+                Display = "GET /api/probe/{id}",
+                Tag = "returns",
+                Text = "探针接口的返回值说明。",
+                SourceState = "written",
+                XmlState = "disabled",
+                SwaggerState = "unavailable",
+            },
+        ],
+    };
 
     /// <summary>代码证据失败态那一段用的位置（两处只差证据编号集合：一处命中、一处一个都不命中）。</summary>
     private static DocSlot EvidenceSlot(string id, List<string> evidenceIds) => new()
@@ -11734,6 +12156,63 @@ internal static class Program
         var button = ButtonOf(root, text);
         if (!button.CanSelect) throw new InvalidOperationException($"「{text}」按钮不可点（禁用或不可见）。");
         button.PerformClick();
+    }
+
+    /// <summary>
+    /// 按 Tab 键走一遍这一屏的停靠点（第三百一十三轮）：从窗体出发逐站 <c>SelectNextControl</c>，
+    /// 返回真正拿到焦点的那些控件——不可见 / 禁用的控件由 WinForms 自己跳过，本方法不另判一遍。
+    /// <para>
+    /// <b>为什么量这个</b>：那颗「重试」是第三百一十三轮新加的，它落在 Tab 链的哪一位此前<b>没有任何一段量过</b>
+    /// （全仓 <c>Desktop/Native</c> 里没有一处 <c>TabIndex</c>，停靠次序全由控件加入次序隐式决定）。
+    /// 一颗点得到、Tab 走不到的按钮，对键盘用户等于不存在——真机复核清单第 3 条要的正是 Tab 可达。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判这个次序「对不对」（那是取舍，只有人读得出来），只判「在不在链里」与
+    /// 「与谁相邻」——这两件是键盘用户能不能走到那一步的全部。
+    /// </para>
+    /// </summary>
+    private static List<Control> TabChain(Form form)
+    {
+        var chain = new List<Control>();
+        Control? current = null;
+        for (var guard = 0; guard < 64; guard++)
+        {
+            if (!form.SelectNextControl(current, forward: true, tabStopOnly: true, nested: true, wrap: false)) break;
+            var focused = FocusedControl(form)
+                ?? throw new InvalidOperationException("Tab 走了一站，却没有任何控件拿到焦点：这一屏的停靠点判定不成立。");
+            // 回到走过的某一站即视为绕完一圈（wrap: false 时正常不会发生，留着防死循环）。
+            if (chain.Contains(focused)) break;
+            chain.Add(focused);
+            current = focused;
+        }
+        return chain;
+    }
+
+    /// <summary>
+    /// Tab 链上那一站的念法（第三百一十三轮）：按钮念它的文字，清单与输入框念它们在这一屏上的名字。
+    /// <para>
+    /// 不念 <c>Text</c>：清单与多行预览框的 <c>Text</c> 是整份数据（详情区那一格是四行），
+    /// 念进讲稿会把一行读数撑成一段正文——读数要能当场念出来。
+    /// </para>
+    /// </summary>
+    private static string StationName(Control control) => control switch
+    {
+        Button button => "「" + button.Text + "」",
+        ListView => "清单",
+        TextBox box when box.Multiline => "多行预览框",
+        TextBox box => "「" + box.PlaceholderText + "」",
+        _ => control.GetType().Name,
+    };
+
+    /// <summary>控件树里当前真正持有键盘焦点的那个控件（<c>Focused</c> 只在拿到焦点的那一个上为真）。</summary>
+    private static Control? FocusedControl(Control root)
+    {
+        if (root.Focused) return root;
+        foreach (Control child in root.Controls)
+        {
+            if (FocusedControl(child) is { } found) return found;
+        }
+        return null;
     }
 
     /// <summary>控件树里第一个指定类型的后代。</summary>

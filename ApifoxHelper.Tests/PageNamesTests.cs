@@ -50,7 +50,9 @@ public class PageNamesTests
         ("EndpointTraceDialog.cs", "PageNames.Projects", 1),
         // 七个任务阶段对话框：「先在某一页点某个按钮」。
         ("DecisionsDialog.cs", "PageNames.Tasks", 1),
-        ("PropagationDialog.cs", "PageNames.Tasks", 2),
+        // 第三百一十三轮：失败那一句改从口径文件取（`LoadFailureState.Propagation.Hint` 即 `DirectoryHint`，
+        // 不再自己拼「请关闭后在「检查任务」页重新核对再试」），这一屏只剩「尚未核对」那一处指路。
+        ("PropagationDialog.cs", "PageNames.Tasks", 1),
         // 第三百零八轮：检查结果那一屏的读取失败提示改从口径文件那一对共用常量交出，句子不再指页面——
         // 剩下两处是模型清单的标题行与「尚未检查」那一句空态（那一种的下一步确实不在「再读一次」上）。
         ("CheckResultsDialog.cs", "PageNames.Tasks", 2),
