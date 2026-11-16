@@ -96,6 +96,11 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly FlowLayoutPanel _stepper = new() { AutoSize = true, WrapContents = true, Margin = new Padding(0) };
     private readonly Button[] _stepButtons;
     private readonly Label _stepperHint = Ui.Caption(StageSteps.JumpHint);
+    // 折行的那三笔记录（口径与理由见 WrapStepCells）：签名挡住「在布局回调里改尺寸又触发布局」；
+    // 单行那一版要多宽多高要趁那一格还没折行时记下——折过行之后它自己报回来的高是折行那一版的高。
+    private readonly string[] _stepCellsApplied = new string[StageSteps.Keys.Length];
+    private readonly Size[] _stepCellLineSizes = new Size[StageSteps.Keys.Length];
+    private readonly int[] _stepCellLineFontHeights = new int[StageSteps.Keys.Length];
     // 三个分区的标题控件：进度条点击的滚动落点（文字取 StageSteps 常量，本页不就地拼）。
     private readonly Label _sourceSection = SectionCaption(StageSteps.SourceLabel);
     private readonly Label _generatedSection = SectionCaption(StageSteps.GeneratedLabel);
@@ -365,6 +370,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _split.Panel1.Controls.Add(Ui.ListHost(_list, _empty));
         // 停靠按集合倒序生效：滚动宿主最后加入、在提示标签之下填满剩余空间。
         _detailScroll.Controls.Add(_detail);
+        // 栏宽变了要重问一次：进度条里放不下整句的那一格自己折行（WrapStepCells）。
+        _detail.Layout += (_, _) => WrapStepCells();
         _split.Panel2.Controls.Add(_detailHint);
         _split.Panel2.Controls.Add(_detailScroll);
         _split.Panel2.BackColor = UiTokens.Bg;
@@ -806,6 +813,8 @@ internal sealed class TasksPage : UserControl, INativePage
         {
             _stepButtons[i].Text = StageSteps.ButtonText(steps[i], i);
         }
+        // 文字换了而栏宽没换时签名不会重算，这一步由这里主动问一次。
+        WrapStepCells();
     }
 
     /// <summary>
@@ -823,6 +832,68 @@ internal sealed class TasksPage : UserControl, INativePage
         };
         if (section is null) return;
         _detailScroll.AutoScrollPosition = new Point(0, Math.Max(0, section.Top - UiTokens.Lg));
+    }
+
+    /// <summary>
+    /// 栏比某一格的整句文字窄时，那一格自己按栏宽折行（<c>docs/DESIGN.md</c> §8「任务页按钮行的横向可达性」）。
+    /// <para>
+    /// <b>为什么不是给一个上界就完事</b>：≈200% 档真 DPI 上下文里两版都量过（模拟器取帧，不是推）。
+    /// autosize 开着只给 <c>MaximumSize</c>：那一格宽收到栏宽 353px 而高仍是单行的 55px，
+    /// 「未扫描（当前）」那一段被静默截掉——比伸出行面还糟，屏幕上连「还有下文」都不剩。
+    /// 关掉 autosize、高按折行后要多高给：同一格画成两行，阶段名与状态都在。
+    /// </para>
+    /// <para>
+    /// <b>高怎么来的</b>：行数 × 字号行高 + 一笔上下留白。行数由 <c>TextRenderer</c> 按
+    /// 「栏宽减掉这一格自己的左右留白」量出来；留白 = 单行那一版的高 − 记下它时的字号行高
+    /// （96 档 37−18、192 档 55−35，两档量下来差 1px，不随缩放走）。单行那一版只在还开着 autosize
+    /// 时量得到：折过行之后把 autosize 开回来，宽回到 367px 而高停在折行那一版的 90px 不缩回去（模拟器实测），
+    /// 所以这一笔要趁出厂那一版记下，之后按字号行高是否变了再重量。
+    /// </para>
+    /// <para>
+    /// <b>只动放不下整句的那一格</b>：放得下一行的格子仍是出厂那一版（96 / 120 两档三格都放得下，
+    /// 这一处一行不改）；栏被拖宽回来到那一格的整句放得下时，那一格也交回出厂那一版。
+    /// </para>
+    /// </summary>
+    private void WrapStepCells()
+    {
+        var column = Ui.ContentWidth(_detail);
+        if (column <= 1) return; // 网格还没布局：这一趟量不到栏宽，别按 1px 折行
+
+        for (var i = 0; i < _stepButtons.Length; i++)
+        {
+            var cell = _stepButtons[i];
+            var applied = cell.Text + "|" + column;
+            // 布局回调里改尺寸会再触发一次布局：文字与栏宽都没变时不动它，这一趟到此为止。
+            if (_stepCellsApplied[i] == applied) continue;
+
+            if (cell.AutoSize)
+            {
+                _stepCellLineSizes[i] = cell.Size;
+                _stepCellLineFontHeights[i] = cell.Font.Height;
+            }
+
+            var line = _stepCellLineSizes[i];
+            if (line.Width == 0) continue; // 没记到过单行那一版：宁可保持原样，也不猜一笔留白
+
+            if (line.Width <= column)
+            {
+                _stepCellsApplied[i] = applied;
+                if (cell.AutoSize) continue;
+                // 栏又宽回来了：先按记下那一版把尺寸交回去，再让框架自己接管这一格。
+                cell.AutoSize = false;
+                cell.Size = line;
+                cell.AutoSize = true;
+                continue;
+            }
+
+            var oneLineText = TextRenderer.MeasureText(cell.Text, cell.Font);
+            var wrappedText = TextRenderer.MeasureText(
+                cell.Text, cell.Font, new Size(column - cell.Padding.Horizontal, 0), TextFormatFlags.WordBreak);
+            var lines = Math.Max(1, (int)Math.Ceiling(wrappedText.Height / (double)oneLineText.Height));
+            _stepCellsApplied[i] = applied;
+            cell.AutoSize = false;
+            cell.Size = new Size(column, lines * cell.Font.Height + line.Height - _stepCellLineFontHeights[i]);
+        }
     }
 
     /// <summary>下一步引导横幅：标题按语义色调着色，动作按钮映射到本页既有入口（只做引导，不改变状态）。</summary>

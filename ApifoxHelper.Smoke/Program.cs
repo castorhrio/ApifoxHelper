@@ -8071,12 +8071,12 @@ internal static class Program
     /// 逐行逐颗量两个数：相对滚动宿主的右边界（不得越过宿主客户区）、相对自己那一行行面的位置
     /// （不得越出行面——越出去的按钮被行面裁掉，屏幕上根本没有它）。返回不达标的说明（空 = 合规）。
     /// <para>
-    /// <b>唯一的例外是三格进度条那一行里「单颗就比栏还宽」的那一颗</b>（第三百六十二轮在 ≈200% 档新量到的：
-    /// 「1 源码注释 · 未扫描（当前）」那颗 367px，而栏宽 353px、最窄栏 294px）——折行帮不了单独一颗，
-    /// 它不是本轮那四行的机制问题，量到就逐颗点名报出来并挂进 <c>docs/DESIGN.md</c> §8，不在本轮的门里判它。
-    /// 例外要同时满足两件事才成立：这一行是进度条那一行（按 <c>StageSteps</c> 的三个阶段名认，
-    /// 不在这里抄第二份字面）、且那颗自己的宽就超过栏宽。96 / 120 两档都不满足例外，
-    /// 所以把四行里任一行的按钮改宽，门当场红。
+    /// <b>这一条判据以前留过一个例外，第三百六十三轮把例外删掉了</b>：第三百六十二轮在 ≈200% 档量到
+    /// 三格进度条里「1 源码注释 · 未扫描（当前）」单独一颗就 367px、比那一档的栏宽 353px 还宽，
+    /// 当时判定「折行帮不了单独一颗」，于是量到就逐颗点名报出来、挂在 <c>docs/DESIGN.md</c> §8 而不进门。
+    /// 本轮那一格改成按栏宽自己折行（<c>TasksPage.WrapStepCells</c>），量到的宽落在栏内，
+    /// 例外没有可放行的对象了——把它删掉、让门逐颗判这五行每一颗，就是这一片要的证据；
+    /// 留着它，「修好了」与「又没人看那一颗」在两臂三档的读数里长得一模一样。
     /// </para>
     /// </summary>
     private static List<string> MeasureRows(TasksPage page, string when)
@@ -8087,7 +8087,6 @@ internal static class Program
         var column = grid.ClientSize.Width - grid.Padding.Horizontal;
         var offenders = new List<string>();
         var measured = new List<string>();
-        var registered = new List<string>();
         foreach (var row in DetailActionRows(page))
         {
             var buttons = row.Controls.Cast<Control>().OfType<Button>().Where(control => control.Visible).ToList();
@@ -8100,39 +8099,13 @@ internal static class Program
                 var clipped = button.Right > row.ClientSize.Width + 1 || button.Bottom > row.ClientSize.Height + 1;
                 var unreachable = right > client;
                 if (!clipped && !unreachable) continue;
-                if (IsStageStepRow(row) && button.Width > column)
-                {
-                    registered.Add($"「{label}」宽 {button.Width}px 比栏宽 {column}px 还宽（行面 {row.ClientSize.Width}×{row.ClientSize.Height}px、右边界 {right}px 对宿主 {client}px）");
-                    continue;
-                }
                 if (unreachable) offenders.Add($"「{label}」右边界 {right}px 越过宿主客户区 {client}px");
                 if (clipped) offenders.Add($"「{label}」越出所在行的行面（按钮右 {button.Right}px、底 {button.Bottom}px 对行面 {row.ClientSize.Width}×{row.ClientSize.Height}px）");
             }
         }
         _lines.Add($"     {when}：网格宽 {grid.Width}px、栏宽 {column}px、宿主客户区 {client}px");
         _lines.Add("     " + string.Join("；", measured));
-        if (registered.Count > 0)
-        {
-            _lines.Add("     量到、按实物挂账（单颗比栏还宽，折行帮不了它；见 docs/DESIGN.md §8）：" + string.Join("、", registered));
-        }
         return offenders;
-    }
-
-    /// <summary>
-    /// 三格进度条那一行（按 <c>StageSteps</c> 的三个阶段名认，不在这里抄第二份字面）。
-    /// <para>
-    /// <b>为什么还要数按钮个数与顺序</b>：只按「标题里有阶段名」认会把 <c>_nextActions</c> 也认进来——
-    /// 它那颗「跳过，检查 Apifox」的标题里就带着 <c>StageSteps.RemoteLabel</c>。那一行是本轮四行之一，
-    /// 让它落进这一条例外就等于给门开了一个洞，所以再要一道「恰是三格、且第 i 颗说的是第 i 个阶段」。
-    /// </para>
-    /// </summary>
-    private static bool IsStageStepRow(FlowLayoutPanel row)
-    {
-        var buttons = row.Controls.Cast<Control>().OfType<Button>().ToList();
-        var labels = new[] { StageSteps.SourceLabel, StageSteps.GeneratedLabel, StageSteps.RemoteLabel };
-        return buttons.Count == labels.Length
-            && buttons.Zip(labels, (button, label) => button.Text.Contains(label, StringComparison.Ordinal))
-                .All(isStageCell => isStageCell);
     }
 
     /// <summary>
