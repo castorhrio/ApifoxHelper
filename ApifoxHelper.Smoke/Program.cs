@@ -7972,6 +7972,7 @@ internal static class Program
                 Application.DoEvents();
 
                 var offenders = MeasureRows(page, "出厂栏宽");
+                MeasureStepCellPadding(page, "出厂栏宽");
                 if (offenders.Count > 0)
                 {
                     throw new InvalidOperationException(
@@ -8106,6 +8107,45 @@ internal static class Program
         _lines.Add($"     {when}：网格宽 {grid.Width}px、栏宽 {column}px、宿主客户区 {client}px");
         _lines.Add("     " + string.Join("；", measured));
         return offenders;
+    }
+
+    /// <summary>
+    /// 三格进度条那一笔<b>上下留白</b>的读数（第三百六十四轮，控制仓简报 P0-2）。
+    /// <para>
+    /// <c>Desktop/Native/TasksPage.cs</c> 的 <c>WrapStepCells</c> 折行时给的高是
+    /// 「行数 × 字号行高 + 一笔上下留白」，那一笔留白取「单行那一版的高 − 记下它时的字号行高」。
+    /// 192 档那一笔上一轮经取帧量到了（55 − 35 = 20px），96 档那一笔当时只有注释里那句自述
+    /// （37 − 18 = 19px）。这里把两个操作数从屏上的真实控件读出来：<b>96 / 120 两档三格都放得下、
+    /// 那一格仍是单行出厂版</b>，所以高与字号行高都直接可读；<b>192 档</b>触发折行的那一格已经是折行版，
+    /// 这里如实标出「读到的不是单行那一版」，它那一笔的出处仍是上一轮那一跑的取帧行，不在这里冒充量过。
+    /// </para>
+    /// <para>
+    /// <b>这一条是读数不是判据</b>：量到什么都照念，判可达与越界的仍是 <see cref="MeasureRows"/>。
+    /// 落点用「详情第一行 + 可见按钮数等于 <c>StageSteps.Keys.Length</c>」自证：进度条那一行是
+    /// <c>BuildDetail</c> 里第一个加进网格的行（<c>docs/DESIGN.md</c> §6 登记的「详情第一行是三格进度条」）。
+    /// 落点挪走时报错点名，而不是静默念一格别的东西——那是仪器瞎掉，不是这一屏变了。
+    /// </para>
+    /// </summary>
+    private static void MeasureStepCellPadding(TasksPage page, string when)
+    {
+        var row = DetailGrid(page).Controls.Cast<Control>().FirstOrDefault() as FlowLayoutPanel
+            ?? throw new InvalidOperationException(
+                "详情第一行不是那一行按钮：这一条留白读数的落点不再指向三格进度条，本段读的是别的东西。");
+        var cells = row.Controls.Cast<Control>().OfType<Button>().Where(control => control.Visible).ToList();
+        if (cells.Count != StageSteps.Keys.Length)
+        {
+            throw new InvalidOperationException(
+                $"详情第一行读到 {cells.Count} 颗可见按钮，与 {nameof(StageSteps)} 的 {StageSteps.Keys.Length} 个阶段键不等长："
+                + "这一条留白读数的落点不在三格进度条上。");
+        }
+
+        _lines.Add($"     {when}进度条那一格（折行时那一笔上下留白的两个操作数）：" + string.Join("、", cells.Select(cell =>
+        {
+            var label = cell.Text.Length <= 10 ? cell.Text : cell.Text[..10] + "…";
+            var padding = cell.Height - cell.Font.Height;
+            return $"「{label}」白面 {cell.Width}×{cell.Height}px、Font.Height {cell.Font.Height}px、上下留白 {padding}px"
+                + (cell.AutoSize ? "（单行那一版）" : "（已是折行版，这一笔不是留白的出处）");
+        })));
     }
 
     /// <summary>
