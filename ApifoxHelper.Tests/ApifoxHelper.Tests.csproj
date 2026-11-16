@@ -120,6 +120,9 @@
     <Compile Include="..\Desktop\Native\ListFocus.cs" Link="Shared\ListFocus.cs" />
     <Compile Include="..\Desktop\Native\ListSelection.cs" Link="Shared\ListSelection.cs" />
     <Compile Include="..\Desktop\Native\ListChecks.cs" Link="Shared\ListChecks.cs" />
+    <!-- 对话框主动作的键盘入口（第三百五十九轮）：纯判定、不依赖 WinForms，门在 PrimaryActionKeysTests。
+         手势与「这一次该不该动作」都在这一份里，界面只登记「本屏的主动作是哪一颗按钮」。 -->
+    <Compile Include="..\Desktop\Native\PrimaryActionKeys.cs" Link="Shared\PrimaryActionKeys.cs" />
     <Compile Include="..\Desktop\Native\BindingChoices.cs" Link="Shared\BindingChoices.cs" />
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />

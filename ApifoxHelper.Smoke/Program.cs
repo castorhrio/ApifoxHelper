@@ -385,6 +385,9 @@ internal static class Program
         Section("列表 Ctrl+C 复制：同步预览勾选页的接口清单（打开即选中第一条接口且键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「接口」格、不是邻列「名称」 → 按一次空格翻勾选后标识格没被改写 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGestureSyncSelect));
         RunListCopyGestureSyncSelect(services, dataRoot);
 
+        Section("对话框主动作的键盘入口（打开即选中第一条且键盘真的在清单上、主动作按钮可用且可见 → 真的按一次 Ctrl+Enter 走掉一条：磁盘上第一条变成 accepted、状态行取共享口径、选中交给下一条 → Ctrl+Shift+Enter 不属本手势、再按一次什么都不发生 → 主动作不可用时按 Ctrl+Enter 什么都不发生，真实键）", nameof(RunPrimaryActionGesture));
+        RunPrimaryActionGesture(services, dataRoot);
+
         Section("任务列表的列头排序（真的点一次列头：点「任务」列 → 自然序重排并画出 ▲ → 再点一次反向 ▼ → 换点「配置」列按配置名升序且原列标记撤掉 → 排序不写任务数据、选中按 Id 恢复，真实鼠标）", nameof(RunColumnSortGesture));
         RunColumnSortGesture(services, dataRoot);
 
@@ -13918,6 +13921,276 @@ internal static class Program
         {
             Application.DoEvents();
             Thread.Sleep(20);
+        }
+    }
+
+    /// <summary>
+    /// 对话框主动作的键盘入口（<c>Ctrl+Enter</c>，第三百五十九轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：三个审阅对话框（注释候选 / 响应契约 / 差异确认）的主动作是
+    /// 「接受并下一条」「确认」「确认纳入」——逐条清队列时这一个动作要按几十次。它此前只有两条路：
+    /// 鼠标点，或 Tab 到那颗按钮再按空格。而这三个对话框的 <c>AcceptButton</c> 是「关闭」
+    /// （<c>Enter</c> 在对话框里是「确认/关闭」的既有语义），于是「键盘上按一下就走下一条」
+    /// 在整只壳里没有入口：审阅五十条候选要按五十次 Tab。
+    /// </para>
+    /// <para>
+    /// <b>这一份量什么</b>：判定与点击都在 <c>DpiAwareForm.ProcessCmdKey</c> 一处
+    /// （<see cref="PrimaryActionKeys"/> 只判手势与可用性），而「按下去真的走了下一条」这件事
+    /// 只有真控件上按一次才知道——<c>SendKeys</c> 经系统键入，按键先到窗体的 <c>ProcessCmdKey</c>，
+    /// 与 Windows 上用户按 Ctrl+Enter 走的是同一条路。
+    /// </para>
+    /// <para>
+    /// <b>四段各量一件事</b>：① 前提——打开即选中第一条、键盘真的在清单上、主动作按钮可用且可见；
+    /// ② 真的按一次 Ctrl+Enter——磁盘上第一条变成 <c>accepted</c>、状态行取共享口径、选中交给下一条；
+    /// ③ <c>Ctrl+Shift+Enter</c> 不属本手势——再按一次什么都不发生（第二条仍是 <c>pending</c>、
+    /// 选中仍在原处、状态行一个字没变）；④ 主动作不可用时按 Ctrl+Enter 什么都不发生
+    /// （筛到零行 → 按钮禁用 → 对话框仍开着、磁盘不变、状态行没被改写）。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：不判真机上这个手势的手感、不判中文输入法是否吞掉 Ctrl+Enter、
+    /// 不判 200% 档下按钮的观感——Windows GUI 在本机不可验证，随 G-D5 复核。
+    /// </para>
+    /// </summary>
+    private static void RunPrimaryActionGesture(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var drafts = services.GetRequiredService<DraftService>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "主动作手势任务" });
+
+        // 夹具是真的落盘：扫描结果与候选队列各一份，经 TaskStore 写，界面读的是磁盘上那两份。
+        // 两条候选都没有待确认问题——这一段量的是「按一下就走下一条」，不是「接受被拒」。
+        var slots = new List<DocSlot>
+        {
+            new()
+            {
+                Id = "slot-primary-1",
+                SymbolId = "M:Probe.Api.Controllers.ProbeController.Get",
+                SymbolKind = "method",
+                Display = "GET /api/probe",
+                Tag = "summary",
+                Status = "missing",
+                File = "Probe.Api/Controllers/ProbeController.cs",
+                Line = 12,
+                Role = "endpoint",
+                Editable = true,
+            },
+            new()
+            {
+                Id = "slot-primary-2",
+                SymbolId = "M:Probe.Api.Controllers.ProbeController.Save",
+                SymbolKind = "method",
+                Display = "POST /api/probe",
+                Tag = "summary",
+                Status = "missing",
+                File = "Probe.Api/Controllers/ProbeController.cs",
+                Line = 24,
+                Role = "endpoint",
+                Editable = true,
+            },
+        };
+        tasks.Write(task.Id, TaskFiles.Symbols, new ScanOutput { Slots = slots });
+        tasks.Write(task.Id, TaskFiles.Drafts, new DraftStore
+        {
+            Candidates =
+            [
+                new CommentCandidate
+                {
+                    Id = "candidate-primary-1",
+                    SlotId = slots[0].Id,
+                    SymbolId = slots[0].SymbolId,
+                    Tag = slots[0].Tag,
+                    Text = "按名称查询探针数据。",
+                    Basis = "code",
+                    Source = "rule",
+                    ReviewState = "pending",
+                    CreatedAt = DateTimeOffset.Now,
+                },
+                new CommentCandidate
+                {
+                    Id = "candidate-primary-2",
+                    SlotId = slots[1].Id,
+                    SymbolId = slots[1].SymbolId,
+                    Tag = slots[1].Tag,
+                    Text = "保存探针数据。",
+                    Basis = "code",
+                    Source = "rule",
+                    ReviewState = "pending",
+                    CreatedAt = DateTimeOffset.Now,
+                },
+            ],
+        });
+
+        CandidatesDialog? dialog = null;
+        try
+        {
+            RunAction("主动作手势：注释候选打开即选中第一条、键盘真的在清单上、「接受并下一条」可用且可见（Ctrl+Enter 的前提）", () =>
+            {
+                dialog = new CandidatesDialog(drafts, tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = CandidateList(dialog);
+                if (!list.Visible)
+                {
+                    throw new InvalidOperationException("候选清单不可见（对话框停在提示态）：本段量不到主动作手势。");
+                }
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException(
+                        $"候选清单有 {list.Items.Count} 行，夹具是 2 条候选：量到的不是这一屏。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"打开后选中 {list.SelectedIndices.Count} 行（首行序号 {list.SelectedIndices.Cast<int>().FirstOrDefault()}），"
+                        + "期望恰好第一行（一行都不选，Ctrl+Enter 就没有落点）。");
+                }
+                if (!list.Focused)
+                {
+                    throw new InvalidOperationException(
+                        "打开后键盘不在候选清单上：方向键动的是别的控件，"
+                        + "「按一下就走下一条」在界面上按不出来。"
+                        + $"诊断读数：ActiveControl={dialog.ActiveControl?.GetType().Name ?? "（空）"}、"
+                        + $"清单 ContainsFocus={list.ContainsFocus}、窗体 ContainsFocus={dialog.ContainsFocus}。");
+                }
+                var accept = ButtonOf(dialog, "接受并下一条");
+                if (!accept.Enabled)
+                {
+                    throw new InvalidOperationException("打开后「接受并下一条」不可点：主动作手势没有落点。");
+                }
+                if (!accept.Visible)
+                {
+                    throw new InvalidOperationException("打开后「接受并下一条」是藏起来的：藏着的按钮被点一下等于替用户做了一件屏幕上没有的事。");
+                }
+                _lines.Add($"     主动作按钮：「{accept.Text}」（可用 {accept.Enabled}、可见 {accept.Visible}）");
+            });
+
+            RunAction("主动作手势：真的按一次 Ctrl+Enter——磁盘上第一条变成 accepted、状态行取共享口径、选中交给下一条", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = CandidateList(dialog);
+                var status = StatusLabel(dialog);
+                status.Text = "";
+
+                PressKey(dialog, list, "^{ENTER}");
+                PumpUntilCondition(() => status.Text.Length > 0, "Ctrl+Enter 之后的状态行");
+
+                var store = drafts.Load(task.Id);
+                var first = store.Candidates.First(c => c.Id == "candidate-primary-1");
+                if (first.ReviewState != "accepted")
+                {
+                    throw new InvalidOperationException(
+                        $"按了 Ctrl+Enter，磁盘上第一条的审阅状态是「{first.ReviewState}」，期望 accepted："
+                        + "主动作手势没有落到那颗按钮上。");
+                }
+                var expectedStatus = CandidateEdit.ReviewDoneText("accepted", store.Candidates.Count(c => c.ReviewState == "pending"));
+                if (status.Text != expectedStatus)
+                {
+                    throw new InvalidOperationException(
+                        $"状态行是「{status.Text}」，期望「{expectedStatus}」（取 CandidateEdit.ReviewDoneText 单一口径）："
+                        + "界面若自己拼一句就是第二份文案。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"接受之后选中 {list.SelectedIndices.Count} 行（首行序号 {list.SelectedIndices.Cast<int>().FirstOrDefault()}），"
+                        + "期望恰好第二行（「接受并下一条」承诺的就是接下来发生的事）。");
+                }
+                _lines.Add($"     按一次 Ctrl+Enter：第一条 accepted，状态行「{status.Text}」，选中落到第 2 行");
+            });
+
+            RunAction("主动作手势：Ctrl+Shift+Enter 不属本手势——再按一次什么都不发生（第二条仍是 pending、选中仍在原处、状态行一个字没变）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = CandidateList(dialog);
+                var status = StatusLabel(dialog);
+                var before = status.Text;
+
+                PressKey(dialog, list, "^+{ENTER}");
+                Application.DoEvents();
+
+                var store = drafts.Load(task.Id);
+                var second = store.Candidates.First(c => c.Id == "candidate-primary-2");
+                if (second.ReviewState != "pending")
+                {
+                    throw new InvalidOperationException(
+                        $"按了 Ctrl+Shift+Enter，磁盘上第二条的审阅状态是「{second.ReviewState}」，期望 pending："
+                        + "带 Shift 的组合不属本手势，不该替用户接受一条。");
+                }
+                if (status.Text != before)
+                {
+                    throw new InvalidOperationException(
+                        $"按了 Ctrl+Shift+Enter，状态行从「{before}」变成「{status.Text}」："
+                        + "带 Shift 的组合不属本手势，不该写状态行。");
+                }
+                if (list.SelectedIndices.Count != 1 || list.SelectedIndices[0] != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"按了 Ctrl+Shift+Enter，选中变成 {list.SelectedIndices.Count} 行"
+                        + $"（首行序号 {list.SelectedIndices.Cast<int>().FirstOrDefault()}），期望仍在第 2 行。");
+                }
+                _lines.Add("     按一次 Ctrl+Shift+Enter：第二条仍是 pending、选中仍在第 2 行、状态行未变");
+            });
+
+            RunAction("主动作手势：主动作不可用时按 Ctrl+Enter 什么都不发生（筛到零行 → 按钮禁用 → 对话框仍开着、磁盘不变、状态行没被改写）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var filter = FindAll<ComboBox>(dialog).FirstOrDefault()
+                    ?? throw new InvalidOperationException("对话框里找不到筛选器：本段造不出「主动作不可用」那一态。");
+                var rejected = filter.Items.Cast<object>().Select(item => item.ToString()).ToList().IndexOf("已驳回");
+                if (rejected < 0)
+                {
+                    throw new InvalidOperationException(
+                        "筛选器里没有「已驳回」这一项：本段造不出「筛到零行」那一态。界面文案：" + string.Join("、", filter.Items.Cast<object>()));
+                }
+                filter.SelectedIndex = rejected;
+                Application.DoEvents();
+
+                var list = CandidateList(dialog);
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"筛到「已驳回」之后清单还有 {list.Items.Count} 行：夹具里没有已驳回的候选，这一态应当零行。");
+                }
+                var accept = ButtonOf(dialog, "接受并下一条");
+                if (accept.Enabled)
+                {
+                    throw new InvalidOperationException("筛到零行之后「接受并下一条」仍是可用的：这一态没有可接受的候选。");
+                }
+                var status = StatusLabel(dialog);
+                var before = status.Text;
+
+                PressKey(dialog, list, "^{ENTER}");
+                Application.DoEvents();
+
+                if (!dialog.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "主动作不可用时按 Ctrl+Enter，对话框被关掉了："
+                        + "这一次按键该交回基类、什么都不发生，不该替用户关掉这一屏。");
+                }
+                var store = drafts.Load(task.Id);
+                var second = store.Candidates.First(c => c.Id == "candidate-primary-2");
+                if (second.ReviewState != "pending")
+                {
+                    throw new InvalidOperationException(
+                        $"主动作不可用时按 Ctrl+Enter，磁盘上第二条的审阅状态是「{second.ReviewState}」，期望 pending："
+                        + "按钮禁用时按下去什么都不该发生。");
+                }
+                if (status.Text != before)
+                {
+                    throw new InvalidOperationException(
+                        $"主动作不可用时按 Ctrl+Enter，状态行从「{before}」变成「{status.Text}」："
+                        + "什么都没发生，不该写状态行。");
+                }
+                _lines.Add("     主动作不可用时按 Ctrl+Enter：对话框仍开着、第二条仍是 pending、状态行未变");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
         }
     }
 

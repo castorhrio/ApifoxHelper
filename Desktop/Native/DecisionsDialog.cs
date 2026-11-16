@@ -126,6 +126,9 @@ internal sealed class DecisionsDialog : DpiAwareForm
 
         _confirmButton = Ui.Primary("确认纳入");
         _confirmButton.Click += (_, _) => ConfirmCurrent();
+        // 主动作的键盘入口（第三百五十九轮）：这一屏的主动作按钮文字随条目类型换（「确认纳入」/「确认绑定」），
+        // 登记的是按钮本身而不是文字——可用性与文字都由按钮自己带着，本类不另存一份副本。
+        PrimaryActionButton = _confirmButton;
         _useTargetButton = Ui.Ghost("使用目标");
         _useTargetButton.Click += (_, _) => ChooseConflict("useTarget");
         _keepRemoteButton = Ui.Ghost("保留远端");

@@ -94,6 +94,9 @@ internal sealed class ContractsDialog : DpiAwareForm
 
         _confirmButton = Ui.Primary("确认");
         _confirmButton.Click += (_, _) => RunReview("confirmed");
+        // 主动作的键盘入口（第三百五十九轮）：与注释候选同一口径——登记本屏的主动作按钮，
+        // Ctrl+Enter 的判定与点击都在 DpiAwareForm 一处，本屏不自己认键。
+        PrimaryActionButton = _confirmButton;
         _rejectButton = Ui.Ghost("拒绝");
         _rejectButton.Click += (_, _) => RunReview("rejected");
         _resetButton = Ui.Ghost("重置");

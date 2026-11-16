@@ -26,6 +26,13 @@ namespace ApifoxHelper.Desktop.Native;
 /// 覆写排在 <c>base</c> <b>之后</b>：这条消息框架自己也要用（更新窗口边界与它自己的 DPI 账），
 /// 挡在前面等于替框架决定它该收到什么；本仓全部对话框都不再有第二条 DPI 通路。
 /// </para>
+/// <para>
+/// <b>第三百五十九轮多了一件：主动作的键盘入口</b>（<c>Ctrl+Enter</c>）。三个审阅对话框的主动作
+/// （「接受并下一条」「确认」「确认纳入」）逐条清队列时要按几十次，而对话框的 <c>Enter</c> 是「关闭」，
+/// 键盘上按一下就走下一条这件事此前没有入口。判定在 <see cref="PrimaryActionKeys"/> 一处，
+/// 点按钮只在这里一处（<c>ProcessCmdKey</c>），对话框只登记「本屏的主动作是哪一颗按钮」
+/// （<see cref="PrimaryActionButton"/>）——不各写一套按键判定，也不各写一次 <c>PerformClick</c>。
+/// </para>
 /// </summary>
 internal abstract class DpiAwareForm : Form
 {
@@ -36,11 +43,54 @@ internal abstract class DpiAwareForm : Form
     /// </summary>
     internal DpiTracking? Tracking { get; set; }
 
+    /// <summary>
+    /// 本屏的主动作按钮（<c>Ctrl+Enter</c> 的落点）。<c>null</c> = 这一屏不接这个手势
+    /// （表单类对话框的主动作是「保存/确定」，那一步的入口是那颗按钮本身与它自己的校验，
+    /// 不为它另开一个键盘入口——见 <c>PrimaryActionKeysTests</c> 的豁免登记）。
+    /// <para>
+    /// 登记的是<b>按钮本身</b>而不是「点下去做什么」：可用性与可见性由按钮自己带着，
+    /// 判定读的就是它此刻的那两个值（<see cref="PrimaryActionKeys.ShouldRun"/>），
+    /// 本类不另存一份「现在能不能点」的副本——两份必然漂移。
+    /// </para>
+    /// </summary>
+    internal Button? PrimaryActionButton { get; set; }
+
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);
         if (m.Msg != DpiScale.WmDpiChanged) return;
         DpiScale.RescaleOnDpiChanged(this, m.WParam.ToInt64());
+    }
+
+    /// <summary>
+    /// 主动作的键盘入口（<c>Ctrl+Enter</c>）：手势成立且按钮此刻可用、可见时点它一下并吞掉这一次按键；
+    /// 其余一律交回基类（对话框的 <c>Enter</c>=确认/关闭、<c>Esc</c>=取消、各控件的编辑键逐字不变）。
+    /// <para>
+    /// <b>为什么在 <c>ProcessCmdKey</c> 而不是 <c>ProcessDialogKey</c></b>：后者只收到「对话框键」
+    /// （Tab / 方向键 / Enter / Esc 那一族），而多行输入框会先把 <c>Ctrl+Enter</c> 当成自己的编辑键吃掉；
+    /// <c>ProcessCmdKey</c> 在控件拿到按键之前就被调用，于是「正在改候选文字时按 Ctrl+Enter」
+    /// 与「焦点在清单上按 Ctrl+Enter」是同一件事——这正是这个手势要的（改完就接受并下一条）。
+    /// </para>
+    /// <para>
+    /// <b>不吞键的那一支</b>：按钮禁用（没有选中行、读取失败、作业运行中）或藏起来（读取失败态里
+    /// 唯一入口是「重试」）时返回 <c>false</c>，这一次按键照旧往上传——不把「什么都没发生」说成做了什么。
+    /// </para>
+    /// </summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (PrimaryActionButton is { } primary
+            && (keyData & Keys.KeyCode) == Keys.Enter
+            && PrimaryActionKeys.ShouldRun(
+                PrimaryActionKeys.IsPrimaryActionGesture(
+                    (keyData & Keys.Shift) != 0, (keyData & Keys.Control) != 0, (keyData & Keys.Alt) != 0),
+                primary.Enabled,
+                primary.Visible))
+        {
+            primary.PerformClick();
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 }
 

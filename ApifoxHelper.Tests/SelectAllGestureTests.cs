@@ -85,16 +85,43 @@ public class SelectAllGestureTests
     /// <summary>
     /// 「A」这个键全仓只在一处被认出来。认键散成两处，两处迟早对不上
     /// （一处认了 Ctrl+A、另一处认了 Ctrl+Alt+A，界面上就是一个键有时灵有时不灵）。
+    /// <para>
+    /// <b>认的是「字母 A 这个键」，不是「以 Keys.A 开头的任何东西」（第三百五十九轮实测）</b>：
+    /// 这一条此前用子串 <c>Keys.A</c> 判，而 <c>Keys.Alt</c> 逐字包含它——第三百五十九轮给
+    /// <c>DpiAwareForm</c> 的主动作手势拆修饰键时写了一句 <c>(keyData &amp; Keys.Alt) != 0</c>，
+    /// 这一条当场把那个文件读成「第二处认了字母 A」，而它认的是 Alt。子串判定在这里量错了东西：
+    /// 它要判的是「字母 A 这个键有没有第二个主人」，不是「这几个字符有没有第二次出现」。
+    /// 现按词边界判（<c>Keys\.A</c> 后面不能再跟字母），<c>Keys.Alt</c>／<c>Keys.Add</c> 不再算命中；
+    /// 真正的第二处 <c>Keys.A</c> 仍然红（<see cref="TheLetterA_Gate_StillCatchesASecondOwner"/> 钉住这一点）。
+    /// </para>
     /// </summary>
     [Fact]
     public void TheLetterA_IsRecognizedInExactlyOnePlace()
     {
         var holders = Repo.NativeSources()
-            .Where(s => CodeScan.HasLine(s.Text, "Keys.A"))
+            .Where(s => LetterAHolders(s.Text).Count > 0)
             .Select(s => s.Name)
             .ToList();
         Assert.Equal(new[] { "Ui.cs" }, holders);
     }
+
+    /// <summary>
+    /// 上面那一条判据自己被抓得住：喂它一份「第二处真的认了字母 A」的源码，它必须报出来；
+    /// 喂它一份「只认了 Alt」的源码，它必须不报——否则「按词边界判」这句话只是注释里的一句自述。
+    /// </summary>
+    [Fact]
+    public void TheLetterA_Gate_StillCatchesASecondOwner()
+    {
+        Assert.Single(LetterAHolders("if (e.KeyCode != Keys.A) return;"));
+        Assert.Empty(LetterAHolders("if ((keyData & Keys.Alt) != 0) return;"));
+        Assert.Empty(LetterAHolders("if ((keyData & Keys.Add) != 0) return;"));
+        // 注释里的引用不算接线（CodeScan 先去掉注释）。
+        Assert.Empty(LetterAHolders("// 这一处不认 Keys.A"));
+    }
+
+    /// <summary>「字母 A 这个键」在代码行里的出现次数（注释已去掉，按词边界判，不把 Keys.Alt 读成字母 A）。</summary>
+    private static List<string> LetterAHolders(string source) =>
+        CodeScan.Lines(source).Where(code => Regex.IsMatch(code, @"Keys\.A(?![A-Za-z0-9_])")).ToList();
 
     /// <summary>
     /// 手势与按钮调的是同一个方法：两条入口、一件事。

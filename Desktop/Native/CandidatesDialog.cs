@@ -116,6 +116,10 @@ internal sealed class CandidatesDialog : DpiAwareForm
 
         _acceptButton = Ui.Primary("接受并下一条");
         _acceptButton.Click += (_, _) => RunReview("accepted");
+        // 主动作的键盘入口（第三百五十九轮）：本屏的主动作是「接受并下一条」，逐条清队列时按几十次，
+        // 而对话框的 Enter 是「关闭」（AcceptButton 在下面）。登记的是按钮本身，判定与点击都在
+        // DpiAwareForm 一处（PrimaryActionKeys 只判手势与可用性），本屏不自己认键。
+        PrimaryActionButton = _acceptButton;
         _deferButton = Ui.Ghost("搁置");
         _deferButton.Click += (_, _) => RunReview("deferred");
         _rejectButton = Ui.Ghost("驳回");
