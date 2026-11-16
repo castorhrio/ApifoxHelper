@@ -280,6 +280,13 @@ public class GateSourceConsistencyTests
             + "剪贴板读回来逐字比对、期望值取产品口径 PropagationDialog.XmlFileColumn」——那是段体形状门"
             + "（判据在判冒烟段自己），不是「静态门与冒烟段断言同一表达式」的同源对；"
             + "这一屏没有可判的同源表达式，硬凑一对只会把「同源」稀释成「两边都提到这个名字」。"),
+        new(
+            ["RunListCopyGestureSyncSelect"],
+            "同步预览勾选页的接口清单的列表 Ctrl+C 复制（第三百五十七轮）："
+            + "ListCopyGestureSyncSelectSmokeTests.cs 判的是「冒烟段真的经 PressKey 按了 ^c、{DOWN} 与裸空格、"
+            + "剪贴板读回来逐字比对、期望值取产品口径（表头「接口」那一格与 SyncSelection.Selectable）」——"
+            + "那是段体形状门（判据在判冒烟段自己），不是「静态门与冒烟段断言同一表达式」的同源对；"
+            + "这一屏没有可判的同源表达式，硬凑一对只会把「同源」稀释成「两边都提到这个名字」。"),
     ];
 
     /// <summary>

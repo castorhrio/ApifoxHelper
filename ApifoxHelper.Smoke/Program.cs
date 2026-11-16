@@ -382,6 +382,9 @@ internal static class Program
         Section("列表 Ctrl+C 复制：生成文档核对的 XML 文件清单（点一行之后键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「XML 文档文件」格、不是首列「项目」 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGesturePropagationXmlFiles));
         RunListCopyGesturePropagationXmlFiles(services, dataRoot);
 
+        Section("列表 Ctrl+C 复制：同步预览勾选页的接口清单（打开即选中第一条接口且键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「接口」格、不是邻列「名称」 → 按一次空格翻勾选后标识格没被改写 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGestureSyncSelect));
+        RunListCopyGestureSyncSelect(services, dataRoot);
+
         Section("任务列表的列头排序（真的点一次列头：点「任务」列 → 自然序重排并画出 ▲ → 再点一次反向 ▼ → 换点「配置」列按配置名升序且原列标记撤掉 → 排序不写任务数据、选中按 Id 恢复，真实鼠标）", nameof(RunColumnSortGesture));
         RunColumnSortGesture(services, dataRoot);
 
@@ -13552,6 +13555,234 @@ internal static class Program
             throw new InvalidOperationException("读不回剪贴板（被其他进程占用）：" + ex.Message);
         }
     }
+
+    /// <summary>
+    /// 同步预览<b>勾选页</b>的接口清单的列表 Ctrl+C 复制（第三百五十七轮，接续 <c>RunListCopyGesture</c> 一族）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：已按过的十二次 Ctrl+C 全在<b>普通清单</b>上（差异确认、检查结果、任务日志、
+    /// 代码证据、同步预览写入清单、补充说明、接口追踪明细、响应契约、注释候选、注释缺口、注释回写、
+    /// 生成文档核对的两张清单），<b>复选清单上一次都没按过</b>。这一屏的接口清单是复选清单
+    /// （<c>Ui.List(true)</c>）：它自己的 KeyDown 上接着三只手势——Ctrl+C（抄标识列）、空格（翻焦点行）、
+    /// Ctrl+A（全选可见行里可同步的那些），外加 <c>FilterGestures</c> 的 Ctrl+F。四只手势共用同一段接线，
+    /// 而此前没有任何一段把它们放到同一行上真的按过。
+    /// </para>
+    /// <para>
+    /// <b>这一屏为什么最该按</b>：这张清单的首列逐字就是「GET /路径」（<c>SyncSelectSort.EndpointCell</c>
+    /// = 方法 + 空格 + 路径），而 <c>ListCopy</c> 开头那段话点名的用途正是「新建任务的『指定接口』要求逐行
+    /// 手敲同样的文字」——抄出去的每一个字，用户都要逐行粘回去。这一屏是那张清单里唯一「首列即身份」的。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>（与已收各屏逐字同一口径）：① 打开即选中第一条接口、键盘真的在清单上，且这一张确实是
+    /// 复选清单（这一段量的前提）；② 真的按一次 Ctrl+C，剪贴板逐字等于焦点行「接口」格原文，且<b>不等于</b>
+    /// 邻列「名称」格原文；③ <b>按一次空格把焦点行勾上之后</b>，标识格没被改写——再按一次 Ctrl+C，剪贴板仍是
+    /// 同一个接口格（翻勾选与抄标识列是同一段接线上的两件事，互不干扰）；④ 按方向键换一行再按，剪贴板跟着
+    /// 换到那一行的接口（复制的是焦点行，不是固定第一行）；⑤ 焦点行未选中时按 Ctrl+C，剪贴板不动
+    /// （不把用户先前复制的内容抹掉）。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：不判中文输入法是否吞掉 Ctrl+C、不判真机上剪贴板被别的程序占用时的行为（随 G-D5 真机复核）；
+    /// 不判「点勾选框那一格之后焦点行有没有跟着走」（那是 Windows 上的行为，模拟器量不到）；
+    /// 不判这一屏该不该打开即选中第一行（现状是选中，与另十张长清单同一行为）。
+    /// </para>
+    /// </summary>
+    private static void RunListCopyGestureSyncSelect(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "列表复制任务（同步预览勾选页）" });
+        var diff = CheckResultsFixture();
+        tasks.Write(task.Id, TaskFiles.Diff, diff);
+
+        SyncPreviewDialog? dialog = null;
+        try
+        {
+            RunAction("列表复制：勾选页打开即选中第一条接口、键盘真的在清单上、这一张确实是复选清单（Ctrl+C 的前提）", () =>
+            {
+                dialog = new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = SyncSelectInterfaceList(dialog);
+                if (list.Items.Count != diff.Endpoints.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"勾选页接口清单有 {list.Items.Count} 行，检查结果有 {diff.Endpoints.Count} 条："
+                        + "夹具与这一屏对不上，量到的不是这一屏。");
+                }
+                if (!list.CheckBoxes)
+                {
+                    throw new InvalidOperationException(
+                        "勾选页的接口清单不是复选清单：这一段量的是「复选清单上按一次 Ctrl+C」，"
+                        + "前提不成立时量到的是另一张清单。");
+                }
+                if (list.SelectedItems.Count != 1 || list.SelectedItems[0].Index != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"打开勾选页时选中了 {list.SelectedItems.Count} 行：Ctrl+C 没有落点。");
+                }
+                if (!list.Focused)
+                {
+                    throw new InvalidOperationException(
+                        "打开勾选页时键盘不在接口清单上（焦点落在别的控件上）：Ctrl+C 落在别的控件上，"
+                        + "那只手势在这一张清单上按不出来。");
+                }
+            });
+
+            RunAction("列表复制：勾选页真的按一次 Ctrl+C——剪贴板逐字等于焦点行「接口」格原文，且不等于邻列「名称」格原文", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = SyncSelectInterfaceList(dialog);
+                var endpointColumn = ColumnIndex(list, "接口");
+                var nameColumn = ColumnIndex(list, "名称");
+                var row = list.FocusedItem ?? throw new InvalidOperationException("清单里没有焦点行：Ctrl+C 没有落点。");
+                var endpoint = row.SubItems[endpointColumn].Text;
+                var name = row.SubItems[nameColumn].Text;
+                if (string.IsNullOrWhiteSpace(endpoint))
+                {
+                    throw new InvalidOperationException("焦点行的「接口」格是空的：这一段量不到东西。");
+                }
+
+                PressKey(dialog, list, "^c");
+                var pasted = ReadClipboard();
+                if (pasted != endpoint)
+                {
+                    throw new InvalidOperationException(
+                        $"按了 Ctrl+C，剪贴板里是「{pasted}」，焦点行「接口」列是「{endpoint}」："
+                        + "这一屏的标识列是首列「接口」，抄出去的必须是那一格。");
+                }
+                if (pasted == name)
+                {
+                    throw new InvalidOperationException(
+                        $"剪贴板里是「{pasted}」，与邻列「名称」那一格逐字相同：抄出去的是远端名字，"
+                        + "不是这一行说的是哪个接口（粘进「指定接口」的那一行得是 GET /路径）。");
+                }
+                _lines.Add($"     勾选页：焦点行「{endpoint}」被 Ctrl+C 抄进剪贴板（邻列「名称」格「{name}」没有被抄）");
+            });
+
+            RunAction("列表复制：勾选页按一次空格把焦点行勾上之后，标识格没被改写——再按一次 Ctrl+C，剪贴板仍是同一个接口格", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = SyncSelectInterfaceList(dialog);
+                var endpointColumn = ColumnIndex(list, "接口");
+                var row = list.FocusedItem ?? throw new InvalidOperationException("清单里没有焦点行：空格没有落点。");
+                var endpoint = row.SubItems[endpointColumn].Text;
+                var wasChecked = row.Checked;
+                // 前提：这一行勾得上（不可同步的行勾上即被弹回，翻不动就量不到「翻勾选不改写标识格」）。
+                if (row.Tag is not EndpointCheck check
+                    || !SyncSelection.Selectable(task.OfflineMode, check.Status))
+                {
+                    throw new InvalidOperationException(
+                        "焦点行勾不上（不可同步的那几种状态）：这一段量的是「翻勾选之后标识格没被改写」，"
+                        + "前提不成立时量到的是另一件事。");
+                }
+
+                PressKey(dialog, list, " ");
+                Application.DoEvents();
+                if (row.Checked == wasChecked)
+                {
+                    throw new InvalidOperationException(
+                        "按了一次空格，焦点行的勾选状态没有变：这一段量的前提（空格真的翻得动这一行）不成立。");
+                }
+                if (row.SubItems[endpointColumn].Text != endpoint)
+                {
+                    throw new InvalidOperationException(
+                        $"按了一次空格之后，焦点行的「接口」格从「{endpoint}」变成了「{row.SubItems[endpointColumn].Text}」："
+                        + "翻勾选不该改写标识格。");
+                }
+
+                PressKey(dialog, list, "^c");
+                var pasted = ReadClipboard();
+                if (pasted != endpoint)
+                {
+                    throw new InvalidOperationException(
+                        $"翻完勾选再按 Ctrl+C，剪贴板里是「{pasted}」，焦点行的「接口」格是「{endpoint}」："
+                        + "翻勾选与抄标识列是同一段接线上的两件事，互不干扰。");
+                }
+                _lines.Add($"     勾选页：焦点行勾上之后，Ctrl+C 抄出来的仍是「{endpoint}」");
+            });
+
+            RunAction("列表复制：勾选页按方向键换到另一行再按 Ctrl+C——剪贴板跟着换到那一行的接口（复制的是焦点行，不是固定第一行）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = SyncSelectInterfaceList(dialog);
+                var endpointColumn = ColumnIndex(list, "接口");
+                var first = list.Items[0].SubItems[endpointColumn].Text;
+                // 目标行按「接口格与第一行不同」认，不按固定序号认：夹具换了行序，这一段照样量得到。
+                var target = -1;
+                for (var i = 1; i < list.Items.Count; i++)
+                {
+                    if (list.Items[i].SubItems[endpointColumn].Text != first) { target = i; break; }
+                }
+                if (target < 0)
+                {
+                    throw new InvalidOperationException(
+                        "夹具里没有第二行「接口」格与第一行不同的条目：这一段量不到「复制跟着焦点走」。");
+                }
+
+                var before = ReadClipboard();
+                for (var i = 0; i < target; i++) PressKey(dialog, list, "{DOWN}");
+                var row = list.FocusedItem ?? throw new InvalidOperationException("按了方向键之后清单里没有焦点行。");
+                if (row.Index != target)
+                {
+                    throw new InvalidOperationException(
+                        $"按了 {target} 次方向键下，焦点行是第 {row.Index} 行，期望第 {target} 行："
+                        + "清单没接方向键，这一段量不到「复制跟着焦点走」。");
+                }
+                var endpoint = row.SubItems[endpointColumn].Text;
+                PressKey(dialog, list, "^c");
+                var pasted = ReadClipboard();
+                if (pasted != endpoint)
+                {
+                    throw new InvalidOperationException(
+                        $"换到第 {target} 行再按 Ctrl+C，剪贴板里是「{pasted}」，那一行的「接口」格是「{endpoint}」。");
+                }
+                if (pasted == before)
+                {
+                    throw new InvalidOperationException(
+                        $"换了一行再按 Ctrl+C，剪贴板里还是「{pasted}」：复制的是固定第一行，不是焦点行。");
+                }
+                _lines.Add($"     勾选页：焦点换到第 {target} 行之后，剪贴板从「{before}」换成「{pasted}」");
+            });
+
+            RunAction("列表复制：勾选页焦点行未选中时按 Ctrl+C，剪贴板不动（不把用户先前复制的内容抹掉）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = SyncSelectInterfaceList(dialog);
+                var before = ReadClipboard();
+                list.SelectedItems.Clear();
+                list.Focus();
+                Application.DoEvents();
+                PressKey(dialog, list, "^c");
+                var after = ReadClipboard();
+                if (after != before)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点行没有选中时按 Ctrl+C，剪贴板从「{before}」变成「{after}」："
+                        + "只复制屏幕上真正标出来的那一行，未选中时不该动作（空复制会把用户先前复制的内容抹掉）。");
+                }
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 同步预览勾选页的接口清单（按表头认，不按类型认：这一对话框有两页各一张清单，只按类型认会撞车）。
+    /// </summary>
+    private static ListView SyncSelectInterfaceList(Form dialog) =>
+        FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                    .SequenceEqual(["接口", "名称", "状态", "待确认"]))
+            ?? throw new InvalidOperationException(
+                "同步预览勾选页找不到表头为「接口 / 名称 / 状态 / 待确认」的接口清单：列增删或改名了，本段口径需要重定。");
 
     /// <summary>
     /// 勾选页的关键词框（第二百八十六轮）：按「与接口清单同一页」认，不按「可见的文本框」认——
