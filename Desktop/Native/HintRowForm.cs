@@ -48,14 +48,41 @@ public static class HintRowForms
     public const int TextGap = 4;
 
     /// <summary>
-    /// 这一形态的说明行左侧让出多少像素（= <c>Padding.Left</c>）。
+    /// 这一形态的说明行在 <b>96dpi 设计档</b>左侧让出多少像素（= 出厂时 <c>Padding.Left</c> 的基线）。
     /// <para>
     /// 字段级是 <b>0</b>：它紧贴网格左缘，与它上面那一行字段名同一条竖线，读起来是「这一行的注脚」。
     /// 分区级是 <b>竖线宽 + 让位 = 6</b>：文字整体右移，左缘多出一条竖线，读起来是「这一块的注脚」。
     /// 两个数<b>必须不相等</b>——相等就等于两种形态在屏幕上没有差异，这一处枚举就白加了。
     /// </para>
+    /// <para>
+    /// 这是<b>基线</b>，不是出厂值：真正写进 <c>Padding.Left</c> 的是
+    /// <see cref="ScaledLeftIndent"/>（基线 × 当前缩放因子）。第三百五十四轮之前出厂值就是这一个数，
+    /// 而框架那一次 <c>Form.Scale</c> 并没有替它放大——三档实测恒为 6px，见 <see cref="ScaledLeftIndent"/>。
+    /// </para>
     /// </summary>
     public static int LeftIndent(HintRowForm form) => form == HintRowForm.Section ? RuleWidth + TextGap : 0;
+
+    /// <summary>
+    /// 这一形态在<b>当前缩放档</b>下左侧让出多少像素——出厂时真正写进 <c>Padding.Left</c> 的那个数。
+    /// <para>
+    /// <b>为什么让位要在这里按因子算一次</b>（第三百五十四轮，简报 P0-2）：第三百五十三轮的前提是
+    /// 「<c>DpiScale.Apply</c> 那一次 <c>Form.Scale</c> 会把 <c>Padding.Left</c> 按缩放档放大」。
+    /// 三档复跑把这个前提量掉了：四个子对话框的构造顺序是<b>先</b> <c>DpiScale.Apply</c>、<b>后</b>加控件，
+    /// 说明行在缩放那一刻还不存在，<c>Form.Scale</c> 一次都没碰过它——wine 三档实测
+    /// <c>Padding.Left</c> 恒为 <b>6px</b>（96 / 125% / 200% 同一个数），不是 6 / 8 / 12。
+    /// 于是 200% 档上「一条 2px 线 + 4px 让位」被留在 96 档的尺寸上，而旁边的文字已经放大一倍。
+    /// </para>
+    /// <para>
+    /// <b>怎么算</b>：与左列宽同一条口径——基线 × 缩放因子，因子取 <c>DpiScale.ScaleFactor()</c>
+    /// （<c>ProfileGridColumns.ScaledLabelWidth</c> 用的就是它），取整走 <see cref="DpiScaleFactor.ScaledExtent"/>
+    /// 同一份，不另写第二个取整。三档因此是 6 / 8 / 12，<see cref="RuleWidthAt"/> 的入参前提由此成立。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判真机上 200% 档那条线够不够一眼可辨——那是观感，随 G-D5 复核。
+    /// </para>
+    /// </summary>
+    public static int ScaledLeftIndent(HintRowForm form, float factor) =>
+        DpiScaleFactor.ScaledExtent(LeftIndent(form), factor);
 
     /// <summary>这一形态要不要在左缘画那条竖线（只有分区级画）。</summary>
     public static bool DrawsRule(HintRowForm form) => form == HintRowForm.Section;
@@ -64,18 +91,24 @@ public static class HintRowForms
     /// 这一形态在<b>当前缩放档</b>下那条竖线该画多宽（px）：由<b>已经缩放过的让位</b>反算，
     /// 竖线与让位之比恒为 <see cref="RuleWidth"/> : <see cref="TextGap"/>（96 档 2 : 4）。
     /// <para>
-    /// <b>为什么线宽不能是一个常量</b>（第三百五十三轮，具名 pass：layout + harden）：<c>Padding.Left</c>
-    /// 是 WinForms 的属性，<c>DpiScale.Apply</c> 里那一次 <c>Form.Scale</c> 会把它按缩放档放大
-    /// （96 档 6px → 200% 档 12px），而 <c>OnPaint</c> 里那个 <c>new Pen(…, RuleWidth)</c> 是画出来的，
-    /// 框架不会替它放大。于是 200% 档上竖线仍是 2px、让位已经 12px——两种形态的差异还在，
-    /// 但「一条线 + 一段让位」这个形状本身被拉成了 1 : 6，与 96 档量过并归档的 1 : 2 不是同一个形状。
-    /// 线宽按让位反算之后，三档都是同一个比例，产品与门读的仍是 <see cref="RuleWidth"/> 与
-    /// <see cref="TextGap"/> 这两个数（不新增第三个常量，也不在界面层就地写一个 4）。
+    /// <b>为什么线宽不能是一个常量</b>（第三百五十三轮，具名 pass：layout + harden）：让位随缩放档放大
+    /// （<see cref="ScaledLeftIndent"/>：96 档 6px → 200% 档 12px），而 <c>OnPaint</c> 里那个
+    /// <c>new Pen(…, RuleWidth)</c> 是画出来的，框架不会替它放大。于是 200% 档上竖线仍是 2px、
+    /// 让位已经 12px——两种形态的差异还在，但「一条线 + 一段让位」这个形状本身被拉成了 1 : 6，
+    /// 与 96 档量过并归档的 1 : 2 不是同一个形状。线宽按让位反算之后，三档都落在同一个比例附近
+    /// （四舍五入的界内：96 档 2 : 4、125% 档 3 : 5、200% 档 4 : 8），产品与门读的仍是
+    /// <see cref="RuleWidth"/> 与 <see cref="TextGap"/> 这两个数（不新增第三个常量，也不在界面层就地写一个 4）。
     /// </para>
     /// <para>
-    /// <b>为什么入参是让位而不是缩放因子</b>：让位是<b>框架已经算好的那一个数</b>——它已经含了当前缩放档、
-    /// 也含了运行中 <c>WM_DPICHANGED</c> 那一次重算的结果。再取一次屏幕 DPI 等于把同一件事算两遍，
-    /// 而两遍在「窗口被拖到另一块屏」那一刻会给出不同的答案（<c>DpiScale</c> 的类注释记着这一族）。
+    /// <b>「恒为 1 : 2」这句措辞按实测收窄</b>（第三百五十四轮，简报 P2-1）：三档里只有 96 与 200% 档
+    /// 恰好是 1 : 2，125% 档是 3 : 5——让位 8px 反算出 2.67px，取整到 3px。这是四舍五入的界，
+    /// 不是比例漂了；写成「恒为」等于替一个没量过的档位下结论。
+    /// </para>
+    /// <para>
+    /// <b>为什么入参是让位而不是缩放因子</b>：让位是<b>控件上此刻真的那一个数</b>——它已经含了当前缩放档
+    /// （出厂时由 <see cref="ScaledLeftIndent"/> 按因子算好），也含了运行中 <c>WM_DPICHANGED</c>
+    /// 那一次重算的结果。再取一次屏幕 DPI 等于把同一件事算两遍，而两遍在「窗口被拖到另一块屏」
+    /// 那一刻会给出不同的答案（<c>DpiScale</c> 的类注释记着这一族）。
     /// 让位为 0（字段级那一形，或有人把让位改没了）时答 0：不画线，也不猜一个最小宽度。
     /// </para>
     /// </summary>

@@ -106,7 +106,8 @@ public class HintRowTests
         Assert.Contains("grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));", body, StringComparison.Ordinal);
         Assert.Contains("var hint = HintRowForms.DrawsRule(form) ? SectionHint(text) : Ui.Caption(text);", body, StringComparison.Ordinal);
         // 两种形态的差异只在这一处落地，且数从 HintRowForms 取——工厂里不写死 6 或 2。
-        Assert.Contains("hint.Padding = new Padding(HintRowForms.LeftIndent(form), 0, 0, 0);", body, StringComparison.Ordinal);
+        // 第三百五十四轮：让位按当前缩放档算（ScaledLeftIndent），不是把设计档那个数直接写进 Padding。
+        Assert.Contains("hint.Padding = new Padding(HintRowForms.ScaledLeftIndent(form, DpiScale.ScaleFactor()), 0, 0, 0);", body, StringComparison.Ordinal);
         // 第三百四十九轮：说明行不是字段，它要的宽度是整张网格的宽度——从字段列那一格改成跨两列。
         // 判据与逐处代价清点在 docs/NOTES.md 第三百四十九轮那一节，可用宽那笔账见下面
         // HintRow_FitsBothLongTextsOnlyWhenItSpansBothColumns。
@@ -240,15 +241,128 @@ public class HintRowTests
     }
 
     /// <summary>
-    /// 那条竖线的宽度<b>跟着缩放档走</b>，且三档都是同一个比例（第三百五十三轮）。
+    /// 三档（96 / 125% / 200%）的让位：<c>RuleWidthAt</c> 的入参就是这三个数。
     /// <para>
-    /// <b>补的是哪个缺口</b>：<c>Padding.Left</c> 是 WinForms 的属性，<c>DpiScale.Apply</c> 那一次
-    /// <c>Form.Scale</c> 会把它按缩放档放大；而竖线是 <c>OnPaint</c> 里画出来的，框架不会替它放大。
-    /// 写死 <c>RuleWidth</c> 的话，200% 档上竖线仍是 2px、让位已经 12px——「一条线 + 一段让位」
-    /// 被拉成 1 : 6，与 96 档归档的 1 : 2 不是同一个形状。这条门判的就是「三档同一个比例」。
+    /// <b>为什么写成一处</b>（第三百五十四轮，简报 P0-2）：这三个数此前散在断言里当字面量，
+    /// 而它们其实是<b>设计档让位 × 三档因子</b>算出来的——写成一处之后，下面那条
+    /// <see cref="TierIndents_AreTheDesignIndentScaledByTheThreeTierFactors"/> 能把「这三个数从哪来」
+    /// 与「框架实际给的是不是这三个」分开判：前者在 Linux 上算，后者只有 wine 三档量得到。
+    /// </para>
+    /// </summary>
+    private static readonly int[] TierIndents = [6, 8, 12];
+
+    /// <summary>
+    /// 三档让位<b>不是手写的三个数</b>：它们是设计档让位 × 三档因子（1 / 1.25 / 2），
+    /// 由出厂那一处（<c>HintRowForms.ScaledLeftIndent</c>）算出来（第三百五十四轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>RuleWidthAt</c> 的算式前提是「控件上的让位是 6 / 8 / 12」，
+    /// 而这三个数此前只以字面量出现在断言里——算式改了、设计档让位改了，那三个字面量不会跟着动，
+    /// 于是「算式前提」与「断言里的数」可以各说一套而全绿。这一条把三个数接回设计档与三档因子，
+    /// 且<b>走的是产品出厂时用的同一个函数</b>：断言里的数与控件上那个数因此不可能各算一套。
     /// </para>
     /// <para>
-    /// <b>入参是让位而不是缩放因子</b>：让位是框架已经算好的那个数（含当前缩放档、也含运行中
+    /// <b>它不判什么</b>：不判控件上真的是不是这三个数——那要跑 wine 三档（冒烟器那一段，见
+    /// <see cref="Smoke_ReconcilesTheFrameworkIndentWithTheInputsRuleWidthAtIsPinnedTo"/>）。
+    /// 第三百五十四轮第一次跑那一段时，控件上恒为 6px：这一条当时是绿的，红的是那一段——
+    /// 「算式对」与「控件上对」是两件事，两条门各判一件。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TierIndents_AreTheDesignIndentScaledByTheThreeTierFactors()
+    {
+        var factors = new[] { 1f, 1.25f, 2f };
+        var derived = factors
+            .Select(f => ApifoxHelper.Desktop.Native.HintRowForms.ScaledLeftIndent(
+                ApifoxHelper.Desktop.Native.HintRowForm.Section, f))
+            .ToArray();
+        Assert.Equal(TierIndents, derived);
+        // 三档必须互不相等：相等就等于「缩放档对让位没有影响」，那 RuleWidthAt 的入参也就没有三档可言。
+        Assert.Equal(TierIndents.Length, TierIndents.Distinct().Count());
+        // 字段级那一形三档都是 0：让位放大只对分区注脚成立，字段注脚不许凭空长出一条缩进。
+        foreach (var factor in factors)
+        {
+            Assert.Equal(0, ApifoxHelper.Desktop.Native.HintRowForms.ScaledLeftIndent(
+                ApifoxHelper.Desktop.Native.HintRowForm.Field, factor));
+        }
+    }
+
+    /// <summary>
+    /// 出厂那一处<b>真的按缩放档算让位</b>，而不是把设计档那个数直接写进 <c>Padding.Left</c>
+    /// （第三百五十四轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：三档复跑量到 <c>Padding.Left</c> 恒为 6px。根因不是算式，是<b>接线</b>——
+    /// 四个子对话框「先 <c>DpiScale.Apply</c>、后加控件」，说明行在 <c>Form.Scale</c> 那一刻还不存在，
+    /// 框架一次都没碰过它。所以让位必须在出厂处自己按因子算；这一条判的就是那一句接线在不在。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判算出来的数对不对（上一条判）、也不判控件上真的是不是那个数（冒烟器判）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HintRowFactory_ScalesTheIndentByTheSameFactorAsTheLabelColumn()
+    {
+        // ① 出厂处按因子算：函数与因子都从产品现读，不在这里写死 6 / 8 / 12。
+        Assert.Contains(
+            "hint.Padding = new Padding(HintRowForms.ScaledLeftIndent(form, DpiScale.ScaleFactor()), 0, 0, 0);",
+            UiSource,
+            StringComparison.Ordinal);
+        // ② 设计档那个数不得再直接进 Padding：写死它就等于「缩放档对让位没有影响」（三档实测 6 / 6 / 6）。
+        Assert.DoesNotContain(
+            "hint.Padding = new Padding(HintRowForms.LeftIndent(form), 0, 0, 0);",
+            UiSource,
+            StringComparison.Ordinal);
+        // ③ 因子只有一处出处：与左列宽用的是同一个数（ProfileGridColumns.ScaledLabelWidth 的入参）。
+        Assert.Contains("ProfileGridColumns.ScaledLabelWidth(_labelWidth, DpiScale.ScaleFactor())", UiSource, StringComparison.Ordinal);
+        // ④ 取整不另写一份：ScaledLeftIndent 走 DpiScaleFactor.ScaledExtent。
+        var forms = NativeFile("HintRowForm.cs");
+        Assert.Contains("DpiScaleFactor.ScaledExtent(LeftIndent(form), factor)", forms, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 冒烟器在三档里把<b>框架实际给出的让位</b>念出来，并与 <c>RuleWidthAt</c> 的期望输入对账
+    /// （第三百五十四轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第三百五十三轮那条比例恒等式只在 Linux 算式上成立——「控件上的让位是
+    /// 6 / 8 / 12」这个前提<b>一次都没有在真实控件上量过</b>。第三百五十四轮第一次跑就红了：
+    /// 三档实测恒为 <b>6px</b>（说明行在 <c>Form.Scale</c> 那一刻还不存在），修法见
+    /// <see cref="HintRowFactory_ScalesTheIndentByTheSameFactorAsTheLabelColumn"/>。
+    /// </para>
+    /// <para>
+    /// <b>这一条判什么</b>：冒烟器那一段真的读 <c>Padding.Left</c>、期望值从 <c>HintRowForms</c> 现读、
+    /// 因子从 <c>DpiScale</c> 现读、对不上就当场失败。**它判不到「量到的数是多少」**——那要跑 wine 三档，
+    /// 读数记在 <c>docs/NOTES.md</c> 第三百五十四轮那一节与 <c>.winecheck/reading.txt</c> 的三档读数里。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Smoke_ReconcilesTheFrameworkIndentWithTheInputsRuleWidthAtIsPinnedTo()
+    {
+        // ① 真的读框架给出的那个数（不是只念行高）。
+        Assert.Contains("hint.Padding.Left", SmokeSource, StringComparison.Ordinal);
+        // ② 期望值从产品几何现读、按框架自己的缩放因子算——冒烟器里不写死 6 / 8 / 12。
+        Assert.Contains("var factor = DpiScale.ScaleFactor();", SmokeSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "var expected = HintRowForms.ScaledLeftIndent(HintRowForm.Section, factor);",
+            SmokeSource,
+            StringComparison.Ordinal);
+        // ③ 对不上就当场失败（不是只印一行读数）。
+        Assert.Contains("if (sectionIndents.Any(v => v != expected))", SmokeSource, StringComparison.Ordinal);
+        // ④ 两种形态都要量到：字段级那一形必须是 0，分区级那一形必须至少有一条。
+        Assert.Contains("if (fieldIndents.Any(v => v != 0))", SmokeSource, StringComparison.Ordinal);
+        Assert.Contains("if (sectionIndents.Count == 0)", SmokeSource, StringComparison.Ordinal);
+        // ⑤ 认提示行仍只有一处：拆出来的取控件方法与判据是同一个出口，不许长出第二种认法。
+        Assert.Single(Regex.Matches(SmokeSource, @"private static Label\? HintRowControl\(TableLayoutPanel grid, int row\)").Cast<Match>());
+    }
+
+    /// <summary>
+    /// 那条竖线的宽度<b>跟着缩放档走</b>，且三档都是同一个比例（第三百五十三轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：让位随缩放档放大（出厂时按因子算，第三百五十四轮），而竖线是
+    /// <c>OnPaint</c> 里画出来的，框架不会替它放大。写死 <c>RuleWidth</c> 的话，200% 档上竖线仍是 2px、
+    /// 让位已经 12px——「一条线 + 一段让位」被拉成 1 : 6，与 96 档归档的 1 : 2 不是同一个形状。
+    /// 这条门判的就是「三档落在同一个比例附近」。
+    /// </para>
+    /// <para>
+    /// <b>入参是让位而不是缩放因子</b>：让位是控件上此刻真的那个数（含当前缩放档、也含运行中
     /// <c>WM_DPICHANGED</c> 那一次重算），再取一次屏幕 DPI 等于把同一件事算两遍。
     /// </para>
     /// <para>
@@ -268,10 +382,13 @@ public class HintRowTests
             ApifoxHelper.Desktop.Native.HintRowForm.Section);
         Assert.Equal(rule, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(designIndent));
 
-        // ② 三档的让位（96 / 125% / 200%，6 / 8 / 12）逐个钉死：线宽 2 / 3 / 4。
-        Assert.Equal(2, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(6));
-        Assert.Equal(3, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(8));
-        Assert.Equal(4, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(12));
+        // ② 三档的让位（96 / 125% / 200%）逐个钉死：线宽 2 / 3 / 4。
+        //    这三个数不是手写的：它们是设计档让位 × 三档因子（1 / 1.25 / 2）四舍五入，
+        //    由 TierIndents_AreTheDesignIndentScaledByTheThreeTierFactors 现算对账；
+        //    框架实际给出的那三个数由冒烟器在三档里量（第三百五十四轮，简报 P0-2）。
+        Assert.Equal(2, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(TierIndents[0]));
+        Assert.Equal(3, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(TierIndents[1]));
+        Assert.Equal(4, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(TierIndents[2]));
 
         // ③ 比例：线宽 / 让位 ≈ 线宽档 / 让位档，即 width × total ≈ indent × rule，
         //    误差不超过半个让位档（四舍五入的界）。让位 1px 那一格不在此列：理想线宽 0.33px
@@ -494,7 +611,9 @@ public class HintRowTests
     public void Smoke_MeasuresTheHintRowHeightsOfThoseFourDialogs()
     {
         Assert.Contains("四个子对话框的提示行没有死空白", SmokeSource, StringComparison.Ordinal);
-        Assert.Matches(@"(?m)^\s*private static bool IsHintRow\(TableLayoutPanel grid, int row\)$", SmokeSource);
+        // 第三百五十四轮把「认提示行」与「取那条提示行本体」拆成两处（`IsHintRow` 转调 `HintRowControl`），
+        // 判据仍是同一个出口：这里只判「那个判据还在、签名没变」，不判它是不是表达式体。
+        Assert.Matches(@"(?m)^\s*private static bool IsHintRow\(TableLayoutPanel grid, int row\)", SmokeSource);
         foreach (var screen in new[] { "新建任务", "模块与模板", "序列化与分析", "模型服务" })
         {
             Assert.Contains($"(\"{screen}\"", SmokeSource, StringComparison.Ordinal);

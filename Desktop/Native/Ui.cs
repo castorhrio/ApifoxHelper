@@ -336,7 +336,10 @@ internal static class Ui
         var hint = HintRowForms.DrawsRule(form) ? SectionHint(text) : Ui.Caption(text);
         hint.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
         // 两种形态的差异只在这一处落地：字段级 0px、分区级 2px 竖线 + 4px 让位（几何在 HintRowForms 一处）。
-        hint.Padding = new Padding(HintRowForms.LeftIndent(form), 0, 0, 0);
+        // 让位按当前缩放档放大（第三百五十四轮）：这四个子对话框是「先 DpiScale.Apply、后加控件」，
+        // 说明行在 Form.Scale 那一刻还不存在，框架一次都没碰过它的 Padding——三档实测恒为 6px。
+        // 因子取 DpiScale.ScaleFactor()，与左列宽（ProfileGridColumns.ScaledLabelWidth）同一个数。
+        hint.Padding = new Padding(HintRowForms.ScaledLeftIndent(form, DpiScale.ScaleFactor()), 0, 0, 0);
         grid.Controls.Add(hint, 0, row);
         grid.SetColumnSpan(hint, 2);
         hint.Tag = HintRowMarker;
@@ -364,12 +367,12 @@ internal static class Ui
     /// 不改 <c>AutoSize</c> 的度量，行高与字段注脚那一形逐像素相同。
     /// </para>
     /// <para>
-    /// <b>线宽跟着让位走，不写死</b>（第三百五十三轮，具名 pass：layout + harden）：<c>Padding.Left</c> 是
-    /// 属性，<c>DpiScale.Apply</c> 那一次 <c>Form.Scale</c> 会把它按缩放档放大；而这条线是画出来的，
-    /// 框架不会替它放大。写死 <see cref="HintRowForms.RuleWidth"/> 的话，200% 档上竖线仍是 2px、
+    /// <b>线宽跟着让位走，不写死</b>（第三百五十三轮，具名 pass：layout + harden）：让位随缩放档放大
+    /// （出厂时由 <see cref="HintRowForms.ScaledLeftIndent"/> 按因子算好，第三百五十四轮），而这条线是
+    /// 画出来的，框架不会替它放大。写死 <see cref="HintRowForms.RuleWidth"/> 的话，200% 档上竖线仍是 2px、
     /// 让位已经 12px——「一条线 + 一段让位」被拉成 1 : 6，与 96 档归档的 1 : 2 不是同一个形状。
-    /// 现按<b>已经缩放过的让位</b>反算（<see cref="HintRowForms.RuleWidthAt"/>，纯算术、Linux 侧有真值表），
-    /// 三档都是同一个比例；界面层不取第二次屏幕 DPI，也不就地写一个 4。
+    /// 现按<b>控件上此刻真的那个让位</b>反算（<see cref="HintRowForms.RuleWidthAt"/>，纯算术、Linux 侧有真值表），
+    /// 三档都落在同一个比例附近；界面层不取第二次屏幕 DPI，也不就地写一个 4。
     /// </para>
     /// </summary>
     private sealed class HintLabel : Label

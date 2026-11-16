@@ -2995,6 +2995,12 @@ internal static class Program
                 // 模型服务」三份私有 AddHint 与新建任务的 AddRow 都在标签列放默认尺寸的 Panel（200×100），
                 // 每一行提示都被撑到 100px 高。这一段逐条量那四个对话框的提示行行高——改回去即红。
                 var tall = new List<string>();
+                // 第三百五十四轮（简报 P0-2）：把「框架实际给出的让位」念出来，并与 RuleWidthAt 的期望输入对账。
+                // Padding.Left 是 WinForms 属性，DpiScale.Apply 那一次 Form.Scale 会按缩放档放大它；
+                // 而 RuleWidthAt 的入参就是这一个数——三档实际是 6 / 8 / 12 还是 6 / 7 / 12，只有这里量得到。
+                var fieldIndents = new List<int>();
+                var sectionIndents = new List<int>();
+                var lastDpiContext = "";
                 foreach (var (screen, open) in new (string, Func<Form>)[]
                 {
                     ("新建任务", () => new NewTaskDialog(profiles)),
@@ -3012,11 +3018,48 @@ internal static class Program
                     for (var row = 0; row < heights.Length; row++)
                     {
                         if (!IsHintRow(grid, row)) continue;
+                        var hint = HintRowControl(grid, row)
+                            ?? throw new InvalidOperationException($"「{screen}」第 {row} 行认成提示行，却找不到那个带标记的 Label。");
+                        if (hint.Padding.Left == 0) fieldIndents.Add(0); else sectionIndents.Add(hint.Padding.Left);
                         rows.Add($"第{row}行={heights[row]}px");
                         if (heights[row] > limit) tall.Add($"「{screen}」第 {row} 行 {heights[row]}px（{TallestInRow(grid, row)}，{DpiContext(form)}）");
                     }
                     if (rows.Count == 0) throw new InvalidOperationException($"「{screen}」对话框里没有一条提示行——工厂调用点被删掉了？");
+                    // 报告行仍直接走那一个出口（`DpiContextConsistencyTests` 判「两个读数各一行、都经这一处」）；
+                    // `lastDpiContext` 只是把同一处读到的数留给下面那行让位对账用，不另开第二种取法。
+                    lastDpiContext = DpiContext(form);
                     _lines.Add($"     提示行行高（{screen}，阈值 {limit}px，{DpiContext(form)}）：{string.Join("，", rows)}");
+                }
+
+                // 对账（第三百五十四轮，简报 P0-2）：控件上真的那个让位必须等于「设计档让位 × 缩放因子」。
+                // 期望值从 HintRowForms 现读、因子从 DpiScale 现读——这里不写死 6 / 8 / 12，
+                // 写死了就变成「拿一个手抄的数去判产品」，而这一条要判的正是「控件上真的是不是那个数」。
+                // 这一条第一次跑就抓到了真缺陷：三档实测 Padding.Left 恒为 6px（不是 6 / 8 / 12）——
+                // 四个子对话框是「先 DpiScale.Apply、后加控件」，说明行在 Form.Scale 那一刻还不存在，
+                // 框架一次都没碰过它。修法是把让位按因子算在出厂处（HintRowForms.ScaledLeftIndent）。
+                var factor = DpiScale.ScaleFactor();
+                var expected = HintRowForms.ScaledLeftIndent(HintRowForm.Section, factor);
+                _lines.Add($"     提示行让位（框架 Form.Scale 之后，{lastDpiContext}、因子 {factor:0.##}）："
+                    + $"字段级 Padding.Left={string.Join("/", fieldIndents.Distinct())}px（{fieldIndents.Count} 条）、"
+                    + $"分区级 Padding.Left={string.Join("/", sectionIndents.Distinct())}px（{sectionIndents.Count} 条）；"
+                    + $"按设计档 {HintRowForms.LeftIndent(HintRowForm.Section)}px × {factor:0.##} 应为 {expected}px"
+                    + $"（RuleWidthAt 因此拿到 {HintRowForms.RuleWidthAt(expected)}px 的线宽）");
+                if (fieldIndents.Any(v => v != 0))
+                {
+                    throw new InvalidOperationException(
+                        $"字段注脚的 Padding.Left 是 {string.Join("/", fieldIndents.Distinct())}px，期望 0px（两种形态的差异靠这一个数）。");
+                }
+                if (sectionIndents.Count == 0)
+                {
+                    throw new InvalidOperationException("四个对话框里一条分区注脚都没有——形态实参被改回 Field 了？");
+                }
+                if (sectionIndents.Any(v => v != expected))
+                {
+                    throw new InvalidOperationException(
+                        $"框架给出的分区注脚让位是 {string.Join("/", sectionIndents.Distinct())}px，"
+                        + $"而按设计档 {HintRowForms.LeftIndent(HintRowForm.Section)}px × 因子 {factor:0.##} 应为 {expected}px："
+                        + "控件上的让位没有跟着缩放档走（第三百五十四轮实测过这一族：说明行在 Form.Scale 那一刻还不存在），"
+                        + "先查 Ui.HintRow 是不是又退回写死的设计档让位。");
                 }
 
                 if (tall.Count > 0)
@@ -3181,14 +3224,24 @@ internal static class Program
     /// 判断要看形状，不能看一个会随缩放漂走的读数。
     /// </para>
     /// </summary>
-    private static bool IsHintRow(TableLayoutPanel grid, int row)
+    private static bool IsHintRow(TableLayoutPanel grid, int row) => HintRowControl(grid, row) is not null;
+
+    /// <summary>
+    /// 某一行里那条提示行本体（带 <see cref="Ui.HintRowMarker"/> 标记的 Label），找不到返回 null。
+    /// <para>
+    /// 第三百五十四轮从 <c>IsHintRow</c> 里拆出来：那一条此前只回答「是不是提示行」，
+    /// 而简报 P0-2 要的是「框架实际给出的让位是多少」——那要拿到控件本体读 <c>Padding.Left</c>。
+    /// 判据与取控件仍是同一处，不新增第二个「怎么认提示行」的写法。
+    /// </para>
+    /// </summary>
+    private static Label? HintRowControl(TableLayoutPanel grid, int row)
     {
         foreach (Control control in grid.Controls)
         {
             if (grid.GetRow(control) != row) continue;
-            if (control is Label && (control.Tag as string) == Ui.HintRowMarker) return true;
+            if (control is Label label && (label.Tag as string) == Ui.HintRowMarker) return label;
         }
-        return false;
+        return null;
     }
 
     /// <summary>字段名所在的行号（找不到返回 -1）。</summary>
