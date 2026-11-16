@@ -198,6 +198,108 @@ public class HintRowTests
     }
 
     /// <summary>
+    /// 分区注脚那条竖线的宽度<b>在设计基线里登记过</b>，且登记的位置不是间距五档（第三百五十三轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第三百五十二轮把 <c>RuleWidth = 2</c> 写成 <c>HintRowForms</c> 里的一个就地常量，
+    /// 而 <c>docs/DESIGN.md</c> §4 是<b>封闭五档</b>（4 / 8 / 12 / 16 / 24，4px 基准）、§5 的发丝边是 <b>1px</b>——
+    /// 2px 在这两份表里都没有落点。设计基线开头那句「组件内不得出现档外数值」因此在这一处不成立，
+    /// 而它不成立的方式是<b>静默的</b>：没有任何一条门会红，下一个人读 §4 也读不出这个 2 是从哪来的。
+    /// </para>
+    /// <para>
+    /// <b>为什么登记在 §5 而不是 §4</b>：§4 那五档是<b>留白</b>，这条 2px 是<b>描边</b>——把它塞进 §4 会让
+    /// 「4px 基准」这句话当场不成立，而 <c>TokenWiringTests.SpacingTiers_MatchDesignDoc</c> 按 §4 那张表
+    /// 逐行解析（`` `名` | 数 | ``），塞进去还会要求 <c>UiTokens</c> 里多一个间距字段。§5 是「形状与描边」，
+    /// 1px 发丝边本来就在那里，2px 内容分隔线与它并列才是同一件事的两种宽度。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判 2px 在真机上够不够一眼可辨——那是观感，随 G-D5 复核；也不判 §5 那张表的
+    /// 其余行（圆角两行各有各的出处）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SectionRuleWidth_IsRegisteredInTheShapeSection_AndNotAsASpacingTier()
+    {
+        var shape = Repo.DesignSection(5);
+        var rule = Regex.Match(shape, @"\|\s*内容分隔线\s*\|\s*(\d+)px\s*`Line`\s*\|");
+        Assert.True(rule.Success,
+            "DESIGN.md §5 里读不到「内容分隔线 | Npx `Line`」那一行：分区注脚那条竖线的宽度没有出处，"
+            + "而 §4 是封闭五档、§5 的发丝边是 1px——2px 在这两份表里都没有落点。");
+        Assert.Equal(ApifoxHelper.Desktop.Native.HintRowForms.RuleWidth, int.Parse(rule.Groups[1].Value));
+
+        // 发丝边仍是 1px：这条 2px 不是把 §5 那一行改宽了，是另立一行。
+        var hairline = Regex.Match(shape, @"\|\s*边框\s*\|\s*(\d+)px\s*`Line`\s*\|");
+        Assert.True(hairline.Success, "DESIGN.md §5 里读不到「边框 | Npx `Line`」那一行：发丝边那一档没有出处了。");
+        Assert.Equal(1, int.Parse(hairline.Groups[1].Value));
+        Assert.NotEqual(ApifoxHelper.Desktop.Native.HintRowForms.RuleWidth, int.Parse(hairline.Groups[1].Value));
+
+        // 它也不许混进 §4 的间距五档：那五档是留白，这条是描边。
+        var spacing = Regex.Matches(Repo.DesignSection(4), @"`(\w+)`\s*\|\s*(\d+)\s*\|")
+            .Select(m => int.Parse(m.Groups[2].Value)).ToHashSet();
+        Assert.DoesNotContain(ApifoxHelper.Desktop.Native.HintRowForms.RuleWidth, spacing);
+        Assert.Contains(ApifoxHelper.Desktop.Native.HintRowForms.TextGap, spacing);
+    }
+
+    /// <summary>
+    /// 那条竖线的宽度<b>跟着缩放档走</b>，且三档都是同一个比例（第三百五十三轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>Padding.Left</c> 是 WinForms 的属性，<c>DpiScale.Apply</c> 那一次
+    /// <c>Form.Scale</c> 会把它按缩放档放大；而竖线是 <c>OnPaint</c> 里画出来的，框架不会替它放大。
+    /// 写死 <c>RuleWidth</c> 的话，200% 档上竖线仍是 2px、让位已经 12px——「一条线 + 一段让位」
+    /// 被拉成 1 : 6，与 96 档归档的 1 : 2 不是同一个形状。这条门判的就是「三档同一个比例」。
+    /// </para>
+    /// <para>
+    /// <b>入参是让位而不是缩放因子</b>：让位是框架已经算好的那个数（含当前缩放档、也含运行中
+    /// <c>WM_DPICHANGED</c> 那一次重算），再取一次屏幕 DPI 等于把同一件事算两遍。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判真机上那条线画出来是什么样（本环境没有 Windows GUI 运行时，
+    /// <c>OnPaint</c> 一次都跑不到）——这里判的是<b>算式</b>，观感随 G-D5 复核。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void RuleWidthAt_FollowsTheScaledIndent_AndKeepsTheOneToTwoRatio()
+    {
+        var rule = ApifoxHelper.Desktop.Native.HintRowForms.RuleWidth;
+        var gap = ApifoxHelper.Desktop.Native.HintRowForms.TextGap;
+        var total = rule + gap;
+
+        // ① 96 档那一格是恒等式：设计档的让位反算回来必须还是设计档的线宽。
+        var designIndent = ApifoxHelper.Desktop.Native.HintRowForms.LeftIndent(
+            ApifoxHelper.Desktop.Native.HintRowForm.Section);
+        Assert.Equal(rule, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(designIndent));
+
+        // ② 三档的让位（96 / 125% / 200%，6 / 8 / 12）逐个钉死：线宽 2 / 3 / 4。
+        Assert.Equal(2, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(6));
+        Assert.Equal(3, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(8));
+        Assert.Equal(4, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(12));
+
+        // ③ 比例：线宽 / 让位 ≈ 线宽档 / 让位档，即 width × total ≈ indent × rule，
+        //    误差不超过半个让位档（四舍五入的界）。让位 1px 那一格不在此列：理想线宽 0.33px
+        //    被下限抬到 1px，那是「画得出来」的取舍，不是比例漂了。
+        foreach (var indent in new[] { 2, 3, 4, 6, 7, 8, 9, 12, 16, 24, 48 })
+        {
+            var width = ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(indent);
+            Assert.True(width >= 1, $"让位 {indent}px 反算出线宽 {width}px：画出来的线宽不得小于 1px。");
+            Assert.True(Math.Abs(width * total - indent * rule) <= total / 2,
+                $"让位 {indent}px 反算出线宽 {width}px，比例是 1 : {(double)indent / width:0.##}，"
+                + $"而设计档是 1 : {(double)gap / rule:0.##}——线宽没有跟着让位走。");
+        }
+
+        // ④ 单调不减：让位变大，线宽不许变小（否则 200% 档会比 96 档还细）。
+        var previous = 0;
+        for (var indent = 1; indent <= 48; indent++)
+        {
+            var width = ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(indent);
+            Assert.True(width >= previous, $"让位 {indent}px 的线宽 {width}px 比让位 {indent - 1}px 的 {previous}px 还细。");
+            previous = width;
+        }
+
+        // ⑤ 让位为 0（字段级那一形，或有人把让位改没了）答 0：不画线，也不猜一个最小宽度。
+        Assert.Equal(0, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(0));
+        Assert.Equal(0, ApifoxHelper.Desktop.Native.HintRowForms.RuleWidthAt(-6));
+    }
+
+    /// <summary>
     /// 二十六处调用点<b>都写了</b>形态，且分区注脚恰好是 §6 登记的那六句（第三百五十二轮）。
     /// <para>
     /// 工厂没有缺省值（上面那条门判着），所以「少写一处」在编译期就红；这一条判的是<b>源码里真的写着</b>——
@@ -252,7 +354,7 @@ public class HintRowTests
             .Distinct().OrderBy(n => n, StringComparer.Ordinal).ToList();
         Assert.Equal(["Ui.cs"], writers);
 
-        Assert.Equal(1, Regex.Matches(SmokeSource, @"Tag as string\) == Ui\.HintRowMarker").Count);
+        Assert.Single(Regex.Matches(SmokeSource, @"Tag as string\) == Ui\.HintRowMarker").Cast<Match>());
         Assert.False(SmokeSource.Contains(".Tag = Ui.HintRowMarker", StringComparison.Ordinal),
             "冒烟器自己给一格写上说明行标记——那一段量的就是它自己造出来的行，不再是产品出厂的那二十六处。");
         Assert.False(SmokeSource.Contains("if (grid.GetColumn(control) == 0) return false;", StringComparison.Ordinal),

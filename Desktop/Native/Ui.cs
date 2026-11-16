@@ -357,11 +357,19 @@ internal static class Ui
     };
 
     /// <summary>
-    /// 分区注脚那一句的 Label：在左缘画一条 <see cref="HintRowForms.RuleWidth"/> 宽的竖线（Line 色，不新造颜色）。
+    /// 分区注脚那一句的 Label：在左缘画一条竖线（Line 色，不新造颜色；宽度见下）。
     /// <para>
     /// <b>为什么自绘而不是套一个 Panel</b>：套 Panel 就是第二百零六轮那个根因——默认尺寸 200×100 会把这一行
     /// 撑到 100px 高，而这一行的高度必须由那句文字自己决定（冒烟器逐条量它）。自绘只多一条线，
     /// 不改 <c>AutoSize</c> 的度量，行高与字段注脚那一形逐像素相同。
+    /// </para>
+    /// <para>
+    /// <b>线宽跟着让位走，不写死</b>（第三百五十三轮，具名 pass：layout + harden）：<c>Padding.Left</c> 是
+    /// 属性，<c>DpiScale.Apply</c> 那一次 <c>Form.Scale</c> 会把它按缩放档放大；而这条线是画出来的，
+    /// 框架不会替它放大。写死 <see cref="HintRowForms.RuleWidth"/> 的话，200% 档上竖线仍是 2px、
+    /// 让位已经 12px——「一条线 + 一段让位」被拉成 1 : 6，与 96 档归档的 1 : 2 不是同一个形状。
+    /// 现按<b>已经缩放过的让位</b>反算（<see cref="HintRowForms.RuleWidthAt"/>，纯算术、Linux 侧有真值表），
+    /// 三档都是同一个比例；界面层不取第二次屏幕 DPI，也不就地写一个 4。
     /// </para>
     /// </summary>
     private sealed class HintLabel : Label
@@ -369,8 +377,10 @@ internal static class Ui
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            using var pen = new Pen(UiTokens.Line, HintRowForms.RuleWidth);
-            var x = HintRowForms.RuleWidth / 2f;
+            var width = HintRowForms.RuleWidthAt(Padding.Left);
+            if (width <= 0) return;
+            using var pen = new Pen(UiTokens.Line, width);
+            var x = width / 2f;
             e.Graphics.DrawLine(pen, x, 0, x, Height);
         }
     }

@@ -59,4 +59,32 @@ public static class HintRowForms
 
     /// <summary>这一形态要不要在左缘画那条竖线（只有分区级画）。</summary>
     public static bool DrawsRule(HintRowForm form) => form == HintRowForm.Section;
+
+    /// <summary>
+    /// 这一形态在<b>当前缩放档</b>下那条竖线该画多宽（px）：由<b>已经缩放过的让位</b>反算，
+    /// 竖线与让位之比恒为 <see cref="RuleWidth"/> : <see cref="TextGap"/>（96 档 2 : 4）。
+    /// <para>
+    /// <b>为什么线宽不能是一个常量</b>（第三百五十三轮，具名 pass：layout + harden）：<c>Padding.Left</c>
+    /// 是 WinForms 的属性，<c>DpiScale.Apply</c> 里那一次 <c>Form.Scale</c> 会把它按缩放档放大
+    /// （96 档 6px → 200% 档 12px），而 <c>OnPaint</c> 里那个 <c>new Pen(…, RuleWidth)</c> 是画出来的，
+    /// 框架不会替它放大。于是 200% 档上竖线仍是 2px、让位已经 12px——两种形态的差异还在，
+    /// 但「一条线 + 一段让位」这个形状本身被拉成了 1 : 6，与 96 档量过并归档的 1 : 2 不是同一个形状。
+    /// 线宽按让位反算之后，三档都是同一个比例，产品与门读的仍是 <see cref="RuleWidth"/> 与
+    /// <see cref="TextGap"/> 这两个数（不新增第三个常量，也不在界面层就地写一个 4）。
+    /// </para>
+    /// <para>
+    /// <b>为什么入参是让位而不是缩放因子</b>：让位是<b>框架已经算好的那一个数</b>——它已经含了当前缩放档、
+    /// 也含了运行中 <c>WM_DPICHANGED</c> 那一次重算的结果。再取一次屏幕 DPI 等于把同一件事算两遍，
+    /// 而两遍在「窗口被拖到另一块屏」那一刻会给出不同的答案（<c>DpiScale</c> 的类注释记着这一族）。
+    /// 让位为 0（字段级那一形，或有人把让位改没了）时答 0：不画线，也不猜一个最小宽度。
+    /// </para>
+    /// </summary>
+    public static int RuleWidthAt(int indent)
+    {
+        if (indent <= 0) return 0;
+        var total = RuleWidth + TextGap;
+        // 四舍五入到最近整数：6 → 2、8 → 3、12 → 4（96 / 125% / 200% 三档的让位实测值）。
+        var scaled = (indent * RuleWidth + total / 2) / total;
+        return scaled < 1 ? 1 : scaled;
+    }
 }
