@@ -32,7 +32,12 @@ internal sealed class PropagationDialog : DpiAwareForm
         Visible = false,
     };
     private readonly ListView _list = Ui.List();
-    private readonly ListView _xmlList = Ui.List();
+    // XML 文件清单的标识列：首列是「项目」（同一个项目下的 XML 文件都同值，认不出是哪一份文件）；
+    // 名称格在「XML 文档文件」列——Ctrl+C 交出去的是它（与差异确认「接口/模型」分类列、
+    // 同步预览写入清单的动作序号同一取舍：抄出去的是这一行在屏幕之外还能被指代的东西）。
+    private const int XmlFileColumn = 1;
+
+    private readonly ListView _xmlList = Ui.List(identityColumn: XmlFileColumn);
     private readonly TextBox _keyword = Ui.Input();
     private readonly TextBox _detail = Ui.Preview(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly Label _hint = new()

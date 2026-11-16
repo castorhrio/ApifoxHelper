@@ -48,6 +48,7 @@ public class ListCopyIdentityColumnTests
         ("JournalDialog.cs", "_list", "SummaryColumn", "摘要"),
         ("EvidenceDialog.cs", "_list", "EvidenceSummaryColumn", "证据摘要"),
         ("SyncPreviewDialog.cs", "_actionList", "ActionResourceColumn", "资源"),
+        ("PropagationDialog.cs", "_xmlList", "XmlFileColumn", "XML 文档文件"),
     ];
 
     /// <summary>源码里那一处声明：<c>private readonly ListView _list = Ui.List(identityColumn: ResourceColumn);</c>。</summary>

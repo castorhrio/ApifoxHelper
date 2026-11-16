@@ -379,6 +379,9 @@ internal static class Program
         Section("列表 Ctrl+C 复制：生成文档核对（打开即选中第一条位置且键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「位置」格、不是邻列「标注」 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGesturePropagation));
         RunListCopyGesturePropagation(services, dataRoot);
 
+        Section("列表 Ctrl+C 复制：生成文档核对的 XML 文件清单（点一行之后键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「XML 文档文件」格、不是首列「项目」 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGesturePropagationXmlFiles));
+        RunListCopyGesturePropagationXmlFiles(services, dataRoot);
+
         Section("任务列表的列头排序（真的点一次列头：点「任务」列 → 自然序重排并画出 ▲ → 再点一次反向 ▼ → 换点「配置」列按配置名升序且原列标记撤掉 → 排序不写任务数据、选中按 Id 恢复，真实鼠标）", nameof(RunColumnSortGesture));
         RunColumnSortGesture(services, dataRoot);
 
@@ -6385,6 +6388,45 @@ internal static class Program
             },
         ],
     };
+
+    /// <summary>
+    /// XML 文件清单那一段的夹具（第三百五十五轮）：三个 XML 文件，项目与路径互不相同——
+    /// 第 ③ 段要判「抄出去的不是首列「项目」」，第 ④ 段要判「换一行跟着换」，两件事都要求这两列各有不同的值。
+    /// 条目沿用 <see cref="PropagationFailureResult"/> 那三条（这一屏的条目清单不是本段要量的东西，
+    /// 但一条都没有时这一屏会走「没有核对条目」那一支，量到的就不是正常态）。
+    /// </summary>
+    private static PropagationResult PropagationXmlFilesResult()
+    {
+        var result = PropagationFailureResult();
+        result.XmlFiles =
+        [
+            new XmlFileInfo
+            {
+                Project = "Probe.Api",
+                Path = "Probe.Api/Probe.Api.xml",
+                Exists = true,
+                LastWrite = DateTime.Now,
+                Enabled = true,
+            },
+            new XmlFileInfo
+            {
+                Project = "Probe.Contracts",
+                Path = "Probe.Contracts/Probe.Contracts.xml",
+                Exists = true,
+                LastWrite = DateTime.Now.AddDays(-2),
+                OlderThanSource = true,
+                Enabled = true,
+            },
+            new XmlFileInfo
+            {
+                Project = "Probe.Shared",
+                Path = "Probe.Shared/Probe.Shared.xml",
+                Exists = false,
+                Enabled = true,
+            },
+        ];
+        return result;
+    }
 
     /// <summary>代码证据失败态那一段用的位置（两处只差证据编号集合：一处命中、一处一个都不命中）。</summary>
     private static DocSlot EvidenceSlot(string id, List<string> evidenceIds) => new()
@@ -13293,6 +13335,192 @@ internal static class Program
             dialog?.Dispose();
         }
     }
+
+    /// <summary>
+    /// 生成文档核对的 <b>XML 文件清单</b>的列表 Ctrl+C 复制（第三百五十五轮，接续 <c>RunListCopyGesture</c> 一族）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：同屏那张条目清单第三百五十一轮已收（<see cref="RunListCopyGesturePropagation"/>），
+    /// 那一轮的说明里把这张清单<b>如实挂账</b>——「它首列是「项目」而不是文件路径，按现状登记、不在这一轮替它改声明」。
+    /// 挂账的后果是具体的：这一屏存在的理由正是「注释有没有真的写进 XML 文档」，而「哪一份 XML 文件」这件事
+    /// 只在第二列；首列「项目」在同一个项目下每一行都同值，Ctrl+C 抄出去的是「Probe.Api」这种认不出是哪一份文件的
+    /// 分类词——与差异确认首列「接口/模型」、同步预览写入清单首列「动作序号」同一取舍，故本轮在出厂处声明
+    /// 标识列为「XML 文档文件」（<c>PropagationDialog.XmlFileColumn</c>）。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>（与已收各屏逐字同一口径）：① 准备一份真实核对结果并读回来（三个 XML 文件，项目与路径互不相同）；
+    /// ② 点一行之后键盘真的在清单上（Ctrl+C 的前提——这张清单打开时不自动选中，落点由用户点出来）；
+    /// ③ 真的按一次 Ctrl+C，剪贴板逐字等于焦点行「XML 文档文件」格原文，且<b>不等于首列「项目」格</b>；
+    /// ④ 按方向键换一行再按，剪贴板跟着换到那一行的文件路径（复制的是焦点行，不是固定第一行）；
+    /// ⑤ 焦点行未选中时按 Ctrl+C，剪贴板不动（不把用户先前复制的内容抹掉）。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：不判中文输入法是否吞掉 Ctrl+C、不判真机上剪贴板被别的程序占用时的行为（随 G-D5 真机复核）；
+    /// 不判这张清单该不该自动选中第一行（现状是不选，落点由用户点出来，本轮不改这一条）；
+    /// 不判「未启用」那一格（<c>Path</c> 为空时显示「未启用」）该不该被抄出去——夹具里三份文件都有路径。
+    /// </para>
+    /// </summary>
+    private static void RunListCopyGesturePropagationXmlFiles(IServiceProvider services, string dataRoot)
+    {
+        const int rowCount = 3;
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "列表复制任务（XML 文件清单）" });
+
+        PropagationDialog? dialog = null;
+        try
+        {
+            RunAction("列表复制：XML 文件清单准备一份真实核对结果并读回来（三个 XML 文件、项目与路径互不相同，产品自己的写入口径落盘）", () =>
+            {
+                tasks.Write(task.Id, TaskFiles.Propagation, PropagationXmlFilesResult());
+                var reread = tasks.Read<PropagationResult>(task.Id, TaskFiles.Propagation)
+                    ?? throw new InvalidOperationException("写入后读不回核对结果。");
+                if (reread.XmlFiles.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"夹具回读到 {reread.XmlFiles.Count} 个 XML 文件，期望 {rowCount} 个。");
+                }
+                if (reread.XmlFiles.Select(file => file.Path).Distinct(StringComparer.Ordinal).Count() != rowCount)
+                {
+                    throw new InvalidOperationException(
+                        "夹具里三个 XML 文件的路径有两笔相同：第 ④ 段量不到「复制跟着焦点走」。");
+                }
+                _lines.Add($"     夹具：{reread.XmlFiles.Count} 个 XML 文件（{string.Join("、", reread.XmlFiles.Select(file => file.Path))}）");
+            });
+
+            RunAction("列表复制：XML 文件清单点一行之后键盘真的在清单上（Ctrl+C 的前提）", () =>
+            {
+                dialog = new PropagationDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = PropagationXmlFileList(dialog);
+                if (list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException(
+                        $"XML 文件清单有 {list.Items.Count} 行，夹具是 {rowCount} 个文件：量到的不是这一屏。");
+                }
+                // 这张清单打开时不自动选中（落点由用户点出来）：本段按产品自己的选中入口点第一行。
+                Ui.SelectItem(list.Items[0]);
+                list.Focus();
+                Application.DoEvents();
+                if (list.SelectedItems.Count != 1 || list.SelectedItems[0].Index != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"点第一行之后清单里选中了 {list.SelectedItems.Count} 行：Ctrl+C 没有落点。");
+                }
+                if (!list.Focused)
+                {
+                    throw new InvalidOperationException(
+                        "点第一行之后键盘不在 XML 文件清单上（焦点落在别的控件上）：Ctrl+C 落在别的控件上，"
+                        + "那只手势在这一张清单上按不出来。");
+                }
+            });
+
+            RunAction("列表复制：XML 文件清单真的按一次 Ctrl+C——剪贴板逐字等于焦点行「XML 文档文件」格原文，且不等于首列「项目」格原文", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = PropagationXmlFileList(dialog);
+                var projectColumn = ColumnIndex(list, "项目");
+                var fileColumn = ColumnIndex(list, "XML 文档文件");
+                var row = list.FocusedItem ?? throw new InvalidOperationException("清单里没有焦点行：Ctrl+C 没有落点。");
+                var path = row.SubItems[fileColumn].Text;
+                var project = row.SubItems[projectColumn].Text;
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    throw new InvalidOperationException("焦点行的「XML 文档文件」格是空的：这一段量不到东西。");
+                }
+
+                PressKey(dialog, list, "^c");
+                var pasted = ReadClipboard();
+                if (pasted != path)
+                {
+                    throw new InvalidOperationException(
+                        $"按了 Ctrl+C，剪贴板里是「{pasted}」，焦点行「XML 文档文件」列是「{path}」："
+                        + "这一屏声明了标识列（PropagationDialog.XmlFileColumn），抄出去的必须是那一格。");
+                }
+                if (pasted == project)
+                {
+                    throw new InvalidOperationException(
+                        $"剪贴板里是「{pasted}」，与首列「项目」那一格逐字相同：抄出去的是项目名，"
+                        + "不是这一行说的是哪一份 XML 文件。");
+                }
+                _lines.Add($"     XML 文件清单：焦点行「{path}」被 Ctrl+C 抄进剪贴板（首列「项目」格「{project}」没有被抄）");
+            });
+
+            RunAction("列表复制：XML 文件清单按方向键换到另一行再按 Ctrl+C——剪贴板跟着换到那一行的文件路径（复制的是焦点行，不是固定第一行）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = PropagationXmlFileList(dialog);
+                var fileColumn = ColumnIndex(list, "XML 文档文件");
+                var first = list.Items[0].SubItems[fileColumn].Text;
+                // 目标行按「路径格与第一行不同」认，不按固定序号认：夹具换了行序，这一段照样量得到。
+                var target = -1;
+                for (var i = 1; i < list.Items.Count; i++)
+                {
+                    if (list.Items[i].SubItems[fileColumn].Text != first) { target = i; break; }
+                }
+                if (target < 0)
+                {
+                    throw new InvalidOperationException(
+                        "夹具里没有第二行「XML 文档文件」格与第一行不同的条目：这一段量不到「复制跟着焦点走」。");
+                }
+
+                var before = ReadClipboard();
+                for (var i = 0; i < target; i++) PressKey(dialog, list, "{DOWN}");
+                var row = list.FocusedItem ?? throw new InvalidOperationException("按了方向键之后清单里没有焦点行。");
+                if (row.Index != target)
+                {
+                    throw new InvalidOperationException(
+                        $"按了 {target} 次方向键下，焦点行是第 {row.Index} 行，期望第 {target} 行："
+                        + "清单没接方向键，这一段量不到「复制跟着焦点走」。");
+                }
+                var path = row.SubItems[fileColumn].Text;
+                PressKey(dialog, list, "^c");
+                var pasted = ReadClipboard();
+                if (pasted != path)
+                {
+                    throw new InvalidOperationException(
+                        $"换到第 {target} 行再按 Ctrl+C，剪贴板里是「{pasted}」，那一行的「XML 文档文件」格是「{path}」。");
+                }
+                if (pasted == before)
+                {
+                    throw new InvalidOperationException(
+                        $"换了一行再按 Ctrl+C，剪贴板里还是「{pasted}」：复制的是固定第一行，不是焦点行。");
+                }
+                _lines.Add($"     XML 文件清单：焦点换到第 {target} 行之后，剪贴板从「{before}」换成「{pasted}」");
+            });
+
+            RunAction("列表复制：XML 文件清单焦点行未选中时按 Ctrl+C，剪贴板不动（不把用户先前复制的内容抹掉）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = PropagationXmlFileList(dialog);
+                var before = ReadClipboard();
+                list.SelectedItems.Clear();
+                list.Focus();
+                Application.DoEvents();
+                PressKey(dialog, list, "^c");
+                var after = ReadClipboard();
+                if (after != before)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点行没有选中时按 Ctrl+C，剪贴板从「{before}」变成「{after}」："
+                        + "只复制屏幕上真正标出来的那一行，未选中时不该动作（空复制会把用户先前复制的内容抹掉）。");
+                }
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>生成文档核对的 XML 文件清单（按表头认，不按列数认：同屏还有一张五列的条目清单）。</summary>
+    private static ListView PropagationXmlFileList(Form dialog) =>
+        FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                    .SequenceEqual(["项目", "XML 文档文件", "状态", "更新时间"]))
+            ?? throw new InvalidOperationException(
+                "生成文档核对找不到表头为「项目 / XML 文档文件 / 状态 / 更新时间」的 XML 文件清单：列增删或改名了，本段口径需要重定。");
 
     /// <summary>生成文档核对的条目清单（按表头认，不按列数认：同屏还有一张四列的 XML 文件清单）。</summary>
     private static ListView PropagationEntryList(Form dialog) =>
