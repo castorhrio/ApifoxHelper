@@ -376,6 +376,9 @@ internal static class Program
         Section("列表 Ctrl+C 复制：注释回写（打开即选中第一个文件且键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「源码文件」格、不是邻列「回写范围」 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGestureApplyPlan));
         RunListCopyGestureApplyPlan(services, dataRoot);
 
+        Section("列表 Ctrl+C 复制：生成文档核对（打开即选中第一条位置且键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「位置」格、不是邻列「标注」 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGesturePropagation));
+        RunListCopyGesturePropagation(services, dataRoot);
+
         Section("任务列表的列头排序（真的点一次列头：点「任务」列 → 自然序重排并画出 ▲ → 再点一次反向 ▼ → 换点「配置」列按配置名升序且原列标记撤掉 → 排序不写任务数据、选中按 Id 恢复，真实鼠标）", nameof(RunColumnSortGesture));
         RunColumnSortGesture(services, dataRoot);
 
@@ -13064,6 +13067,187 @@ internal static class Program
                     .SequenceEqual(["序号", "动作", "资源", "远端 ID", "改动", "CLI 校验", "状态"]))
             ?? throw new InvalidOperationException(
                 "同步预览找不到表头为「序号 / 动作 / 资源 / 远端 ID / 改动 / CLI 校验 / 状态」的写入清单：列增删或改名了，本段口径需要重定。");
+
+    /// <summary>
+    /// 生成文档核对（<c>PropagationDialog</c>）条目清单的列表 Ctrl+C 复制（第三百五十一轮，接续 <c>RunListCopyGesture</c> 一族）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一屏是只读详情视图，条目清单首列就是「位置」——<c>GET /api/probe</c> 这种接口身份，
+    /// 与已收的注释候选 / 注释缺口 / 响应契约那几屏的首列同一族内容，因此不声明标识列（走
+    /// <c>ListCopy.DefaultIdentityColumn</c>，序号恒为 0）。第八十八轮把这一屏的键盘交给清单，那一处的注释里
+    /// 就写着不接的两种后果（「方向键动的是别的控件、Ctrl+C 也复制不到那一行」）——前提被记成这条手势的理由，
+    /// 而<b>那只手势在这一屏一次都没被按过</b>：同族已收的那几屏里没有它。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>（与已收各屏逐字同一口径）：① 准备一份真实核对结果并读回来；② 打开即选中第一条位置且键盘真的
+    /// 在清单上（Ctrl+C 的前提）；③ 真的按一次 Ctrl+C，剪贴板逐字等于焦点行「位置」格原文，且<b>不等于邻列「标注」格</b>
+    /// （默认标识列走首列）；④ 按方向键换一行再按，剪贴板跟着换到那一行（复制的是焦点行，不是固定第一行）；
+    /// ⑤ 焦点行未选中时按 Ctrl+C，剪贴板不动（不把用户先前复制的内容抹掉）。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：不判中文输入法是否吞掉 Ctrl+C、不判真机上剪贴板被别的程序占用时的行为（随 G-D5 真机复核）；
+    /// 不判这一屏的筛选与排序（单元侧由 <c>PropagationFilterTests</c> / <c>PropagationSortTests</c> 钉，失败态与
+    /// 筛到零行那几段由 <c>RunPropagationLoadFailure</c> 在真实控件上量过），不判关键词筛到零行之后的复制；
+    /// <b>不判同屏那张 XML 文件清单的标识列该取哪一列</b>——它首列是「项目」而不是文件路径，本轮只量条目清单那一张，
+    /// 那张清单的归属按现状登记、不在这一轮替它改声明。夹具取 <see cref="PropagationFailureResult"/> 那一份
+    /// 真实核对结果（三条条目、位置互不相同），经产品自己的写入口径落盘，界面读的是磁盘上那一份。
+    /// </para>
+    /// </summary>
+    private static void RunListCopyGesturePropagation(IServiceProvider services, string dataRoot)
+    {
+        const int rowCount = 3;
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "列表复制任务（生成文档核对）" });
+
+        PropagationDialog? dialog = null;
+        try
+        {
+            RunAction("列表复制：生成文档核对准备一份真实核对结果并读回来（三条条目、位置互不相同，产品自己的写入口径落盘）", () =>
+            {
+                tasks.Write(task.Id, TaskFiles.Propagation, PropagationFailureResult());
+                var reread = tasks.Read<PropagationResult>(task.Id, TaskFiles.Propagation)
+                    ?? throw new InvalidOperationException("写入后读不回核对结果。");
+                if (reread.Entries.Count != rowCount)
+                {
+                    throw new InvalidOperationException($"夹具回读到 {reread.Entries.Count} 条核对条目，期望 {rowCount} 条。");
+                }
+                if (reread.Entries.Select(entry => entry.Display).Distinct(StringComparer.Ordinal).Count() != rowCount)
+                {
+                    throw new InvalidOperationException(
+                        "夹具里三条「位置」有两笔相同：第 ④ 段量不到「复制跟着焦点走」。");
+                }
+                _lines.Add($"     夹具：{reread.Entries.Count} 条核对条目（{string.Join("、", reread.Entries.Select(entry => entry.Display))}）");
+            });
+
+            RunAction("列表复制：生成文档核对打开即选中第一条位置且键盘真的在清单上（Ctrl+C 的前提）", () =>
+            {
+                dialog = new PropagationDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = PropagationEntryList(dialog);
+                if (list.Items.Count != rowCount)
+                {
+                    throw new InvalidOperationException(
+                        $"核对条目清单有 {list.Items.Count} 行，夹具是 {rowCount} 条：量到的不是这一屏。");
+                }
+                if (list.SelectedItems.Count != 1 || list.SelectedItems[0].Index != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"打开生成文档核对时选中了 {list.SelectedItems.Count} 行：这一屏应当打开即选中第一条条目"
+                        + "（详情区对着那一行；一行都不选，Ctrl+C 就没有落点）。");
+                }
+                if (!list.Focused)
+                {
+                    throw new InvalidOperationException(
+                        "打开生成文档核对时键盘不在条目清单上（焦点落在别的控件上）：Ctrl+C 落在别的控件上，"
+                        + "那只手势在界面上按不出来——第八十八轮交键盘那一步在本屏没有生效。");
+                }
+            });
+
+            RunAction("列表复制：生成文档核对真的按一次 Ctrl+C——剪贴板逐字等于焦点行「位置」格原文，且不等于邻列「标注」格原文（默认标识列走首列）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = PropagationEntryList(dialog);
+                var tagColumn = ColumnIndex(list, "标注");
+                var row = list.FocusedItem ?? throw new InvalidOperationException("清单里没有焦点行：Ctrl+C 没有落点。");
+                var position = row.SubItems[0].Text;
+                var tag = row.SubItems[tagColumn].Text;
+                if (string.IsNullOrWhiteSpace(position))
+                {
+                    throw new InvalidOperationException("焦点行的「位置」格是空的：这一段量不到东西。");
+                }
+
+                PressKey(dialog, list, "^c");
+                var pasted = ReadClipboard();
+                if (pasted != position)
+                {
+                    throw new InvalidOperationException(
+                        $"按了 Ctrl+C，剪贴板里是「{pasted}」，焦点行「位置」列是「{position}」："
+                        + "这一屏不声明标识列，抄出去的必须是首列那一格（ListCopy.DefaultIdentityColumn）。");
+                }
+                if (pasted == tag)
+                {
+                    throw new InvalidOperationException(
+                        $"剪贴板里是「{pasted}」，与邻列「标注」那一格逐字相同：抄出去的是标注，不是这一条核对的是哪个接口。");
+                }
+                _lines.Add($"     生成文档核对：焦点行「{position}」被 Ctrl+C 抄进剪贴板（邻列「标注」格「{tag}」没有被抄）");
+            });
+
+            RunAction("列表复制：生成文档核对按方向键换到另一行再按 Ctrl+C——剪贴板跟着换到那一行的「位置」格（复制的是焦点行，不是固定第一行）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = PropagationEntryList(dialog);
+                var first = list.Items[0].SubItems[0].Text;
+                // 目标行按「位置格与第一行不同」认，不按固定序号认：夹具换了行序，这一段照样量得到。
+                var target = -1;
+                for (var i = 1; i < list.Items.Count; i++)
+                {
+                    if (list.Items[i].SubItems[0].Text != first) { target = i; break; }
+                }
+                if (target < 0)
+                {
+                    throw new InvalidOperationException(
+                        "夹具里没有第二行「位置」格与第一行不同的条目：这一段量不到「复制跟着焦点走」。");
+                }
+
+                var before = ReadClipboard();
+                for (var i = 0; i < target; i++) PressKey(dialog, list, "{DOWN}");
+                var row = list.FocusedItem ?? throw new InvalidOperationException("按了方向键之后清单里没有焦点行。");
+                if (row.Index != target)
+                {
+                    throw new InvalidOperationException(
+                        $"按了 {target} 次方向键下，焦点行是第 {row.Index} 行，期望第 {target} 行："
+                        + "清单没接方向键，这一段量不到「复制跟着焦点走」。");
+                }
+                var position = row.SubItems[0].Text;
+                PressKey(dialog, list, "^c");
+                var pasted = ReadClipboard();
+                if (pasted != position)
+                {
+                    throw new InvalidOperationException(
+                        $"换到第 {target} 行再按 Ctrl+C，剪贴板里是「{pasted}」，那一行的「位置」格是「{position}」。");
+                }
+                if (pasted == before)
+                {
+                    throw new InvalidOperationException(
+                        $"换了一行再按 Ctrl+C，剪贴板里还是「{pasted}」：复制的是固定第一行，不是焦点行。");
+                }
+                _lines.Add($"     生成文档核对：焦点换到第 {target} 行之后，剪贴板从「{before}」换成「{pasted}」");
+            });
+
+            RunAction("列表复制：生成文档核对焦点行未选中时按 Ctrl+C，剪贴板不动（不把用户先前复制的内容抹掉）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = PropagationEntryList(dialog);
+                var before = ReadClipboard();
+                list.SelectedItems.Clear();
+                list.Focus();
+                Application.DoEvents();
+                PressKey(dialog, list, "^c");
+                var after = ReadClipboard();
+                if (after != before)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点行没有选中时按 Ctrl+C，剪贴板从「{before}」变成「{after}」："
+                        + "只复制屏幕上真正标出来的那一行，未选中时不该动作（空复制会把用户先前复制的内容抹掉）。");
+                }
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>生成文档核对的条目清单（按表头认，不按列数认：同屏还有一张四列的 XML 文件清单）。</summary>
+    private static ListView PropagationEntryList(Form dialog) =>
+        FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                    .SequenceEqual(["位置", "标注", "源码", "XML", "Swagger"]))
+            ?? throw new InvalidOperationException(
+                "生成文档核对找不到表头为「位置 / 标注 / 源码 / XML / Swagger」的条目清单：列增删或改名了，本段口径需要重定。");
 
     /// <summary>清单里某一列表头的序号（按表头文字认，不按固定序号认：列序改了这一段会当场点名）。</summary>
     private static int ColumnIndex(ListView list, string title)

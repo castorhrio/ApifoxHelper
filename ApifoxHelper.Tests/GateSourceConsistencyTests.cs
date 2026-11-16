@@ -267,6 +267,12 @@ public class GateSourceConsistencyTests
             ["RunContractsInteraction"],
             "响应契约那一屏的同源判据落在 ReadFullTextAndCheck 段（Pairs 第三行：状态行完整错误入口），"
             + "RunContractsInteraction 判的是五段交互与落盘，不是同源表达式。"),
+        new(
+            ["RunListCopyGesturePropagation"],
+            "生成文档核对那一屏的列表 Ctrl+C 复制（第三百五十一轮）：ListCopyGesturePropagationSmokeTests.cs 判的是"
+            + "「冒烟段真的经 PressKey 按了 ^c 与 {DOWN}、剪贴板读回来逐字比对、期望值取 ListCopy.DefaultIdentityColumn」——"
+            + "那是段体形状门（判据在判冒烟段自己），不是「静态门与冒烟段断言同一表达式」的同源对；"
+            + "这一屏没有可判的同源表达式，硬凑一对只会把「同源」稀释成「两边都提到这个名字」。"),
     ];
 
     /// <summary>
