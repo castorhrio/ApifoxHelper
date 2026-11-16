@@ -125,7 +125,8 @@ public class CaptionBrevityTests
                 {
                     found.Add(new Caption(name, i + 1, match.Groups[1].Value, CaptionForm.HintRowCallSite));
                 }
-                foreach (Match match in Regex.Matches(line, @"Ui\.HintRow\([^,]+,\s*(?<arg>[\w.]+)\s*\)"))
+                // 第三百五十二轮起工厂多一个形态实参：共享常量那一支后面跟着「, HintRowForm.X」。
+                foreach (Match match in Regex.Matches(line, @"Ui\.HintRow\([^,]+,\s*(?<arg>[\w.]+)\s*,\s*HintRowForm\.\w+\)"))
                 {
                     var argument = match.Groups["arg"].Value;
                     if (constants.TryGetValue(argument, out var shared))
@@ -180,6 +181,12 @@ public class CaptionBrevityTests
     /// 一行里所有 <c>Ui.HintRow(…)</c> 的<b>第二个</b>实参原文（第二百零六轮起的提示行工厂：
     /// 第一个实参是网格，第二个才是那句话）。取法与 <see cref="CaptionArguments"/> 同一套：
     /// 顶层逗号切一次，再按括号配对取到收尾的 <c>)</c>。
+    /// <para>
+    /// <b>第三百五十二轮起要停在第二个顶层逗号</b>：工厂多了第三个实参（形态 <c>HintRowForm.X</c>），
+    /// 照旧取到收尾的 <c>)</c> 会把「那句话, HintRowForm.Field」整串当成文字——它既不是字面量、
+    /// 也不是共享常量，于是每一处提示行都会被判成「绕过了机械门」。切到第二个逗号为止，
+    /// 取到的仍是那句话本身。
+    /// </para>
     /// </summary>
     private static IEnumerable<(int Column, string Argument)> HintRowArguments(string line)
     {
@@ -191,6 +198,7 @@ public class CaptionBrevityTests
             var cursor = open + "Ui.HintRow(".Length;
             var depth = 1;
             var textStart = -1;
+            var textEnd = -1;
             while (cursor < line.Length)
             {
                 var ch = line[cursor];
@@ -198,15 +206,17 @@ public class CaptionBrevityTests
                 else if (ch == ')') depth--;
                 else if (ch == ',' && depth == 1)
                 {
-                    if (textStart < 0) { textStart = cursor + 1; }   // 第一个逗号之后才是文字
+                    if (textStart < 0) { textStart = cursor + 1; }        // 第一个逗号之后才是文字
+                    else if (textEnd < 0) { textEnd = cursor; }           // 第二个逗号之后是形态
                 }
                 if (depth == 0) break;
                 cursor++;
             }
             if (textStart >= 0)
             {
-                // cursor 停在收尾的 )（不含），所以切出来就是完整的文字实参原文。
-                yield return (open, line[textStart..Math.Min(cursor, line.Length)].Trim());
+                // 有第二个逗号就切在它那里（形态实参不进文字），否则切在收尾的 )（不含）。
+                var end = textEnd >= 0 ? textEnd : Math.Min(cursor, line.Length);
+                yield return (open, line[textStart..end].Trim());
             }
             index = open + "Ui.HintRow(".Length;
         }
@@ -320,8 +330,8 @@ public class CaptionBrevityTests
             var c = Ui.Caption(Shared.Caption);
             var d = Ui.Caption(text);
             var e = Ui.Caption();
-            var f = Ui.HintRow(grid, "提示行说明行");
-            var g = Ui.HintRow(grid, Shared.Hint);
+            var f = Ui.HintRow(grid, "提示行说明行", HintRowForm.Field);
+            var g = Ui.HintRow(grid, Shared.Hint, HintRowForm.Section);
             """;
         var constants = new Dictionary<string, string>(StringComparer.Ordinal)
         {

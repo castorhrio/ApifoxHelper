@@ -312,23 +312,67 @@ internal static class Ui
     /// 换来的是另外六句不再被缩进谎指最后一个字段（那六句一次管两三个编辑位，讲的是整个分区）。
     /// </para>
     /// <para>
+    /// <b>所有权改由形态枚举承载</b>（第三百五十二轮，具名 pass：distill + layout）：跨两列之后，
+    /// 说明行与它所管的行只剩竖向邻接，而竖向邻接对<b>分区注脚</b>不够——那六句一次管两三个编辑位或整个分区，
+    /// 与字段注脚长得一模一样，读的人分不出「这一句在说上面那一行」还是「这一句在说这一整块」。
+    /// 现由调用处<b>必须写下来</b>的第三个实参 <see cref="HintRowForm"/> 承载：字段级左侧零缩进、
+    /// 分区级左侧一条 2px 竖线加 4px 文字让位（几何在 <see cref="HintRowForms"/> 一处，两种形态的
+    /// <c>Padding.Left</c> 因此不相等）。<b>代价与好处各一句</b>：代价是二十六处调用点各多写一个实参、
+    /// 分区注脚那一句的可用宽少 6px（最长那句需宽 1220px，跨两列 1318px，仍放得下）；
+    /// 好处是「这一句管一行还是管一块」从读感变成源码里写死的一个取值，真机复核时不必再靠猜。
+    /// </para>
+    /// <para>
     /// 本工厂只管形状不管文字：二十六句提示逐字留在调用处（四处取共享口径、其余就地字面量），
     /// 文字内容不在这一处统一。
     /// </para>
     /// </summary>
-    public static Label HintRow(TableLayoutPanel grid, string text)
+    public static Label HintRow(TableLayoutPanel grid, string text, HintRowForm form)
     {
         var row = grid.RowCount;
         grid.RowCount = row + 1;
         grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         // 不放占位控件：一个默认尺寸的 Panel 就把这一行按它的 100px 高排（第二百零六轮那个根因）。
         // 带 Ui. 限定名是刻意的：说明行的长度门按「Ui.Caption（」这个记号取字，工厂这一处也要留在它视野里。
-        var hint = Ui.Caption(text);
+        var hint = HintRowForms.DrawsRule(form) ? SectionHint(text) : Ui.Caption(text);
         hint.Margin = new Padding(0, UiTokens.Xs, 0, UiTokens.Xs);
+        // 两种形态的差异只在这一处落地：字段级 0px、分区级 2px 竖线 + 4px 让位（几何在 HintRowForms 一处）。
+        hint.Padding = new Padding(HintRowForms.LeftIndent(form), 0, 0, 0);
         grid.Controls.Add(hint, 0, row);
         grid.SetColumnSpan(hint, 2);
         hint.Tag = HintRowMarker;
         return hint;
+    }
+
+    /// <summary>
+    /// 分区注脚那一句的说明行：与字段注脚同一档字号、同一字色，左缘多一条 2px 竖线
+    /// （形态与几何见 <see cref="HintRowForm"/> 与 <see cref="HintRowForms"/>）。
+    /// </summary>
+    private static Label SectionHint(string text) => new HintLabel
+    {
+        Text = text,
+        AutoSize = true,
+        Font = UiTokens.Caption.Value,
+        ForeColor = UiTokens.Muted,
+        Margin = new Padding(0),
+    };
+
+    /// <summary>
+    /// 分区注脚那一句的 Label：在左缘画一条 <see cref="HintRowForms.RuleWidth"/> 宽的竖线（Line 色，不新造颜色）。
+    /// <para>
+    /// <b>为什么自绘而不是套一个 Panel</b>：套 Panel 就是第二百零六轮那个根因——默认尺寸 200×100 会把这一行
+    /// 撑到 100px 高，而这一行的高度必须由那句文字自己决定（冒烟器逐条量它）。自绘只多一条线，
+    /// 不改 <c>AutoSize</c> 的度量，行高与字段注脚那一形逐像素相同。
+    /// </para>
+    /// </summary>
+    private sealed class HintLabel : Label
+    {
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using var pen = new Pen(UiTokens.Line, HintRowForms.RuleWidth);
+            var x = HintRowForms.RuleWidth / 2f;
+            e.Graphics.DrawLine(pen, x, 0, x, Height);
+        }
     }
 
     /// <summary>

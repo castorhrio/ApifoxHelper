@@ -75,16 +75,16 @@ internal sealed class GenerationDialog : DpiAwareForm
         AddSection(grid, "注释草稿生成");
         Ui.FieldRow(grid, "生成方式", _mode);
         Ui.FieldRow(grid, "服务地址", Ui.Field(_baseUrl));
-        Ui.HintRow(grid, "例如 https://api.openai.com/v1；只发送用户确认的材料。");
+        Ui.HintRow(grid, "例如 https://api.openai.com/v1；只发送用户确认的材料。", HintRowForm.Field);
         Ui.FieldRow(grid, "模型", Ui.Field(_model));
         Ui.FieldRow(grid, "超时秒数", Field(_timeout, GenerationEntries.FieldTimeoutSeconds));
         Ui.FieldRow(grid, "每批数量", Field(_batch, GenerationEntries.FieldMaxSlotsPerRequest));
-        Ui.HintRow(grid, "每次请求最多包含的注释位置数；数字留空用默认值。");
+        Ui.HintRow(grid, "每次请求最多包含的注释位置数；数字留空用默认值。", HintRowForm.Section);
 
         AddSection(grid, "服务密钥");
         _key.Width = 280;
         Ui.FieldRow(grid, "服务密钥", Row(Ui.Field(_key), _saveKeyButton));
-        Ui.HintRow(grid, GenerationEntries.KeyHint + "。");
+        Ui.HintRow(grid, GenerationEntries.KeyHint + "。", HintRowForm.Field);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，主行动（确定）在最右。

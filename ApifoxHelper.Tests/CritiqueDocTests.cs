@@ -217,7 +217,7 @@ public class CritiqueDocTests
         // 第二百零六轮那一处（distill，第 1 站的第三条）。
         Assert.Contains("Ui.HintRow", Doc, StringComparison.Ordinal);
         Assert.Contains("HintRowTests", Doc, StringComparison.Ordinal);
-        Assert.True(Repo.Source("Desktop", "Native", "Ui.cs").Contains("Label HintRow(TableLayoutPanel grid, string text)", StringComparison.Ordinal),
+        Assert.True(Repo.Source("Desktop", "Native", "Ui.cs").Contains("Label HintRow(TableLayoutPanel grid, string text, HintRowForm form)", StringComparison.Ordinal),
             "critique 说第二百零六轮落地了 Ui.HintRow，而 Ui.cs 里没有这个符号——文档不许跑在代码前面。");
         Assert.True(File.Exists(Path.Combine(Repo.Root, "ApifoxHelper.Tests", "HintRowTests.cs")),
             "critique 点名的门文件 ApifoxHelper.Tests/HintRowTests.cs 不在测试工程里。");

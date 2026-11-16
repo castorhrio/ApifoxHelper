@@ -65,24 +65,24 @@ internal sealed class ProfileAdvancedDialog : DpiAwareForm
         var grid = Ui.FieldGrid(ProfileGridColumns.LabelWidth);
 
         AddSection(grid, "模块范围");
-        Ui.HintRow(grid, "每行：模块名=路径前缀 1、路径前缀 2，例如 财务=/api/finance/；新建任务时可按模块选择范围。");
+        Ui.HintRow(grid, "每行：模块名=路径前缀 1、路径前缀 2，例如 财务=/api/finance/；新建任务时可按模块选择范围。", HintRowForm.Field);
         _modules.Height = 72;
         Ui.FieldRow(grid, "模块", Ui.Field(_modules));
 
         AddSection(grid, "新接口模板");
-        Ui.HintRow(grid, "新建接口创建时的目录与公共设置；只随创建写入这些字段，不克隆脚本、用例或 Mock。");
+        Ui.HintRow(grid, "新建接口创建时的目录与公共设置；只随创建写入这些字段，不克隆脚本、用例或 Mock。", HintRowForm.Section);
         Ui.FieldRow(grid, "目录 ID", Field(_folderId, ProfileAdvanced.FieldFolderId));
-        Ui.HintRow(grid, "留空表示未指定目录；未指定目录时新接口无法创建。");
+        Ui.HintRow(grid, "留空表示未指定目录；未指定目录时新接口无法创建。", HintRowForm.Field);
         Ui.FieldRow(grid, "状态", _status);
         Ui.FieldRow(grid, "服务 ID", Ui.Field(_serverId));
         Ui.FieldRow(grid, "标签", Ui.Field(_tags));
-        Ui.HintRow(grid, "用「,」分隔。");
+        Ui.HintRow(grid, "用「,」分隔。", HintRowForm.Field);
         Ui.FieldRow(grid, "鉴权 auth", Field(_auth, ProfileAdvanced.FieldAuth));
         Ui.FieldRow(grid, "安全方案", Field(_security, ProfileAdvanced.FieldSecurityScheme));
         Ui.FieldRow(grid, "公共 Header", Field(_headers, ProfileAdvanced.FieldHeaderParameters));
-        Ui.HintRow(grid, "JSON 对象或数组；留空表示不设置。");
+        Ui.HintRow(grid, "JSON 对象或数组；留空表示不设置。", HintRowForm.Section);
         Ui.FieldRow(grid, "从既有接口提取", Row(Ui.Field(_templateEndpoint), 120, _extractButton));
-        Ui.HintRow(grid, "填写接口 ID 后提取其目录、状态、服务、鉴权、安全方案、公共 Header 与标签填入上方字段；请检查后再保存。");
+        Ui.HintRow(grid, "填写接口 ID 后提取其目录、状态、服务、鉴权、安全方案、公共 Header 与标签填入上方字段；请检查后再保存。", HintRowForm.Section);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，主行动（确定）在最右。

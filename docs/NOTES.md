@@ -600,46 +600,48 @@
 
 ### 提示行 26 句的所有权归属（逐句对照表，第三百四十九轮那笔「随 G-D5 复核」的前置材料）
 
+> **第三百五十二轮把「形态」这一列补上（简报 P0-1）**：第三百四十九轮那句「所有权通道从水平对齐换成竖向邻接」在真机到手前只剩一件事可做——把「这一句管一行还是管一块」从读感变成源码里写死的一个取值。`Ui.HintRow` 因此多了一个**没有缺省值**的第三个实参 `HintRowForm`（`Field` / `Section`），两种形态在同一屏上有可量化的差异：字段级左侧零缩进、分区级左侧一条 2px 竖线加 4px 文字让位（几何在 `Desktop/Native/HintRowForm.cs` 一处，产品与门读同一个数）。本表因此多一列「形态」，26 行逐句填上；`HintRowTests` 另加两条门（`HintRowForms_DifferVisiblyOnTheSameScreen` 判两种形态的 `Padding.Left` 不相等且让位与令牌源 `UiTokens.Xs` 对账、`EveryCallSite_DeclaresItsForm_AndTheSectionOnesAreTheSix` 判 26 处调用点都写了形态且分区注脚恰好是 §6 登记的那六句）。**这一列不替代「归属」那一列**：归属说的是「它管哪几行」（源码行序列里的关系），形态说的是「它在屏幕上长什么样」（用户看得见的那条竖线），两者由一条对应绑在一起，任一处漂了门就红。
+>
 > **这一节解决什么**（第三百五十轮，简报 P1-1）：第三百四十九轮把 `Ui.HintRow` 一族的说明行从字段列那一格改成跨两列，登记的形状是「26 句里有 20 句此前靠缩进指向紧邻的那一个字段、6 句一次管两三个编辑位或整个分区」，并把「真机上说明行读起来像字段注脚还是分区注脚」随 G-D5 复核。那一笔给的是**按文件的数**（`序列化与分析` 8 句里 6 句、`模块与模板` 6 句里 3 句、`模型服务` 3 句里 2 句、新建任务 5 句、项目设置 4 句），**没有按句给**——而真机到手那天要逐句看的是「这一句现在还剩什么在指它的 owner」，按文件的数只能数、找不到对象。这一节把它落成一句一行的表：**哪 20 句指向哪一个编辑位、哪 6 句管哪几个编辑位**。本节不改那 26 句文字、不改工厂形状（第三百四十九轮那几个不动点照旧）。
 >
 > **归属这一列怎么读**：形状改完之后，说明行与它所管的行只剩竖向邻接，所以这一列写的必须是**能在源码的行序列里核对的关系**，不是读感。五个取值各是一条机械可判的关系：`字段级·紧邻上一行` = 它上面那一格是那个字段的编辑行；`字段级·紧邻下一行` = owner 在它下面那一行，跨两列后这一句会读成分区注脚，是这一族最贵的一处；`多字段·上方连续` = 它一次管上面紧挨着的那两三行；`多字段·上方不连续` = 它点名的是上面几行，但中间隔着别的行；`分区级·标题之后` = 它讲的是整个分区，紧跟在分区标题之后。
 >
-> **机械门**：`ApifoxHelper.Tests/HintRowTests.cs` 的 `HintOwnershipTable_CoversEveryCallSiteBothWays` 判五件事——① 表 26 行，逐文件的行数与 `HintRowTests` 里那本 `CallSites` 登记一一对上（源码里的工厂调用点与那本登记之间已由既有门 `CallSites_RegistryMatchesTheSource_AndSaysWhichDirection` 钉住，本条把这张表接进同一条链，三方任一处漂了即红）；② 每行那句说明逐字等于该文件里那一处 `Ui.HintRow` 的实参（就地字面量取字面量本身，取共享常量的取那个表达式），并按源码出厂顺序排列；③ 「管的编辑位」按归属那一列真的取得到——紧邻那一行确实是那个字段行、上方连续那几行确实挨着、上方不连续那几行都在它上面、分区名确实是那一格的分区标题；④ 这张表自己数出的 20 / 6 / 26 与 `docs/DESIGN.md` §6「提示行」那一格登记的三个数逐字对账，且「字段级·紧邻下一行」恰好一条、就在 `Desktop/Native/ProfileAdvancedDialog.cs`（§6 说的那一处最贵的代价）；⑤ 归属取值只认上面那五个写法，第六种写法出现即红（不猜）。**它不判什么**：不判真机上那一句读起来像不像字段注脚——那是观感，只有人眼答得出，这张表是给那只眼睛用的清单；也不判这 26 句该不该各有不同形状（两形的三条取舍记在本文件第三百四十九轮那一节）。抓不抓得住由同文件 `HintOwnershipTable_DetectorReportsTheBreaksItMustCatch` 拿注入当场验。**表里「说明句」那一格的写法**：逐字抄工厂收到的实参；取共享常量的那四处写成表达式本身，其中两格（TaskCreation 那两句）不带反引号——反引号里那种「类名点成员名」的形状会被本节所在的 G-D5 那一节的引用解析门当成测试断言引用去判，而那两格不是断言。
+> **机械门**：`ApifoxHelper.Tests/HintRowTests.cs` 的 `HintOwnershipTable_CoversEveryCallSiteBothWays` 判六件事——① 表 26 行，逐文件的行数与 `HintRowTests` 里那本 `CallSites` 登记一一对上（源码里的工厂调用点与那本登记之间已由既有门 `CallSites_RegistryMatchesTheSource_AndSaysWhichDirection` 钉住，本条把这张表接进同一条链，三方任一处漂了即红）；② 每行那句说明逐字等于该文件里那一处 `Ui.HintRow` 的实参（就地字面量取字面量本身，取共享常量的取那个表达式），并按源码出厂顺序排列；③ 「管的编辑位」按归属那一列真的取得到——紧邻那一行确实是那个字段行、上方连续那几行确实挨着、上方不连续那几行都在它上面、分区名确实是那一格的分区标题；④ 这张表自己数出的 20 / 6 / 26 与 `docs/DESIGN.md` §6「提示行」那一格登记的三个数逐字对账，且「字段级·紧邻下一行」恰好一条、就在 `Desktop/Native/ProfileAdvancedDialog.cs`（§6 说的那一处最贵的代价）；⑤ 归属取值只认上面那五个写法，第六种写法出现即红（不猜）；⑥ **「形态」那一列**（第三百五十二轮加）只认 `Field` / `Section` 两个取值，且与源码那一处工厂收到的第三个实参逐行相等、与「归属」那一列按同一条对应走（字段级两种 → `Field`，多字段两种与分区级 → `Section`）——形态与归属各说一套，屏幕上那条竖线就在说谎。**它不判什么**：不判真机上那一句读起来像不像字段注脚——那是观感，只有人眼答得出，这张表是给那只眼睛用的清单；也不判这 26 句该不该各有不同形状（两形的三条取舍记在本文件第三百四十九轮那一节）。抓不抓得住由同文件 `HintOwnershipTable_DetectorReportsTheBreaksItMustCatch` 拿八发注入当场验（第三百五十二轮加的两发：形态与归属对不上、形态与源码第三实参对不上）。**表里「说明句」那一格的写法**：逐字抄工厂收到的实参；取共享常量的那四处写成表达式本身，其中两格（TaskCreation 那两句）不带反引号——反引号里那种「类名点成员名」的形状会被本节所在的 G-D5 那一节的引用解析门当成测试断言引用去判，而那两格不是断言。
 >
 > **一处按实物改准（不改写那一节的原句）**：第三百四十九轮那一节把 `Desktop/Native/ProfileAdvancedDialog.cs` 那句「提取…填入上方字段」登记成「点的是六个字段」，实物是**七个**——`Profiles/EndpointTemplateReader.cs` 读回 `FolderId` / `Status` / `ServerId` / `Auth` / `SecurityScheme` / `HeaderParameters` / `Tags` 七个模板字段，界面上那句列出的也是七项（目录、状态、服务、鉴权、安全方案、公共 Header 与标签）。本表按实物记七个，那一节留在原处不改写；**真机复核以本表为准**。
 >
 > **真机到手那天按这张表做什么**：那 20 句逐句问一句「缩进没了之后，还认得出它管哪个编辑位吗」；那 6 句逐句问「读起来像分区注脚还是字段注脚」，其中表里第 10 行（`Desktop/Native/ProfileAdvancedDialog.cs` 的第一句）的 owner 在它**下面**那一行，是这一族最该被真人看过的那一处。看到的结果按既有口径写回本节行内，量不成的那一句写「仍未量到 + 缺什么」，不许改写成通过、也不许替 G-D5 打勾。
 
-| 屏（文件） | 说明句（出厂实参，逐字） | 归属 | 管的编辑位 |
-| --- | --- | --- | --- |
-| `Desktop/Native/ProjectsPage.cs` | `相对路径前缀，用「;」分隔；留空表示只允许导出补丁。` | 字段级·紧邻上一行 | `允许回写范围` |
-| `Desktop/Native/ProjectsPage.cs` | `提交号、构建号或版本描述；为空时报告显示「未绑定代码版本」。` | 字段级·紧邻上一行 | `版本备注` |
-| `Desktop/Native/ProjectsPage.cs` | `ProfileFormLayout.ProjectListHint(_editing is not null)` | 字段级·紧邻上一行 | `Apifox 项目 ID` |
-| `Desktop/Native/ProjectsPage.cs` | `分支留空表示主分支。` | 字段级·紧邻上一行 | `分支` |
-| `Desktop/Native/TasksPage.cs` | `留空则用「配置名 月-日 时:分」。` | 字段级·紧邻上一行 | `任务名称` |
-| `Desktop/Native/TasksPage.cs` | `勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。` | 字段级·紧邻上一行 | `模块` |
-| `Desktop/Native/TasksPage.cs` | `补充接口路径前缀，用「,」「;」分隔；可与模块并用。` | 字段级·紧邻上一行 | `路径前缀` |
-| `Desktop/Native/TasksPage.cs` | TaskCreation.KeysHint | 字段级·紧邻上一行 | `指定接口` |
-| `Desktop/Native/TasksPage.cs` | TaskCreation.NoteFallbackHint | 字段级·紧邻上一行 | `版本备注` |
-| `Desktop/Native/ProfileAdvancedDialog.cs` | `每行：模块名=路径前缀 1、路径前缀 2，例如 财务=/api/finance/；新建任务时可按模块选择范围。` | 字段级·紧邻下一行 | `模块` |
-| `Desktop/Native/ProfileAdvancedDialog.cs` | `新建接口创建时的目录与公共设置；只随创建写入这些字段，不克隆脚本、用例或 Mock。` | 分区级·标题之后 | `新接口模板` |
-| `Desktop/Native/ProfileAdvancedDialog.cs` | `留空表示未指定目录；未指定目录时新接口无法创建。` | 字段级·紧邻上一行 | `目录 ID` |
-| `Desktop/Native/ProfileAdvancedDialog.cs` | `用「,」分隔。` | 字段级·紧邻上一行 | `标签` |
-| `Desktop/Native/ProfileAdvancedDialog.cs` | `JSON 对象或数组；留空表示不设置。` | 多字段·上方连续 | `鉴权 auth`、`安全方案`、`公共 Header` |
-| `Desktop/Native/ProfileAdvancedDialog.cs` | `填写接口 ID 后提取其目录、状态、服务、鉴权、安全方案、公共 Header 与标签填入上方字段；请检查后再保存。` | 多字段·上方不连续 | `目录 ID`、`状态`、`服务 ID`、`标签`、`鉴权 auth`、`安全方案`、`公共 Header` |
-| `Desktop/Native/ProfileAnalysisDialog.cs` | `与 Swashbuckle SupportNonNullableReferenceTypes 一致。` | 字段级·紧邻上一行 | `非空引用类型` |
-| `Desktop/Native/ProfileAnalysisDialog.cs` | `每行：类型名=数据属性名，例如 PNOSActionResult=Data；用于追踪 data 的实际类型（响应契约）。` | 字段级·紧邻上一行 | `通用响应封装` |
-| `Desktop/Native/ProfileAnalysisDialog.cs` | `留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。` | 字段级·紧邻上一行 | `编译常量` |
-| `Desktop/Native/ProfileAnalysisDialog.cs` | `数字留空用默认值。` | 多字段·上方连续 | `调用深度`、`方法预算` |
-| `Desktop/Native/ProfileAnalysisDialog.cs` | `可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。` | 字段级·紧邻上一行 | `XML 文档路径` |
-| `Desktop/Native/ProfileAnalysisDialog.cs` | `与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。` | 字段级·紧邻上一行 | `去掉 Async 后缀` |
-| `Desktop/Native/ProfileAnalysisDialog.cs` | `只读详情的并发数（1–8）；写入始终串行。` | 字段级·紧邻上一行 | `读取并发` |
-| `Desktop/Native/ProfileAnalysisDialog.cs` | `可选；为空时自动查找 PATH 与全局 npm 目录。` | 多字段·上方连续 | `node 路径`、`cli.js 路径` |
-| `Desktop/Native/GenerationDialog.cs` | `例如 https://api.openai.com/v1；只发送用户确认的材料。` | 字段级·紧邻上一行 | `服务地址` |
-| `Desktop/Native/GenerationDialog.cs` | `每次请求最多包含的注释位置数；数字留空用默认值。` | 多字段·上方连续 | `超时秒数`、`每批数量` |
-| `Desktop/Native/GenerationDialog.cs` | `GenerationEntries.KeyHint + "。"` | 字段级·紧邻上一行 | `服务密钥` |
+| 屏（文件） | 说明句（出厂实参，逐字） | 归属 | 形态 | 管的编辑位 |
+| --- | --- | --- | --- | --- |
+| `Desktop/Native/ProjectsPage.cs` | `相对路径前缀，用「;」分隔；留空表示只允许导出补丁。` | 字段级·紧邻上一行 | Field | `允许回写范围` |
+| `Desktop/Native/ProjectsPage.cs` | `提交号、构建号或版本描述；为空时报告显示「未绑定代码版本」。` | 字段级·紧邻上一行 | Field | `版本备注` |
+| `Desktop/Native/ProjectsPage.cs` | `ProfileFormLayout.ProjectListHint(_editing is not null)` | 字段级·紧邻上一行 | Field | `Apifox 项目 ID` |
+| `Desktop/Native/ProjectsPage.cs` | `分支留空表示主分支。` | 字段级·紧邻上一行 | Field | `分支` |
+| `Desktop/Native/TasksPage.cs` | `留空则用「配置名 月-日 时:分」。` | 字段级·紧邻上一行 | Field | `任务名称` |
+| `Desktop/Native/TasksPage.cs` | `勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。` | 字段级·紧邻上一行 | Field | `模块` |
+| `Desktop/Native/TasksPage.cs` | `补充接口路径前缀，用「,」「;」分隔；可与模块并用。` | 字段级·紧邻上一行 | Field | `路径前缀` |
+| `Desktop/Native/TasksPage.cs` | TaskCreation.KeysHint | 字段级·紧邻上一行 | Field | `指定接口` |
+| `Desktop/Native/TasksPage.cs` | TaskCreation.NoteFallbackHint | 字段级·紧邻上一行 | Field | `版本备注` |
+| `Desktop/Native/ProfileAdvancedDialog.cs` | `每行：模块名=路径前缀 1、路径前缀 2，例如 财务=/api/finance/；新建任务时可按模块选择范围。` | 字段级·紧邻下一行 | Field | `模块` |
+| `Desktop/Native/ProfileAdvancedDialog.cs` | `新建接口创建时的目录与公共设置；只随创建写入这些字段，不克隆脚本、用例或 Mock。` | 分区级·标题之后 | Section | `新接口模板` |
+| `Desktop/Native/ProfileAdvancedDialog.cs` | `留空表示未指定目录；未指定目录时新接口无法创建。` | 字段级·紧邻上一行 | Field | `目录 ID` |
+| `Desktop/Native/ProfileAdvancedDialog.cs` | `用「,」分隔。` | 字段级·紧邻上一行 | Field | `标签` |
+| `Desktop/Native/ProfileAdvancedDialog.cs` | `JSON 对象或数组；留空表示不设置。` | 多字段·上方连续 | Section | `鉴权 auth`、`安全方案`、`公共 Header` |
+| `Desktop/Native/ProfileAdvancedDialog.cs` | `填写接口 ID 后提取其目录、状态、服务、鉴权、安全方案、公共 Header 与标签填入上方字段；请检查后再保存。` | 多字段·上方不连续 | Section | `目录 ID`、`状态`、`服务 ID`、`标签`、`鉴权 auth`、`安全方案`、`公共 Header` |
+| `Desktop/Native/ProfileAnalysisDialog.cs` | `与 Swashbuckle SupportNonNullableReferenceTypes 一致。` | 字段级·紧邻上一行 | Field | `非空引用类型` |
+| `Desktop/Native/ProfileAnalysisDialog.cs` | `每行：类型名=数据属性名，例如 PNOSActionResult=Data；用于追踪 data 的实际类型（响应契约）。` | 字段级·紧邻上一行 | Field | `通用响应封装` |
+| `Desktop/Native/ProfileAnalysisDialog.cs` | `留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。` | 字段级·紧邻上一行 | Field | `编译常量` |
+| `Desktop/Native/ProfileAnalysisDialog.cs` | `数字留空用默认值。` | 多字段·上方连续 | Section | `调用深度`、`方法预算` |
+| `Desktop/Native/ProfileAnalysisDialog.cs` | `可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。` | 字段级·紧邻上一行 | Field | `XML 文档路径` |
+| `Desktop/Native/ProfileAnalysisDialog.cs` | `与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。` | 字段级·紧邻上一行 | Field | `去掉 Async 后缀` |
+| `Desktop/Native/ProfileAnalysisDialog.cs` | `只读详情的并发数（1–8）；写入始终串行。` | 字段级·紧邻上一行 | Field | `读取并发` |
+| `Desktop/Native/ProfileAnalysisDialog.cs` | `可选；为空时自动查找 PATH 与全局 npm 目录。` | 多字段·上方连续 | Section | `node 路径`、`cli.js 路径` |
+| `Desktop/Native/GenerationDialog.cs` | `例如 https://api.openai.com/v1；只发送用户确认的材料。` | 字段级·紧邻上一行 | Field | `服务地址` |
+| `Desktop/Native/GenerationDialog.cs` | `每次请求最多包含的注释位置数；数字留空用默认值。` | 多字段·上方连续 | Section | `超时秒数`、`每批数量` |
+| `Desktop/Native/GenerationDialog.cs` | `GenerationEntries.KeyHint + "。"` | 字段级·紧邻上一行 | Field | `服务密钥` |
 
-> **这张表与 §6 那一格的关系（为什么两份都要在）**：`docs/DESIGN.md` §6「提示行」那一格写的是**这一改的代价**（所有权通道从水平对齐换成竖向邻接、20 / 6 那两个数、以及那一句最贵的 owner 在下面的），是给设计与答辩读的一段判断；这一节写的是**代价落在哪 26 句上**，是给真机复核用的清单。两者方向不同，合并会同时丢掉一个——与本文件「G-D5 真机复核清单」那张动作单与 `docs/evidence/real-machine/README.md` 产出物清单同一分寸（第二百零五轮那句「双写是本意」）。让两份不至各说一套的是上面那条门，不是抄写。
+> **这张表与 §6 那一格的关系（为什么两份都要在）**：`docs/DESIGN.md` §6「提示行」那一格写的是**这一改的代价与它的收法**（第三百四十九轮所有权通道从水平对齐换成竖向邻接、第三百五十二轮再换成形态枚举、20 / 6 那两个数、以及那一句最贵的 owner 在下面的），是给设计与答辩读的一段判断；这一节写的是**代价落在哪 26 句上**，是给真机复核用的清单。两者方向不同，合并会同时丢掉一个——与本文件「G-D5 真机复核清单」那张动作单与 `docs/evidence/real-machine/README.md` 产出物清单同一分寸（第二百零五轮那句「双写是本意」）。让两份不至各说一套的是上面那条门，不是抄写。
 
 ## G-D6 退场清单（可勾选）
 

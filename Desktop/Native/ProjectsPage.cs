@@ -679,15 +679,15 @@ internal sealed class ProfileDialog : DpiAwareForm
         AddRow(grid, "API 项目", _apiProject);
         AddSection(grid, ProfileFormLayout.OptionalSectionTitle);
         AddRow(grid, "允许回写范围", Field(_allowed, ProfileStore.FieldAllowedSourcePaths));
-        Ui.HintRow(grid, "相对路径前缀，用「;」分隔；留空表示只允许导出补丁。");
+        Ui.HintRow(grid, "相对路径前缀，用「;」分隔；留空表示只允许导出补丁。", HintRowForm.Field);
         AddRow(grid, "版本备注", Ui.Field(_sourceVersion));
-        Ui.HintRow(grid, "提交号、构建号或版本描述；为空时报告显示「未绑定代码版本」。");
+        Ui.HintRow(grid, "提交号、构建号或版本描述；为空时报告显示「未绑定代码版本」。", HintRowForm.Field);
         AddRow(grid, "Swagger 来源", _swaggerType);
         AddRow(grid, "Swagger 位置", Field(_swaggerLocation, ProfileStore.FieldSwaggerLocation));
         AddRow(grid, "Apifox 项目 ID", Row(220, _projectId, _loadProjectsButton));
-        Ui.HintRow(grid, ProfileFormLayout.ProjectListHint(_editing is not null));
+        Ui.HintRow(grid, ProfileFormLayout.ProjectListHint(_editing is not null), HintRowForm.Field);
         AddRow(grid, "分支", Row(220, _branch, _loadBranchesButton));
-        Ui.HintRow(grid, "分支留空表示主分支。");
+        Ui.HintRow(grid, "分支留空表示主分支。", HintRowForm.Field);
         AddSection(grid, ProfileFormLayout.AdvancedSectionTitle);
         AddWide(grid, AdvancedEntries(advancedButton, analysisButton, generationButton, exportButton));
 

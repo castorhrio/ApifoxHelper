@@ -1472,18 +1472,18 @@ internal sealed class NewTaskDialog : DpiAwareForm
         var grid = Ui.FieldGrid(ProfileGridColumns.NarrowLabelWidth);
         AddRow(grid, "项目配置", _profile);
         AddRow(grid, "任务名称", Ui.Field(_name));
-        Ui.HintRow(grid, "留空则用「配置名 月-日 时:分」。");
+        Ui.HintRow(grid, "留空则用「配置名 月-日 时:分」。", HintRowForm.Field);
         var moduleHost = Ui.Hairline(_modules);
         moduleHost.Height = 96;
         AddRow(grid, "模块", moduleHost);
-        Ui.HintRow(grid, "勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。");
+        Ui.HintRow(grid, "勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。", HintRowForm.Field);
         AddRow(grid, "路径前缀", Ui.Field(_prefixes));
-        Ui.HintRow(grid, "补充接口路径前缀，用「,」「;」分隔；可与模块并用。");
+        Ui.HintRow(grid, "补充接口路径前缀，用「,」「;」分隔；可与模块并用。", HintRowForm.Field);
         AddRow(grid, "指定接口", Ui.Field(_keys));
-        Ui.HintRow(grid, TaskCreation.KeysHint);
+        Ui.HintRow(grid, TaskCreation.KeysHint, HintRowForm.Field);
         AddRow(grid, "版本备注", Ui.Field(_note));
         _note.PlaceholderText = TaskCreation.NotePlaceholder;
-        Ui.HintRow(grid, TaskCreation.NoteFallbackHint);
+        Ui.HintRow(grid, TaskCreation.NoteFallbackHint, HintRowForm.Field);
         AddRow(grid, "", _offline);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };

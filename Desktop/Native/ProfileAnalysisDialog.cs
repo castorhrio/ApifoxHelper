@@ -67,23 +67,23 @@ internal sealed class ProfileAnalysisDialog : DpiAwareForm
         Ui.FieldRow(grid, "JSON 命名", _naming);
         Ui.FieldRow(grid, "枚举输出为字符串", _enumAsString);
         Ui.FieldRow(grid, "非空引用类型", _nonNullable);
-        Ui.HintRow(grid, "与 Swashbuckle SupportNonNullableReferenceTypes 一致。");
+        Ui.HintRow(grid, "与 Swashbuckle SupportNonNullableReferenceTypes 一致。", HintRowForm.Field);
         _wrappers.Height = 64;
         Ui.FieldRow(grid, "通用响应封装", Ui.Field(_wrappers));
-        Ui.HintRow(grid, "每行：类型名=数据属性名，例如 PNOSActionResult=Data；用于追踪 data 的实际类型（响应契约）。");
+        Ui.HintRow(grid, "每行：类型名=数据属性名，例如 PNOSActionResult=Data；用于追踪 data 的实际类型（响应契约）。", HintRowForm.Field);
 
         AddSection(grid, "代码分析");
         Ui.FieldRow(grid, "分析配置名", Ui.Field(_configuration));
         Ui.FieldRow(grid, "编译常量", Ui.Field(_symbols));
-        Ui.HintRow(grid, "留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。");
+        Ui.HintRow(grid, "留空按目标框架与配置推导（DEBUG;TRACE;NET8_0…）。", HintRowForm.Field);
         Ui.FieldRow(grid, "调用深度", Field(_depth, ProfileAnalysis.FieldMaxTraceDepth));
         Ui.FieldRow(grid, "方法预算", Field(_budget, ProfileAnalysis.FieldMaxMethodsPerEndpoint));
-        Ui.HintRow(grid, "数字留空用默认值。");
+        Ui.HintRow(grid, "数字留空用默认值。", HintRowForm.Section);
         _xmlDocPaths.Height = 56;
         Ui.FieldRow(grid, "XML 文档路径", Field(_xmlDocPaths, ProfileAnalysis.FieldXmlDocPaths));
-        Ui.HintRow(grid, "可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。");
+        Ui.HintRow(grid, "可选：项目名=路径，每行一个；默认按 bin/配置/目标框架 推断。", HintRowForm.Field);
         Ui.FieldRow(grid, "去掉 Async 后缀", _suppressAsync);
-        Ui.HintRow(grid, "与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。");
+        Ui.HintRow(grid, "与 MvcOptions.SuppressAsyncSuffixInActionNames 一致（默认开启）。", HintRowForm.Field);
 
         AddSection(grid, "质量规则");
         Ui.FieldRow(grid, "通用 data 属性名", Ui.Field(_dataProperty));
@@ -92,10 +92,10 @@ internal sealed class ProfileAnalysisDialog : DpiAwareForm
 
         AddSection(grid, "Apifox CLI");
         Ui.FieldRow(grid, "读取并发", Field(_concurrency, ProfileAnalysis.FieldReadConcurrency));
-        Ui.HintRow(grid, "只读详情的并发数（1–8）；写入始终串行。");
+        Ui.HintRow(grid, "只读详情的并发数（1–8）；写入始终串行。", HintRowForm.Field);
         Ui.FieldRow(grid, "node 路径", Ui.Field(_nodePath));
         Ui.FieldRow(grid, "cli.js 路径", Ui.Field(_cliPath));
-        Ui.HintRow(grid, "可选；为空时自动查找 PATH 与全局 npm 目录。");
+        Ui.HintRow(grid, "可选；为空时自动查找 PATH 与全局 npm 目录。", HintRowForm.Section);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，主行动（确定）在最右。

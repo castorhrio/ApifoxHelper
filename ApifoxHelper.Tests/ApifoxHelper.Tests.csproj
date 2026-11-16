@@ -51,6 +51,9 @@
     <Compile Include="..\Desktop\Native\GenerationEntries.cs" Link="Shared\GenerationEntries.cs" />
     <Compile Include="..\Desktop\Native\ProfileAnalysis.cs" Link="Shared\ProfileAnalysis.cs" />
     <Compile Include="..\Desktop\Native\ProfileGridColumns.cs" Link="Shared\ProfileGridColumns.cs" />
+    <!-- 提示行两种形态的几何（第三百五十二轮）：纯算术、不依赖 WinForms，门在 HintRowFormTests。
+         产品按这里的数设 Padding.Left，门按同一个数判「两种形态在同一屏上有可辨差异」——门里不另写一份 6。 -->
+    <Compile Include="..\Desktop\Native\HintRowForm.cs" Link="Shared\HintRowForm.cs" />
     <Compile Include="..\Desktop\Native\ProfileFormLayout.cs" Link="Shared\ProfileFormLayout.cs" />
     <Compile Include="..\Desktop\Native\ProfileLoadState.cs" Link="Shared\ProfileLoadState.cs" />
     <Compile Include="..\Desktop\Native\LoadFailureState.cs" Link="Shared\LoadFailureState.cs" />

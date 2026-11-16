@@ -33,6 +33,16 @@ namespace ApifoxHelper.Tests;
 /// 形状，都在 <c>docs/NOTES.md</c> 第三百四十九轮那一节），换来的是另外六句不再被缩进谎指最后一个字段、
 /// 以及 200% 档那两条超预算的说明行归零。
 /// </para>
+/// <para>
+/// <b>第三百五十二轮把所有权从「竖向邻接」换成「形态枚举」</b>（简报 P0-1）：竖向邻接对字段注脚够用，
+/// 对分区注脚不够——那六句一次管两三个编辑位或整个分区，跨两列之后与字段注脚长得一模一样。
+/// 现由调用处必须写下来的第三个实参 <c>HintRowForm</c> 承载，两种形态在同一屏上有可量化的差异
+/// （字段级 <c>Padding.Left = 0</c>、分区级 = 2px 竖线 + 4px 让位 = 6px，几何在 <c>HintRowForms</c> 一处）。
+/// 本文件因此多判三件事：⑫ 二十六处调用点<b>都写了</b>形态（工厂没有缺省值，少写一处编译不过、
+/// 这里再判一次源码）；⑬ 两种形态的 <c>Padding.Left</c> <b>不相等</b>（判据是算式不是恒等式，
+/// 且分区级那个让位与令牌源 <c>UiTokens.Xs</c> 对账）；⑭ 逐句归属表多一列「形态」，
+/// 与源码第三实参、与「归属」那一列（字段级 → Field、多字段与分区级 → Section）三方对账。
+/// </para>
 /// </summary>
 public class HintRowTests
 {
@@ -88,10 +98,15 @@ public class HintRowTests
     [Fact]
     public void HintRow_IsTheOnlyFactoryAndCarriesNoSpacer()
     {
-        Assert.Single(Regex.Matches(UiSource, @"static Label HintRow\(TableLayoutPanel grid, string text\)"));
+        // 第三百五十二轮：第三个实参是形态，且<b>没有缺省值</b>——缺省值等于「没人选过」，
+        // 下一句提示行加进来会静默变成字段注脚，而它可能讲的是整个分区。
+        Assert.Single(Regex.Matches(UiSource, @"static Label HintRow\(TableLayoutPanel grid, string text, HintRowForm form\)"));
+        Assert.DoesNotContain("HintRowForm form =", UiSource, StringComparison.Ordinal);
         var body = FactoryBody();
         Assert.Contains("grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));", body, StringComparison.Ordinal);
-        Assert.Contains("var hint = Ui.Caption(text);", body, StringComparison.Ordinal);
+        Assert.Contains("var hint = HintRowForms.DrawsRule(form) ? SectionHint(text) : Ui.Caption(text);", body, StringComparison.Ordinal);
+        // 两种形态的差异只在这一处落地，且数从 HintRowForms 取——工厂里不写死 6 或 2。
+        Assert.Contains("hint.Padding = new Padding(HintRowForms.LeftIndent(form), 0, 0, 0);", body, StringComparison.Ordinal);
         // 第三百四十九轮：说明行不是字段，它要的宽度是整张网格的宽度——从字段列那一格改成跨两列。
         // 判据与逐处代价清点在 docs/NOTES.md 第三百四十九轮那一节，可用宽那笔账见下面
         // HintRow_FitsBothLongTextsOnlyWhenItSpansBothColumns。
@@ -145,6 +160,80 @@ public class HintRowTests
         Assert.True(longest.All(w => w > FieldColumnAt192),
             $"那两句如今在字段列那一格里也都放得下了（最宽 {longest.Max()} 对 {FieldColumnAt192}）："
             + "上面那条「必须跨两列」的读数已经过期，这一片的成因不再是可用宽——先重量，再决定这条门留不留。");
+    }
+
+    /// <summary>
+    /// 两种形态在同一屏上<b>有可量化的差异</b>（第三百五十二轮，简报 P0-1 的成功判据）。
+    /// <para>
+    /// 判据是「两种形态的 <c>Padding.Left</c> 不相等」——不是恒等式，是<b>算式</b>：字段级 0、
+    /// 分区级 = 竖线宽 + 让位。两个数都从 <c>HintRowForms</c> 现读，产品与门读的是同一个数；
+    /// 让位那一档再与令牌源 <c>UiTokens.Xs</c> 对账（D1：界面不得就地发明间距值）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判真机上 6px 够不够一眼可辨——那是观感，随 G-D5 复核；也不判那条竖线的颜色
+    /// （取 <c>UiTokens.Line</c>，灰阶里已有的发丝边色，不新造颜色）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void HintRowForms_DifferVisiblyOnTheSameScreen()
+    {
+        var field = ApifoxHelper.Desktop.Native.HintRowForms.LeftIndent(ApifoxHelper.Desktop.Native.HintRowForm.Field);
+        var section = ApifoxHelper.Desktop.Native.HintRowForms.LeftIndent(ApifoxHelper.Desktop.Native.HintRowForm.Section);
+
+        Assert.Equal(0, field);
+        Assert.NotEqual(field, section);
+        Assert.Equal(
+            ApifoxHelper.Desktop.Native.HintRowForms.RuleWidth + ApifoxHelper.Desktop.Native.HintRowForms.TextGap,
+            section);
+
+        Assert.False(ApifoxHelper.Desktop.Native.HintRowForms.DrawsRule(ApifoxHelper.Desktop.Native.HintRowForm.Field));
+        Assert.True(ApifoxHelper.Desktop.Native.HintRowForms.DrawsRule(ApifoxHelper.Desktop.Native.HintRowForm.Section));
+
+        // 让位那一档取令牌，不就地发明：UiTokens.Xs 的值从令牌源现读
+        // （本工程不编译 UiTokens——它依赖 System.Drawing，Linux 上构造 FontFamily 会抛）。
+        var tokens = Repo.Source("Desktop", "Native", "UiTokens.cs");
+        var xs = Regex.Match(tokens, @"public const int Xs = (\d+);");
+        Assert.True(xs.Success, "UiTokens.cs 里读不到 Xs 那一档：让位与令牌源的对账退化了，这条门会在空对空上绿。");
+        Assert.Equal(ApifoxHelper.Desktop.Native.HintRowForms.TextGap, int.Parse(xs.Groups[1].Value));
+    }
+
+    /// <summary>
+    /// 二十六处调用点<b>都写了</b>形态，且分区注脚恰好是 §6 登记的那六句（第三百五十二轮）。
+    /// <para>
+    /// 工厂没有缺省值（上面那条门判着），所以「少写一处」在编译期就红；这一条判的是<b>源码里真的写着</b>——
+    /// 有人给工厂加回一个 <c>= HintRowForm.Field</c> 的缺省值时，编译照样过，而下一句讲整个分区的说明行
+    /// 会静默变成字段注脚。总数与分区数都不在这里写死：总数取 <see cref="CallSites"/> 那本登记，
+    /// 分区数取 <c>docs/DESIGN.md</c> §6 那一格登记的「另外 N 句」。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryCallSite_DeclaresItsForm_AndTheSectionOnesAreTheSix()
+    {
+        var problems = new List<string>();
+        var total = 0;
+        var section = 0;
+        foreach (var source in Repo.NativeSources())
+        {
+            foreach (Match match in Regex.Matches(source.Text, @"(?m)^\s*Ui\.HintRow\(grid, .*\);$"))
+            {
+                total++;
+                var form = Regex.Match(match.Value, @"HintRowForm\.(Field|Section)\);$");
+                if (!form.Success)
+                {
+                    problems.Add($"{source.Name}：{match.Value.Trim()} 没写形态——工厂没有缺省值，这一处要么编译不过，要么有人给它加了缺省值");
+                    continue;
+                }
+
+                if (form.Groups[1].Value == "Section") section++;
+            }
+        }
+
+        Assert.True(problems.Count == 0, "提示行的形态没有逐处写下来：" + string.Join("；", problems) + "。");
+        Assert.Equal(CallSites.Sum(s => s.Calls), total);
+
+        var rest = Regex.Match(Repo.DesignSection(6), @"另外 (\d+) 句");
+        Assert.True(rest.Success, "DESIGN.md §6「提示行」那一格里读不到「另外 N 句」：分区注脚那个数没有出处了。");
+        Assert.Equal(int.Parse(rest.Groups[1].Value), section);
     }
 
     /// <summary>
@@ -264,7 +353,7 @@ public class HintRowTests
     public void TheHintTexts_AreWordForWordUnchanged()
     {
         var all = string.Join("\n", CallSites.Select(s => NativeFile(s.File)));
-        var literals = Regex.Matches(all, @"Ui\.HintRow\(grid, ""([^""]*)""\)").Cast<Match>()
+        var literals = Regex.Matches(all, @"Ui\.HintRow\(grid, ""([^""]*)"", HintRowForm\.(?:Field|Section)\)").Cast<Match>()
             .Select(m => m.Groups[1].Value).ToList();
         Assert.Equal(LiteralHints.Length, literals.Count);
         Assert.Equal(LiteralHints.OrderBy(t => t, StringComparer.Ordinal), literals.OrderBy(t => t, StringComparer.Ordinal));
@@ -272,10 +361,10 @@ public class HintRowTests
         // 取共享口径的那五处：文字来自一份常量，界面不另抄一遍。
         foreach (var (file, call) in new[]
         {
-            ("TasksPage.cs", "Ui.HintRow(grid, TaskCreation.KeysHint);"),
-            ("TasksPage.cs", "Ui.HintRow(grid, TaskCreation.NoteFallbackHint);"),
-            ("ProjectsPage.cs", "Ui.HintRow(grid, ProfileFormLayout.ProjectListHint(_editing is not null));"),
-            ("GenerationDialog.cs", "Ui.HintRow(grid, GenerationEntries.KeyHint + \"。\");"),
+            ("TasksPage.cs", "Ui.HintRow(grid, TaskCreation.KeysHint, HintRowForm.Field);"),
+            ("TasksPage.cs", "Ui.HintRow(grid, TaskCreation.NoteFallbackHint, HintRowForm.Field);"),
+            ("ProjectsPage.cs", "Ui.HintRow(grid, ProfileFormLayout.ProjectListHint(_editing is not null), HintRowForm.Field);"),
+            ("GenerationDialog.cs", "Ui.HintRow(grid, GenerationEntries.KeyHint + \"。\", HintRowForm.Field);"),
         })
         {
             Assert.Contains(call, NativeFile(file), StringComparison.Ordinal);
@@ -330,12 +419,23 @@ public class HintRowTests
         "字段级·紧邻上一行", "字段级·紧邻下一行", "多字段·上方连续", "多字段·上方不连续", "分区级·标题之后",
     ];
 
-    private sealed record OwnershipRow(string File, string Arg, string Kind, string[] Owners);
+    private sealed record OwnershipRow(string File, string Arg, string Kind, string Form, string[] Owners);
 
     private enum RowKind { Section, Field, Hint }
 
-    /// <summary>网格里出厂的一行：字段行与分区标题那一格的 <see cref="Text"/> 是标签列（或标题）的字面，说明行那一格是工厂收到的实参。</summary>
-    private sealed record SourceRow(RowKind Kind, string Text);
+    /// <summary>
+    /// 网格里出厂的一行：字段行与分区标题那一格的 <see cref="Text"/> 是标签列（或标题）的字面，
+    /// 说明行那一格是工厂收到的实参，<see cref="Form"/> 是工厂收到的第三个实参（非说明行为空串）。
+    /// </summary>
+    private sealed record SourceRow(RowKind Kind, string Text, string Form = "");
+
+    /// <summary>
+    /// 「归属」那一列与「形态」那一列的对应（第三百五十二轮）：字段级两种 → <c>Field</c>，
+    /// 多字段两种与分区级 → <c>Section</c>。这不是读感，是这一族「一眼可辨」的承诺本身——
+    /// 形态与归属各说一套，屏幕上那条竖线就在说谎。
+    /// </summary>
+    private static string FormOfKind(string kind) =>
+        kind is "字段级·紧邻上一行" or "字段级·紧邻下一行" ? "Field" : "Section";
 
     /// <summary>
     /// 逐句归属表 ↔ 源码调用点 ↔ <c>CallSites</c> 登记 ↔ §6 那三个数，四方一条链。
@@ -358,7 +458,7 @@ public class HintRowTests
     }
 
     /// <summary>
-    /// 上面那条门自己被抓得住：六发注入各喂一次，每一发都必须报出自己那一处，合规那发不报。
+    /// 上面那条门自己被抓得住：七发注入各喂一次，每一发都必须报出自己那一处，合规那发不报。
     /// <para>与本仓同一族做法（<c>..._ReportsTheBreaksItMustCatch</c>）：判据没被跑过，比没有判据更贵。</para>
     /// </summary>
     [Fact]
@@ -391,6 +491,17 @@ public class HintRowTests
         Assert.Contains(
             OwnershipProblems(real, design.Replace("26 句里有 20 句", "26 句里有 19 句", StringComparison.Ordinal)),
             p => p.Contains("19", StringComparison.Ordinal));
+
+        // ⑦ 形态与归属对不上（把「用「,」分隔。」那一句的形态改成 Section）→ 屏幕上那条竖线在说谎。
+        var wrongForm = real.Select(l => l.Contains("`用「,」分隔。`", StringComparison.Ordinal)
+            ? l.Replace("| Field |", "| Section |", StringComparison.Ordinal) : l).ToList();
+        Assert.Contains(OwnershipProblems(wrongForm, design), p => p.Contains("用「,」分隔。", StringComparison.Ordinal));
+
+        // ⑧ 形态与源码第三实参对不上（表里把「分支留空表示主分支。」那一句的归属与形态一起改成
+        //    多字段·上方连续 / Section——归属与形态自洽，只有源码那一头说它是 Field）→ 表与实物各说一套。
+        var wrongSourceForm = real.Select(l => l.Contains("`分支留空表示主分支。`", StringComparison.Ordinal)
+            ? l.Replace("| 字段级·紧邻上一行 | Field |", "| 多字段·上方连续 | Section |", StringComparison.Ordinal) : l).ToList();
+        Assert.Contains(OwnershipProblems(wrongSourceForm, design), p => p.Contains("分支留空表示主分支", StringComparison.Ordinal));
     }
 
     /// <summary>整条判据：表文本 + §6 那一格 → 问题清单（空 = 四方一致）。注入走同一条路，不开第二份判据。</summary>
@@ -407,16 +518,16 @@ public class HintRowTests
         foreach (var line in tableLines)
         {
             var cells = OwnershipCells(line);
-            if (cells.Count != 4)
+            if (cells.Count != 5)
             {
-                problems.Add($"表有一行是 {cells.Count} 格（应为 4 格：屏 / 说明句 / 归属 / 管的编辑位）：{line.Trim()}");
+                problems.Add($"表有一行是 {cells.Count} 格（应为 5 格：屏 / 说明句 / 归属 / 形态 / 管的编辑位）：{line.Trim()}");
                 continue;
             }
 
             // 首格写的是仓内全路径（本节在 G-D5 那一节里，反引号点到的文件必须能落到实物）；
             // 与 CallSites、NativeFile 对账用的键是那一串的文件名。
-            rows.Add(new OwnershipRow(cells[0].Split('/', '\\').Last(), cells[1], cells[2],
-                cells[3].Split('、').Select(s => s.Trim().Trim('`')).Where(s => s.Length > 0).ToArray()));
+            rows.Add(new OwnershipRow(cells[0].Split('/', '\\').Last(), cells[1], cells[2], cells[3],
+                cells[4].Split('、').Select(s => s.Trim().Trim('`')).Where(s => s.Length > 0).ToArray()));
         }
 
         if (problems.Count > 0) return problems;
@@ -425,6 +536,25 @@ public class HintRowTests
         foreach (var kind in rows.Select(r => r.Kind).Where(k => !OwnershipKinds.Contains(k, StringComparer.Ordinal)).Distinct())
         {
             problems.Add($"表里出现没登记的归属写法「{kind}」：{nameof(OwnershipKinds)} 之外的写法不猜含义——一个取值一条源码关系，猜错的那一行整行都不可信。");
+        }
+
+        if (problems.Count > 0) return problems;
+
+        // 形态取值封闭，且与「归属」那一列按同一条对应走（第三百五十二轮）。
+        foreach (var row in rows)
+        {
+            if (row.Form is not ("Field" or "Section"))
+            {
+                problems.Add($"{row.File}「{row.Arg}」的形态写成「{row.Form}」：只认 Field 与 Section 两个取值——"
+                    + "第三个取值等于界面上多出一种没人定义过的形状。");
+                continue;
+            }
+
+            if (row.Form != FormOfKind(row.Kind))
+            {
+                problems.Add($"{row.File}「{row.Arg}」的归属是「{row.Kind}」，形态却写成 {row.Form}（按归属应为 {FormOfKind(row.Kind)}）："
+                    + "形态与归属各说一套，屏幕上那条竖线就在说谎——它标的是「这一句管一块」，而这一句其实只管一行。");
+            }
         }
 
         if (problems.Count > 0) return problems;
@@ -442,7 +572,7 @@ public class HintRowTests
 
             var sourceRows = GridRows(NativeFile(file));
             var hints = sourceRows
-                .Select((row, index) => (row.Kind, row.Text, index))
+                .Select((row, index) => (row.Kind, row.Text, row.Form, index))
                 .Where(x => x.Kind == RowKind.Hint)
                 .ToList();
             var tableRows = rows.Where(r => r.File == file).ToList();
@@ -458,6 +588,14 @@ public class HintRowTests
                 if (tableRows[i].Arg != hints[i].Text)
                 {
                     problems.Add($"{file} 第 {i + 1} 行说的不是源码里那一处出厂的实参：表写「{tableRows[i].Arg}」，源码那一处是「{hints[i].Text}」——逐句表按出厂顺序排，跳序与改字在这里都露出来。");
+                    continue;
+                }
+
+                if (tableRows[i].Form != hints[i].Form)
+                {
+                    problems.Add($"{file} 第 {i + 1} 行（「{tableRows[i].Arg}」）表里记的形态是 {tableRows[i].Form}，"
+                        + $"源码那一处工厂收到的第三个实参是 HintRowForm.{hints[i].Form}——表与实物各说一套，"
+                        + "真机那天按表看的是另一种形状。");
                     continue;
                 }
 
@@ -627,10 +765,10 @@ public class HintRowTests
         foreach (var raw in source.ReplaceLineEndings("\n").Split('\n'))
         {
             var line = raw.Trim();
-            var hint = Regex.Match(line, @"^Ui\.HintRow\(grid, (?<arg>.+)\);$");
+            var hint = Regex.Match(line, @"^Ui\.HintRow\(grid, (?<arg>.+), HintRowForm\.(?<form>Field|Section)\);$");
             if (hint.Success)
             {
-                rows.Add(new SourceRow(RowKind.Hint, Unquote(hint.Groups["arg"].Value)));
+                rows.Add(new SourceRow(RowKind.Hint, Unquote(hint.Groups["arg"].Value), hint.Groups["form"].Value));
                 continue;
             }
 
@@ -657,7 +795,7 @@ public class HintRowTests
 
     private static string FactoryBody()
     {
-        var start = UiSource.IndexOf("static Label HintRow(TableLayoutPanel grid, string text)", StringComparison.Ordinal);
+        var start = UiSource.IndexOf("static Label HintRow(TableLayoutPanel grid, string text, HintRowForm form)", StringComparison.Ordinal);
         Assert.True(start >= 0, "Ui.cs 里没有 HintRow。");
         var end = UiSource.IndexOf("\n    }", start, StringComparison.Ordinal);
         Assert.True(end > start, "Ui.HintRow 切不出方法体边界。");
