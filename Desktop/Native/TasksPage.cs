@@ -81,7 +81,11 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly FlowLayoutPanel _nextHead = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
     private readonly Label _nextTitle = Ui.Body();
     private readonly Label _nextDetail = Ui.Caption();
-    private readonly FlowLayoutPanel _nextActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+    // 四行动作按钮（_nextActions / _scanActions / _generatedActions / _remoteActions）按栏宽折行。
+    // 机制是量出来的（RunDetailReach，wine 96 档）：这一族出厂时行面宽已经等于详情栏那一格（370px），
+    // 不折行时行内却仍按自己算出的单行总宽排（最宽那一行 740px）——夹完不重排，越出行面的按钮被裁掉，
+    // 拖横向滚动条也到不了（宿主的滚动区只认网格边界）。折行让行内按行面宽重排，右边界回到栏内。
+    private readonly FlowLayoutPanel _nextActions = new() { AutoSize = true, WrapContents = true, Margin = new Padding(0) };
 
     // 三阶段进度条（口径在 StageSteps）：三格 ghost 按钮 + 一句「点一下会发生什么」，
     // 点一下滚到对应分区（冻结页面 stepper 点一下切到该阶段页签的同一手势）。
@@ -111,8 +115,8 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Button _openProfileButton = Ui.Ghost(ProfileJump.ButtonLabel);
     private readonly Label _sourceStatus = Ui.StatusText();
     private readonly Label _sourceNumbers = Ui.Mono();
-    private readonly FlowLayoutPanel _scanActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-    private readonly FlowLayoutPanel _generatedActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+    private readonly FlowLayoutPanel _scanActions = new() { AutoSize = true, WrapContents = true, Margin = new Padding(0) };
+    private readonly FlowLayoutPanel _generatedActions = new() { AutoSize = true, WrapContents = true, Margin = new Padding(0) };
     private readonly Button _gapButton;
     private readonly Button _candidatesButton;
     private readonly Button _ruleButton;
@@ -133,7 +137,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Label _contractStatus = Ui.StatusText();
     private readonly Label _remoteStatus = Ui.StatusText();
     private readonly Label _remoteNumbers = Ui.Mono();
-    private readonly FlowLayoutPanel _remoteActions = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+    private readonly FlowLayoutPanel _remoteActions = new() { AutoSize = true, WrapContents = true, Margin = new Padding(0) };
     private readonly Button _importRemoteButton;
     private readonly Button _remoteCheckButton;
     private readonly Button _reloadSwaggerButton;

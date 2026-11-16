@@ -304,6 +304,9 @@ internal static class Program
         Section("极端数据下的详情区与列表（长中文 / 长路径 / 超长错误消息，真实控件）", nameof(RunDetailBreak));
         RunDetailBreak(services, dataRoot);
 
+        Section("详情区动作按钮的横向可达性（每一颗可见按钮的右边界在宿主客户区内且不越出自己那一行的行面 → 滚动宿主不出横向滚动条 → 把详情栏拖窄一档后行面跟着栏走，真实控件量）", nameof(RunDetailReach));
+        RunDetailReach(services, dataRoot);
+
         Section("状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）", nameof(RunStatusFullText));
         RunStatusFullText(services, dataRoot);
 
@@ -7888,6 +7891,268 @@ internal static class Program
             page?.Dispose();
             host?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 任务详情那五行动作按钮的横向可达性（第三百六十二轮，控制仓简报 P0-1 切片三；判据立在第三百四十八轮）。
+    /// <para>
+    /// <b>补的是哪一笔账</b>：第二百七十二轮留下的说法是「其余四行放得下是因为它们各只有两三颗按钮」，
+    /// 那句话本轮按实物改准——四行里三行放不下。96 档量到的是（行面宽 370px 对宿主客户区 402px）：
+    /// 注释缺口那一行 7 颗排到 740px、Apifox 那一行 6 颗排到 624px、生成文档那一行 4 颗排到 440px，
+    /// 越出行面的那 4 / 3 / 1 颗被行面裁掉，而宿主的滚动区只认网格边界（网格宽 402px 就等于宿主客户区宽、
+    /// 本来就没有横向滚动条可拖）——那些按钮不是「在视区之外」，是<b>在这台机器上到不了</b>。
+    /// </para>
+    /// <para>
+    /// <b>机制（第三百六十二轮切片一量出来的那一条）</b>：<c>AutoSize</c> 的 <c>FlowLayoutPanel</c>
+    /// 放进单列 <c>Percent</c> 网格时，栏宽会先按行的首选宽（不折行 = 单行内容总宽）算出来，再夹回宿主给的宽度；
+    /// 夹完<b>不会重排行内</b>，于是按钮停在被夹掉之前的位置上。同一条量出来还有另一半：把网格的宽度上界
+    /// 收到宿主客户区、或把同一个上界发给那几行，右边界都<b>一字不动</b>——因为要动的不是「行有多宽」
+    /// （行面已经等于栏宽），而是「行内按什么宽排」。折行让行内按行面宽重排，右边界回到栏内。
+    /// </para>
+    /// <para>
+    /// <b>为什么这里有两组读数而第三百六十一轮那一组作废</b>：上一轮的 1404 / 780 / 1148px 与本仓的 756 / 456 / 640px
+    /// 量的是同一批按钮的同一个右边界，差别只在算法——<see cref="RightEdgeIn"/> 之外的那种
+    /// <c>宿主.PointToClient(按钮.PointToScreen(...))</c> 会把按钮自己的 <c>Left</c> 加两遍
+    /// （那颗按钮越出父面时偏差正好是它的 <c>Left</c>）。所以这一段的量测口径写在 <see cref="RightEdgeIn"/> 一处，
+    /// 不用屏幕坐标。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判折行之后的观感（一行按钮拆成两三行是不是还像那一屏该有的样子）、
+    /// 也不判真机上详情栏实际排成几行——随 G-D5（真机 0 台）。
+    /// </para>
+    /// </summary>
+    private static void RunDetailReach(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort-reach.json"));
+        var task = tasks.Create(new CreateTaskRequest
+        {
+            ProfileId = profiles.List().First().Id,
+            Name = "横向可达性冒烟",
+        });
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("任务页详情区：五行动作按钮里每一颗可见按钮的右边界都在滚动宿主客户区内、且不越出它自己那一行的行面（真实控件量）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "横向可达性冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    profiles,
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                // 与 RunDetailBreak 同一入口：详情栏的设计宽只在 OnPageShown 里按当前宽度布置一次。
+                page.OnPageShown();
+                Application.DoEvents();
+
+                var list = TaskList(page);
+                var item = list.Items.Cast<ListViewItem>().FirstOrDefault(i => (i.Tag as CheckTask)?.Id == task.Id)
+                    ?? throw new InvalidOperationException("任务清单里找不到刚建的那一行：这一屏没有可量的详情。");
+                item.Selected = true;
+                item.Focused = true;
+                Application.DoEvents();
+
+                var offenders = MeasureRows(page, "出厂栏宽");
+                if (offenders.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "详情区有按钮到不了（越出行面的被行面裁掉、越过宿主的在视区之外）：" + string.Join("、", offenders));
+                }
+            });
+
+            RunAction("任务页详情区：动作按钮按栏宽排好之后，滚动宿主不出横向滚动条（真实控件量）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                var scroll = DetailScrollHost(shown);
+                var display = scroll.DisplayRectangle.Width;
+                var client = scroll.ClientSize.Width;
+                _lines.Add($"     滚动宿主：客户区宽 {client}px、显示区宽 {display}px、横向滚动条 {scroll.HorizontalScroll?.Visible}、AutoScrollPosition {scroll.AutoScrollPosition}");
+                if (scroll.HorizontalScroll?.Visible == true)
+                {
+                    throw new InvalidOperationException($"滚动宿主出了横向滚动条（显示区 {display}px 对客户区 {client}px）：那一屏的动作要靠横向拖动才够得着。");
+                }
+                if (display > client)
+                {
+                    throw new InvalidOperationException(
+                        $"滚动宿主的内容比客户区宽（显示区 {display}px 对客户区 {client}px）：不出滚动条时多出来的那 {display - client}px 上的东西一律不可达。");
+                }
+                if (scroll.AutoScrollPosition.X != 0)
+                {
+                    throw new InvalidOperationException($"滚动宿主横向停在了 {scroll.AutoScrollPosition.X}px 处：本屏没有该横向滚动的内容。");
+                }
+            });
+
+            RunAction("任务页详情区：把详情栏拖窄一档后，每一颗可见按钮的右边界跟着栏走、不跟着内容走（真实控件量）", () =>
+            {
+                if (page is not { } narrow) throw new InvalidOperationException("上一段没有产出任务页。");
+                var scroll = DetailScrollHost(narrow);
+                var clientBefore = scroll.ClientSize.Width;
+                var facesBefore = DetailActionRows(narrow).ToDictionary(row => row, row => row.ClientSize.Width);
+                var split = FindAll<SplitContainer>(page).FirstOrDefault()
+                    ?? throw new InvalidOperationException("任务页里找不到分割面板：拖窄详情栏这一步做不出来。");
+                // 拖到产品允许的最窄详情栏（Panel2MinSize 就是设计里那一栏的下限），用户真能做的动作。
+                split.SplitterDistance = Math.Max(split.Panel1MinSize, split.Width - split.Panel2MinSize - split.SplitterWidth);
+                Application.DoEvents();
+
+                var clientAfter = scroll.ClientSize.Width;
+                if (clientAfter >= clientBefore)
+                {
+                    throw new InvalidOperationException(
+                        $"拖窄详情栏之后宿主客户区没有变窄（{clientBefore}px → {clientAfter}px）：这一段量不到「栏变窄时按钮跟不跟栏」。");
+                }
+
+                var offenders = MeasureRows(narrow, $"详情栏收到最小（宿主客户区 {clientAfter}px，原 {clientBefore}px）");
+                // 「跟着栏走」要量到实物：至少有一行的行面真的随栏变窄了，而不是只有前面那段没红。
+                var narrowed = DetailActionRows(narrow).Count(row => row.ClientSize.Width < facesBefore[row]);
+                if (narrowed == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"详情栏从 {clientBefore}px 收到 {clientAfter}px，可每一行的行面宽一个都没变（{string.Join(" / ", facesBefore.Keys.Select(row => row.ClientSize.Width))}）："
+                        + "行宽还是自己算出来的，不是栏给的。");
+                }
+                if (offenders.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"详情栏收到 {clientAfter}px 后有按钮够不着：" + string.Join("、", offenders));
+                }
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 详情网格所在的滚动宿主（<c>Ui.ScrollHost</c> 出厂的那一块——<c>AutoScroll</c> 与横向滚动条都在它身上，
+    /// 父容器换成别的形状时这一段要跟着改，不能退化成量一个没有滚动语义的 Panel）。
+    /// </summary>
+    private static ScrollableControl DetailScrollHost(TasksPage page) =>
+        DetailGrid(page).Parent as ScrollableControl
+        ?? throw new InvalidOperationException("详情网格的父容器不是可滚动宿主：长内容区那一处工厂换了形状，本段的量测口径要跟着改。");
+
+    /// <summary>
+    /// 详情区里那几行动作按钮（含按钮、且按钮可见的行；横幅头那一行只有标签，不在这一族）。
+    /// </summary>
+    private static List<FlowLayoutPanel> DetailActionRows(TasksPage page)
+    {
+        var rows = DetailGrid(page).Controls.Cast<Control>()
+            .OfType<FlowLayoutPanel>()
+            .Where(row => row.Controls.Cast<Control>().Any(control => control is Button && control.Visible))
+            .ToList();
+        if (rows.Count == 0)
+        {
+            throw new InvalidOperationException("详情区里找不到含按钮的动作按钮行：量测口径可能已失效。");
+        }
+        return rows;
+    }
+
+    /// <summary>
+    /// 逐行逐颗量两个数：相对滚动宿主的右边界（不得越过宿主客户区）、相对自己那一行行面的位置
+    /// （不得越出行面——越出去的按钮被行面裁掉，屏幕上根本没有它）。返回不达标的说明（空 = 合规）。
+    /// <para>
+    /// <b>唯一的例外是三格进度条那一行里「单颗就比栏还宽」的那一颗</b>（第三百六十二轮在 ≈200% 档新量到的：
+    /// 「1 源码注释 · 未扫描（当前）」那颗 367px，而栏宽 353px、最窄栏 294px）——折行帮不了单独一颗，
+    /// 它不是本轮那四行的机制问题，量到就逐颗点名报出来并挂进 <c>docs/DESIGN.md</c> §8，不在本轮的门里判它。
+    /// 例外要同时满足两件事才成立：这一行是进度条那一行（按 <c>StageSteps</c> 的三个阶段名认，
+    /// 不在这里抄第二份字面）、且那颗自己的宽就超过栏宽。96 / 120 两档都不满足例外，
+    /// 所以把四行里任一行的按钮改宽，门当场红。
+    /// </para>
+    /// </summary>
+    private static List<string> MeasureRows(TasksPage page, string when)
+    {
+        var grid = DetailGrid(page);
+        var scroll = DetailScrollHost(page);
+        var client = scroll.ClientSize.Width;
+        var column = grid.ClientSize.Width - grid.Padding.Horizontal;
+        var offenders = new List<string>();
+        var measured = new List<string>();
+        var registered = new List<string>();
+        foreach (var row in DetailActionRows(page))
+        {
+            var buttons = row.Controls.Cast<Control>().OfType<Button>().Where(control => control.Visible).ToList();
+            var rightmost = buttons.Max(control => RightEdgeIn(scroll, control));
+            measured.Add($"行面 {row.ClientSize.Width}×{row.ClientSize.Height}px、{buttons.Count} 颗、最右一颗右边界 {rightmost}px 对宿主 {client}px");
+            foreach (var button in buttons)
+            {
+                var label = button.Text.Length <= 10 ? button.Text : button.Text[..10] + "…";
+                var right = RightEdgeIn(scroll, button);
+                var clipped = button.Right > row.ClientSize.Width + 1 || button.Bottom > row.ClientSize.Height + 1;
+                var unreachable = right > client;
+                if (!clipped && !unreachable) continue;
+                if (IsStageStepRow(row) && button.Width > column)
+                {
+                    registered.Add($"「{label}」宽 {button.Width}px 比栏宽 {column}px 还宽（行面 {row.ClientSize.Width}×{row.ClientSize.Height}px、右边界 {right}px 对宿主 {client}px）");
+                    continue;
+                }
+                if (unreachable) offenders.Add($"「{label}」右边界 {right}px 越过宿主客户区 {client}px");
+                if (clipped) offenders.Add($"「{label}」越出所在行的行面（按钮右 {button.Right}px、底 {button.Bottom}px 对行面 {row.ClientSize.Width}×{row.ClientSize.Height}px）");
+            }
+        }
+        _lines.Add($"     {when}：网格宽 {grid.Width}px、栏宽 {column}px、宿主客户区 {client}px");
+        _lines.Add("     " + string.Join("；", measured));
+        if (registered.Count > 0)
+        {
+            _lines.Add("     量到、按实物挂账（单颗比栏还宽，折行帮不了它；见 docs/DESIGN.md §8）：" + string.Join("、", registered));
+        }
+        return offenders;
+    }
+
+    /// <summary>
+    /// 三格进度条那一行（按 <c>StageSteps</c> 的三个阶段名认，不在这里抄第二份字面）。
+    /// <para>
+    /// <b>为什么还要数按钮个数与顺序</b>：只按「标题里有阶段名」认会把 <c>_nextActions</c> 也认进来——
+    /// 它那颗「跳过，检查 Apifox」的标题里就带着 <c>StageSteps.RemoteLabel</c>。那一行是本轮四行之一，
+    /// 让它落进这一条例外就等于给门开了一个洞，所以再要一道「恰是三格、且第 i 颗说的是第 i 个阶段」。
+    /// </para>
+    /// </summary>
+    private static bool IsStageStepRow(FlowLayoutPanel row)
+    {
+        var buttons = row.Controls.Cast<Control>().OfType<Button>().ToList();
+        var labels = new[] { StageSteps.SourceLabel, StageSteps.GeneratedLabel, StageSteps.RemoteLabel };
+        return buttons.Count == labels.Length
+            && buttons.Zip(labels, (button, label) => button.Text.Contains(label, StringComparison.Ordinal))
+                .All(isStageCell => isStageCell);
+    }
+
+    /// <summary>
+    /// 控件的右边相对某个祖先的水平距离：沿父链逐层累加 <c>Left</c>。
+    /// <para>
+    /// <b>为什么不用屏幕坐标</b>：<c>祖先.PointToClient(控件.PointToScreen(new Point(控件.Right, 0)))</c>
+    /// 会把控件自己的 <c>Left</c> 加两遍——<c>PointToScreen</c> 给的已经是「控件原点 + Right」，
+    /// 换回祖先坐标时又带上了一次控件在祖先里的位置。控件没越出父面时偏差为 0，越出去时偏差正好是它的
+    /// <c>Left</c>：第三百六十一轮那组 1404 / 780 / 1148px 就是这么来的（实物是 756 / 456 / 640px），
+    /// 而那一轮据此判「折行之后仍在 402 之外」，把一片能修的缺陷退回了。
+    /// </para>
+    /// </summary>
+    private static int RightEdgeIn(Control ancestor, Control control)
+    {
+        var x = 0;
+        for (Control? current = control; current is not null && !ReferenceEquals(current, ancestor); current = current.Parent)
+        {
+            x += current.Left;
+        }
+        return x + control.Width;
     }
 
     /// <summary>

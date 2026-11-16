@@ -29,12 +29,13 @@ namespace ApifoxHelper.Tests;
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：① <b>不判那一行在真机上排成几行</b>、也不判那句提示是不是真的落在栏中间——那要读像素，
-/// 是挂着的量测段那一形，随 G-D5；② <b>不判进度条挂在详情网格的第几行</b>（「进度条在横幅之前」已由
-/// <c>StageStepsTests</c> 判住，本类不抄第二份口径）；③ <b>不判另外七处</b> <c>WrapContents = false</c>
-/// 该不该也折行——第二百七十二轮的 critique 结论是「其余四行放得下是因为它们各只有两三颗按钮，
-/// 不是因为那几句被逐行选过」，那几处没量过，本轮不为它们改判据。
-/// 但 ③ 有一个副产品：这一族里「唯一被量过、因此唯一该折行」的那一处若悄悄变成两处，
-/// 下面那条计数会红，逼着改的人先交代另一处的读数从哪来。
+/// 归 <c>RunDetailReach</c> 与 <c>RunDetailBreak</c> 那一族（模拟器量，真机随 G-D5）；② <b>不判进度条挂在详情网格的第几行</b>
+/// （「进度条在横幅之前」已由 <c>StageStepsTests</c> 判住，本类不抄第二份口径）；③ <b>不判「这一行放不放得下」本身</b>——
+/// 写本类的时候详情区那四行动作按钮还没量过，所以计数只认一处；第三百六十二轮量完了（<c>RunDetailReach</c>，
+/// 逐档读数在 <c>docs/DESIGN.md</c> §8），计数随之改成五行。本类钉的仍是那一件旧事：<b>量过的这几行别再退回不折行</b>。
+/// 同一处分法也留给 ≈200% 档新量到的那一处——单独一颗进度格比整栏还宽（367px 对 353px），折行帮不了单独一颗，
+/// 它量出来挂在 §8，不在本类里判。副产品照旧：这一族里被量过的行数与计数不符时，下面那条计数会红，
+/// 逼着改的人先交代读数从哪来。
 /// </para>
 /// </summary>
 public class WrapAndFillTests
@@ -48,8 +49,15 @@ public class WrapAndFillTests
         RegexOptions.Multiline,
         TimeSpan.FromSeconds(2));
 
-    /// <summary>这一族里被量过、因而该折行的那一处——只此一处。</summary>
+    /// <summary>详情区里被量过、因而该折行的那一族（折行开关本身）。</summary>
     private const string WrapsCode = "WrapContents = true";
+
+    /// <summary>
+    /// 该折行的行数：三格进度条那一行（第二百七十二轮量过）+ 四行动作按钮
+    /// （<c>_nextActions</c> / <c>_scanActions</c> / <c>_generatedActions</c> / <c>_remoteActions</c>，
+    /// 第三百六十二轮量过，读数出自冒烟段 <c>RunDetailReach</c>）。
+    /// </summary>
+    private const int WrappedRows = 5;
 
     /// <summary>那句空态提示的三件套：铺满那一格、把内容居中、并且这一格真的挂在右栏上。</summary>
     private const string HintFillsTheCell = "_detailHint.Dock = DockStyle.Fill;";
@@ -144,12 +152,12 @@ public class WrapAndFillTests
         Assert.Single(renamed);
         Assert.Contains("0 处", renamed[0], StringComparison.Ordinal);
 
-        // ⑧ 顺手把另一处也折行：那一处本轮没量过，改的人得先交代读数从哪来。
-        var secondWrap = StepperProblems(current.Replace(
-            "FlowLayoutPanel _nextActions = new() { AutoSize = true, WrapContents = false",
-            $"FlowLayoutPanel _nextActions = new() {{ AutoSize = true, {WrapsCode}"));
-        Assert.Single(secondWrap);
-        Assert.Contains("2 处", secondWrap[0], StringComparison.Ordinal);
+        // ⑧ 把五行里的一行退回不折行（第三百六十二轮量过的那四行里的一行）：计数那条要红。
+        var oneRowBack = StepperProblems(current.Replace(
+            "FlowLayoutPanel _remoteActions = new() { AutoSize = true, WrapContents = true",
+            "FlowLayoutPanel _remoteActions = new() { AutoSize = true, WrapContents = false"));
+        Assert.Single(oneRowBack);
+        Assert.Contains("4 处", oneRowBack[0], StringComparison.Ordinal);
     }
 
     /// <summary>去掉注释的界面源码：注释里点名 <c>WrapContents</c> 是在说明理由，不是在接线。</summary>
@@ -188,12 +196,15 @@ public class WrapAndFillTests
         }
 
         var wrapped = CodeScan.CountContaining(tasks, WrapsCode);
-        if (wrapped != 1)
+        if (wrapped != WrappedRows)
         {
             problems.Add(
-                $"这一份源码里有 {wrapped} 处「{WrapsCode}」，而被量过因而该折行的只有三格进度条那一处："
-                + "其余几处各只有两三颗按钮，放得下不是因为那几句被逐行选过（第二百七十二轮 critique 那一节）。"
-                + "另一处确实要折行，先量过再把这一条改成两处，并写明那一处的读数出自哪一跑。");
+                $"这一份源码里有 {wrapped} 处「{WrapsCode}」（应是 {WrappedRows} 处）：详情区该折行的是这五行——三格进度条那一行，"
+                + "加上 _nextActions / _scanActions / _generatedActions / _remoteActions 四行动作按钮。"
+                + "后四行是第三百六十二轮量出来的：96 档它们各自的行面宽已经等于栏宽（370px），行内却仍按自己算出的单行总宽排"
+                + "（740 / 624 / 440px），越出行面的那几颗按钮被行面裁掉、拖横向滚动条也到不了（读数出自冒烟段 RunDetailReach，"
+                + "逐档的数见 docs/DESIGN.md §8「任务页按钮行的横向可达性」那一行）。"
+                + "少一处就得先给那一行一份新的右边界读数，别把折行改回去而让门只看到计数。");
         }
 
         return problems;

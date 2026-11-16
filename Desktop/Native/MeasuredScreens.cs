@@ -142,6 +142,10 @@ internal static class MeasuredScreens
         new("检查任务页详情区（超长任务名 / 路径 / 错误消息）", "RunDetailBreak",
             ["TasksPage"], true, "第一百五十九轮",
             "docs/NOTES.md 第一百五十九轮：120 字任务名、两段各 60 字路径、334 字错误消息落进真实产品数据后逐行量详情区"),
+        new("检查任务页详情区动作按钮的横向可达性", "RunDetailReach",
+            ["TasksPage"], true, "第三百六十二轮",
+            "docs/DESIGN.md 第三百六十二轮：逐行逐颗量「按钮相对滚动宿主的右边界」与「有没有越出自己那一行的行面」，"
+            + "三档各 409 通过 / 0 失败；同一段另量到 ≈200% 档单独一颗进度格比整栏还宽那一处（挂账在同一行）"),
         new("状态行完整错误入口（页面侧）", "RunStatusFullText",
             ["ProjectsPage", "TasksPage"], true, "第一百六十五轮",
             "docs/NOTES.md 第一百六十五轮：短句放得下不给入口、真实失败长句放不下才给、点开正文与状态行逐字相同"),
