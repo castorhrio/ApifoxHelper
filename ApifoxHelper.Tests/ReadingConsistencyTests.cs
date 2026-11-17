@@ -72,12 +72,47 @@ public class ReadingConsistencyTests
     /// <summary>句子边界：句号、换行、表格单元格分隔符。</summary>
     private static readonly char[] SentenceBreaks = ['。', '\n', '|'];
 
-    /// <summary>一处读数所在的句子（前后各切到最近的句子边界）。</summary>
-    private static string SentenceAround(string text, Match match)
+    /// <summary>那一处读数所在的句子范围（下标左闭右开，与 <see cref="SentenceAround"/> 同一取法）。</summary>
+    private static (int Start, int End) SentenceBounds(string text, Match match)
     {
         var start = text.LastIndexOfAny(SentenceBreaks, Math.Max(0, match.Index - 1));
         var end = text.IndexOfAny(SentenceBreaks, match.Index + match.Length);
-        return text[(start + 1)..(end < 0 ? text.Length : end)];
+        return (start + 1, end < 0 ? text.Length : end);
+    }
+
+    /// <summary>一处读数所在的句子（前后各切到最近的句子边界）。</summary>
+    private static string SentenceAround(string text, Match match)
+    {
+        var (start, end) = SentenceBounds(text, match);
+        return text[start..end];
+    }
+
+    /// <summary>散文里的轮次字面（与上面判「有没有说轮次」那半句用同一个形状）。</summary>
+    private static readonly Regex RoundAttribution = new(@"第[一二三四五六七八九十百零]+轮", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 离那一处读数<b>最近</b>的轮次（同句之内），没有则 null。
+    /// <para>
+    /// <b>为什么不是「同句里第一处」</b>：G-D5 那一格里「第一百六十七轮 wine 三档 135/0 ×3（模拟器，不是真机）；
+    /// <b>读数更新（第三百七十六轮）：当前源码三档 418 通过 / 0 失败 ×3</b>…」是<b>同一句</b>（句子按
+    /// <c>。 | \n</c> 切，那里只隔一个分号）——取第一处就把当前读数归到那笔历史读数上，红的是门自己判错。
+    /// 取最近的那一处，归的才是那句话真正拿来标注这笔读数的轮次。
+    /// </para>
+    /// </summary>
+    private static string? NearestRound(string text, int start, int end, int reading)
+    {
+        string? nearest = null;
+        var best = int.MaxValue;
+        foreach (Match m in RoundAttribution.Matches(text, start))
+        {
+            if (m.Index >= end) break;
+            var distance = Math.Abs(m.Index - reading);
+            if (distance >= best) continue;
+            best = distance;
+            nearest = m.Value;
+        }
+
+        return nearest;
     }
 
     /// <summary>
@@ -91,6 +126,29 @@ public class ReadingConsistencyTests
     /// <b>判据</b>：同一句里必须出现「当前源码」或「第…轮」。历史读数本来就该各不相同（135 / 180 / 200 / 206 / 208），
     /// 所以这里<b>不拉平数字</b>，只要求每一处都说清自己是谁的读数。
     /// </para>
+    /// <para>
+    /// <b>第三百八十一轮在同一句判据上扩的那一句（简报 P0-2）：那一笔「当前源码」读数只允许有一个轮次归属</b>。
+    /// 上面那半只判「<b>有没有</b>说轮次」，判不到「<b>说的是不是同一轮</b>」——第三百七十八轮重烧之后，
+    /// <c>README.md</c>「已知限制」第 3 条与 <c>docs/NOTES.md</c> 的 G-D5 那一行都还写着「第三百七十六轮」，
+    /// 而那一跑真正的归属是第三百七十八轮；三处字面各自都「有轮次」，这一族没有一条门看得见。
+    /// 现在补的是这一件事：顶部「真机供给状态」那一段里的<b>那一行</b>（<see cref="LastFullRunEntry"/>，
+    /// 唯一落点）念的轮次，必须与 <c>README.md</c> 全文、与「G-D5 真机观感」那一行里
+    /// 凡把某笔三档读数念成「当前源码」<b>并且点了轮次</b>的每一句逐字相同（比的轮次取<b>同句里离那一处
+    /// 读数最近的那一处</b>，见 <see cref="NearestRound"/>——那一格里还写着别轮的旧读数）；那一行念的日期与指纹，
+    /// 必须逐字等于 <c>.winecheck/defense.txt</c> 的 <c>date=</c> / <c>source=</c>——那两行由
+    /// <c>defense-day.sh</c> 四步走完自己写出，不是手抄，于是「文档说的那一跑」被接到「机器记的那一跑」上。
+    /// <b>范围</b>：README.md 全文、「G-D5 真机观感」那一行，以及 NOTES 里每一处用那两句「当前读数」形状
+    /// （<c>当前源码最近一次三档复跑为</c> 与 <c>读数更新（</c>）的地方——本轮改准时一共六处：
+    /// README「已知限制」第 3 条、验收表 G-D3 / G-D4 / G-D5 三格、G-D4 详细口径那一行、G-D5 详细口径那一行。
+    /// 那几句才是「被当成当前读数念出来」的地方；逐轮日志的散文不用那两句形状，历史轮次照旧不拉平——
+    /// 而且扫描在账本那第一个 <c>## 第…轮</c> 标题之前停住（<see cref="LedgerStartLine"/>：账本里会原样引用
+    /// 改准前那句字面，那是那一轮那一跑的账，不是当前声称）。
+    /// 这一族要一起改这件事，第三百四十五轮那一行账已经写过（「同一族跟着改的三处归属」），
+    /// 本轮起它从散文变成可判。
+    /// <b>它不判什么</b>：不判那个轮次号写得对不对（门读不到 <c>git log</c>，判的是「三处说法一致 +
+    /// 那一跑的日期与指纹确由脚本写出」），也不判那一跑是不是真跑出来的——与 <c>reading.txt</c>
+    /// 那一条固有边界同一口径（见本类注释）。
+    /// </para>
     /// </summary>
     [Fact]
     public void EveryThreeTierReading_IsAttributedToARoundOrTheCurrentSource()
@@ -103,7 +161,7 @@ public class ReadingConsistencyTests
             {
                 var sentence = SentenceAround(text, m);
                 if (sentence.Contains("当前源码", StringComparison.Ordinal)) continue;
-                if (Regex.IsMatch(sentence, @"第[一二三四五六七八九十百零]+轮")) continue;
+                if (RoundAttribution.IsMatch(sentence)) continue;
                 unattributed.Add($"{file}：{sentence.Trim()}");
             }
         }
@@ -112,6 +170,123 @@ public class ReadingConsistencyTests
             "这些三档读数没说清是哪一轮的（同一句里既没有「当前源码」也没有「第…轮」）："
             + string.Join(" ／ ", unattributed)
             + "。历史读数本来就各不相同，但每一处都得说清自己是谁的读数——否则它会被读成第二个当前读数。");
+
+        // —— 第三百八十一轮（简报 P0-2）：同一笔「当前源码」读数只允许有一个轮次归属 ——
+        var run = LastFullRunAttribution();
+        var defense = DefenseRecordFile();
+        var drift = new List<string>();
+        if (run.Date != defense.Date)
+        {
+            drift.Add($"顶部那一行念的日期是 {run.Date}，而 {DefenseRecordPath} 的 date= 是 {defense.Date}");
+        }
+        if (!defense.Source.StartsWith(run.Fingerprint, StringComparison.Ordinal))
+        {
+            drift.Add($"顶部那一行念的指纹是 {run.Fingerprint}…，而 {DefenseRecordPath} 的 source= 是 {Short(defense.Source)}");
+        }
+
+        var attributed = 0;
+        // 范围就是「被当成当前读数念出来」的那几处：README 全文、G-D5 那一行，
+        // 以及 NOTES 里每一处用那两句「当前读数」形状（「当前源码最近一次三档复跑为」、「读数更新（」）的地方
+        // ——第三百四十五轮那一条账把这几处点成「同一族跟着改的三处归属」。
+        // 逐轮日志里的散文不用那两句形状，照旧不在范围内。
+        var scopes = new List<(string Label, string Text)>
+        {
+            ("README.md", Repo.Source("README.md")),
+            ("docs/NOTES.md 的 G-D5 行", Gd5Row()),
+        };
+        scopes.AddRange(Repo.Source("docs", "NOTES.md").Split('\n')
+            .Take(LedgerStartLine())
+            .Select((line, i) => (Line: i + 1, Text: line, Phrase: CurrentClaimPhrases.FirstOrDefault(
+                p => line.Contains(p, StringComparison.Ordinal))))
+            .Where(s => s.Phrase is not null)
+            .Select(s => ($"docs/NOTES.md:{s.Line}「{s.Phrase}」那一行", s.Text)));
+
+        foreach (var (label, text) in scopes)
+        {
+            foreach (Match m in CurrentReading.Matches(text))
+            {
+                var (start, end) = SentenceBounds(text, m);
+                var round = NearestRound(text, start, end, m.Index);
+                if (round is null) continue;
+                attributed++;
+                if (round != run.Round)
+                {
+                    drift.Add($"{label} 把那一笔当前源码读数归到 {round}，顶部那一行归的是 {run.Round}");
+                }
+            }
+        }
+
+        // 地板：至少有一处把当前读数归到某轮——把轮次删光不算「对上了」。
+        Assert.True(attributed >= 1,
+            "那一族里（README.md 全文、G-D5 那一行、NOTES 里每一处「当前源码最近一次三档复跑为」）没有任何一处"
+            + "把那笔当前读数归到某轮：顶部那一行没有对照物，把轮次删光就能绿。");
+
+        Assert.True(drift.Count == 0,
+            "「最近一次三档整支跑是哪一轮、哪一天、哪一版源码」在这几处不是同一个答案："
+            + string.Join(" ／ ", drift)
+            + "。改法是现读 `.winecheck/defense.txt` 的 date= / source= 与那一跑自己的轮次，把三处一起改成同一个——"
+            + "别只改被点到的那一处，更别把轮次号改成没跑过的日子（重烧一次：PUBLISH=1 bash .winecheck/defense-day.sh）。");
+    }
+
+    /// <summary>
+    /// 顶部「真机供给状态」那一段里那一行的<b>行首形状</b>——「最近一次三档整支跑是哪一轮」的唯一落点。
+    /// <para>
+    /// <b>为什么锚在行首而不是找子串</b>：下面逐轮账本里会把那一行<b>原样引一次</b>（第三百八十一轮那条就是这么
+    /// 念的）——那是引用，不是第二个落点。只认「列表项 + 加粗起头是这一句」那种行。
+    /// </para>
+    /// </summary>
+    private static readonly Regex LastFullRunEntry = new(
+        @"^\s*>?\s*-\s+\*\*最近一次三档整支跑", RegexOptions.Compiled);
+
+    /// <summary>
+    /// NOTES 里那种「把某笔三档读数念成当前读数」的两句既有形状（第三百四十五轮那一条账点名的那一族归属，
+    /// 「读数更新（」那一句形是 G-D5 详细口径那一节用的）。
+    /// 讲惯例本身的那两句（写成「读数更新（第 N 轮）」）不会被扫到：<c>N</c> 不是中文数字，那两句里也没有读数。
+    /// </summary>
+    private static readonly string[] CurrentClaimPhrases = ["当前源码最近一次三档复跑为", "读数更新（"];
+
+    /// <summary>逐轮账本的开头：NOTES 里第一处 <c>## 第…轮</c> 标题——那以下每一行都是「某一轮那一跑」的账。</summary>
+    private static readonly Regex RoundLedgerHeading = new(@"^## 第[一二三四五六七八九十百零]+轮", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 账本从第几行开始（找不到标题就当作没有账本，返回全文长度）。
+    /// <para>
+    /// <b>为什么范围要在账本之前停住</b>：账本里会<b>原样引用</b>红消息与旧说法——第三百八十一轮那条就逐字引了
+    /// 「读数更新（第三百七十六轮）：当前源码三档 418 通过 / 0 失败 ×3」那一处改准前的字面。
+    /// 那种句子带着「当前读数」的形状，但它属于<b>那一轮那一跑</b>，按本文件从头到尾的边界（历史读数不拉平）
+    /// 不该被当成当前声称——不停住，门就会把「把当时那一红记下来」这件事判成又一处漂移。
+    /// </para>
+    /// </summary>
+    private static int LedgerStartLine()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").Split('\n');
+        var at = Array.FindIndex(lines, l => RoundLedgerHeading.IsMatch(l));
+        return at < 0 ? lines.Length : at;
+    }
+
+    /// <summary>那一行必须一起说全的三样：轮次、日期、指纹前 10 位（形状写歪即红，不许只留一句好看的话）。</summary>
+    private static readonly Regex LastFullRunShape = new(
+        @"\*\*最近一次三档整支跑[^\n]*?：(?<round>第[一二三四五六七八九十百零]+轮) · (?<date>\d{4}-\d{2}-\d{2}) · 指纹 `(?<fp>[0-9a-f]{10})…",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// 读顶部那一行（第三百八十一轮）。读到 0 处即红（那一跑没有落点），读到 2 处以上即红
+    /// （「最近一次」有了两个答案），三样缺一即红。
+    /// </summary>
+    private static (string Round, string Date, string Fingerprint) LastFullRunAttribution()
+    {
+        var hits = Repo.Source("docs", "NOTES.md").Split('\n')
+            .Where(l => LastFullRunEntry.IsMatch(l)).ToList();
+        Assert.True(hits.Count == 1,
+            $"顶部「真机供给状态」那一段里那一行（列表项加粗起头「最近一次三档整支跑」）读到 {hits.Count} 处，要的是恰好一处："
+            + "「最近一次三档整支跑是哪一轮、哪一天、哪一版源码」要么没有落点，要么有了两个答案。");
+
+        var m = LastFullRunShape.Match(hits[0]);
+        Assert.True(m.Success,
+            "那一行没有按「**最近一次三档整支跑…：第 N 轮 · YYYY-MM-DD · 指纹 `hex…`」把三样一起说全："
+            + hits[0].Trim()
+            + "。轮次 / 日期 / 指纹少任何一样，这一跑都追不回去。");
+        return (m.Groups["round"].Value, m.Groups["date"].Value, m.Groups["fp"].Value);
     }
 
     /// <summary>
