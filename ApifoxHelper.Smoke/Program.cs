@@ -8140,6 +8140,45 @@ internal static class Program
                         + "动作做完之后用户被拉回屏顶，看不见刚做完那一步的结果。");
                 }
             });
+
+            // 键盘路径（第三百七十一轮）：上一轮那两段换任务走的是程序化选中（SelectTaskRow 里 item.Selected = true），
+            // 而用户换任务最常用的动作是键盘——方向键与 End 在清单上换行。归位若只对鼠标点选成立，
+            // 键盘换任务时新任务的头仍在屏外，那一条规矩就只成立了一半。这一段真的按一次 End。
+            RunAction("任务页详情区：用真实按键在清单里换任务（End 跳到末行），详情同样回到顶部（键盘路径，真实键）", () =>
+            {
+                if (page is not { } shown || host is not { } window)
+                {
+                    throw new InvalidOperationException("上一段没有产出任务页。");
+                }
+                var list = TaskList(shown);
+                if (list.Items.Count < 2)
+                {
+                    throw new InvalidOperationException(
+                        $"任务清单只有 {list.Items.Count} 行：这一段量不到「用键盘换到另一个任务」。");
+                }
+                var before = list.SelectedItems.Count == 1 ? list.SelectedItems[0] : null;
+                var scrolled = ScrollDetailToBottom(shown);
+                PressKey(window, list, "{END}");
+                var focused = list.FocusedItem
+                    ?? throw new InvalidOperationException(
+                        "按了 End 之后清单里没有焦点行：键盘没落在清单上，这一段量不到键盘换任务。");
+                if (ReferenceEquals(focused, before))
+                {
+                    throw new InvalidOperationException(
+                        $"按了 End 之后焦点行仍是原来那一行（第 {focused.Index} 行）：清单没接这个键，"
+                        + "这一段量不到「用键盘换任务」。");
+                }
+                var offset = DetailScrollHost(shown).AutoScrollPosition.Y;
+                if (offset != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"用键盘换到第 {focused.Index} 行之后详情仍停在 {offset}px 处（滚到底那一笔是 {scrolled}px）："
+                        + "归位只对鼠标点选成立，键盘换任务时新任务的头仍在屏外。");
+                }
+                _lines.Add(
+                    $"     键盘换任务：按一次 End 从第 {before?.Index} 行换到第 {focused.Index} 行，"
+                    + $"详情回到顶部（滚到底那一笔是 {scrolled}px）");
+            });
         }
         finally
         {

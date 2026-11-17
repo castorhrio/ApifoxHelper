@@ -28,7 +28,11 @@ namespace ApifoxHelper.Tests;
 /// 多一次赋值就意味着「没有选中任务时把它抹掉」，而那会让刷新也归位（抹掉之后重建时条件必然成立）；
 /// ③ 详情滚动的落点全文件只有两处（归位一处、点阶段跳分区一处），不多不少；
 /// ④ 冒烟段 <c>RunDetailScrollReset</c> 注册在案（冒烟器与 <c>MeasuredScreens</c> 两处），
-/// 且段体里真的把详情滚到底、真的换一行选中、真的读回滚动位置，<b>并反过来量「刷新同一个任务不抹掉当前位置」</b>。
+/// 且段体里真的把详情滚到底、真的换一行选中、真的读回滚动位置，<b>并反过来量「刷新同一个任务不抹掉当前位置」</b>；
+/// ⑤ 换任务那一半<b>键盘路径也量过</b>（第三百七十一轮）：段体里真的按一次 <c>End</c>（<c>PressKey</c>）——
+/// 程序化选中（<c>item.Selected = true</c>）与用户按方向键换行走的是同一条 <c>SelectedIndexChanged</c>，
+/// 但「键盘真的落在清单上、这个键真的换得动行」只有按一次才知道；只量程序化选中时，
+/// 归位在键盘换任务上是否成立没人量过。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判「归位在真机上看起来顺不顺眼」——那要 Windows 真机（G-D5，真机 0 台）；
@@ -55,10 +59,11 @@ public class DetailScrollResetTests
     /// 上面那段判据<b>自己</b>被抓得住：四发注入各喂一次，每一发都必须报出自己那一处。
     /// <para>
     /// 本仓的教训是「判据自己没被跑过」比「没有判据」更贵（第二百零九轮那两处假变异、第二百四十三轮
-    /// M4 那一发假绿）。四发分别是：① 归位去掉条件（每次刷新都归位——用户做完动作被拉回屏顶）；
+    /// M4 那一发假绿）。五发分别是：① 归位去掉条件（每次刷新都归位——用户做完动作被拉回屏顶）；
     /// ② 删掉「记下位置属于哪一个任务」那一笔（条件恒成立，同上一发）；
     /// ③ 没有选中任务时把那一笔抹掉（重建时条件必然成立，刷新也跟着归位）；
-    /// ④ 合规写法（不报）。
+    /// ④ 删掉真实按键那一行（键盘换任务那一半没人量过，第三百七十一轮补的那一发）；
+    /// ⑤ 合规写法（不报）。
     /// </para>
     /// </summary>
     [Fact]
@@ -93,6 +98,13 @@ public class DetailScrollResetTests
         Assert.NotEqual(TasksPage, clearedOnNone);
         Assert.Contains(Problems(clearedOnNone, Smoke),
             p => p.Contains("只赋值一次", StringComparison.Ordinal));
+
+        // ⑤ 键盘路径那一半没量：把真实按键那一行删掉（只剩程序化选中），
+        //    归位在「用户按方向键 / End 换任务」上是否成立就没人量过了。
+        var noKey = Smoke.Replace("PressKey(window, list, \"{END}\");", "", StringComparison.Ordinal);
+        Assert.NotEqual(Smoke, noKey);
+        Assert.Contains(Problems(TasksPage, noKey),
+            p => p.Contains("PressKey", StringComparison.Ordinal));
     }
 
     /// <summary>逐条对账，返回每一处对不上的说明（空 = 对得上）。</summary>
@@ -162,6 +174,8 @@ public class DetailScrollResetTests
                      "RefreshData",        // 真的走一次刷新（反向那一半）
                      "SelectTaskRow",      // 真的换一行选中
                      "ScrollDetailToBottom", // 真的把详情滚到底
+                     "PressKey",           // 键盘路径：真的按一次键（第三百七十一轮）
+                     "{END}",              // 按的是「跳到末行」那一个键，不是随便一个键
                  })
         {
             if (!segment.Contains(needed, StringComparison.Ordinal))

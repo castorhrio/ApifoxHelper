@@ -14,6 +14,19 @@ apphost 会把 `ApplicationIcon` 重新编码成 PE 的 `RT_GROUP_ICON` / `RT_IC
     dotnet publish ApifoxHelper.csproj -c Release -r win-x64 --self-contained -o /tmp/ah-app-pub
     python3 Assets/check-apphost-icon.py /tmp/ah-app-pub/ApifoxHelper.exe Assets/app.ico
 
+`publish.ps1` 的两条发布路径（第三百七十一轮按控制仓简报 P0-2 逐条对过账）：
+自包含单文件与 framework-dependent 各发一次，两条路径的 `.exe` 都逐字节相同（55918 字节、8 条）。
+两条路径的参数与 `publish.ps1` 里那两组逐字相同，改脚本时这里要跟着改：
+
+    dotnet publish ApifoxHelper.csproj -c Release -r win-x64 --self-contained true \
+        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none \
+        -p:AllowedReferenceRelatedFileExtensions=none -p:EnableCompressionInSingleFile=true -o /tmp/ah-pub-sc
+    dotnet publish ApifoxHelper.csproj -c Release -r win-x64 --self-contained false \
+        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none \
+        -p:AllowedReferenceRelatedFileExtensions=none -o /tmp/ah-pub-fx
+    python3 Assets/check-apphost-icon.py /tmp/ah-pub-sc/ApifoxHelper.exe Assets/app.ico
+    python3 Assets/check-apphost-icon.py /tmp/ah-pub-fx/ApifoxHelper.exe Assets/app.ico
+
 退出码 `0` = 逐字节相同；`1` = 不同（逐条报出差在哪一档）；`2` = 用法错。
 **它是一次量测，不是常驻门**：跑它要一次 `dotnet publish`（要还原、要 win-x64 运行时包），
 放进 `dotnet test` 会把一条静态门变成一次几分钟的构建。读数记在 `docs/DESIGN.md` §8「品牌资产」那一格
@@ -22,7 +35,7 @@ apphost 会把 `ApplicationIcon` 重新编码成 PE 的 `RT_GROUP_ICON` / `RT_IC
 它不判什么
 ----------
 不判这颗图标在任务栏 / 标题栏 / 资源管理器里真机上是什么观感（那要 Windows 真机，G-D5 仍 `[ ]`）；
-也不判 `publish.ps1` 那一支的安装包产物（那是另一条路径，另一次构建）。
+也不判安装包（`.msi` / 压缩包）那一层——本仓没有打包步骤，`publish.ps1` 交出去的就是这两个目录里的 `.exe`。
 """
 import struct
 import sys
