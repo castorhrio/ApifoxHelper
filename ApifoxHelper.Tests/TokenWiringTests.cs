@@ -113,8 +113,15 @@ public class TokenWiringTests
 
     // ── DESIGN.md 解析 ────────────────────────────────────────────────────
 
-    /// <summary>§2 颜色表：`名` | `#RRGGBB`（Accent 行带粗体标记，一并容许）。</summary>
-    private static Dictionary<string, string> DocColors() =>
+    /// <summary>
+    /// §2 颜色表：`名` | `#RRGGBB`（Accent 行带粗体标记，一并容许）。
+    /// <para>
+    /// 这是「§2 那张表」在测试工程里的<b>唯一取法</b>，所以是 <c>internal</c> 而不是 <c>private</c>：
+    /// 品牌资产那一族（<c>AppIconTests</c>）要对的也是这一个 Accent，各写一把正则的结果不是重复四行字，
+    /// 是改了 §2 那一行只有一边会红。
+    /// </para>
+    /// </summary>
+    internal static Dictionary<string, string> DocColors() =>
         Regex.Matches(Repo.DesignSection(2), @"`(\w+)`\s*(?:\*\*)?\s*\|\s*(?:\*\*)?`#([0-9A-Fa-f]{6})`")
             .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
 
