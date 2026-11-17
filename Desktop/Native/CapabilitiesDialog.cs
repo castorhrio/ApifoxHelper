@@ -48,6 +48,17 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
     private bool _checking;
     private JobInfo? _probeJob;
     private bool _probeShown;
+    /// <summary>
+    /// 已经为哪一次探测请求过停止（第三百八十八轮）：取消是协作式的，从点下「停止」到真的停住那一段，
+    /// 进度行要说 <see cref="JobOutcome.StoppingText"/> 那一句，而不是继续念「正在写入兼容探测…」。
+    /// 写它一处（<c>RequestStop</c>）、清它一处（<c>ShowProbeRunning(null)</c>）。
+    /// </summary>
+    private string? _stopRequestedJobId;
+    /// <summary>
+    /// 探测这一作业的<b>种类</b>唯一落点：起作业时传给 <c>JobRunner</c> 的是它，进度行那句「正在…」「正在停止…」
+    /// 里出现的也是它。两处必须是同一个字面——那一行报的作业名说的就是屏上这颗钮正在停的那一次。
+    /// </summary>
+    private const string ProbeKind = "写入兼容探测";
 
     public CapabilitiesDialog(CompatService compat, FileStore store, JobRunner jobs, ProjectProfile profile)
     {
@@ -75,7 +86,7 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         _runButton = Ui.Primary("运行写入探测");
         _runButton.Click += (_, _) => RunProbe();
         _stopButton = Ui.DangerGhost("停止");
-        _stopButton.Click += (_, _) => _jobs.Cancel(_scope);
+        _stopButton.Click += (_, _) => RequestStop();
         _stopButton.Visible = false;
         _progress.Visible = false;
         _progress.Margin = new Padding(UiTokens.Md, 0, 0, 0);
@@ -266,7 +277,7 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         var workDir = Path.Combine(_store.CompatDir, "probe-" + DateTimeOffset.Now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
         try
         {
-            _jobs.Start(_scope, "写入兼容探测", async job => await _compat.ProbeAsync(_profile, request, workDir, job.Token));
+            _jobs.Start(_scope, ProbeKind, async job => await _compat.ProbeAsync(_profile, request, workDir, job.Token));
         }
         catch (UserException ex)
         {
@@ -283,20 +294,44 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         _resultHint.ForeColor = UiTokens.Muted;
         _checks.Visible = false;
         _checks.Items.Clear();
-        ShowProbeRunning(true);
+        ShowProbeRunning(_jobs.Running(_scope));
         OnTick();
     }
 
     /// <summary>探测执行中：输入禁用、运行钮换成停止（位置固定不跳位），状态行显示进行中说明。</summary>
-    private void ShowProbeRunning(bool running)
+    private void ShowProbeRunning(JobInfo? job)
     {
+        var running = job is not null;
         _runButton.Visible = !running;
         _stopButton.Visible = running;
         _progress.Visible = running;
-        _progress.Text = "正在写入兼容探测…（逐项写入并回读核对，需要一些时间）";
+        // 这一处每个轮询周期都走（OnTick 里），所以停止的请求记在字段里、由这一处读——
+        // 只在点击那一刻改文字，半秒后就被这一行抹回去了。
+        // 先问「有没有一个作业在跑」再比 Id：两个 null 相等不是「请求过停止」，而是「什么都没在跑」。
+        var stoppingRequested = job is not null && _stopRequestedJobId == job.Id;
+        _progress.Text = JobOutcome.StoppingText(job?.Kind ?? ProbeKind, stoppingRequested)
+            ?? $"正在{ProbeKind}…（逐项写入并回读核对，需要一些时间）";
         _progress.ForeColor = UiTokens.Text;
         if (running) _statusHost.SetText("", _status.ForeColor);
+        if (!running) _stopRequestedJobId = null;
         RefreshRunState();
+    }
+
+    /// <summary>
+    /// 点下「停止」：请求由 <c>JobRunner.Cancel</c> 收下，进度行当场就得换一句话。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：探测会在测试接口上写三段内容再逐项回读，中途停下要先恢复说明，
+    /// 这一段本来就要时间。此前点下去之后那一行照旧念「正在写入兼容探测…」，一个字都不变，
+    /// 用户看不出那一击有没有被收到——而这一屏的说明行写的正是「需要一些时间」。
+    /// </para>
+    /// <para>没有探测在跑时 <c>Cancel</c> 答 false（那颗钮本就只在跑着时可见），什么都不记。</para>
+    /// </summary>
+    private void RequestStop()
+    {
+        if (_jobs.Running(_scope) is not { } job || !_jobs.Cancel(_scope)) return;
+        _stopRequestedJobId = job.Id;
+        // 走的是轮询每周期都走的那一处：文字只在那一处拼，重画与定时重画不会是两套说法。
+        ShowProbeRunning(job);
     }
 
     private void OnTick()
@@ -306,12 +341,12 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         {
             _probeJob = job;
             _probeShown = true;
-            ShowProbeRunning(true);
+            ShowProbeRunning(job);
             return;
         }
         if (!_probeShown) return;
         _probeShown = false;
-        ShowProbeRunning(false);
+        ShowProbeRunning(null);
         FinishProbe(_probeJob);
         _probeJob = null;
     }

@@ -43,6 +43,12 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     private SyncPlan? _plan;
     private JobInfo? _job;
     private bool _busy;
+    /// <summary>
+    /// 已经为哪一个作业请求过停止（第三百八十八轮）：点下「停止」到作业真的在当前动作之后停住之间有一段，
+    /// 那一段里状态行要说「正在停止…」，而不是继续念「正在执行同步… 40%」。按<b>作业</b> Id 记，
+    /// 起一次作业与结束一次作业都清掉（<see cref="SetBusy"/>），不把上一次的请求带给下一次。
+    /// </summary>
+    private string? _stopRequestedJobId;
 
     // 勾选页（生成计划前的接口选择）。
     private readonly Label _selectHint = new()
@@ -308,7 +314,7 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _backButton.Click += (_, _) => ShowSelectPage();
         _stopButton = Ui.DangerGhost("停止");
         _stopButton.Visible = false;
-        _stopButton.Click += (_, _) => _jobs.Cancel(_taskId);
+        _stopButton.Click += (_, _) => RequestStop();
         _closeButton = Ui.Ghost("关闭");
         _closeButton.Click += (_, _) => Close();
         AcceptButton = _closeButton;
@@ -853,6 +859,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     private void SetBusy(bool busy)
     {
         _busy = busy;
+        // 起一次作业与结束一次作业都不该把上一次的停止请求带过去：这一屏的忙闲只在这一个落点变，
+        // 那一笔就也只在这里清（RequestStop 是唯一写它的地方）。
+        _stopRequestedJobId = null;
         // 两颗批量按钮的启停各在一处判定（第二百八十七轮「清空」、第二百九十五轮「全选可同步」）：
         // 忙的时候两条入口一起闭，不忙时再问「有没有可动的东西」。
         RefreshSelectAllButton();
@@ -953,13 +962,38 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _timer.Start();
     }
 
+    /// <summary>
+    /// 点下「停止」：请求由 <c>JobRunner.Cancel</c> 收下，屏上当场就得说一句话。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：取消是协作式的——同步执行一个动作含写入与立即回读，只在动作之间响应停止。
+    /// 从点下去到真的停住那一段，状态行此前照旧念「正在执行同步… 40%」，那一击看不出收到了没有，
+    /// 只能再点一次，或者以为这颗按钮坏了。现在当场把那一行换成 <see cref="JobOutcome.StoppingText"/> 那一句。
+    /// </para>
+    /// <para>
+    /// 没有作业在跑时 <c>Cancel</c> 答 false（那颗钮本就只在忙时可见），什么都不记、什么都不说——
+    /// 那一行讲的必须是屏上这一次作业。
+    /// </para>
+    /// </summary>
+    private void RequestStop()
+    {
+        if (_job is not { } job || !_jobs.Cancel(_taskId)) return;
+        _stopRequestedJobId = job.Id;
+        ShowRunningStatus(job);
+    }
+
+    /// <summary>作业还在跑时状态行说什么（唯一落点：轮询与点下「停止」那一次的当场重画都走这里）。</summary>
+    private void ShowRunningStatus(JobInfo job) => _statusHost.SetText(
+        JobOutcome.StoppingText(job.Kind, _stopRequestedJobId == job.Id)
+        ?? "正在" + job.Kind + "… " + job.Progress.ToString("P0") + " " + job.ProgressText,
+        UiTokens.Text);
+
     private void OnTick()
     {
         if (IsDisposed || Disposing) return;
         if (_job is not { } job) { _timer.Stop(); return; }
         if (job.FinishedAt is null)
         {
-            _statusHost.SetText("正在" + job.Kind + "… " + job.Progress.ToString("P0") + " " + job.ProgressText, UiTokens.Text);
+            ShowRunningStatus(job);
             return;
         }
         _timer.Stop();

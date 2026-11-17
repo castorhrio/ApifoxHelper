@@ -187,6 +187,12 @@ internal sealed class TasksPage : UserControl, INativePage
     private string? _lastJobId;
     /// <summary><see cref="_lastJobId"/> 那一次作业所属的任务 Id（<c>JobInfo.Scope</c> 就是这个 Id）。</summary>
     private string? _lastJobTaskId;
+    /// <summary>
+    /// 已经为哪一个作业请求过停止（第三百八十八轮）：按<b>作业</b> Id 记，不按任务 Id 记——
+    /// 停止请求针对的是那一次执行，切到别的任务再切回来时作业还在跑，那句话仍该说。
+    /// 用掉即清（<see cref="ShowJobState"/> 的「没有作业在跑」那一支）。
+    /// </summary>
+    private string? _stopRequestedJobId;
     private bool _splitAdjusted;
     // 列排序状态（ListSort 口径）：未排序时按任务创建时间倒序（TaskStore.List 的顺序）。
     private int _sortColumn = ListSort.None;
@@ -1149,7 +1155,8 @@ internal sealed class TasksPage : UserControl, INativePage
             _progress.Visible = true;
             _cancelButton.Visible = true;
             _progress.Text = job.State == "running"
-                ? $"正在{job.Kind}… {job.Progress:P0} {job.ProgressText}"
+                ? JobOutcome.StoppingText(job.Kind, _stopRequestedJobId == job.Id)
+                    ?? $"正在{job.Kind}… {job.Progress:P0} {job.ProgressText}"
                 : job is { State: "failed", Error: not null }
                     ? $"{job.Kind}失败：{job.Error} 正在刷新。"
                     : $"{job.Kind}结束（{TaskDisplay.JobStateText(job.State)}），正在刷新。";
@@ -1158,6 +1165,8 @@ internal sealed class TasksPage : UserControl, INativePage
         }
         else
         {
+            // 没有作业在跑了：停止请求已经用完（那一行接下来要说的是这一次的结果，见 ShowJobOutcome）。
+            _stopRequestedJobId = null;
             _scanButton.Visible = true;
             _progress.Visible = false;
             _cancelButton.Visible = false;
@@ -1246,7 +1255,14 @@ internal sealed class TasksPage : UserControl, INativePage
     private void CancelScan()
     {
         if (_selectedTask is null) return;
-        _jobs.Cancel(_selectedTask.Id);
+        var scope = _selectedTask.Id;
+        // 只有真的按下一个在跑的作业才记下这一笔：没有作业在跑时 Cancel 答 false，
+        // 那句「正在停止…」就成了没影的话（这一行说的必须是屏上那一次作业）。
+        if (!_jobs.Cancel(scope) || _jobs.Running(scope) is not { } job) return;
+        _stopRequestedJobId = job.Id;
+        // 当场重画一次进度行：否则那句话要等下一个轮询周期（500ms）才出来，
+        // 而这一轮补的正是「那一击之后屏上得有回应」。重画走的仍是那唯一一处 ShowJobState。
+        ShowJobState(job);
     }
 
     /// <summary>打开注释缺口清单：证据查看只读；手工填写与删除失效标签经既有 AddManualAsync 写任务数据成为候选。</summary>
