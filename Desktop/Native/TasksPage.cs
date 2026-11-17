@@ -865,6 +865,10 @@ internal sealed class TasksPage : UserControl, INativePage
     /// 所以跳完把键盘交给那一区的第一颗可点按钮：Tab 从那里往下走，不再往回走。
     /// 那一区一颗可点的按钮都没有时（例如未扫描时的 Apifox 区）焦点留在原处——那时那一区本来也没有可做的事。
     /// </para>
+    /// <para>
+    /// <b>本方法只认键</b>（第三百七十三轮）：三个阶段各认自己那一区与那一行动作按钮，认完交给
+    /// <see cref="MoveDetailTo"/>——「交焦点 + 换落点」的顺序与算式只在那一处，本方法不自己滚、也不自己交焦点。
+    /// </para>
     /// </summary>
     private void JumpToStage(string key)
     {
@@ -875,14 +879,36 @@ internal sealed class TasksPage : UserControl, INativePage
             NextStep.StageRemote => (_remoteSection, _remoteActions),
             _ => ((Label?)null, (FlowLayoutPanel?)null),
         };
-        if (section is null || actions is null) return;
-        // 先交焦点、再定落点：反过来的话交焦点那一下（WinForms 把焦点控件滚进视野）会把刚定好的落点顶掉。
-        FocusFirstAction(actions);
-        _detailScroll.AutoScrollPosition = new Point(0, Math.Max(0, section.Top - UiTokens.Lg));
+        MoveDetailTo(section, actions);
     }
 
     /// <summary>
-    /// 把键盘交给一行动作按钮里的第一颗可点按钮（第三百七十二轮，唯一触达点）。
+    /// 详情区「交焦点 + 换落点」的<b>唯一落点</b>（第三百七十三轮，具名 harden 切片）。
+    /// <para>
+    /// <b>为什么收成一处</b>：这两笔此前散在 <see cref="JumpToStage"/>（交焦点 + 定落点）与
+    /// <see cref="FocusFirstAction"/>（挑哪一颗）里，而详情区这一族已经连做三轮
+    /// （横幅按钮出厂一次、换任务回到顶部、跳阶段交键盘），每一轮各钉一处、各写一遍「先交焦点再滚」。
+    /// 下一轮再往详情区加一个入口时，第四处会自己再写一遍，而顺序写反了在 Linux 上没人看得见——
+    /// 所以顺序与落点算式都收到这里：判定在 <see cref="DetailFocusPlan"/>（纯逻辑、Linux 真执行），
+    /// 触达控件只在本方法。
+    /// </para>
+    /// <para>
+    /// <b>先交焦点、再定落点</b>：反过来的话交焦点那一下（WinForms 把焦点控件滚进视野）会把刚定好的落点顶掉。
+    /// 认不出的分区（<paramref name="section"/> 或 <paramref name="actions"/> 为 null）不动作——
+    /// 不猜一个分区，也不把焦点塞给别处。
+    /// </para>
+    /// </summary>
+    private void MoveDetailTo(Control? section, FlowLayoutPanel? actions)
+    {
+        if (section is null || actions is null) return;
+        // 先交焦点、再定落点：反过来的话交焦点那一下（WinForms 把焦点控件滚进视野）会把刚定好的落点顶掉。
+        FocusFirstAction(actions);
+        _detailScroll.AutoScrollPosition = new Point(0, DetailFocusPlan.Landing(section.Top, UiTokens.Lg));
+    }
+
+    /// <summary>
+    /// 把键盘交给一行动作按钮里的第一颗可点按钮（第三百七十二轮；第三百七十三轮起「挑哪一颗」的判定
+    /// 收到 <see cref="DetailFocusPlan.FirstSelectable"/>，本方法只负责触达）。
     /// <para>
     /// 一颗都不可点时不动键盘：焦点落在一个禁用控件上等于没落（<c>Focus()</c> 直接返回 false），
     /// 而把焦点硬塞给别处会让用户下一步按 Tab 时从别的地方起手——那比留在原处更难解释。
@@ -890,12 +916,10 @@ internal sealed class TasksPage : UserControl, INativePage
     /// </summary>
     private static void FocusFirstAction(Control row)
     {
-        foreach (var control in row.Controls.Cast<Control>())
-        {
-            if (!control.CanSelect) continue;
-            control.Focus();
-            return;
-        }
+        var controls = row.Controls.Cast<Control>().ToList();
+        var index = DetailFocusPlan.FirstSelectable(controls.Select(control => control.CanSelect).ToList());
+        if (index < 0) return;
+        controls[index].Focus();
     }
 
     /// <summary>

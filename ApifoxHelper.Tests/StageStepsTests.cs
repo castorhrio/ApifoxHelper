@@ -335,16 +335,23 @@ public class StageStepsTests
     public void JumpToStage_OnlyScrollsTheDetail()
     {
         var page = Repo.Source("Desktop", "Native", "TasksPage.cs");
-        var jump = Slice(page, "private void JumpToStage(string key)", "/// <summary>\n    /// 把键盘交给一行动作按钮里的第一颗可点按钮");
+        // 第三百七十三轮起「滚到哪」只在 MoveDetailTo 一处（详情区交焦点 + 换落点的唯一落点），
+        // JumpToStage 只认键、把那一对（分区标题、那一行动作按钮）交过去——判据本身一条未放宽，
+        // 只是跟着实物换了落点：滚的仍是那一区标题、仍不改选中/不重建/不写数据/不触发动作。
+        var jump = SourceSlice.BodyOf(page, "private void JumpToStage(string key)");
+        var landing = SourceSlice.BodyOf(page, "private void MoveDetailTo(Control? section, FlowLayoutPanel? actions)");
         // 只把详情滚到那一区的标题：不改选中、不重建、不写数据、不触发任何动作。
-        Assert.Matches(@"(?m)^\s*_detailScroll\.AutoScrollPosition = new Point\(0, Math\.Max\(0, section\.Top - UiTokens\.Lg\)\);$", jump);
-        Assert.DoesNotContain("Ui.SelectItem", jump, StringComparison.Ordinal);
-        Assert.DoesNotContain("RefreshDetail", jump, StringComparison.Ordinal);
-        Assert.DoesNotContain("FileStore", jump, StringComparison.Ordinal);
-        Assert.DoesNotContain("WriteJson", jump, StringComparison.Ordinal);
-        Assert.DoesNotContain("Start", jump, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^\s*_detailScroll\.AutoScrollPosition = new Point\(0, DetailFocusPlan\.Landing\(section\.Top, UiTokens\.Lg\)\);$", landing);
+        Assert.DoesNotContain("Ui.SelectItem", landing, StringComparison.Ordinal);
+        Assert.DoesNotContain("RefreshDetail", landing, StringComparison.Ordinal);
+        Assert.DoesNotContain("FileStore", landing, StringComparison.Ordinal);
+        Assert.DoesNotContain("WriteJson", landing, StringComparison.Ordinal);
+        Assert.DoesNotContain("Start", landing, StringComparison.Ordinal);
         // 认不出的键不动作（不猜一个分区）：分区与那一行动作按钮一起认，缺一个都不动作。
-        Assert.Matches(@"(?m)^\s*if \(section is null \|\| actions is null\) return;$", jump);
+        Assert.Matches(@"(?m)^\s*if \(section is null \|\| actions is null\) return;$", landing);
+        // 本方法只认键：自己不滚、也不自己交焦点（两笔都在 MoveDetailTo 一处）。
+        Assert.DoesNotContain("AutoScrollPosition", jump, StringComparison.Ordinal);
+        Assert.DoesNotContain("FocusFirstAction", jump, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -367,14 +374,16 @@ public class StageStepsTests
     public void JumpToStage_HandsTheKeyboardToTheFirstSelectableAction()
     {
         var page = Repo.Source("Desktop", "Native", "TasksPage.cs");
-        var jump = Slice(page, "private void JumpToStage(string key)", "/// <summary>\n    /// 把键盘交给一行动作按钮里的第一颗可点按钮");
-        var handoff = Slice(page, "private static void FocusFirstAction(Control row)", "/// <summary>\n    /// 栏比某一格的整句文字窄时");
+        // 第三百七十三轮起这两笔都在 MoveDetailTo 一处（唯一落点）；JumpToStage 只剩「认键 → 交过去」。
+        var jump = SourceSlice.BodyOf(page, "private void JumpToStage(string key)");
+        var landing = SourceSlice.BodyOf(page, "private void MoveDetailTo(Control? section, FlowLayoutPanel? actions)");
+        var handoff = SourceSlice.BodyOf(page, "private static void FocusFirstAction(Control row)");
 
         // ① 交焦点在定落点之前：反过来的话交焦点那一下会把落点顶掉。
-        var focusAt = jump.IndexOf("FocusFirstAction(actions);", StringComparison.Ordinal);
-        var scrollAt = jump.IndexOf("_detailScroll.AutoScrollPosition =", StringComparison.Ordinal);
-        Assert.True(focusAt >= 0, "JumpToStage 里没有把键盘交给那一区（FocusFirstAction）：跳完焦点仍留在已被滚出屏外的阶段按钮上。");
-        Assert.True(scrollAt > focusAt, "JumpToStage 里交焦点发生在定落点之后：交焦点那一下会把刚定好的落点顶掉。");
+        var focusAt = landing.IndexOf("FocusFirstAction(actions);", StringComparison.Ordinal);
+        var scrollAt = landing.IndexOf("_detailScroll.AutoScrollPosition =", StringComparison.Ordinal);
+        Assert.True(focusAt >= 0, "MoveDetailTo 里没有把键盘交给那一区（FocusFirstAction）：跳完焦点仍留在已被滚出屏外的阶段按钮上。");
+        Assert.True(scrollAt > focusAt, "MoveDetailTo 里交焦点发生在定落点之后：交焦点那一下会把刚定好的落点顶掉。");
 
         // ② 三个阶段各自认自己那一行动作按钮（不猜、不共用一行）。
         Assert.Matches(@"(?m)^\s*NextStep\.StageSource => \(_sourceSection, _scanActions\),$", jump);
@@ -382,9 +391,11 @@ public class StageStepsTests
         Assert.Matches(@"(?m)^\s*NextStep\.StageRemote => \(_remoteSection, _remoteActions\),$", jump);
 
         // ③ 只交可点的：禁用控件 Focus() 直接返回 false，塞过去等于没塞，还会让下一步 Tab 从别处起手。
-        Assert.Matches(@"(?m)^\s*if \(!control\.CanSelect\) continue;$", handoff);
-        Assert.Matches(@"(?m)^\s*control\.Focus\(\);$", handoff);
-        Assert.Matches(@"(?m)^\s*return;$", handoff);
+        //    第三百七十三轮起「挑哪一颗」的判定在 DetailFocusPlan.FirstSelectable（纯逻辑、Linux 真执行），
+        //    本方法只负责触达——判据仍是「只交可点的、一颗都不可点就不动键盘」，一条未放宽。
+        Assert.Matches(@"(?m)^\s*var index = DetailFocusPlan\.FirstSelectable\(controls\.Select\(control => control\.CanSelect\)\.ToList\(\)\);$", handoff);
+        Assert.Matches(@"(?m)^\s*if \(index < 0\) return;$", handoff);
+        Assert.Matches(@"(?m)^\s*controls\[index\]\.Focus\(\);$", handoff);
         // 一颗都不可点时不硬塞给别处（焦点留在原处）。
         Assert.DoesNotContain("Parent", handoff, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectNextControl", handoff, StringComparison.Ordinal);

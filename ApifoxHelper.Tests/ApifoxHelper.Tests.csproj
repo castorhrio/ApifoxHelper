@@ -127,6 +127,8 @@
     <Compile Include="..\Desktop\Native\FieldChrome.cs" Link="Shared\FieldChrome.cs" />
     <Compile Include="..\Desktop\Native\NextStep.cs" Link="Shared\NextStep.cs" />
     <Compile Include="..\Desktop\Native\StageSteps.cs" Link="Shared\StageSteps.cs" />
+    <!-- 详情区「交焦点 + 换落点」的协调规则（第三百七十三轮）：纯逻辑、不依赖 WinForms，门在 DetailFocusCoordinationTests。 -->
+    <Compile Include="..\Desktop\Native\DetailFocusPlan.cs" Link="Shared\DetailFocusPlan.cs" />
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />
     <Compile Include="..\Desktop\Native\TaskSummary.cs" Link="Shared\TaskSummary.cs" />
     <Compile Include="..\Desktop\Native\ShellShortcuts.cs" Link="Shared\ShellShortcuts.cs" />
