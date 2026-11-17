@@ -172,6 +172,12 @@ internal sealed class TasksPage : UserControl, INativePage
     // 被筛掉的任务在清空筛选后仍回到选中（与配置页同一口径）。
     private string? _selectedId;
     private bool _runningShown;
+    /// <summary>
+    /// 上一次在这一页上看到的作业 Id（第三百七十八轮）：作业结束之后 <c>JobRunner.Running</c> 就答 null 了，
+    /// 要读回它的终态与失败原因只能按 Id 取（<c>JobRunner.Get</c>）。记在 <see cref="ShowJobState"/> 一处、
+    /// 用掉即清（<see cref="ShowJobOutcome"/>），一次作业只报一次结果。
+    /// </summary>
+    private string? _lastJobId;
     private bool _splitAdjusted;
     // 列排序状态（ListSort 口径）：未排序时按任务创建时间倒序（TaskStore.List 的顺序）。
     private int _sortColumn = ListSort.None;
@@ -1102,6 +1108,8 @@ internal sealed class TasksPage : UserControl, INativePage
         if (job is not null)
         {
             _runningShown = true;
+            // 记下 Id：作业一结束 Running 就答 null，终态与失败原因只能按 Id 读回（见 ShowJobOutcome）。
+            _lastJobId = job.Id;
             _scanButton.Visible = false;
             _progress.Visible = true;
             _cancelButton.Visible = true;
@@ -1135,7 +1143,37 @@ internal sealed class TasksPage : UserControl, INativePage
         {
             // 作业刚结束：重读任务与列表，展示落盘的阶段结果。
             LoadTasks();
+            // 这一次的结果说在状态行上（第三百七十八轮）：进度行随即收起，失败原因不能跟着一起消失。
+            ShowJobOutcome();
         }
+    }
+
+    /// <summary>
+    /// 作业结束之后，把这一次的结果说在状态行上（第三百七十八轮，具名 pass：clarify）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：进度标签是「正在做什么」的通道，作业一结束就被 <see cref="ShowJobState"/>
+    /// 藏起来——失败原因因此在屏上只活了不到一个轮询周期（500ms），随后连同一整行一起消失；
+    /// 成功与取消更是从来没有一句话。用户按了「开始扫描」，回来只看到进度行没了。
+    /// </para>
+    /// <para>
+    /// <b>为什么读回终态</b>：<c>JobRunner.Running</c> 在作业结束后答 null，终态与失败原因只能按 Id 取
+    /// （<c>JobRunner.Get</c>，作业记录在 <c>Prune</c> 之前一直留着）。Id 由 <see cref="ShowJobState"/> 记下，
+    /// 本方法用掉即清——一次作业只报一次，不重复念同一句。
+    /// </para>
+    /// <para>
+    /// <b>不覆盖读取失败</b>：<see cref="LoadTasks"/> 刚判过「磁盘上的任务读不出来」时，状态行已经在说那件事的
+    /// 原因——那一句比这一次作业的结果更该留在屏上（屏上此刻连任务清单都没有）。同理，作业还在跑
+    /// （<c>FinishedText</c> 答 null）时什么都不说。
+    /// </para>
+    /// </summary>
+    private void ShowJobOutcome()
+    {
+        if (_lastJobId is not { } id) return;
+        _lastJobId = null;
+        if (_jobs.Get(id) is not { } job) return;
+        if (JobOutcome.FinishedText(job.Kind, job.State, job.Error) is not { } text) return;
+        if (_loadFailed) return;
+        SetStatus(text, JobOutcome.Tone(job.State) == "bad" ? UiTokens.BadText : UiTokens.Muted);
     }
 
     private void StartScan()
