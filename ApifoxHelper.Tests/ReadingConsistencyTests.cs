@@ -137,17 +137,24 @@ public class ReadingConsistencyTests
     /// 读数最近的那一处</b>，见 <see cref="NearestRound"/>——那一格里还写着别轮的旧读数）；那一行念的日期与指纹，
     /// 必须逐字等于 <c>.winecheck/defense.txt</c> 的 <c>date=</c> / <c>source=</c>——那两行由
     /// <c>defense-day.sh</c> 四步走完自己写出，不是手抄，于是「文档说的那一跑」被接到「机器记的那一跑」上。
-    /// <b>范围</b>：README.md 全文、「G-D5 真机观感」那一行，以及 NOTES 里每一处用那两句「当前读数」形状
-    /// （<c>当前源码最近一次三档复跑为</c> 与 <c>读数更新（</c>）的地方——本轮改准时一共六处：
-    /// README「已知限制」第 3 条、验收表 G-D3 / G-D4 / G-D5 三格、G-D4 详细口径那一行、G-D5 详细口径那一行。
-    /// 那几句才是「被当成当前读数念出来」的地方；逐轮日志的散文不用那两句形状，历史轮次照旧不拉平——
+    /// <b>范围</b>：README.md 全文、「G-D5 真机观感」那一行，以及 NOTES 里每一处用<b>登记在册</b>的那几句
+    /// 「当前读数」形状的地方——「登记在册」这四个字第三百八十二轮起有出处了：形状册写在
+    /// <c>docs/NOTES.md</c> 顶部判据层那一行（<see cref="ClaimShapeRegistryEntry"/>，唯一落点），
+    /// 本门按 <see cref="CurrentClaimShapes"/> 现读它，不再在本文件里硬写那两句字面（第三百八十一轮之前
+    /// <c>CurrentClaimPhrases</c> 就是那两个字面量，简报把它点成「口径漂移的下一个入口」：下一轮换一种说法
+    /// 写「当前读数」，门看不见，而人看得见）。<b>判据本体一条没放宽</b>：被念成当前读数的每一句，
+    /// 轮次仍须与顶部那一行相同、日期与指纹仍须与 <c>defense.txt</c> 相同；改的只是「哪几句算当前声称」
+    /// 从哪里读。删掉登记行即红（范围没有落点），登记一句仓里没处在用的形状同样红（表不许养死条目），
+    /// 六发注入见 <see cref="ClaimShapeRegistryDetector_ReportsTheBreaksItMustCatch"/>。
+    /// 上面列的那几处才是「被当成当前读数念出来」的地方；逐轮日志的散文不用登记在册的形状，历史轮次照旧不拉平——
     /// 而且扫描在账本那第一个 <c>## 第…轮</c> 标题之前停住（<see cref="LedgerStartLine"/>：账本里会原样引用
     /// 改准前那句字面，那是那一轮那一跑的账，不是当前声称）。
     /// 这一族要一起改这件事，第三百四十五轮那一行账已经写过（「同一族跟着改的三处归属」），
     /// 本轮起它从散文变成可判。
     /// <b>它不判什么</b>：不判那个轮次号写得对不对（门读不到 <c>git log</c>，判的是「三处说法一致 +
     /// 那一跑的日期与指纹确由脚本写出」），也不判那一跑是不是真跑出来的——与 <c>reading.txt</c>
-    /// 那一条固有边界同一口径（见本类注释）。
+    /// 那一条固有边界同一口径（见本类注释）；<b>也不判一种没有登记的新说法</b>——门只判它认得的形状，
+    /// 那是判据的边界，不是这一族的疏漏；要换说法就得先改登记，而改登记这件事在 NOTES 那一行上看得见。
     /// </para>
     /// </summary>
     [Fact]
@@ -186,18 +193,19 @@ public class ReadingConsistencyTests
 
         var attributed = 0;
         // 范围就是「被当成当前读数念出来」的那几处：README 全文、G-D5 那一行，
-        // 以及 NOTES 里每一处用那两句「当前读数」形状（「当前源码最近一次三档复跑为」、「读数更新（」）的地方
+        // 以及 NOTES 里（逐轮账本之前）每一处用上登记在册的那几句「当前读数」形状的地方
         // ——第三百四十五轮那一条账把这几处点成「同一族跟着改的三处归属」。
-        // 逐轮日志里的散文不用那两句形状，照旧不在范围内。
+        // 登记行自己是那张表、不是一处声称，故排除在范围之外；逐轮账本里的散文不用那些形状，照旧不在范围内。
+        var shapes = CurrentClaimShapes();
         var scopes = new List<(string Label, string Text)>
         {
             ("README.md", Repo.Source("README.md")),
             ("docs/NOTES.md 的 G-D5 行", Gd5Row()),
         };
-        scopes.AddRange(Repo.Source("docs", "NOTES.md").Split('\n')
-            .Take(LedgerStartLine())
-            .Select((line, i) => (Line: i + 1, Text: line, Phrase: CurrentClaimPhrases.FirstOrDefault(
-                p => line.Contains(p, StringComparison.Ordinal))))
+        scopes.AddRange(PreLedgerNotesLines()
+            .Where(x => !ClaimShapeRegistryEntry.IsMatch(x.Text))
+            .Select(x => (x.Line, x.Text, Phrase: shapes.FirstOrDefault(
+                p => x.Text.Contains(p, StringComparison.Ordinal))))
             .Where(s => s.Phrase is not null)
             .Select(s => ($"docs/NOTES.md:{s.Line}「{s.Phrase}」那一行", s.Text)));
 
@@ -218,7 +226,8 @@ public class ReadingConsistencyTests
 
         // 地板：至少有一处把当前读数归到某轮——把轮次删光不算「对上了」。
         Assert.True(attributed >= 1,
-            "那一族里（README.md 全文、G-D5 那一行、NOTES 里每一处「当前源码最近一次三档复跑为」）没有任何一处"
+            "那一族里（README.md 全文、G-D5 那一行、NOTES 里每一处用登记在册形状的地方，登记表见 "
+            + "docs/NOTES.md 顶部「当前读数声称的合法形状登记」那一行）没有任何一处"
             + "把那笔当前读数归到某轮：顶部那一行没有对照物，把轮次删光就能绿。");
 
         Assert.True(drift.Count == 0,
@@ -239,11 +248,154 @@ public class ReadingConsistencyTests
         @"^\s*>?\s*-\s+\*\*最近一次三档整支跑", RegexOptions.Compiled);
 
     /// <summary>
-    /// NOTES 里那种「把某笔三档读数念成当前读数」的两句既有形状（第三百四十五轮那一条账点名的那一族归属，
-    /// 「读数更新（」那一句形是 G-D5 详细口径那一节用的）。
-    /// 讲惯例本身的那两句（写成「读数更新（第 N 轮）」）不会被扫到：<c>N</c> 不是中文数字，那两句里也没有读数。
+    /// 「当前读数声称的合法形状登记」那一行的<b>行首形状</b>——那张表的唯一落点（第三百八十二轮，简报 P0-1）。
+    /// <para>
+    /// <b>为什么锚在行首</b>：与 <see cref="LastFullRunEntry"/> 同一取法。逐轮账本里会把这句话原样引一次，
+    /// 那是引用、不是第二张表；只认「blockquote 里加粗起头是这一句」那种行。
+    /// </para>
     /// </summary>
-    private static readonly string[] CurrentClaimPhrases = ["当前源码最近一次三档复跑为", "读数更新（"];
+    private static readonly Regex ClaimShapeRegistryEntry = new(
+        @"^\s*>\s*\*\*当前读数声称的合法形状登记", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 登记行里那串形状的起头。它之后<b>到第一个「。」为止</b>就是登记表——所以形状本身不许含「。」，
+    /// 也不许跨行（一行就是一张表）。
+    /// </summary>
+    private const string ClaimShapeMarker = "形状登记：";
+
+    /// <summary>登记表里一个形状的写法：一对反引号之间的字面（与「证据出处」那一族的引用写法同一分寸）。</summary>
+    private static readonly Regex ClaimShapeItem = new(@"`([^`]*)`", RegexOptions.Compiled);
+
+    /// <summary>账本之前的那些 NOTES 行（行号 + 原文）——当前声称的扫描面止于此处。</summary>
+    private static List<(int Line, string Text)> PreLedgerNotesLines() =>
+        Repo.Source("docs", "NOTES.md").ReplaceLineEndings("\n").Split('\n')
+            .Take(LedgerStartLine())
+            .Select((text, i) => (Line: i + 1, Text: text))
+            .ToList();
+
+    /// <summary>
+    /// 那一行登记<b>抓不抓得住</b>——判据本体（收成一处，好让
+    /// <see cref="ClaimShapeRegistryDetector_ReportsTheBreaksItMustCatch"/> 把每一发破坏各喂一遍）。
+    /// <paramref name="registryLines"/> 是匹配 <see cref="ClaimShapeRegistryEntry"/> 的行，
+    /// <paramref name="usageLines"/> 是仓里其余可能被念成当前声称的地方（登记行自身不在里面）。
+    /// 返回问题清单（空 = 这一行是张能用的表）与解析出来的形状。
+    /// </summary>
+    private static (List<string> Problems, List<string> Shapes) ReadClaimShapeRegistry(
+        IReadOnlyList<string> registryLines, IReadOnlyList<string> usageLines)
+    {
+        if (registryLines.Count != 1)
+        {
+            return ([$"「当前读数声称的合法形状登记」那一行读到 {registryLines.Count} 处，要的是恰好一处："
+                    + "0 处 = 门的范围没有落点（「哪几句算当前声称」退回只有代码知道的事）；"
+                    + "2 处以上 = 那张表有了两个答案，改一处不动另一处就分叉。"
+                    + "改的地方在 docs/NOTES.md 顶部判据层那一行（加粗起头「当前读数声称的合法形状登记」）。"], []);
+        }
+
+        var line = registryLines[0];
+        var at = line.IndexOf(ClaimShapeMarker, StringComparison.Ordinal);
+        if (at < 0)
+        {
+            return ([$"那一登记行里没有「{ClaimShapeMarker}」那一起头：表写在散文里读不出来，"
+                     + "形状册等于没有。形状要写成「形状登记：`一句形`、`另一句形`」这一种可以现读的样子。"], []);
+        }
+
+        var list = line[(at + ClaimShapeMarker.Length)..];
+        var stop = list.IndexOf('。');
+        if (stop >= 0) list = list[..stop];
+
+        var shapes = ClaimShapeItem.Matches(list)
+            .Select(m => m.Groups[1].Value)
+            .Where(s => s.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (shapes.Count == 0)
+        {
+            return ([$"那一登记行的「{ClaimShapeMarker}」后面一个形状都没有（取到的是「{list.Trim()}」）："
+                     + "表是空的，门就没有范围——凡把某笔三档读数念成当前读数的句子全落在门外。"], []);
+        }
+
+        // 死条目：登记了一句没有处在用的形状。这一半把「表」与「实物」两侧对账，
+        // 挡的是「改了一句形却忘了删旧的」——那种条目让范围悄悄变大，而看起来仍然是一条条规矩。
+        var dead = shapes
+            .Where(shape => !usageLines.Any(text => text.Contains(shape, StringComparison.Ordinal)))
+            .Select(shape => $"登记的形状「{shape}」在仓里没有任何一处在用（README.md 全文与账本之前的 NOTES 行都扫过）："
+                             + "要么那一处声称被改写成了别的说法（那就把新说法登记进来，并写明用在哪几处），"
+                             + "要么这一条该从表里删掉——表不许养死条目。")
+            .ToList();
+
+        return (dead, shapes);
+    }
+
+    /// <summary>
+    /// 现读那一行登记，得到「被念成当前读数」的那几句形状。<b>本门不再在本文件里抄第二份字面</b>
+    /// （第三百八十一轮之前那两句是硬编码的 <c>string[]</c>，简报把它点成「口径漂移的下一个入口」）。
+    /// 表不在、有两处、没有登记表、表是空的、或有一句没处在用 → 当场红，红话就是
+    /// <see cref="ReadClaimShapeRegistry"/> 念出来的那一句。
+    /// </summary>
+    private static string[] CurrentClaimShapes()
+    {
+        var preLedger = PreLedgerNotesLines();
+        var registry = preLedger.Where(x => ClaimShapeRegistryEntry.IsMatch(x.Text)).Select(x => x.Text).ToList();
+        // 用法那一侧：账本之前的 NOTES 行（登记行自身除外——它是表，不是一处声称）+ README 全文。
+        // G-D5 那一行本就在账本之前，不重复塞第二份。
+        var usage = preLedger.Where(x => !ClaimShapeRegistryEntry.IsMatch(x.Text)).Select(x => x.Text).ToList();
+        usage.Add(Repo.Source("README.md"));
+
+        var (problems, shapes) = ReadClaimShapeRegistry(registry, usage);
+        Assert.True(problems.Count == 0,
+            "「哪几句算把某笔三档读数念成当前读数」这件事，在 docs/NOTES.md 顶部那一行登记上读不出来了："
+            + string.Join(" ／ ", problems));
+        return shapes.ToArray();
+    }
+
+    /// <summary>
+    /// 上面那张表<b>抓不抓得住</b>——六发各喂一次（第三百八十二轮）。
+    /// <para>
+    /// 只在真仓上判的门，抓不抓得住全靠那天有没有人想到去试；本仓对每一条判据都跑一遍反向，
+    /// 为的就是让「它绿着」不等于「它什么都看不见」。夹具里的形状字面是<b>自造的</b>（「甲句形」这类）：
+    /// 判据自测不该把仓里那两句真形状再抄一份进测试，那正是本轮要拆掉的东西。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ClaimShapeRegistryDetector_ReportsTheBreaksItMustCatch()
+    {
+        var registryLine = "> **当前读数声称的合法形状登记**（判据）：形状登记：`甲句形`、`乙句形`。凡用登记在册的任一句形……";
+
+        // ① 登记行不在（0 处）：门的范围没有落点。
+        var missing = ReadClaimShapeRegistry([], [registryLine]);
+        Assert.Single(missing.Problems);
+        Assert.Contains("读到 0 处", missing.Problems[0], StringComparison.Ordinal);
+
+        // ② 登记行有两处：那张表有了两个答案。
+        var doubled = ReadClaimShapeRegistry([registryLine, registryLine], []);
+        Assert.Single(doubled.Problems);
+        Assert.Contains("读到 2 处", doubled.Problems[0], StringComparison.Ordinal);
+
+        // ③ 那一行在，但没有「形状登记：」起头：表写在散文里读不出来。
+        var noMarker = ReadClaimShapeRegistry(
+            ["> **当前读数声称的合法形状登记**（判据）：这一行只写了「当前源码最近那一句形」这样一句话。"], []);
+        Assert.Single(noMarker.Problems);
+        Assert.Contains("那一起头", noMarker.Problems[0], StringComparison.Ordinal);
+
+        // ④ 起头在，反引号里一个形状都没有：表是空的，范围就成了「哪儿都不判」。
+        var emptyTable = ReadClaimShapeRegistry(
+            ["> **当前读数声称的合法形状登记**（判据）：形状登记：见下面那两句。"], []);
+        Assert.Single(emptyTable.Problems);
+        Assert.Contains("一个形状都没有", emptyTable.Problems[0], StringComparison.Ordinal);
+
+        // ⑤ 登记了一句仓里没处在用的形状（甲在用、乙没处在用）：只报乙那一处，不牵连甲。
+        var dead = ReadClaimShapeRegistry([registryLine], ["……这一行里有甲句形 418 通过 / 0 失败 ×3……"]);
+        Assert.Single(dead.Problems);
+        Assert.Contains("乙句形", dead.Problems[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("甲句形", dead.Problems[0], StringComparison.Ordinal);
+
+        // ⑥ 合规那一发：不报，且解析出登记在册的两个形状（顺序按那一行写的顺序）。
+        var clean = ReadClaimShapeRegistry(
+            [registryLine],
+            ["……甲句形……", "……乙句形 418 通过 / 0 失败 ×3……"]);
+        Assert.Empty(clean.Problems);
+        Assert.Equal(["甲句形", "乙句形"], clean.Shapes);
+    }
 
     /// <summary>逐轮账本的开头：NOTES 里第一处 <c>## 第…轮</c> 标题——那以下每一行都是「某一轮那一跑」的账。</summary>
     private static readonly Regex RoundLedgerHeading = new(@"^## 第[一二三四五六七八九十百零]+轮", RegexOptions.Compiled);
