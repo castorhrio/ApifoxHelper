@@ -86,6 +86,15 @@ internal sealed class TasksPage : UserControl, INativePage
     // 不折行时行内却仍按自己算出的单行总宽排（最宽那一行 740px）——夹完不重排，越出行面的按钮被裁掉，
     // 拖横向滚动条也到不了（宿主的滚动区只认网格边界）。折行让行内按行面宽重排，右边界回到栏内。
     private readonly FlowLayoutPanel _nextActions = new() { AutoSize = true, WrapContents = true, Margin = new Padding(0) };
+    // 横幅那两颗按钮出厂一次、之后只换字与显隐（第三百六十八轮）：此前每次刷新都 Controls.Clear() 再新建，
+    // 于是「Tab 到那颗按钮、按空格」之后紧接着的那一次 RefreshDetail（StartScan 自己就调一次）把按钮从父面
+    // 摘掉，键盘焦点跟着跳到别处——同一页另四行动作按钮（_stepper / _scanActions / _generatedActions /
+    // _remoteActions）都是出厂一次、刷新只改 Enabled/Visible，这一行是唯一的例外。
+    // 动作也各记一笔：按钮自己不带「点下去做什么」，换字时把这一次的动作一起换掉，点击只读当前那一笔。
+    private readonly Button _nextPrimary = Ui.Ghost("");
+    private readonly Button _nextSecondary = Ui.Ghost("");
+    private string? _nextPrimaryAction;
+    private string? _nextSecondaryAction;
 
     // 三阶段进度条（口径在 StageSteps）：三格 ghost 按钮 + 一句「点一下会发生什么」，
     // 点一下滚到对应分区（冻结页面 stepper 点一下切到该阶段页签的同一手势）。
@@ -239,6 +248,18 @@ internal sealed class TasksPage : UserControl, INativePage
         };
         _nextHead.Controls.Add(nextTag);
         _nextHead.Controls.Add(_nextTitle);
+
+        // 横幅两颗按钮在这里出厂一次（与上面三格按钮同一形状）：之后 RefreshNextBanner 只换字与显隐，
+        // 不把控件从父面摘掉——摘掉一次，键盘焦点就丢一次。
+        _nextPrimary.Margin = new Padding(0, 0, UiTokens.Sm, 0);
+        _nextPrimary.Click += (_, _) => RunNextAction(_nextPrimaryAction);
+        _nextSecondary.Margin = new Padding(0, 0, UiTokens.Sm, 0);
+        _nextSecondary.Click += (_, _) => RunNextAction(_nextSecondaryAction);
+        _nextActions.Controls.Add(_nextPrimary);
+        _nextActions.Controls.Add(_nextSecondary);
+        // 这一行的标记（第三百六十八轮）：冒烟段 RunBannerFocus 按它认出「横幅那一行」而不抄用户可见文案——
+        // 同一屏上「开始扫描」在扫描区那一行也叫这个名字，按文案认会认错行。
+        _nextActions.Tag = Ui.BannerRowMarker;
 
         // 三格按钮按 StageSteps.Keys 的顺序出厂：文案在每次刷新时取 StageSteps.ButtonText，
         // 点击只滚到对应分区（不改任何状态、不写数据）。
@@ -898,23 +919,31 @@ internal sealed class TasksPage : UserControl, INativePage
         }
     }
 
-    /// <summary>下一步引导横幅：标题按语义色调着色，动作按钮映射到本页既有入口（只做引导，不改变状态）。</summary>
+    /// <summary>
+    /// 下一步引导横幅：标题按语义色调着色，动作按钮映射到本页既有入口（只做引导，不改变状态）。
+    /// <para>
+    /// <b>只换字与显隐，不重建控件</b>（第三百六十八轮）：这两颗按钮在构造时出厂一次，本方法只改
+    /// <c>Text</c> / <c>Visible</c> 与「这一次点下去做什么」。此前这里是 <c>Controls.Clear()</c> 再新建两颗，
+    /// 而 <see cref="RefreshDetail"/> 在每一次动作之后都会走到这里（<see cref="StartScan"/> 自己就调一次）——
+    /// 键盘用户 Tab 到横幅那颗按钮、按空格之后，按钮当场被从父面摘掉，焦点跳到别处；下一次刷新再摘一次。
+    /// 同一页另四行动作按钮都是出厂一次、刷新只改 <c>Enabled</c> / <c>Visible</c>，这一行是唯一的例外。
+    /// </para>
+    /// <para>
+    /// 没有那一半（<c>PrimaryLabel</c> / <c>SecondaryLabel</c> 为 null）时按钮<b>藏起来</b>而不是摘掉：
+    /// 藏起来的控件不参与 Tab 序、也不占位，与摘掉在屏上一样，但焦点不会因此丢。
+    /// </para>
+    /// </summary>
     private void RefreshNextBanner(NextStep.Step next)
     {
         _nextTitle.Text = next.Title;
         _nextTitle.ForeColor = ToneColor(next.Tone);
         _nextDetail.Text = next.Detail;
-        _nextActions.Controls.Clear();
-        if (next.PrimaryLabel is { } primary) _nextActions.Controls.Add(NextActionButton(primary, next.PrimaryAction));
-        if (next.SecondaryLabel is { } secondary) _nextActions.Controls.Add(NextActionButton(secondary, next.SecondaryAction));
-    }
-
-    private Button NextActionButton(string label, string? action)
-    {
-        var button = Ui.Ghost(label);
-        button.Margin = new Padding(0, 0, UiTokens.Sm, 0);
-        button.Click += (_, _) => RunNextAction(action);
-        return button;
+        _nextPrimaryAction = next.PrimaryAction;
+        _nextPrimary.Text = next.PrimaryLabel ?? "";
+        _nextPrimary.Visible = next.PrimaryLabel is not null;
+        _nextSecondaryAction = next.SecondaryAction;
+        _nextSecondary.Text = next.SecondaryLabel ?? "";
+        _nextSecondary.Visible = next.SecondaryLabel is not null;
     }
 
     /// <summary>引导动作 → 本页既有入口；入口自身的门控与异常处理（状态行内联）保持不变。</summary>

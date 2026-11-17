@@ -291,6 +291,18 @@ internal static class Ui
     public const string HintRowMarker = "hint-row";
 
     /// <summary>
+    /// 任务详情里「下一步」引导横幅那一行动作按钮的标记：<c>TasksPage</c> 的 <c>BuildDetail</c> 是产品源码里
+    /// <b>唯一</b>的赋值点。
+    /// <para>
+    /// <b>为什么需要它</b>（第三百六十八轮）：冒烟器要量「刷新之后横幅那两颗按钮还是不是同一颗、焦点还在不在」，
+    /// 而横幅那一行与另四行动作按钮在形状上完全一样（都是 <c>FlowLayoutPanel</c> 里放 <c>Button</c>），
+    /// 按文案认会把「开始扫描」认到扫描区那一行去（同一屏上两处都叫这个名字）。判断要看标记，不看文案——
+    /// 与 <see cref="HintRowMarker"/> 同一形状、同一理由。
+    /// </para>
+    /// </summary>
+    public const string BannerRowMarker = "next-actions";
+
+    /// <summary>
     /// 两列字段网格里的提示行（说明某一行怎么填、留空会怎样）：一句 Caption 档文字<b>跨两列</b>出厂，
     /// 那一格里不放任何占位控件。
     /// <para>

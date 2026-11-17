@@ -307,6 +307,9 @@ internal static class Program
         Section("详情区动作按钮的横向可达性（每一颗可见按钮的右边界在宿主客户区内且不越出自己那一行的行面 → 滚动宿主不出横向滚动条 → 把详情栏拖窄一档后行面跟着栏走，真实控件量）", nameof(RunDetailReach));
         RunDetailReach(services, dataRoot);
 
+        Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变，真实控件）", nameof(RunBannerFocus));
+        RunBannerFocus(services, dataRoot);
+
         Section("状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）", nameof(RunStatusFullText));
         RunStatusFullText(services, dataRoot);
 
@@ -8166,6 +8169,215 @@ internal static class Program
             x += current.Left;
         }
         return x + control.Width;
+    }
+
+    /// <summary>
+    /// 引导横幅那两颗按钮的「同一颗」与键盘焦点（第三百六十八轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第三百六十八轮之前 <c>RefreshNextBanner</c> 每次刷新都
+    /// <c>Controls.Clear()</c> 再新建两颗按钮，而 <c>RefreshDetail</c> 在每一次动作之后都会走到这里
+    /// （<c>StartScan</c> 自己就调一次）——键盘用户 Tab 到横幅那颗按钮、按空格之后，按钮当场被从父面摘掉，
+    /// 焦点跳到别处，下一次刷新再摘一次。这一处此前没有任何门：改回 <c>Controls.Clear()</c> 再新建，
+    /// <c>dotnet test</c> 一个字节都不会红（源码门 <c>BannerButtonIdentityTests</c> 判的是形状，
+    /// 判不到「焦点还在不在」——那要真的把窗体显示出来、真的把焦点放上去）。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：真的显示任务页、真的把键盘焦点放到横幅那颗按钮上、真的走一次刷新
+    /// （<c>RefreshData</c> → <c>LoadTasks</c> → <c>RefreshDetail</c> → <c>RefreshNextBanner</c>），
+    /// 然后读三件事：那一颗<b>还是同一个实例</b>、它<b>还在父面里</b>、焦点<b>还在它身上</b>。
+    /// 认横幅那一行不抄用户可见文案：按 <c>Ui.BannerRowMarker</c> 那个标记认（与提示行同一形状）——
+    /// 同一屏上「开始扫描」在扫描区那一行也叫这个名字，按文案认会认错行。
+    /// </para>
+    /// <para>
+    /// <b>「没有那一半」怎么造出来</b>：不手写一个假的 <c>NextStep.Step</c>，把任务状态写成产品自己会写的那一个
+    /// （远端 <c>interrupted</c>，<c>NextStep.Compute</c> 那一支只给主动作、不给次动作），
+    /// 让产品自己的判定给出「只有一半」的那一步。
+    /// </para>
+    /// </summary>
+    private static void RunBannerFocus(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort-banner.json"));
+        var task = tasks.Create(new CreateTaskRequest
+        {
+            ProfileId = profiles.List().First().Id,
+            Name = "横幅焦点冒烟",
+        });
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("任务页引导横幅：键盘焦点放到横幅那颗按钮上之后走一次刷新——同一颗实例还在父面里、焦点还在它身上（真实控件）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "横幅焦点冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    profiles,
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                // 与 RunDetailReach 同一入口：详情栏的设计宽只在 OnPageShown 里按当前宽度布置一次。
+                page.OnPageShown();
+                Application.DoEvents();
+
+                SelectTaskRow(page, task.Id);
+                var row = BannerRow(page);
+                var primary = row.Controls.Cast<Control>().OfType<Button>().FirstOrDefault(button => button.Visible)
+                    ?? throw new InvalidOperationException(
+                        "横幅那一行没有可见按钮：这一段量的是「刷新之后焦点还在不在」，没有落点。");
+                primary.Focus();
+                Application.DoEvents();
+                if (!primary.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到横幅那颗「{primary.Text}」上：焦点一开始就不在它身上，"
+                        + "后面那一判等于没量（这一段要的是「刷新之后还在不在」，不是「能不能放上去」）。");
+                }
+
+                // 真的走一次刷新：RefreshData → LoadTasks → RefreshDetail → RefreshNextBanner。
+                // 这一条路径上横幅会被重算两次（清空清单时一次、选中恢复时一次），两次都摘控件的话焦点丢两次。
+                page.RefreshData();
+                Application.DoEvents();
+
+                if (!row.Controls.Contains(primary))
+                {
+                    throw new InvalidOperationException(
+                        $"刷新之后横幅那颗「{primary.Text}」不在父面里了（那一行现在 {row.Controls.Count} 个控件）："
+                        + "它被摘掉过一次——键盘用户按完空格，焦点跟着丢，下一次刷新再摘一次。");
+                }
+                if (!primary.Focused)
+                {
+                    var where = host.ContainsFocus ? "焦点还在窗体里、但不在它身上" : "焦点已经不在这个窗体里";
+                    throw new InvalidOperationException(
+                        $"刷新之后焦点不在横幅那颗「{primary.Text}」上（{where}）：按钮还在、焦点却走了，"
+                        + "等于「按完一次就得重新 Tab 回来」。");
+                }
+                _lines.Add($"     横幅那一行：{row.Controls.Count} 个控件、可见 "
+                    + $"{row.Controls.Cast<Control>().OfType<Button>().Count(button => button.Visible)} 颗、"
+                    + $"刷新之后焦点仍在「{primary.Text}」上");
+            });
+
+            RunAction("任务页引导横幅：刷新只换字与显隐——没有那一半时按钮藏起来而不是摘掉，行内控件数不随刷新增长（真实控件）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                var row = BannerRow(shown);
+                var before = row.Controls.Cast<Control>().OfType<Button>().ToList();
+                if (before.Count != 2)
+                {
+                    throw new InvalidOperationException(
+                        $"横幅那一行出厂 {before.Count} 颗按钮，而这一行只有主动作与次动作两颗："
+                        + "「藏起来而不是摘掉」这一判要的是两颗都在父面里。");
+                }
+
+                // 把任务状态写成产品自己会写的那一个（远端 interrupted）：NextStep.Compute 那一支只给主动作。
+                tasks.UpdateAsync(task.Id, changed => changed.Stages.Remote.Status = "interrupted")
+                    .GetAwaiter().GetResult();
+                shown.RefreshData();
+                Application.DoEvents();
+
+                var step = NextStep.Compute(tasks.Get(task.Id));
+                if (step.SecondaryLabel is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"这一步（「{step.Title}」）仍然给了次动作「{step.SecondaryLabel}」："
+                        + "这一段要的是「没有那一半」的那一步，造出来的状态没有走到那一支。");
+                }
+                var visible = row.Controls.Cast<Control>().OfType<Button>().Where(button => button.Visible).ToList();
+                var hidden = row.Controls.Cast<Control>().OfType<Button>().Where(button => !button.Visible).ToList();
+                if (visible.Count != 1 || hidden.Count != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"这一步只有主动作「{step.PrimaryLabel}」，横幅那一行却读到 {visible.Count} 颗可见、"
+                        + $"{hidden.Count} 颗藏起来（共 {row.Controls.Count} 个控件）："
+                        + "没有那一半时该藏起来、不该摘掉，也不该两颗都亮着。");
+                }
+                if (visible[0].Text != step.PrimaryLabel)
+                {
+                    throw new InvalidOperationException(
+                        $"横幅那颗可见按钮写着「{visible[0].Text}」，而这一步的主动作是「{step.PrimaryLabel}」："
+                        + "刷新没有把这一次的字换上去。");
+                }
+                if (hidden[0].CanSelect)
+                {
+                    throw new InvalidOperationException(
+                        $"藏起来的那颗「{hidden[0].Text}」仍在 Tab 序里（CanSelect = true）："
+                        + "藏起来的控件不该占一个 Tab 停靠点。");
+                }
+                if (hidden[0].Text.Length != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"藏起来的那颗还留着上一次的字「{hidden[0].Text}」：藏起来不等于清干净，"
+                        + "下一次它亮起来时若忘了换字，屏上就是上一屏的话。");
+                }
+
+                // 再刷新三次：控件数不增长、实例不变（摘掉再新建的话这里会读到新实例）。
+                for (var i = 0; i < 3; i++)
+                {
+                    shown.RefreshData();
+                    Application.DoEvents();
+                }
+                var after = row.Controls.Cast<Control>().OfType<Button>().ToList();
+                if (after.Count != before.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"刷新四次之后横幅那一行有 {after.Count} 颗按钮（出厂 {before.Count} 颗）："
+                        + "刷新在往这一行里加控件。");
+                }
+                for (var i = 0; i < before.Count; i++)
+                {
+                    if (!ReferenceEquals(before[i], after[i]))
+                    {
+                        throw new InvalidOperationException(
+                            $"刷新四次之后横幅第 {i + 1} 颗按钮换了实例（「{before[i].Text}」→「{after[i].Text}」）："
+                            + "刷新把它摘掉又新建了一颗，键盘焦点与 Tab 位置都跟着丢。");
+                    }
+                }
+                _lines.Add($"     横幅那一行（只有主动作的那一步）：{row.Controls.Count} 个控件、可见 1 颗「{visible[0].Text}」、"
+                    + $"藏起来 1 颗（CanSelect {hidden[0].CanSelect}）、刷新四次之后实例与控件数都没变");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 引导横幅那一行（按 <see cref="Ui.BannerRowMarker"/> 认，不抄用户可见文案）。
+    /// </summary>
+    private static FlowLayoutPanel BannerRow(TasksPage page) =>
+        DetailGrid(page).Controls.Cast<Control>().OfType<FlowLayoutPanel>()
+            .FirstOrDefault(row => (row.Tag as string) == Ui.BannerRowMarker)
+        ?? throw new InvalidOperationException(
+            "详情区里找不到带 Ui.BannerRowMarker 标记的那一行：横幅那一行的出厂处换了形状，本段的量测口径要跟着改。");
+
+    /// <summary>在任务清单里选中一行（与 <c>RunDetailReach</c> 同一取法：按 Id 认，不按行号）。</summary>
+    private static void SelectTaskRow(TasksPage page, string taskId)
+    {
+        var list = TaskList(page);
+        var item = list.Items.Cast<ListViewItem>().FirstOrDefault(row => (row.Tag as CheckTask)?.Id == taskId)
+            ?? throw new InvalidOperationException($"任务清单里找不到 {taskId} 那一行：这一屏没有可量的详情。");
+        item.Selected = true;
+        item.Focused = true;
+        Application.DoEvents();
     }
 
     /// <summary>

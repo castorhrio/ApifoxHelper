@@ -335,7 +335,7 @@ public class StageStepsTests
     public void JumpToStage_OnlyScrollsTheDetail()
     {
         var page = Repo.Source("Desktop", "Native", "TasksPage.cs");
-        var jump = Slice(page, "private void JumpToStage(string key)", "/// <summary>下一步引导横幅");
+        var jump = Slice(page, "private void JumpToStage(string key)", "/// <summary>\n    /// 下一步引导横幅");
         // 只把详情滚到那一区的标题：不改选中、不重建、不写数据、不触发任何动作。
         Assert.Matches(@"(?m)^\s*_detailScroll\.AutoScrollPosition = new Point\(0, Math\.Max\(0, section\.Top - UiTokens\.Lg\)\);$", jump);
         Assert.DoesNotContain("Ui.SelectItem", jump, StringComparison.Ordinal);
@@ -368,7 +368,7 @@ public class StageStepsTests
     {
         // 进度条是这一屏的呈现：不落盘、不写任务与配置数据（跨启动记忆只有两个常驻页面）。
         var page = Repo.Source("Desktop", "Native", "TasksPage.cs");
-        var stepper = Slice(page, "private void RefreshStepper(", "/// <summary>下一步引导横幅");
+        var stepper = Slice(page, "private void RefreshStepper(", "/// <summary>\n    /// 下一步引导横幅");
         Assert.DoesNotContain("ListSortMemory", stepper, StringComparison.Ordinal);
         Assert.DoesNotContain("FileStore", stepper, StringComparison.Ordinal);
         Assert.DoesNotContain("WriteJson", stepper, StringComparison.Ordinal);
@@ -399,6 +399,14 @@ public class StageStepsTests
     /// <summary>只算代码行：注释里引用「界面不就地写『（当前）』」是在说明理由，不算第二套文案。</summary>
     private static string CodeLines(string source) => CodeScan.Text(source);
 
+    /// <summary>
+    /// 从 <paramref name="start"/> 切到 <paramref name="end"/>（不含）。
+    /// <para>
+    /// 第三百六十八轮：<c>RefreshNextBanner</c> 的文档注释由一行扩成「<c>&lt;summary&gt;</c> 单独一行 + 两段
+    /// <c>&lt;para&gt;</c>」，于是「下一个成员的注释开头」这个切点也跟着变成两行。切点写的是<b>注释的开头</b>
+    /// 而不是那一句正文——正文改了，切点不必跟着改。
+    /// </para>
+    /// </summary>
     private static string Slice(string source, string start, string end)
     {
         var from = source.IndexOf(start, StringComparison.Ordinal);

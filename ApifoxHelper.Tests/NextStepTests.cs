@@ -480,7 +480,10 @@ public class NextStepTests
         // 横幅与列表列都由共享口径驱动；动作经映射调既有入口；作业执行中禁用。
         Assert.Contains("NextStep.Compute(task)", page);
         Assert.Contains("RefreshNextBanner(", page);
-        Assert.Contains("RunNextAction(action)", page);
+        // 第三百六十八轮：横幅那两颗按钮出厂一次、刷新只换字与显隐，于是点击读的是「这一次的动作」那一笔
+        // （`_nextPrimaryAction` / `_nextSecondaryAction`），不再把动作捕获进闭包——两条都要在。
+        Assert.Contains("RunNextAction(_nextPrimaryAction)", page);
+        Assert.Contains("RunNextAction(_nextSecondaryAction)", page);
         Assert.Contains("bannerButton.Enabled = job is null", page);
         // 任务列表的「下一步」列在「配置」之后；按钮文案与检查前置共用 NextStep.NeedsSwaggerLoad 单一口径。
         Assert.Matches(@"Columns\.Add\(""配置"", 140\);[\s\S]*?Columns\.Add\(""下一步"", 150\);", page);
