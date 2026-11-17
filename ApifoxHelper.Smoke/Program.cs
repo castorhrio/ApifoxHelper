@@ -307,6 +307,9 @@ internal static class Program
         Section("详情区动作按钮的横向可达性（每一颗可见按钮的右边界在宿主客户区内且不越出自己那一行的行面 → 滚动宿主不出横向滚动条 → 把详情栏拖窄一档后行面跟着栏走，真实控件量）", nameof(RunDetailReach));
         RunDetailReach(services, dataRoot);
 
+        Section("详情区换任务回到顶部（滚到详情底部 → 换另一个任务 → 详情回到顶部、新任务的头在屏上 → 刷新同一个任务不抹掉当前位置，真实控件量）", nameof(RunDetailScrollReset));
+        RunDetailScrollReset(services, dataRoot);
+
         Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变，真实控件）", nameof(RunBannerFocus));
         RunBannerFocus(services, dataRoot);
 
@@ -8045,6 +8048,132 @@ internal static class Program
             page?.Dispose();
             host?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 任务详情区「换任务回到顶部、刷新同一个任务不归位」（第三百七十轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：详情区是固定控件、按任务刷新文字（<c>TasksPage.RefreshDetail</c>），
+    /// 换任务并不重建它——滚动位置因此会留着上一条任务的那一截。于是新任务的头（名称、配置、范围、
+    /// 下一步横幅、三阶段进度条）整段在屏外，用户看到的是新任务中段某一节，却不知道自己看的是哪一个任务。
+    /// 「选中即定位」在清单那一侧早已立过（<c>DESIGN.md</c> §6「列表选中定位」，第五十七轮），
+    /// 详情这一侧此前没有对上的规矩；冻结页面在同一件事上也是回到顶部
+    /// （<c>Web/app.js</c>：换一条注释缺口详情时 <c>detailHost.scrollTop = 0</c>），属同壳同行为。
+    /// </para>
+    /// <para>
+    /// <b>这一段量两件事</b>：① 滚到详情底部后换另一个任务，详情回到顶部（新任务的头要在屏上）；
+    /// ② <b>反过来</b>：刷新<b>同一个</b>任务不抹掉当前位置——动作做完要看得见结果，那个位置不能被抹掉。
+    /// 只判 ① 的话，「每次刷新都回到顶部」也能把它判绿，而那一条会把用户做完动作后拉回屏顶。
+    /// </para>
+    /// <para>
+    /// <b>量的是真实控件</b>：真的显示任务页、真的把详情滚到底（读回滚动的偏移量，滚不动即报错点名）、
+    /// 真的换一行选中、真的读回滚动位置。<b>不判方向</b>：本段只问「是不是回到顶部」，
+    /// 偏移量的正负由控件自己说（读数行照原样写出来）。
+    /// </para>
+    /// </summary>
+    private static void RunDetailScrollReset(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort-scroll.json"));
+        var profileId = profiles.List().First().Id;
+        var first = tasks.Create(new CreateTaskRequest { ProfileId = profileId, Name = "详情归位冒烟·甲" });
+        var second = tasks.Create(new CreateTaskRequest { ProfileId = profileId, Name = "详情归位冒烟·乙" });
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("任务页详情区：滚到详情底部后换另一个任务，详情回到顶部（新任务的头要在屏上，真实控件量）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "详情归位冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    profiles,
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                // 与 RunDetailReach 同一入口：详情栏的设计宽只在 OnPageShown 里按当前宽度布置一次。
+                page.OnPageShown();
+                Application.DoEvents();
+
+                SelectTaskRow(page, first.Id);
+                var scrolled = ScrollDetailToBottom(page);
+
+                SelectTaskRow(page, second.Id);
+                var offset = DetailScrollHost(page).AutoScrollPosition.Y;
+                if (offset != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"换任务之后详情仍停在 {offset}px 处（滚到底那一笔是 {scrolled}px）："
+                        + "新任务的头（名称、配置、范围、下一步横幅、三阶段进度条）整段在屏外，"
+                        + "用户看到的是新任务中段某一节，却不知道自己看的是哪一个任务。");
+                }
+            });
+
+            RunAction("任务页详情区：刷新同一个任务不抹掉当前位置（动作做完要看得见结果，真实控件量）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                var scrolled = ScrollDetailToBottom(shown);
+                shown.RefreshData();
+                Application.DoEvents();
+                var offset = DetailScrollHost(shown).AutoScrollPosition.Y;
+                if (offset == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"刷新同一个任务之后详情回到了顶部（滚到底那一笔是 {scrolled}px）："
+                        + "动作做完之后用户被拉回屏顶，看不见刚做完那一步的结果。");
+                }
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 把详情滚到底并读回滚动偏移量（<paramref name="page"/> 是任务页）。
+    /// <para>
+    /// 滚不动即报错点名：详情区在那一屏放得下全部内容时，「换任务归位」这一件事根本量不到，
+    /// 那时要说的是「这一屏没有可滚的内容」，不是「归位没发生」。
+    /// </para>
+    /// </summary>
+    private static int ScrollDetailToBottom(TasksPage page)
+    {
+        var scroll = DetailScrollHost(page);
+        var content = DetailGrid(page).Height;
+        var view = scroll.ClientSize.Height;
+        if (content <= view)
+        {
+            throw new InvalidOperationException(
+                $"详情区在这一屏放得下全部内容（内容 {content}px 对可视 {view}px）：量不到「换任务归位」这一件事。");
+        }
+        scroll.AutoScrollPosition = new Point(0, content - view);
+        Application.DoEvents();
+        var offset = scroll.AutoScrollPosition.Y;
+        if (offset == 0)
+        {
+            throw new InvalidOperationException(
+                $"详情滚不下去（内容 {content}px 对可视 {view}px，滚完读回偏移 {offset}px）：这一段量不到换任务归位。");
+        }
+        return offset;
     }
 
     /// <summary>

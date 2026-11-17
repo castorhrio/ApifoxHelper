@@ -120,6 +120,9 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly TableLayoutPanel _detail;
     // 详情有九个分区、高于可视高度：放进可滚动宿主，底部动作（同步/报告）可达（DESIGN.md §6 长内容区）。
     private readonly Panel _detailScroll = Ui.ScrollHost();
+    // 详情区当前这一截滚动位置属于哪一个任务（第三百七十轮）：换任务时详情回到顶部，
+    // 刷新同一个任务时保持原位——动作做完要看得见结果，那个位置不能被抹掉。
+    private string? _detailTaskId;
     private readonly Label _detailName = Ui.Section();
     private readonly Label _detailMeta = Ui.Caption();
     private readonly Label _detailRange = Ui.Caption();
@@ -775,6 +778,19 @@ internal sealed class TasksPage : UserControl, INativePage
         }
         _detailScroll.Visible = true;
         _detailHint.Visible = false;
+
+        // 换任务时详情回到顶部（第三百七十轮）。补的是哪个缺口：详情区是固定控件、按任务刷新文字，
+        // 换任务并不重建它——滚动位置因此会留着上一条任务的那一截。于是新任务的头（名称、配置、范围、
+        // 下一步横幅、三阶段进度条）整段在屏外，用户看到的是新任务中段某一节，却不知道自己看的是哪一个任务；
+        // 「选中即定位」在清单那一侧早已立过（DESIGN.md §6「列表选中定位」，第五十七轮），
+        // 详情这一侧此前没有对上的规矩。冻结页面在同一件事上也是回到顶部（Web/app.js 里换一条注释缺口
+        // 详情时 detailHost.scrollTop = 0），属同壳同行为，不是原生另立一套。
+        // 刷新同一个任务不归位（_detailTaskId 不变）：动作做完要看得见结果，位置不能被抹掉。
+        if (_detailTaskId != task.Id)
+        {
+            _detailScroll.AutoScrollPosition = Point.Empty;
+            _detailTaskId = task.Id;
+        }
 
         _detailName.Text = task.Name;
         // 两行元信息的口径在 TaskSummary 一处（范围按模块/路径前缀/指定接口三个维度如实列出，
