@@ -349,11 +349,16 @@ public class ReadingConsistencyTests
     }
 
     /// <summary>
-    /// 上面那张表<b>抓不抓得住</b>——六发各喂一次（第三百八十二轮）。
+    /// 上面那张表<b>抓不抓得住</b>——七发各喂一次（第三百八十二轮立六发，第三百八十四轮补第七发）。
     /// <para>
     /// 只在真仓上判的门，抓不抓得住全靠那天有没有人想到去试；本仓对每一条判据都跑一遍反向，
     /// 为的就是让「它绿着」不等于「它什么都看不见」。夹具里的形状字面是<b>自造的</b>（「甲句形」这类）：
     /// 判据自测不该把仓里那两句真形状再抄一份进测试，那正是本轮要拆掉的东西。
+    /// </para>
+    /// <para>
+    /// 第七发补的是这一族此前唯一的空档：① 与 ⑤ 都是<b>反向</b>（删登记行红、旧说法没人用红），
+    /// 而「往表里加一个新形状、并且真有一处在用它」这条<b>正向</b>路从来没实测——下一轮要登记新句式时，
+    /// 除了猜没有别的依据。
     /// </para>
     /// </summary>
     [Fact]
@@ -395,6 +400,13 @@ public class ReadingConsistencyTests
             ["……甲句形……", "……乙句形 418 通过 / 0 失败 ×3……"]);
         Assert.Empty(clean.Problems);
         Assert.Equal(["甲句形", "乙句形"], clean.Shapes);
+
+        // ⑦ 正向那一发（第三百八十四轮）：往表里加一个新形状，且真有一处在用它——门要现读出那三个形状、不报。
+        var widened = ReadClaimShapeRegistry(
+            ["> **当前读数声称的合法形状登记**（判据）：形状登记：`甲句形`、`乙句形`、`丙句形`。凡用登记在册的任一句形……"],
+            ["……甲句形……", "……乙句形 418 通过 / 0 失败 ×3……", "……丙句形 418 通过 / 0 失败 ×3……"]);
+        Assert.Empty(widened.Problems);
+        Assert.Equal(["甲句形", "乙句形", "丙句形"], widened.Shapes);
     }
 
     /// <summary>逐轮账本的开头：NOTES 里第一处 <c>## 第…轮</c> 标题——那以下每一行都是「某一轮那一跑」的账。</summary>
@@ -769,15 +781,26 @@ public class ReadingConsistencyTests
         return flat.ToString();
     }
 
-    /// <summary>中文数字（一…二十）。逐屏表里的段数最大是八，留到二十是给以后加段留余量。</summary>
+    /// <summary>
+    /// 中文数字（一…二十，另认「两」）。逐屏表里的段数最大是八，留到二十是给以后加段留余量；
+    /// 「两」是第三百八十四轮补的：表里写「两段」的地方真实存在（第 1 行 <c>RunProfileJumpFilterKeep</c>），
+    /// 而它此前不在这张表里，那一格每次都被解析成「没有段数」放过——值写错了门也不会红。
+    /// </summary>
     private static int? ChineseNumber(string text) => text switch
     {
-        "一" => 1, "二" => 2, "三" => 3, "四" => 4, "五" => 5,
+        "一" => 1, "二" => 2, "两" => 2, "三" => 3, "四" => 4, "五" => 5,
         "六" => 6, "七" => 7, "八" => 8, "九" => 9, "十" => 10,
         _ => text.StartsWith('十') && text.Length == 2 && "一二三四五六七八九".Contains(text[1])
             ? 10 + "一二三四五六七八九".IndexOf(text[1]) + 1
             : null,
     };
+
+    /// <summary>
+    /// 段数的取法。字符类与 <see cref="ChineseNumber"/> 必须是同一份——少一个写法，那一格就安静地落在门外。
+    /// 「第 / 这 / 那 / 每 / 同 / 逐」开头的排除掉：那是「第几段」或指代，不是「共几段」。
+    /// </summary>
+    private static readonly Regex StatedSegmentCount = new(
+        @"(?<![第这那每同逐])([一二三四五六七八九十两]+)段", RegexOptions.Compiled);
 
     /// <summary>
     /// 逐屏对账表里写的段数必须与冒烟器里那一段真有几段对得上（第一百九十四轮，简报 P1-2）。
@@ -803,10 +826,27 @@ public class ReadingConsistencyTests
     [Fact]
     public void ScreenTable_EveryStatedSegmentCountMatchesTheSmokeProgram()
     {
-        var counts = SegmentCounts();
+        var wrong = ScreenSegmentCountProblems(ScreenRows(), SegmentCounts());
+        Assert.True(wrong.Count == 0,
+            "逐屏对账表里这些段数与冒烟器对不上：" + string.Join(" ／ ", wrong)
+            + "。答辩现场念的就是这个数——改一段就回来改表，别让表比代码旧。");
+    }
+
+    /// <summary>
+    /// 判据本体：逐屏表的行 + 冒烟器每段真有几段 进，对不上的清单出（空 = 表里每一个数都是冒烟器里的那一个）。
+    /// <para>
+    /// 收成一处是为了让
+    /// <see cref="ScreenSegmentCountDetector_ReportsTheBreaksItMustCatch"/> 能把「两段」那一发真喂进去。
+    /// 第三百八十三轮挂在账上的正是这件事：真实仓上红不下来的原因在<b>解析器</b>里，
+    /// 而喂真实数据的那一条 [Fact] 只会一直绿——判据本体不接受外部数据时，那一族破坏永远喂不进去。
+    /// </para>
+    /// </summary>
+    private static List<string> ScreenSegmentCountProblems(
+        IReadOnlyList<(string Num, string Evidence)> rows, IReadOnlyDictionary<string, int> counts)
+    {
         var wrong = new List<string>();
 
-        foreach (var (num, evidence) in ScreenRows())
+        foreach (var (num, evidence) in rows)
         {
             var flat = StripParentheticals(evidence);
 
@@ -814,7 +854,7 @@ public class ReadingConsistencyTests
             {
                 var segments = Regex.Matches(clause, @"Run[A-Za-z0-9]+")
                     .Select(m => m.Value).Distinct().ToList();
-                var stated = Regex.Matches(clause, @"(?<![第这那每同逐])([一二三四五六七八九十]+)段")
+                var stated = StatedSegmentCount.Matches(clause)
                     .Select(m => ChineseNumber(m.Groups[1].Value)).Where(n => n is not null).Select(n => n!.Value).ToList();
                 // 一句里只有一个段名、一个段数时才判：两个段名共用一句时，那个数属于谁读不出来。
                 if (segments.Count != 1 || stated.Count != 1) continue;
@@ -836,9 +876,68 @@ public class ReadingConsistencyTests
             }
         }
 
-        Assert.True(wrong.Count == 0,
-            "逐屏对账表里这些段数与冒烟器对不上：" + string.Join(" ／ ", wrong)
-            + "。答辩现场念的就是这个数——改一段就回来改表，别让表比代码旧。");
+        return wrong;
+    }
+
+    /// <summary>
+    /// 上面那条判据<b>自己</b>被抓得住（第三百八十四轮，简报 P1-3）：六发各喂一次夹具。
+    /// <para>
+    /// 前两发是本轮那一改的正面证据：①「两段」写对不许报、②「两段」写错必须报。改之前这两发<b>是同一个答案</b>
+    /// （都不报）——因为「两」不在取法的字符类里，那一格被解析成「没有段数」，
+    /// 再被「一个段名 + 一个段数才判」的跳过条件放过；本轮收的就是这一格从「门跳过」变成「门覆盖」。
+    /// ③ 到 ⑥ 是不许跟着一起松的四发：中文「三段」那一族照旧咬得住、「第三段」是序号不是段数、
+    /// 一句里两个段名仍判不出归属（跳过，不猜）、「A 屏 × B 段 = C 段」乘不起来仍报。
+    /// </para>
+    /// <para>
+    /// <b>按第二百七十轮五步法判过</b>：① 断言里的名字 = <c>docs/NOTES.md</c>「降级答辩脚本」逐屏表那一格的字面、
+    /// <c>ApifoxHelper.Smoke/Program.cs</c> 里的 <c>RunAction(</c> 站点数；② 这两样都不在被这条门定义的对象里
+    /// （门自己不产出表，也不产出冒烟器）——答「不是」；③ 故按<b>对账门</b>处理，照常随实物一起长，
+    /// 本轮认「两」是把判据范围从 42 格扩到 43 格（现读实测新增受覆盖的就是第 1 行那一格，且它值对得上），
+    /// 不是放宽；④ 实测见本方法六发与本轮账本里那两发真实仓注入；⑤ 结论写进本轮账本与 commit message。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ScreenSegmentCountDetector_ReportsTheBreaksItMustCatch()
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["RunFixtureFilterKeep"] = 2,
+            ["RunFixtureBanner"] = 3,
+            ["RunFixtureNotice"] = 4,
+            ["RunFixtureSort"] = 5,
+        };
+
+        // ① 「两段」值对（2 对 2）：不报。这一格本轮起才第一次被门读到，所以要先确认「读到了也不冤枉」。
+        Assert.Empty(ScreenSegmentCountProblems(
+            [("1", "wine 冒烟 `RunFixtureFilterKeep` 两段（词命中那一行 → 词还在）")], counts));
+
+        // ② 「两段」值错（表里 2、冒烟器里 3）：必须报，并且点名是哪一行哪一段、两个数各是多少。
+        //    改之前这一发与 ① 同答案（都不报）——那正是第三百八十一轮挂账、本轮收口的那一处盲区。
+        var liang = ScreenSegmentCountProblems([("1", "wine 冒烟 `RunFixtureFilterKeep` 两段")],
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["RunFixtureFilterKeep"] = 3 });
+        Assert.Single(liang);
+        Assert.Contains("RunFixtureFilterKeep", liang[0], StringComparison.Ordinal);
+        Assert.Contains("写的是 2 段", liang[0], StringComparison.Ordinal);
+        Assert.Contains("冒烟器里是 3 段", liang[0], StringComparison.Ordinal);
+
+        // ③ 旧形状没被削弱：「三段」写错照旧报（表里 3、冒烟器里 4）。
+        var san = ScreenSegmentCountProblems([("2", "wine 冒烟 `RunFixtureBanner` 三段")],
+            new Dictionary<string, int>(StringComparer.Ordinal) { ["RunFixtureBanner"] = 4 });
+        Assert.Single(san);
+        Assert.Contains("RunFixtureBanner", san[0], StringComparison.Ordinal);
+
+        // ④ 「第三段」是「第几段」不是「共几段」：排除项在位，不许凭空报出一格。
+        Assert.Empty(ScreenSegmentCountProblems(
+            [("3", "wine 冒烟 `RunFixtureNotice` 第三段量的是提示行行高")], counts));
+
+        // ⑤ 一句里两个段名共用一个数：归属读不出来 → 跳过、不猜（认了「两」也不许把它读成某一段的数）。
+        Assert.Empty(ScreenSegmentCountProblems(
+            [("4", "wine 冒烟 `RunFixtureNotice` / `RunFixtureSort` 两段")], counts));
+
+        // ⑥ 乘积算式：15 屏 × 4 段 = 11 段 乘不起来 → 报。
+        var product = ScreenSegmentCountProblems([("5", "15 屏 × 4 段 = 11 段")], counts);
+        Assert.Single(product);
+        Assert.Contains("乘不起来", product[0], StringComparison.Ordinal);
     }
 
     // ---------- 第二百零七轮（简报 P0-1）：念出来的数要有「跑出来的出处」 ----------
