@@ -999,9 +999,23 @@ internal sealed class TasksPage : UserControl, INativePage
     /// 没有那一半（<c>PrimaryLabel</c> / <c>SecondaryLabel</c> 为 null）时按钮<b>藏起来</b>而不是摘掉：
     /// 藏起来的控件不参与 Tab 序、也不占位，与摘掉在屏上一样，但焦点不会因此丢。
     /// </para>
+    /// <para>
+    /// <b>被藏起来的那一颗正拿着键盘时，把键盘交给还在屏上的那一颗</b>（第三百七十六轮）：上一段那句
+    /// 「焦点不会因此丢」只对<b>没被聚焦</b>的那一颗成立。用户 Tab 到次动作那颗、按空格之后，那一次动作
+    /// 会改任务状态，紧接着的这一次刷新把次动作藏起来——而此刻键盘正落在它身上，框架把焦点挪到哪一颗
+    /// 不由这一页决定（实测落在父面那一行上），于是「按完一次就得重新 Tab 回来」。
+    /// 判定在 <see cref="BannerFocusPlan.Landing"/>（纯逻辑、Linux 真执行），本方法只负责触达。
+    /// </para>
+    /// <para>
+    /// <b>顺序是判据</b>：<c>Visible = false</c> 一落下去框架当场就把焦点挪走了，之后再读 <c>Focused</c>
+    /// 读到的是「已经不在它身上」，那一判永远答「不用交」——所以焦点必须在换显隐<b>之前</b>记下来。
+    /// </para>
     /// </summary>
     private void RefreshNextBanner(NextStep.Step next)
     {
+        // 先记下焦点在哪一颗：换显隐之后就读不到了（见上面「顺序是判据」那一段）。
+        var primaryHadFocus = _nextPrimary.Focused;
+        var secondaryHadFocus = _nextSecondary.Focused;
         _nextTitle.Text = next.Title;
         _nextTitle.ForeColor = ToneColor(next.Tone);
         _nextDetail.Text = next.Detail;
@@ -1011,6 +1025,10 @@ internal sealed class TasksPage : UserControl, INativePage
         _nextSecondaryAction = next.SecondaryAction;
         _nextSecondary.Text = next.SecondaryLabel ?? "";
         _nextSecondary.Visible = next.SecondaryLabel is not null;
+        // 原本聚焦的那一颗被藏起来了：把键盘交给还在屏上的那一颗（两颗都不在屏上时不猜）。
+        var landing = BannerFocusPlan.Landing(primaryHadFocus, secondaryHadFocus, _nextPrimary.Visible, _nextSecondary.Visible);
+        if (landing == BannerFocusPlan.Primary) _nextPrimary.Focus();
+        else if (landing == BannerFocusPlan.Secondary) _nextSecondary.Focus();
     }
 
     /// <summary>引导动作 → 本页既有入口；入口自身的门控与异常处理（状态行内联）保持不变。</summary>

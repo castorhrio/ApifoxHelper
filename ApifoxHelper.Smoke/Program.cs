@@ -310,7 +310,7 @@ internal static class Program
         Section("详情区换任务回到顶部（滚到详情底部 → 换另一个任务 → 详情回到顶部、新任务的头在屏上 → 刷新同一个任务不抹掉当前位置，真实控件量）", nameof(RunDetailScrollReset));
         RunDetailScrollReset(services, dataRoot);
 
-        Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变，真实控件）", nameof(RunBannerFocus));
+        Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变 → 次动作那颗正拿着键盘时刷新把它藏起来、键盘交给还在屏上的主动作那颗，真实控件）", nameof(RunBannerFocus));
         RunBannerFocus(services, dataRoot);
 
         Section("三阶段进度条跳转之后的键盘落点（焦点在阶段按钮上 → 点一次 → 焦点落到那一区的第一颗可点按钮上 → 那一区一颗都不可点时焦点不往那一区塞 → 跳完按一次 Tab 详情不再被拉回顶部，真实控件与真实按键）", nameof(RunStageJumpFocus));
@@ -8522,6 +8522,71 @@ internal static class Program
                 }
                 _lines.Add($"     横幅那一行（只有主动作的那一步）：{row.Controls.Count} 个控件、可见 1 颗「{visible[0].Text}」、"
                     + $"藏起来 1 颗（CanSelect {hidden[0].CanSelect}）、刷新四次之后实例与控件数都没变");
+            });
+
+            RunAction("任务页引导横幅：次动作那颗正拿着键盘时，刷新把它藏起来——键盘交给还在屏上的主动作那颗（真实控件）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                // 造一个「有次动作」的那一步：新任务还没扫描，NextStep 给主动作「开始扫描」+ 次动作「跳过，检查 Apifox」。
+                var fresh = tasks.Create(new CreateTaskRequest
+                {
+                    ProfileId = profiles.List().First().Id,
+                    Name = "横幅交键盘冒烟",
+                });
+                shown.RefreshData();
+                Application.DoEvents();
+                SelectTaskRow(shown, fresh.Id);
+
+                var row = BannerRow(shown);
+                var step = NextStep.Compute(tasks.Get(fresh.Id));
+                if (step.SecondaryLabel is null)
+                {
+                    throw new InvalidOperationException(
+                        $"这一步（「{step.Title}」）没有次动作：这一段要的是「次动作那颗正拿着键盘」的那一步，"
+                        + "造出来的状态没有走到那一支。");
+                }
+                var secondary = row.Controls.Cast<Control>().OfType<Button>()
+                    .FirstOrDefault(button => button.Visible && button.Text == step.SecondaryLabel)
+                    ?? throw new InvalidOperationException(
+                        $"横幅那一行没有写着「{step.SecondaryLabel}」的可见按钮：这一段要的是次动作那颗，认不到就没有落点。");
+                secondary.Focus();
+                Application.DoEvents();
+                if (!secondary.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到横幅那颗次动作「{secondary.Text}」上：焦点一开始就不在它身上，"
+                        + "后面那一判等于没量（这一段要的是「被藏起来时键盘交给谁」，不是「能不能放上去」）。");
+                }
+
+                // 真的走一次刷新，把次动作藏起来（远端被中断那一步只给主动作）。
+                tasks.UpdateAsync(fresh.Id, changed => changed.Stages.Remote.Status = "interrupted")
+                    .GetAwaiter().GetResult();
+                shown.RefreshData();
+                Application.DoEvents();
+
+                var after = NextStep.Compute(tasks.Get(fresh.Id));
+                if (after.SecondaryLabel is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"刷新之后这一步（「{after.Title}」）仍然给了次动作「{after.SecondaryLabel}」："
+                        + "这一段要的是「次动作被藏起来」的那一次刷新，造出来的状态没有走到那一支。");
+                }
+                if (secondary.Visible)
+                {
+                    throw new InvalidOperationException(
+                        $"刷新之后次动作那颗「{secondary.Text}」还亮着：这一段要的是「它被藏起来」的那一次刷新。");
+                }
+                var primary = row.Controls.Cast<Control>().OfType<Button>().FirstOrDefault(button => button.Visible)
+                    ?? throw new InvalidOperationException(
+                        "刷新之后横幅那一行一颗可见按钮都没有：这一段要的是「键盘交给还在屏上的那一颗」，没有落点。");
+                if (!primary.Focused)
+                {
+                    var where = shown.ContainsFocus ? "焦点还在窗体里、但不在它身上" : "焦点已经不在这个窗体里";
+                    throw new InvalidOperationException(
+                        $"次动作那颗被藏起来之后，键盘没有落到还在屏上的主动作「{primary.Text}」上（{where}）："
+                        + "用户按完一次就得重新 Tab 回来——藏起来的那一颗拿着键盘时，键盘该交给还在屏上的那一颗。");
+                }
+                _lines.Add($"     横幅那一行（次动作那颗拿着键盘、刷新把它藏起来）：键盘落到还在屏上的「{primary.Text}」上");
             });
         }
         finally
