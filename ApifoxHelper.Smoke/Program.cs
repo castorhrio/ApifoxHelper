@@ -313,6 +313,9 @@ internal static class Program
         Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变，真实控件）", nameof(RunBannerFocus));
         RunBannerFocus(services, dataRoot);
 
+        Section("三阶段进度条跳转之后的键盘落点（焦点在阶段按钮上 → 点一次 → 焦点落到那一区的第一颗可点按钮上 → 那一区一颗都不可点时焦点不往那一区塞 → 跳完按一次 Tab 详情不再被拉回顶部，真实控件与真实按键）", nameof(RunStageJumpFocus));
+        RunStageJumpFocus(services, dataRoot);
+
         Section("状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）", nameof(RunStatusFullText));
         RunStatusFullText(services, dataRoot);
 
@@ -8526,6 +8529,239 @@ internal static class Program
             page?.Dispose();
             host?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 点阶段按钮跳到那一区之后，键盘跟着落到那一区（第三百七十二轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>TasksPage.JumpToStage</c> 只把详情滚到那一区的标题，而点完那颗阶段按钮之后
+    /// 焦点就在那颗按钮上——那颗按钮在进度条那一行，此刻已经被滚出屏外。用户接着按 Tab 想走到那一区的动作按钮，
+    /// WinForms 会把新焦点控件滚进视野，于是详情被拉回顶部，刚跳到的分区又不见了
+    /// （wine 96 档实测：跳到源码注释区之后按一次 Tab，详情由 −779px 回到 0px，屏上又只剩进度条那一行）。
+    /// 这一处此前没有任何门：源码门判的是「只滚不改数据」，判不到「焦点落在哪里」——
+    /// 那要真的把窗体显示出来、真的点一次、真的按一次键。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：真的显示任务页、真的把焦点放到阶段按钮上（真实点击会把焦点放在被点的按钮上）、
+    /// 真的点一次（<c>PerformClick</c> 走 WinForms 的点击链路），然后读三件事：
+    /// ① 焦点落在那一区的<b>第一颗可点按钮</b>上（不是留在阶段按钮上、也不是落在禁用控件上）；
+    /// ② 那一区一颗可点的按钮都没有时（未扫描时的 Apifox 区）焦点<b>不往那一区塞</b>；
+    /// ③ 跳完按一次 <c>Tab</c>，详情<b>不再被拉回顶部</b>。
+    /// </para>
+    /// <para>
+    /// <b>认那一区不抄用户可见文案</b>：分区标题取 <c>StageSteps.SourceLabel</c> / <c>StageSteps.RemoteSectionLabel</c>
+    /// 那两个共享常量，动作行取「标题之后那一行」（<c>BuildDetail</c> 的出厂顺序是标题、动作行、标题、动作行…）。
+    /// 落点挪走时报错点名，而不是静默量一行别的东西。
+    /// </para>
+    /// </summary>
+    private static void RunStageJumpFocus(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort-stage-jump.json"));
+        var task = tasks.Create(new CreateTaskRequest
+        {
+            ProfileId = profiles.List().First().Id,
+            Name = "阶段跳转焦点冒烟",
+        });
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("任务页三阶段进度条：点第一格跳到源码注释区之后，键盘焦点落在那一区的第一颗可点按钮上（真实控件）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "阶段跳转焦点冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    profiles,
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                // 与 RunDetailReach 同一入口：详情栏的设计宽只在 OnPageShown 里按当前宽度布置一次。
+                page.OnPageShown();
+                Application.DoEvents();
+
+                SelectTaskRow(page, task.Id);
+
+                var stageButton = StageButton(page, 0);
+                // 真实点击会把焦点放在被点的按钮上：先把它放上去，这一段量的才是「点完之后焦点去哪了」。
+                stageButton.Focus();
+                Application.DoEvents();
+                if (!stageButton.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到第一格阶段按钮「{stageButton.Text}」上：焦点一开始就不在它身上，"
+                        + "后面那一判等于没量（这一段要的是「点完之后焦点去哪了」，不是「能不能放上去」）。");
+                }
+                stageButton.PerformClick();
+                Application.DoEvents();
+
+                var offset = DetailScrollHost(page).AutoScrollPosition.Y;
+                if (offset == 0)
+                {
+                    throw new InvalidOperationException(
+                        "点了第一格阶段按钮之后详情没有滚到源码注释区（偏移仍是 0px）："
+                        + "这一段量的是「跳完之后焦点落在哪里」，跳都没发生就量不到。");
+                }
+
+                var (_, actions) = StageSection(page, StageSteps.SourceLabel);
+                var expected = actions.Controls.Cast<Control>().FirstOrDefault(control => control.CanSelect)
+                    ?? throw new InvalidOperationException(
+                        "源码注释区那一行一颗可点的按钮都没有：这一段要的是「焦点落到第一颗可点按钮」，"
+                        + "造出来的状态没有走到那一支。");
+                var focused = FocusedControl(page)
+                    ?? throw new InvalidOperationException(
+                        "点完阶段按钮之后窗体里没有焦点控件：焦点丢了，下一步 Tab 从窗体第一个控件起手。");
+                if (ReferenceEquals(focused, stageButton))
+                {
+                    throw new InvalidOperationException(
+                        $"点完阶段按钮之后焦点仍留在那颗「{stageButton.Text}」上（详情已滚到 {offset}px 处）："
+                        + "那颗按钮此刻在屏外，用户接着按 Tab 时 WinForms 会把新焦点控件滚进视野，"
+                        + "详情被拉回顶部，刚跳到的分区又不见了。");
+                }
+                if (!ReferenceEquals(focused, expected))
+                {
+                    throw new InvalidOperationException(
+                        $"点完阶段按钮之后焦点落在「{focused.Text}」上，而源码注释区那一行的第一颗可点按钮是"
+                        + $"「{expected.Text}」：焦点没有交给那一区，下一步 Tab 从别处起手。");
+                }
+                _lines.Add($"     跳到源码注释区：详情滚到 {offset}px 处、焦点落在那一区第一颗可点按钮「{focused.Text}」上");
+            });
+
+            RunAction("任务页三阶段进度条：那一区一颗可点的按钮都没有时（未扫描的 Apifox 区），焦点不往那一区塞（真实控件）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                var (_, actions) = StageSection(shown, StageSteps.RemoteSectionLabel);
+                if (actions.Controls.Cast<Control>().Any(control => control.CanSelect))
+                {
+                    throw new InvalidOperationException(
+                        "未扫描任务的 Apifox 区那一行还有可点的按钮：这一段要的是「一颗都不可点」那一支，"
+                        + "造出来的状态没有走到它。");
+                }
+
+                var stageButton = StageButton(shown, StageSteps.Keys.Length - 1);
+                stageButton.Focus();
+                Application.DoEvents();
+                stageButton.PerformClick();
+                Application.DoEvents();
+
+                var offset = DetailScrollHost(shown).AutoScrollPosition.Y;
+                if (offset == 0)
+                {
+                    throw new InvalidOperationException(
+                        "点了最后一格阶段按钮之后详情没有滚到 Apifox 差异与同步区（偏移仍是 0px）："
+                        + "这一段量的是「那一区没有可点按钮时焦点去哪了」，跳都没发生就量不到。");
+                }
+                var focused = FocusedControl(shown);
+                if (focused is not null && actions.Controls.Contains(focused))
+                {
+                    throw new InvalidOperationException(
+                        $"焦点被塞进了 Apifox 区那一行的「{focused.Text}」上（CanSelect = {focused.CanSelect}）："
+                        + "禁用控件 Focus() 直接返回 false，塞过去等于没塞，还会让下一步 Tab 从别处起手。");
+                }
+                _lines.Add($"     跳到 Apifox 区（那一行 {actions.Controls.Count} 个控件、可点 0 颗）："
+                    + $"详情滚到 {offset}px 处、焦点没有被塞进那一行（现在在「{focused?.Text ?? "（无）"}」上）");
+            });
+
+            RunAction("任务页三阶段进度条：跳到源码注释区之后按一次 Tab，详情不再被拉回顶部（真实按键）", () =>
+            {
+                if (page is not { } shown || host is not { } window)
+                {
+                    throw new InvalidOperationException("上一段没有产出任务页。");
+                }
+                var stageButton = StageButton(shown, 0);
+                stageButton.Focus();
+                Application.DoEvents();
+                stageButton.PerformClick();
+                Application.DoEvents();
+
+                var before = DetailScrollHost(shown).AutoScrollPosition.Y;
+                if (before == 0)
+                {
+                    throw new InvalidOperationException(
+                        "点了第一格阶段按钮之后详情没有滚到源码注释区（偏移仍是 0px）：这一段量不到「按 Tab 之后还在不在」。");
+                }
+
+                PressKey(window, null, "{TAB}");
+
+                var after = DetailScrollHost(shown).AutoScrollPosition.Y;
+                if (after == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"跳到源码注释区（{before}px）之后按一次 Tab，详情回到了顶部（{after}px）："
+                        + "焦点还在那颗已被滚出屏外的阶段按钮上，WinForms 把新焦点控件滚进视野时把详情拉回了顶部，"
+                        + "刚跳到的分区又不见了。");
+                }
+                var focused = FocusedControl(shown);
+                _lines.Add($"     跳到源码注释区之后按一次 Tab：详情由 {before}px 到 {after}px（没有被拉回顶部）、"
+                    + $"焦点在「{focused?.Text ?? "（无）"}」上");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 三阶段进度条里第 <paramref name="index"/> 格那颗按钮（详情第一行，<c>BuildDetail</c> 里第一个加进网格的行）。
+    /// <para>
+    /// 落点用「详情第一行 + 可见按钮数等于 <c>StageSteps.Keys.Length</c>」自证（与 <see cref="MeasureStepCellPadding"/>
+    /// 同一取法）：进度条那一行挪走时报错点名，而不是静默量一颗别的东西。
+    /// </para>
+    /// </summary>
+    private static Button StageButton(TasksPage page, int index)
+    {
+        var row = DetailGrid(page).Controls.Cast<Control>().FirstOrDefault() as FlowLayoutPanel
+            ?? throw new InvalidOperationException(
+                "详情第一行不是那一行按钮：阶段按钮的落点不再指向三格进度条，本段的量测口径要跟着改。");
+        var cells = row.Controls.Cast<Control>().OfType<Button>().ToList();
+        if (cells.Count != StageSteps.Keys.Length)
+        {
+            throw new InvalidOperationException(
+                $"详情第一行读到 {cells.Count} 颗按钮，与 {nameof(StageSteps)} 的 {StageSteps.Keys.Length} 个阶段键不等长："
+                + "阶段按钮的落点不在三格进度条上。");
+        }
+        if (index < 0 || index >= cells.Count)
+        {
+            throw new InvalidOperationException($"阶段按钮只有 {cells.Count} 格，要的是第 {index} 格。");
+        }
+        return cells[index];
+    }
+
+    /// <summary>
+    /// 详情里某一区的标题与它下面那一行动作按钮（按共享常量认标题，动作行取「标题之后那一行」）。
+    /// </summary>
+    private static (Label Section, FlowLayoutPanel Actions) StageSection(TasksPage page, string caption)
+    {
+        var controls = DetailGrid(page).Controls.Cast<Control>().ToList();
+        var index = controls.FindIndex(control => control is Label label && label.Text == caption);
+        if (index < 0)
+        {
+            throw new InvalidOperationException(
+                $"详情区里找不到标题为「{caption}」的那一行：分区标题的出厂处换了形状，本段的量测口径要跟着改。");
+        }
+        var actions = controls.Skip(index + 1).OfType<FlowLayoutPanel>().FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                $"「{caption}」之后没有动作按钮行：分区标题与动作行的出厂顺序换了形状，本段的量测口径要跟着改。");
+        return ((Label)controls[index], actions);
     }
 
     /// <summary>

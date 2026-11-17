@@ -335,7 +335,7 @@ public class StageStepsTests
     public void JumpToStage_OnlyScrollsTheDetail()
     {
         var page = Repo.Source("Desktop", "Native", "TasksPage.cs");
-        var jump = Slice(page, "private void JumpToStage(string key)", "/// <summary>\n    /// 下一步引导横幅");
+        var jump = Slice(page, "private void JumpToStage(string key)", "/// <summary>\n    /// 把键盘交给一行动作按钮里的第一颗可点按钮");
         // 只把详情滚到那一区的标题：不改选中、不重建、不写数据、不触发任何动作。
         Assert.Matches(@"(?m)^\s*_detailScroll\.AutoScrollPosition = new Point\(0, Math\.Max\(0, section\.Top - UiTokens\.Lg\)\);$", jump);
         Assert.DoesNotContain("Ui.SelectItem", jump, StringComparison.Ordinal);
@@ -343,8 +343,55 @@ public class StageStepsTests
         Assert.DoesNotContain("FileStore", jump, StringComparison.Ordinal);
         Assert.DoesNotContain("WriteJson", jump, StringComparison.Ordinal);
         Assert.DoesNotContain("Start", jump, StringComparison.Ordinal);
-        // 认不出的键不动作（不猜一个分区）。
-        Assert.Matches(@"(?m)^\s*if \(section is null\) return;$", jump);
+        // 认不出的键不动作（不猜一个分区）：分区与那一行动作按钮一起认，缺一个都不动作。
+        Assert.Matches(@"(?m)^\s*if \(section is null \|\| actions is null\) return;$", jump);
+    }
+
+    /// <summary>
+    /// 跳完把键盘交给那一区（第三百七十二轮）：焦点落在那一区的第一颗<b>可点</b>按钮上，
+    /// 且交焦点发生在定落点<b>之前</b>。
+    /// <para>
+    /// <b>为什么这一半必须由源码门钉住</b>：点完阶段按钮之后焦点就在那颗按钮上，而它在进度条那一行——
+    /// 此刻已经被滚出屏外。用户接着按 Tab，WinForms 会把新焦点控件滚进视野，详情被拉回顶部，
+    /// 刚跳到的分区又不见了。这一处只有「焦点落在哪里」说得清，而判它要真的显示窗体、真的点一次、
+    /// 真的按一次键——那是冒烟段 <c>RunStageJumpFocus</c> 的事（wine 里跑，本环境不是真机）。
+    /// 形状这一半（交焦点在定落点之前、只交可点的、只在这一处交）必须由 <c>dotnet test</c> 当场钉住，
+    /// 否则下一次重构把顺序调过来，要等到下一次重烧才有人发现。
+    /// </para>
+    /// <para>
+    /// <b>顺序为什么是判据</b>：反过来的话，交焦点那一下（WinForms 把焦点控件滚进视野）会把刚定好的落点顶掉——
+    /// 落点由那一区标题算出来，而焦点控件在标题之下，于是详情停在焦点控件那一行、标题被滚出屏外。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void JumpToStage_HandsTheKeyboardToTheFirstSelectableAction()
+    {
+        var page = Repo.Source("Desktop", "Native", "TasksPage.cs");
+        var jump = Slice(page, "private void JumpToStage(string key)", "/// <summary>\n    /// 把键盘交给一行动作按钮里的第一颗可点按钮");
+        var handoff = Slice(page, "private static void FocusFirstAction(Control row)", "/// <summary>\n    /// 栏比某一格的整句文字窄时");
+
+        // ① 交焦点在定落点之前：反过来的话交焦点那一下会把落点顶掉。
+        var focusAt = jump.IndexOf("FocusFirstAction(actions);", StringComparison.Ordinal);
+        var scrollAt = jump.IndexOf("_detailScroll.AutoScrollPosition =", StringComparison.Ordinal);
+        Assert.True(focusAt >= 0, "JumpToStage 里没有把键盘交给那一区（FocusFirstAction）：跳完焦点仍留在已被滚出屏外的阶段按钮上。");
+        Assert.True(scrollAt > focusAt, "JumpToStage 里交焦点发生在定落点之后：交焦点那一下会把刚定好的落点顶掉。");
+
+        // ② 三个阶段各自认自己那一行动作按钮（不猜、不共用一行）。
+        Assert.Matches(@"(?m)^\s*NextStep\.StageSource => \(_sourceSection, _scanActions\),$", jump);
+        Assert.Matches(@"(?m)^\s*NextStep\.StageGenerated => \(_generatedSection, _generatedActions\),$", jump);
+        Assert.Matches(@"(?m)^\s*NextStep\.StageRemote => \(_remoteSection, _remoteActions\),$", jump);
+
+        // ③ 只交可点的：禁用控件 Focus() 直接返回 false，塞过去等于没塞，还会让下一步 Tab 从别处起手。
+        Assert.Matches(@"(?m)^\s*if \(!control\.CanSelect\) continue;$", handoff);
+        Assert.Matches(@"(?m)^\s*control\.Focus\(\);$", handoff);
+        Assert.Matches(@"(?m)^\s*return;$", handoff);
+        // 一颗都不可点时不硬塞给别处（焦点留在原处）。
+        Assert.DoesNotContain("Parent", handoff, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectNextControl", handoff, StringComparison.Ordinal);
+
+        // ④ 交焦点只在这一处：一处定义、一处调用，多一处就意味着别的地方也在动键盘。
+        Assert.Single(Regex.Matches(page, @"private static void FocusFirstAction\(Control row\)").Cast<Match>());
+        Assert.Single(Regex.Matches(page, @"FocusFirstAction\(actions\);").Cast<Match>());
     }
 
     [Fact]

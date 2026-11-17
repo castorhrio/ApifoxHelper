@@ -857,18 +857,45 @@ internal sealed class TasksPage : UserControl, INativePage
     /// <summary>
     /// 点阶段跳到对应分区：只把详情滚动到那一区的标题，不改选中、不改任务数据、不触发任何动作。
     /// 认不出的键不动作（不猜一个分区）。
+    /// <para>
+    /// <b>键盘跟着落到那一区</b>（第三百七十二轮）：点完那颗阶段按钮之后焦点就在那颗按钮上，
+    /// 而那颗按钮在进度条那一行——它此刻已经被滚出屏外。用户接着按 Tab 想走到那一区的动作按钮，
+    /// WinForms 会把新焦点控件滚进视野，于是详情被拉回顶部，刚跳到的分区又不见了
+    /// （wine 96 档实测：跳到源码注释区之后按一次 Tab，详情由 −779px 回到 0px，屏上又只剩进度条那一行）。
+    /// 所以跳完把键盘交给那一区的第一颗可点按钮：Tab 从那里往下走，不再往回走。
+    /// 那一区一颗可点的按钮都没有时（例如未扫描时的 Apifox 区）焦点留在原处——那时那一区本来也没有可做的事。
+    /// </para>
     /// </summary>
     private void JumpToStage(string key)
     {
-        var section = key switch
+        var (section, actions) = key switch
         {
-            NextStep.StageSource => _sourceSection,
-            NextStep.StageGenerated => _generatedSection,
-            NextStep.StageRemote => _remoteSection,
-            _ => null,
+            NextStep.StageSource => (_sourceSection, _scanActions),
+            NextStep.StageGenerated => (_generatedSection, _generatedActions),
+            NextStep.StageRemote => (_remoteSection, _remoteActions),
+            _ => ((Label?)null, (FlowLayoutPanel?)null),
         };
-        if (section is null) return;
+        if (section is null || actions is null) return;
+        // 先交焦点、再定落点：反过来的话交焦点那一下（WinForms 把焦点控件滚进视野）会把刚定好的落点顶掉。
+        FocusFirstAction(actions);
         _detailScroll.AutoScrollPosition = new Point(0, Math.Max(0, section.Top - UiTokens.Lg));
+    }
+
+    /// <summary>
+    /// 把键盘交给一行动作按钮里的第一颗可点按钮（第三百七十二轮，唯一触达点）。
+    /// <para>
+    /// 一颗都不可点时不动键盘：焦点落在一个禁用控件上等于没落（<c>Focus()</c> 直接返回 false），
+    /// 而把焦点硬塞给别处会让用户下一步按 Tab 时从别的地方起手——那比留在原处更难解释。
+    /// </para>
+    /// </summary>
+    private static void FocusFirstAction(Control row)
+    {
+        foreach (var control in row.Controls.Cast<Control>())
+        {
+            if (!control.CanSelect) continue;
+            control.Focus();
+            return;
+        }
     }
 
     /// <summary>
