@@ -171,13 +171,22 @@ internal sealed class TasksPage : UserControl, INativePage
     // 选中任务 Id：重建前先取局部（Items.Clear 触发选中事件会抹掉字段），
     // 被筛掉的任务在清空筛选后仍回到选中（与配置页同一口径）。
     private string? _selectedId;
-    private bool _runningShown;
     /// <summary>
-    /// 上一次在这一页上看到的作业 Id（第三百七十八轮）：作业结束之后 <c>JobRunner.Running</c> 就答 null 了，
-    /// 要读回它的终态与失败原因只能按 Id 取（<c>JobRunner.Get</c>）。记在 <see cref="ShowJobState"/> 一处、
-    /// 用掉即清（<see cref="ShowJobOutcome"/>），一次作业只报一次结果。
+    /// 这一页欠着一次结果没报的作业 Id（第三百七十八轮记法、第三百八十六轮改准）：作业结束之后
+    /// <c>JobRunner.Running</c> 就答 null 了，要读回它的终态与失败原因只能按 Id 取（<c>JobRunner.Get</c>）。
+    /// <para>
+    /// <b>记在两处，而不是只记在「看到它在跑」那一次</b>：<see cref="StartTaskJob"/>（这一页自己起作业时）与
+    /// <see cref="ShowJobState"/>（界面看到它在跑时）。第三百八十五轮的 wine 冒烟量到只记后一处的后果：
+    /// 一次几十毫秒内就失败的作业，<c>RefreshDetail</c> 那一次已经看不到它在跑了，两个都没立起来，
+    /// 于是那一句永远不会说出口——用户按了「开始扫描」，屏上对这次失败一句话都没有。
+    /// 起作业时记下不依赖任何轮询，那一支就补上了。
+    /// </para>
+    /// <para>用掉即清（<see cref="ShowJobOutcome"/>），一次作业只报一次结果；报之前先核它属于当前选中的那一个任务
+    /// （<see cref="_lastJobTaskId"/>），不对着另一个任务念上一个任务的旧结果。</para>
     /// </summary>
     private string? _lastJobId;
+    /// <summary><see cref="_lastJobId"/> 那一次作业所属的任务 Id（<c>JobInfo.Scope</c> 就是这个 Id）。</summary>
+    private string? _lastJobTaskId;
     private bool _splitAdjusted;
     // 列排序状态（ListSort 口径）：未排序时按任务创建时间倒序（TaskStore.List 的顺序）。
     private int _sortColumn = ListSort.None;
@@ -765,7 +774,9 @@ internal sealed class TasksPage : UserControl, INativePage
     {
         _selectedTask = Ui.SelectedItem(_list)?.Tag as CheckTask;
         _selectedId = _selectedTask?.Id;
-        _runningShown = false;
+        // 这里不抹欠着的那一次结果：LoadTasks 重建列表时 Items.Clear 也会走到这一句（选中先被抹成 null），
+        // 抹掉就把 OnTick 刚要报的那一句一起抹了。「换任务不念上一个任务的旧结果」由 ShowJobOutcome
+        // 按欠账所属的任务判，不靠这一处。
         RefreshDetail();
     }
 
@@ -1102,14 +1113,38 @@ internal sealed class TasksPage : UserControl, INativePage
         _reportButton.Enabled = _selectedTask is not null && job is null;
     }
 
+    /// <summary>
+    /// 这一页起一次作业的唯一落点（第三百八十六轮）：起完当场记下「这一次的结果欠着没报」。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：那一记此前只落在 <see cref="ShowJobState"/>「界面看到它在跑」那一次。
+    /// 一次几十毫秒内就失败的作业，<c>StartScan</c> 里紧接着那一次 <c>RefreshDetail</c> 已经看不到它在跑了
+    /// （<c>JobRunner.Running</c> 当场答 null），于是 Id 没记下、触发也没立起来，<see cref="OnTick"/>
+    /// 后半支永远走不到——用户按了「开始扫描」，屏上对这一次失败一句话都没有。
+    /// 第三百八十五轮的 wine 冒烟在 120 与 192 两档量到的正是这一处（逐字红话留在
+    /// <c>ApifoxHelper.Smoke/Program.cs</c> 的 <c>RunJobOutcomeStatus</c> 注释里）。
+    /// <c>Start</c> 当场返回那一个 <see cref="JobInfo"/>，记下它不依赖任何轮询，那一支就此补上。
+    /// </para>
+    /// </summary>
+    private void StartTaskJob(string taskId, string kind, Func<JobContext, Task<object?>> work)
+    {
+        RememberOutcome(_jobs.Start(taskId, kind, work));
+    }
+
+    /// <summary>记下「这一次作业的结果还欠着」（唯一落点，与 <see cref="ShowJobOutcome"/> 的用掉即清成对）。</summary>
+    private void RememberOutcome(JobInfo job)
+    {
+        _lastJobId = job.Id;
+        _lastJobTaskId = job.Scope;
+    }
+
     private void ShowJobState(JobInfo? job)
     {
         RefreshDetailActions(job);
         if (job is not null)
         {
-            _runningShown = true;
             // 记下 Id：作业一结束 Running 就答 null，终态与失败原因只能按 Id 读回（见 ShowJobOutcome）。
-            _lastJobId = job.Id;
+            // 从别的屏起起来的作业（同步预览、写入探测）也经这一处落到这一页的欠账上。
+            RememberOutcome(job);
             _scanButton.Visible = false;
             _progress.Visible = true;
             _cancelButton.Visible = true;
@@ -1123,7 +1158,6 @@ internal sealed class TasksPage : UserControl, INativePage
         }
         else
         {
-            _runningShown = false;
             _scanButton.Visible = true;
             _progress.Visible = false;
             _cancelButton.Visible = false;
@@ -1139,13 +1173,15 @@ internal sealed class TasksPage : UserControl, INativePage
             ShowJobState(job);
             return;
         }
-        if (_runningShown)
-        {
-            // 作业刚结束：重读任务与列表，展示落盘的阶段结果。
-            LoadTasks();
-            // 这一次的结果说在状态行上（第三百七十八轮）：进度行随即收起，失败原因不能跟着一起消失。
-            ShowJobOutcome();
-        }
+
+        // 触发只看「还欠着一次结果没报」，不看「界面有没有看到它在跑」——后者正是第三百八十五轮量到的那处缺口：
+        // 一个到终态比界面第一次看到它还早的作业，那个 flag 从来立不起来，那一句就永远说不出口。
+        if (_lastJobId is null) return;
+
+        // 作业刚结束：重读任务与列表，展示落盘的阶段结果。
+        LoadTasks();
+        // 这一次的结果说在状态行上（第三百七十八轮）：进度行随即收起，失败原因不能跟着一起消失。
+        ShowJobOutcome();
     }
 
     /// <summary>
@@ -1157,8 +1193,16 @@ internal sealed class TasksPage : UserControl, INativePage
     /// </para>
     /// <para>
     /// <b>为什么读回终态</b>：<c>JobRunner.Running</c> 在作业结束后答 null，终态与失败原因只能按 Id 取
-    /// （<c>JobRunner.Get</c>，作业记录在 <c>Prune</c> 之前一直留着）。Id 由 <see cref="ShowJobState"/> 记下，
-    /// 本方法用掉即清——一次作业只报一次，不重复念同一句。
+    /// （<c>JobRunner.Get</c>，作业记录在 <c>Prune</c> 之前一直留着）。Id 由 <see cref="StartTaskJob"/>
+    /// （这一页自己起作业时）与 <see cref="ShowJobState"/>（界面看到它在跑时）两处记下，本方法用掉即清——
+    /// 一次作业只报一次，不重复念同一句。
+    /// </para>
+    /// <para>
+    /// <b>换过任务不念旧结果</b>：欠账带着它属于哪一个任务（<see cref="_lastJobTaskId"/>），报之前先核它
+    /// 就是当前选中的那一个——状态行是「当前这个任务刚才那件事怎么样了」的通道，对着另一个任务念上一个
+    /// 任务的旧结果会把人说错。这一判此前由 <c>OnSelectedChanged</c> 抹「看到过它在跑」那个 flag 承担，
+    /// 挪到这里是因为第三百八十六轮起欠账在起作业时就在手上、换任务那一处不能再抹它
+    /// （<c>LoadTasks</c> 重建列表时也会走那一处，抹掉就把刚要报的那一句一起抹了）。
     /// </para>
     /// <para>
     /// <b>不覆盖读取失败</b>：<see cref="LoadTasks"/> 刚判过「磁盘上的任务读不出来」时，状态行已经在说那件事的
@@ -1170,6 +1214,10 @@ internal sealed class TasksPage : UserControl, INativePage
     {
         if (_lastJobId is not { } id) return;
         _lastJobId = null;
+        var owedByTask = _lastJobTaskId;
+        _lastJobTaskId = null;
+        // 这一笔欠账属于上一个选中的任务：不对着现在这个念，也不留着以后念（留着的数已经旧了）。
+        if (owedByTask != _selectedTask?.Id) return;
         if (_jobs.Get(id) is not { } job) return;
         if (JobOutcome.FinishedText(job.Kind, job.State, job.Error) is not { } text) return;
         if (_loadFailed) return;
@@ -1182,7 +1230,7 @@ internal sealed class TasksPage : UserControl, INativePage
         var taskId = _selectedTask.Id;
         try
         {
-            _jobs.Start(taskId, "源码扫描", async job => await _scan.ScanAsync(taskId, job));
+            StartTaskJob(taskId, "源码扫描", async job => await _scan.ScanAsync(taskId, job));
             RefreshDetail();
         }
         catch (UserException ex)
@@ -1217,7 +1265,7 @@ internal sealed class TasksPage : UserControl, INativePage
         var taskId = _selectedTask.Id;
         try
         {
-            _jobs.Start(taskId, "规则提取候选", async job => await _drafts.GenerateRuleAsync(taskId, [], job.Token));
+            StartTaskJob(taskId, "规则提取候选", async job => await _drafts.GenerateRuleAsync(taskId, [], job.Token));
             RefreshDetail();
         }
         catch (UserException ex)
@@ -1279,7 +1327,7 @@ internal sealed class TasksPage : UserControl, INativePage
         if (choice != DialogResult.OK) return;
         try
         {
-            _jobs.Start(taskId, "模型生成草稿", async job => await _drafts.GenerateWithModelAsync(taskId, [], true, job));
+            StartTaskJob(taskId, "模型生成草稿", async job => await _drafts.GenerateWithModelAsync(taskId, [], true, job));
             RefreshDetail();
         }
         catch (UserException ex)
@@ -1357,7 +1405,7 @@ internal sealed class TasksPage : UserControl, INativePage
         var taskId = _selectedTask.Id;
         try
         {
-            _jobs.Start(taskId, "传播核对", async job => await _propagation.CheckAsync(taskId, job));
+            StartTaskJob(taskId, "传播核对", async job => await _propagation.CheckAsync(taskId, job));
             RefreshDetail();
         }
         catch (UserException ex)
@@ -1393,7 +1441,7 @@ internal sealed class TasksPage : UserControl, INativePage
         var taskId = _selectedTask.Id;
         try
         {
-            _jobs.Start(taskId, "定向构建", async job => await _builds.RunAsync(taskId, job));
+            StartTaskJob(taskId, "定向构建", async job => await _builds.RunAsync(taskId, job));
             RefreshDetail();
         }
         catch (UserException ex)
@@ -1519,7 +1567,7 @@ internal sealed class TasksPage : UserControl, INativePage
         var loadSwagger = reloadSwagger || NextStep.NeedsSwaggerLoad(_selectedTask);
         try
         {
-            _jobs.Start(taskId, "契约检查", async job =>
+            StartTaskJob(taskId, "契约检查", async job =>
             {
                 if (loadSwagger) await _checks.LoadSwaggerAsync(taskId, job.Token);
                 return await _checks.RunAsync(taskId, job);
@@ -1546,7 +1594,7 @@ internal sealed class TasksPage : UserControl, INativePage
         var path = picker.FileName;
         try
         {
-            _jobs.Start(taskId, "导入离线远端", async job =>
+            StartTaskJob(taskId, "导入离线远端", async job =>
                 await _checks.ImportOfflineRemoteAsync(taskId, await File.ReadAllTextAsync(path, Encoding.UTF8, job.Token), job.Token));
             RefreshDetail();
         }
@@ -1615,7 +1663,7 @@ internal sealed class TasksPage : UserControl, INativePage
         try
         {
             var task = _tasks.Create(dialog.Request);
-            if (dialog.StartScan) _jobs.Start(task.Id, "源码扫描", async job => await _scan.ScanAsync(task.Id, job));
+            if (dialog.StartScan) StartTaskJob(task.Id, "源码扫描", async job => await _scan.ScanAsync(task.Id, job));
             LoadTasks();
             SelectTask(task.Id);
         }

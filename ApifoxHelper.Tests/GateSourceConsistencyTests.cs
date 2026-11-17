@@ -293,6 +293,17 @@ public class GateSourceConsistencyTests
             + "剪贴板读回来逐字比对、期望值取产品口径（表头「接口」那一格与 SyncSelection.Selectable）」——"
             + "那是段体形状门（判据在判冒烟段自己），不是「静态门与冒烟段断言同一表达式」的同源对；"
             + "这一屏没有可判的同源表达式，硬凑一对只会把「同源」稀释成「两边都提到这个名字」。"),
+        new(
+            ["RunJobOutcomeStatus"],
+            "作业结束之后状态行那一句（第三百八十五轮写下前两支、第三百八十六轮修掉上一轮量到的缺口之后补上第三支）："
+            + "JobOutcomeStatusSmokeTests.cs 判的是段体形状——点的确实是扫描区那一行的那颗「开始扫描」"
+            + "（ScanActionRow 三支各取一次、PerformClick 两处、SelectedTaskId 两支点之前各先核选中）、"
+            + "确实起了页面自己的 500ms 轮询（OnPageShown 一处、PumpUntilCondition 两处：等成功那一句与等失败那一句、"
+            + "跑三次的 Thread.Sleep(600) 一处）、「作业真跑过」确实从磁盘读回 ScannedAt、失败那一支确实读到原因里的"
+            + "那一个项目路径与色调 bad、红话逐句在——不是「静态门与冒烟段断言同一表达式」的同源对。"
+            + "而这一屏**恰好不许**做成同源对：段体一旦改去调 JobOutcome.FinishedText 生成期望，断言与产品同源就恒真，"
+            + "「那一句真的出现在屏幕上」这句话于是又退回没有读数的样子；"
+            + "所以这一屏判的是「期望必须是屏上那一句字面，且段体里不许出现那句口径调用」。"),
     ];
 
     /// <summary>

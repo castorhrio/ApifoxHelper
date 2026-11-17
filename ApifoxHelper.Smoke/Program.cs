@@ -316,6 +316,9 @@ internal static class Program
         Section("三阶段进度条跳转之后的键盘落点（焦点在阶段按钮上 → 点一次 → 焦点落到那一区的第一颗可点按钮上 → 那一区一颗都不可点时焦点不往那一区塞 → 跳完按一次 Tab 详情不再被拉回顶部，真实控件与真实按键）", nameof(RunStageJumpFocus));
         RunStageJumpFocus(services, dataRoot);
 
+        Section("作业结束之后状态行说结果（真的点一次扫描区那颗「开始扫描」：成功 → 进度行收起之后状态行逐字写着「源码扫描完成。」、色调 muted、磁盘上真有扫描时间 → 那一句在之后三次轮询里逐字未变 → 几十毫秒内就失败的那一次（API 项目在配置保存之后被删掉），那一句原因也在屏上说过、色调 bad；真实控件、真实后台作业、页面自己的轮询）", nameof(RunJobOutcomeStatus));
+        RunJobOutcomeStatus(services, dataRoot);
+
         Section("状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）", nameof(RunStatusFullText));
         RunStatusFullText(services, dataRoot);
 
@@ -8784,6 +8787,363 @@ internal static class Program
             host?.Dispose();
         }
     }
+
+    /// <summary>
+    /// 作业结束之后，那一句结果真的出现在状态行上（第三百八十五轮，具名 pass：evidence）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第三百七十八轮把「作业结束之后状态行说结果」写进了产品——判定在
+    /// <c>Desktop/Native/JobOutcome.cs</c>、触达在 <c>TasksPage.ShowJobOutcome</c>，Linux 侧那一族门也在，
+    /// 但冒烟器里 <c>JobOutcome</c> / <c>ShowJobOutcome</c> / <c>FinishedText</c> 三处零命中：那一句
+    /// 一直是「有门无读数」。答辩现场被问「作业跑完之后屏幕上真的说过结果吗」，仓里没有任何一笔 wine 读数可念。
+    /// </para>
+    /// <para>
+    /// <b>这一段量三件</b>：真的显示任务页、真的点一次扫描区那颗「开始扫描」（走 <c>TasksPage.StartScan</c>
+    /// → 共享 <c>JobRunner</c> 的真实后台作业 → 真实 <c>SourceScanService</c>），然后由<b>页面自己的</b>
+    /// 500ms 轮询走到 <c>OnTick</c> → <c>LoadTasks</c> → <c>ShowJobOutcome</c>，读三件事：
+    /// ① 进度行收起之后，状态行逐字写着「源码扫描完成。」、色调 muted、那颗「开始扫描」回到屏上，
+    ///    而磁盘上确实有这一次扫描的时间（<c>Stages.Source.ScannedAt</c>）；
+    /// ② 那一句在之后连续三次轮询（超过 1.5 秒）里逐字未变——「一次作业只报一次」不等于「报完就消失」；
+    /// ③ 一次<b>几十毫秒内就失败</b>的作业（API 项目在配置保存之后被删掉），那一句「源码扫描失败：…」也真的
+    ///    出现在状态行上、逐字含我写下的那一个项目路径、色调 bad、进度行收起、磁盘上没有这一次扫描的时间。
+    /// </para>
+    /// <para>
+    /// <b>为什么「进度行亮过没有」只作读数、不作判据（96 档第一发实验量出来的）</b>：这一版最初要求
+    /// 「点下去之后进度行同步亮着」，那一发红——不是产品没跑，是<b>量法站不住</b>：探针工程的工作区已被
+    /// 同进程里前几段缓存过（<c>ProjectLoader</c> 的静态树缓存），一次扫描可以在界面第一次看到它之前就到终态，
+    /// 而结果那一句是页面自己的轮询写出来的，读到的那一刻进度行早已收起。现在「作业真跑过」改<b>从磁盘读回来</b>，
+    /// 「进度行亮过」只如实报进读数行；那一句则是泵到它出现，等不到就把当时的可见性链念出来
+    /// （<see cref="VisibilityChain"/>——<c>Control.Visible</c> 是生效后的值，只报一个 false
+    /// 分不清「没跑起来」与「那一行没显出来」）。
+    /// </para>
+    /// <para>
+    /// <b>第二发又量到两件事，都按实物改了</b>：① 等待条件必须是<b>那一句本身</b>而不是「与上一句不同」——
+    /// 作业结束那一次刷新会先把状态行清空（或写回筛选计数），「不同」这一判会被那些中间值筛掉，
+    /// 于是下一支白等满当时那一发设的 180 秒（现已收成 30 秒）；② 点之前先核<b>选中真的落到了要量的那一个任务</b>
+    /// （<see cref="SelectedTaskId"/>）——不落的话跑的是上一个任务、屏上停的是上一句，
+    /// 红话分不清是「没换选中」还是「没跑出那一句」。
+    /// </para>
+    /// <para>
+    /// <b>第三支（第三百八十六轮回到段里）量的是上一轮那一处产品缺口，如今量到的是「说过」</b>：这一支造的是
+    /// 「API 项目在配置保存之后被删掉的配置 → 点开始扫描 → 那一句失败原因在不在屏上」
+    /// （<c>ProfileStore.Save</c> 自己要求那一份文件存在，所以只能先写一份一次性的 csproj、建完任务再删）。
+    /// 第三百八十五轮它被写成第三支时，在 96 档过（那一句 271ms 落地、原因 40 字逐字来自服务层、色调 bad），
+    /// 在 <b>120 与 192 两档同一版源码上各红一次</b>，红话逐字为
+    /// 「等 30004ms 之后状态行还是「源码扫描完成。」：那一句原因没出现在屏上（进度行可见 False、
+    /// 那颗按钮可见 True、父链 Label:False ← FlowLayoutPanel:True ← TableLayoutPanel:True ←
+    /// ScrollPanel:True ← SplitterPanel:True ← SplitContainer:True ← TasksPage:True ← Form:True）」——
+    /// <b>那不是量法问题，是产品缺口</b>：<c>TasksPage.ShowJobState</c> 只在「界面看到它在跑」那一次记下作业 Id
+    /// 并立起 <c>_runningShown</c>，而 <c>OnTick</c> 又以 <c>_runningShown</c> 为唯一触发；一个<b>在界面第一次
+    /// 看到它之前就到达终态</b>的作业（几十毫秒内失败的那一类最典型），两个都没立起来，于是那一句永远说不出口。
+    /// 第三百八十六轮的修法：<c>TasksPage.StartTaskJob</c> 成为这一页起作业的唯一落点、起完当场记下欠账
+    /// （<c>JobRunner.Start</c> 就返回那一个 <see cref="JobInfo"/>，不依赖任何轮询），<c>_runningShown</c> 整个删掉，
+    /// 「换任务不念上一个任务的旧结果」挪到 <c>ShowJobOutcome</c> 按欠账所属任务核。本轮按实物把这一支补回段里，
+    /// 并在 <c>docs/NOTES.md</c> 第三百八十六轮那一节记下修法与三档读数。
+    /// </para>
+    /// <para>
+    /// <b>本轮写这一支时踩过的一发（留在这里，不让它靠「看起来更严」回来）</b>：第一版顺手在
+    /// <c>OnSelectedChanged</c> 里抹掉欠账（以为那就是「换任务不念旧结果」的落点），结果三支全沉默——
+    /// <c>LoadTasks</c> 重建列表时 <c>Items.Clear</c> 也会触发选中事件走到那一处，于是
+    /// <c>OnTick → LoadTasks → ShowJobOutcome</c> 刚要报的那一句被自己抹掉了。这一判已由
+    /// <c>JobOutcomeTests.Detector_ReportsTheBreaksItMustCatch</c> 的第 ⑧ 发注入判住。
+    /// </para>
+    /// <para>
+    /// <b>期望为什么不自己算一遍</b>：不调 <c>JobOutcome.FinishedText</c> 来生成期望——那样断言与产品同源、恒真
+    /// （同族口径见 <see cref="RunStatusFullText"/>：判定在冒烟侧独立重述一遍，不调被测口径）。
+    /// 这里比的是屏上那一句字面与色调，失败那一段原因比的是「服务层那句原文里我写下的那一个路径还在不在」。
+    /// </para>
+    /// <para>
+    /// <b>认那颗按钮为什么不按文案在全页找</b>：引导横幅在「未扫描」那一步里主动作也写着「开始扫描」，
+    /// <c>Click(page, "开始扫描")</c> 按 <c>FindAll</c> 的先序会落到横幅那一颗。本段按「同一行里既有
+    /// 「开始扫描」又有那颗「取消」」认扫描区那一行——与 <see cref="BannerRow"/> 认横幅那一行同一个理由。
+    /// </para>
+    /// </summary>
+    private static void RunJobOutcomeStatus(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort-job-outcome.json"));
+        var good = profiles.Save(new ProjectProfile
+        {
+            Name = "作业结果冒烟配置",
+            WorkspaceRoot = dataRoot,
+            ApiProject = "Probe.Api/Probe.Api.csproj",
+            AllowedSourcePaths = ["Probe.Api/"],
+        }, isNew: true);
+        var scanned = tasks.Create(new CreateTaskRequest { ProfileId = good.Id, Name = "作业结果冒烟（成功）" });
+        // 失败那一支的料：先按 CreateProbeWorkspace 写出一份真的 csproj（ProfileStore.Save 自己要求它存在），
+        // 保存配置、建完任务之后再把它删掉——扫描一进去就撞在「API 项目文件不存在」上，几十毫秒内到终态，
+        // 正是第三百八十五轮量到的那一类作业（比界面第一次看到它还早）。
+        var absentDir = Path.Combine(dataRoot, "Absent.Api");
+        CreateProbeWorkspace(absentDir);
+        var missingProject = "Absent.Api/Absent.Api.csproj";
+        var failing = profiles.Save(new ProjectProfile
+        {
+            Name = "作业结果冒烟配置（API 项目缺失）",
+            WorkspaceRoot = dataRoot,
+            ApiProject = missingProject,
+            AllowedSourcePaths = ["Absent.Api/"],
+        }, isNew: true);
+        File.Delete(Path.Combine(absentDir, "Absent.Api.csproj"));
+        var failedTask = tasks.Create(new CreateTaskRequest { ProfileId = failing.Id, Name = "作业结果冒烟（失败）" });
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("任务页作业结果：真的点一次「开始扫描」，作业成功结束之后进度行收起、状态行逐字写着「源码扫描完成。」（真实控件、真实后台作业、页面自己的轮询）", () =>
+            {
+                host = new Form { Width = 1280, Height = 800, Text = "作业结果冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    profiles,
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                // 轮询计时器在这一点上（OnPageShown 里 _timer.Start()）——作业结束之后说结果的那一步
+                // 只有它会走（OnTick → LoadTasks → ShowJobOutcome），不把它起起来这一段就没在量那件事。
+                page.OnPageShown();
+                Application.DoEvents();
+
+                SelectTaskRow(page, scanned.Id);
+                var selectedId = SelectedTaskId(page);
+                if (selectedId != scanned.Id)
+                {
+                    throw new InvalidOperationException(
+                        $"选中没有落到「{scanned.Name}」那一行（现在选中的是 {selectedId ?? "（无）"}）：点下去跑的不是这一支要量的那个作业。");
+                }
+
+                var (scanButton, progress) = ScanActionRow(page);
+                var status = StatusLabel(page);
+                if (!scanButton.Visible || !scanButton.CanSelect)
+                {
+                    throw new InvalidOperationException($"「开始扫描」点不动（可见 {scanButton.Visible}、可选 {scanButton.CanSelect}）：这一段要真的点它一次。");
+                }
+
+                var sawProgress = false;
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                scanButton.PerformClick();
+                try
+                {
+                    // 等的是**那一句本身**，不是「与上一句不同」：作业结束那一次刷新会先把状态行清空
+                    // 或写回筛选计数，「不同」这一判会被那些中间值筛掉（96 档第二发正是这样等满 180 秒）。
+                    PumpUntilCondition(
+                        () =>
+                        {
+                            sawProgress |= progress.Visible;
+                            return status.Text == "源码扫描完成。";
+                        },
+                        "作业结束之后状态行逐字写着「源码扫描完成。」",
+                        30_000);
+                }
+                catch (TimeoutException)
+                {
+                    throw new InvalidOperationException(
+                        $"等 {watch.ElapsedMilliseconds}ms 之后状态行还是「{status.Text}」：那一句结果没出现在屏上"
+                        + $"（进度行可见 {progress.Visible}、那颗按钮可见 {scanButton.Visible}、父链 {VisibilityChain(progress)}）。");
+                }
+
+                if (status.Text != "源码扫描完成。")
+                {
+                    throw new InvalidOperationException(
+                        $"作业结束之后状态行写的是「{status.Text}」，不是「源码扫描完成。」：进度行收起之后屏上没有一句话说这一次是成功的。");
+                }
+                if (status.ForeColor != UiTokens.Muted)
+                {
+                    throw new InvalidOperationException(
+                        $"「源码扫描完成。」的色调不是 muted（{status.ForeColor.Name}）：成功不该强调（设计验收 D3——颜色只作辅助）。");
+                }
+                if (progress.Visible)
+                {
+                    throw new InvalidOperationException("那一句都说出来了，进度行还亮着：「正在做什么」那一行该随作业结束收起。");
+                }
+                if (!scanButton.Visible)
+                {
+                    throw new InvalidOperationException("作业结束之后那颗「开始扫描」没有回到屏上：进度行收起时按钮应换回来。");
+                }
+                // 作业真跑过这件事从磁盘读回来，不靠控件的可见性（进度行亮没亮与扫描成败是两件事）。
+                var scannedAt = tasks.Get(scanned.Id).Stages.Source.ScannedAt;
+                if (scannedAt is null)
+                {
+                    throw new InvalidOperationException("状态行说着完成，磁盘上却没有扫描时间：那一句与落盘的结果不是同一件事。");
+                }
+                _lines.Add($"     作业（源码扫描）成功结束之后：那一句在点下去之后 {watch.ElapsedMilliseconds}ms 落地"
+                    + $"（期间瞥见进度行亮过 = {sawProgress}）、状态行「{status.Text}」（色调 muted）、"
+                    + $"进度行已收起、那颗「开始扫描」回到屏上、磁盘上 ScannedAt={scannedAt:HH:mm:ss}");
+            });
+
+            RunAction("任务页作业结果：那一句在之后连续三次轮询里逐字未变——没被清空、也没被下一次刷新盖掉（真实控件、页面自己的轮询）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                var (_, progress) = ScanActionRow(shown);
+                var status = StatusLabel(shown);
+                var said = status.Text;
+                if (said != "源码扫描完成。")
+                {
+                    throw new InvalidOperationException($"这一段接的是上一段那一句，状态行现在写的是「{said}」，不是「源码扫描完成。」。");
+                }
+
+                // 三次轮询（间隔 500ms）：作业结束之后 OnTick 每轮都不该再动那一行。
+                for (var i = 0; i < 3; i++)
+                {
+                    Thread.Sleep(600);
+                    Application.DoEvents();
+                }
+
+                if (status.Text != said)
+                {
+                    throw new InvalidOperationException(
+                        $"三次轮询之后状态行从「{said}」变成「{status.Text}」：那一句报完就被抹掉了，"
+                        + "而作业结束那一次刷新（LoadTasks 把状态行清空）正是紧随其后的——顺序判据在这一屏上就是「报在刷新之后」。");
+                }
+                if (progress.Visible)
+                {
+                    throw new InvalidOperationException("三次轮询之后进度行又亮了：作业早已结束，那一行该收起。");
+                }
+                _lines.Add($"     那一句在之后三次轮询（超过 1.5 秒）里逐字未变（{said.Length} 字）、进度行仍收起");
+            });
+
+            RunAction("任务页作业结果：一个在界面第一次看到它之前就到达终态的作业（API 项目在配置保存之后被删掉，几十毫秒内失败），那一句失败原因也真的出现在状态行上（第三百八十五轮量到的那一发，第三百八十六轮修完之后量）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                SelectTaskRow(shown, failedTask.Id);
+                var selectedId = SelectedTaskId(shown);
+                if (selectedId != failedTask.Id)
+                {
+                    throw new InvalidOperationException(
+                        $"选中没有落到「{failedTask.Name}」那一行（现在选中的是 {selectedId ?? "（无）"}）：点下去跑的不是这一支要量的那个作业。");
+                }
+
+                var (scanButton, progress) = ScanActionRow(shown);
+                var status = StatusLabel(shown);
+                if (!scanButton.Visible || !scanButton.CanSelect)
+                {
+                    throw new InvalidOperationException($"「开始扫描」点不动（可见 {scanButton.Visible}、可选 {scanButton.CanSelect}）：这一段要真的点它一次。");
+                }
+
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                scanButton.PerformClick();
+                try
+                {
+                    // 等的还是那一句本身：这一支的上一句正是第一支量到的「源码扫描完成。」，
+                    // 等「与上一句不同」会把中间值（清空、筛选计数）当成结果收下。
+                    PumpUntilCondition(
+                        () => status.Text.StartsWith("源码扫描失败：", StringComparison.Ordinal),
+                        "作业失败结束之后状态行写着「源码扫描失败：」开头那一句",
+                        30_000);
+                }
+                catch (TimeoutException)
+                {
+                    throw new InvalidOperationException(
+                        $"等 {watch.ElapsedMilliseconds}ms 之后状态行还是「{status.Text}」：那一句原因没出现在屏上"
+                        + $"（进度行可见 {progress.Visible}、那颗按钮可见 {scanButton.Visible}、父链 {VisibilityChain(progress)}）。"
+                        + "第三百八十五轮在 120 与 192 两档量到的正是这一发——那时 TasksPage 只在「界面看到它在跑」那一次记下作业，"
+                        + "这种比界面第一次看到它还早就到终态的作业因此一句话都没有。");
+                }
+
+                // 原因逐字来自服务层：冒烟侧只认「我写下的那一个 API 项目路径还在不在那一句里」，
+                // 不去调 JobOutcome.FinishedText 生成整句（一调就与产品同源、恒真）。
+                if (!status.Text.Contains(missingProject, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"状态行写的是「{status.Text}」，里面没有我写下的那一个 API 项目路径「{missingProject}」：那一句不是这一次失败的原因。");
+                }
+                if (status.ForeColor != UiTokens.BadText)
+                {
+                    throw new InvalidOperationException(
+                        $"「{status.Text}」的色调不是 bad（{status.ForeColor.Name}）：失败该给警示色（设计验收 D3——颜色只作辅助，含义由文字承载）。");
+                }
+                if (progress.Visible)
+                {
+                    throw new InvalidOperationException("失败那一句都说出来了，进度行还亮着：「正在做什么」那一行该随作业结束收起。");
+                }
+                if (!scanButton.Visible)
+                {
+                    throw new InvalidOperationException("失败结束之后那颗「开始扫描」没有回到屏上：用户可以重跑这一次，按钮该在。");
+                }
+                // 那一句与落盘的结果对得上：屏上说着失败，磁盘上就不该留着这一次扫描的时间。
+                if (tasks.Get(failedTask.Id).Stages.Source.ScannedAt is { } at)
+                {
+                    throw new InvalidOperationException(
+                        $"屏上说着这一次失败，磁盘上却留着扫描时间 {at:HH:mm:ss}：那一句与落盘的结果不是同一件事。");
+                }
+                _lines.Add($"     作业失败（API 项目在配置保存之后被删掉）结束之后：那一句在点下去之后 {watch.ElapsedMilliseconds}ms 落地"
+                    + $"（{status.Text.Length} 字、含「{missingProject}」、色调 bad）、进度行已收起、那颗「开始扫描」回到屏上、磁盘上没有这一次扫描的时间");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 扫描区那一行的那颗「开始扫描」与那颗进度标签。
+    /// <para>
+    /// 按「同一行里既有「开始扫描」又有那颗「取消」」认，不按文案在全页找：引导横幅在「未扫描」那一步里
+    /// 主动作也写着「开始扫描」（<see cref="BannerRow"/> 认横幅那一行是同一个理由）。那一行里唯一的
+    /// Label 就是进度标签（<c>TasksPage._progress</c>），行挪走或多了标签都报错点名，不静默量别的东西。
+    /// </para>
+    /// </summary>
+    private static (Button Scan, Label Progress) ScanActionRow(TasksPage page)
+    {
+        var rows = FindAll<FlowLayoutPanel>(page)
+            .Where(panel => panel.Controls.Cast<Control>().OfType<Button>().Any(button => button.Text == "开始扫描")
+                && panel.Controls.Cast<Control>().OfType<Button>().Any(button => button.Text == "取消"))
+            .ToList();
+        if (rows.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"按「一行里有『开始扫描』与那颗『取消』」认出 {rows.Count} 行扫描区动作按钮（应为 1 行）："
+                + "这一行挪过或拆过，本段的量测口径要跟着改。");
+        }
+
+        var buttons = rows[0].Controls.Cast<Control>().OfType<Button>().ToList();
+        var labels = rows[0].Controls.Cast<Control>().OfType<Label>().ToList();
+        if (labels.Count != 1)
+        {
+            throw new InvalidOperationException($"扫描区那一行读到 {labels.Count} 个标签，进度标签不再独占那一行：量不到「进度行收起」这一判。");
+        }
+
+        return (buttons.First(button => button.Text == "开始扫描"), labels[0]);
+    }
+
+    /// <summary>
+    /// 一个控件往上到窗体的可见性链（只用在超时那一发红话里）。
+    /// <para>
+    /// 为什么要把整条链念出来：<c>Control.Visible</c> 取的是<b>生效后的</b>可见性——父链上任何一层藏起来，
+    /// 这一层就恒为 <c>false</c>。只报一个「false」，下一轮读的人分不清是「作业没跑起来」还是「那一行没显出来」。
+    /// </para>
+    /// </summary>
+    private static string VisibilityChain(Control control)
+    {
+        var parts = new List<string>();
+        for (Control? at = control; at is not null; at = at.Parent)
+        {
+            parts.Add($"{at.GetType().Name}:{at.Visible}");
+        }
+
+        return string.Join(" ← ", parts);
+    }
+
+    /// <summary>任务清单当前选中那一行的任务 Id（没选中或载荷不是任务时返回 <c>null</c>）。</summary>
+    private static string? SelectedTaskId(TasksPage page) =>
+        (TaskList(page).SelectedItems.Cast<ListViewItem>().FirstOrDefault()?.Tag as CheckTask)?.Id;
 
     /// <summary>
     /// 三阶段进度条里第 <paramref name="index"/> 格那颗按钮（详情第一行，<c>BuildDetail</c> 里第一个加进网格的行）。

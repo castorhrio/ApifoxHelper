@@ -22,7 +22,11 @@ namespace ApifoxHelper.Tests;
 /// ③ 顺序（源码门）：<c>OnTick</c> 里「重读任务」在前、「说结果」在后——反过来的话 <c>LoadTasks</c>
 ///    会把刚写上去的那一句再盖掉；
 /// ④ 唯一落点（源码门）：<c>JobOutcome.FinishedText</c> 在产品源码里恰好调用一处，界面不就地再写一遍真值表；
-/// ⑤ 一次作业只报一次（源码门）：作业 Id 由 <c>ShowJobState</c> 记下、由 <c>ShowJobOutcome</c> 用掉即清；
+/// ⑤ 一次作业只报一次（源码门）：欠账由 <c>StartTaskJob</c>（这一页起作业时，第三百八十六轮加）与
+///    <c>ShowJobState</c>（界面看到它在跑时）两处记下、由 <c>ShowJobOutcome</c> 用掉即清，报之前先核它属于
+///    当前选中的那一个任务。这一条本轮<b>改的是判据本体</b>：此前只认后者，于是一次几十毫秒内就失败的作业
+///    两处都没落下、屏上对它一句话都没有（wine 在 120 / 192 两档量到的正是这一处）——是补上没记的那一处，
+///    不是把「只报一次」放宽；
 /// ⑥ 不覆盖读取失败（源码门）：<c>_loadFailed</c> 时那一句比这一次作业的结果更该留在屏上；
 /// ⑦ 状态字面量两侧对账（第三百七十九轮）：<c>JobRunner</c> 写进 <c>Job.State</c> 的终态字面量集合，
 ///    与 <c>JobOutcome.FinishedText</c> 接受的字面量集合必须一致——两侧各有一个定义不在被它判的对象里，
@@ -40,8 +44,10 @@ public class JobOutcomeTests
     private static string TasksPage => Repo.Source("Desktop", "Native", "TasksPage.cs");
 
     private const string ShowJobStateHeader = "private void ShowJobState(JobInfo? job)";
+    private const string StartTaskJobHeader = "private void StartTaskJob(";
     private const string OnTickHeader = "private void OnTick()";
     private const string ShowJobOutcomeHeader = "private void ShowJobOutcome()";
+    private const string OnSelectedChangedHeader = "private void OnSelectedChanged()";
     private const string FinishedTextHeader = "public static string? FinishedText(";
     private const string ToneHeader = "public static string Tone(string state)";
 
@@ -218,12 +224,17 @@ public class JobOutcomeTests
     }
 
     /// <summary>
-    /// 上面那段判据<b>自己</b>被抓得住：四发注入各喂一次，每一发都必须报出自己那一处。
+    /// 上面那段判据<b>自己</b>被抓得住：八发注入各喂一次，每一发都必须报出自己那一处。
     /// <para>
     /// ① 把「说结果」那一句从 <c>OnTick</c> 里删掉（进度行照旧收起，结果没人说——本门要补的正是这个缺口）；
     /// ② 把「说结果」挪到「重读任务」<b>之前</b>（顺序反了，<c>LoadTasks</c> 会把刚写上去的那一句盖掉）；
     /// ③ 把「用掉即清」那一行删掉（同一句会在每一次轮询里重复念）；
-    /// ④ 把「不覆盖读取失败」那一行删掉（磁盘读不出来时，状态行会被这一次作业的结果顶掉）。
+    /// ④ 把「不覆盖读取失败」那一行删掉（磁盘读不出来时，状态行会被这一次作业的结果顶掉）；
+    /// ⑤ 起作业时不登记（第三百八十六轮补的那一格没了：几十毫秒内就失败的那一次，屏上又一句话都没有）；
+    /// ⑥ 触发退回「界面看到过它在跑」那个 flag（同一发的另一种写法：登记在、触发不看它）；
+    /// ⑦ 欠账所属任务的核对删掉（换过任务之后，上一个任务的旧结果被念到当前这个任务头上）；
+    /// ⑧ 把抹欠账搬回换任务那一处（<c>LoadTasks</c> 重建列表时也走那里，刚要报的那一句被一起抹掉——
+    ///    这一发是第三百八十六轮写这一片时<b>真的踩过</b>的形状，留成注入，不让它靠「看起来更严」回来）。
     /// </para>
     /// <para>
     /// 注入的输入是<b>去注释后的代码</b>（<see cref="CodeScan.Text"/>）：判据读的是那一层，注入必须落在同一层，
@@ -240,14 +251,14 @@ public class JobOutcomeTests
 
         // ① 删掉「说结果」：进度行照旧收起，这一次是成功、失败还是被取消，屏上一句话都没有。
         var silent = Inject(code,
-            "            LoadTasks();\n            ShowJobOutcome();\n",
-            "            LoadTasks();\n");
+            "        LoadTasks();\n        ShowJobOutcome();\n",
+            "        LoadTasks();\n");
         Assert.Contains(Problems(silent), p => p.Contains("ShowJobOutcome", StringComparison.Ordinal));
 
         // ② 顺序反了：先说结果、再重读任务——LoadTasks 会把刚写上去的那一句盖掉。
         var reordered = Inject(code,
-            "            LoadTasks();\n            ShowJobOutcome();\n",
-            "            ShowJobOutcome();\n            LoadTasks();\n");
+            "        LoadTasks();\n        ShowJobOutcome();\n",
+            "        ShowJobOutcome();\n        LoadTasks();\n");
         Assert.Contains(Problems(reordered), p => p.Contains("重读任务", StringComparison.Ordinal));
 
         // ③ 用掉即清那一行没了：同一句会在每一次轮询里重复念。
@@ -257,6 +268,29 @@ public class JobOutcomeTests
         // ④ 不覆盖读取失败那一行没了：磁盘读不出来时，状态行会被这一次作业的结果顶掉。
         var overwritten = Inject(code, "        if (_loadFailed) return;\n", "");
         Assert.Contains(Problems(overwritten), p => p.Contains("_loadFailed", StringComparison.Ordinal));
+
+        // ⑤ 起作业时不登记：一次几十毫秒内就失败的作业，界面第一次看到它之前已经到终态，
+        //    两处都没落下 → 那一句永远说不出口（第三百八十五轮在 120 / 192 两档量到的正是这一发）。
+        var notRemembered = Inject(code,
+            "        RememberOutcome(_jobs.Start(taskId, kind, work));\n",
+            "        _jobs.Start(taskId, kind, work);\n");
+        Assert.Contains(Problems(notRemembered), p => p.Contains("StartTaskJob", StringComparison.Ordinal));
+
+        // ⑥ 触发退回「界面看到过它在跑」那个 flag：那个 flag 只在看到它跑时立起，快失败的那一次又沉默。
+        var backToFlag = Inject(code,
+            "        if (_lastJobId is null) return;\n",
+            "        if (!_runningShown) return;\n");
+        Assert.Contains(Problems(backToFlag), p => p.Contains("flag", StringComparison.Ordinal));
+
+        // ⑦ 欠账所属任务的核对没了：换过任务之后，上一个任务的旧结果被念到当前这个任务头上。
+        var unbound = Inject(code, "        if (owedByTask != _selectedTask?.Id) return;\n", "");
+        Assert.Contains(Problems(unbound), p => p.Contains("_selectedTask?.Id", StringComparison.Ordinal));
+
+        // ⑧ 把抹欠账搬回换任务那一处：LoadTasks 重建列表时也走那里，刚要报的那一句被一起抹掉。
+        var wipedOnSelect = Inject(code,
+            "        _selectedId = _selectedTask?.Id;\n",
+            "        _selectedId = _selectedTask?.Id;\n        _lastJobId = null;\n");
+        Assert.Contains(Problems(wipedOnSelect), p => p.Contains("OnSelectedChanged", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -504,17 +538,40 @@ public class JobOutcomeTests
         var problems = new List<string>();
         var code = CodeScan.Text(tasksPage);
 
-        // ⑤ 作业 Id 由 ShowJobState 记下：作业一结束 Running 就答 null，终态与失败原因只能按 Id 读回。
+        // ⑤ 欠账记在两处（第三百八十六轮改准）：这一页起作业那一处当场记下、界面看到它在跑那一处也记下。
+        //    此前只记后者——一次几十毫秒内就失败的作业，RefreshDetail 那一次 Running 已经答 null，
+        //    两处都没落下，屏上对它一句话都没有（第三百八十五轮在 120 / 192 两档量到的正是这一处）。
         var showJobState = Body(code, ShowJobStateHeader);
         if (showJobState is null)
         {
             problems.Add("TasksPage 里找不到 ShowJobState 的方法体：本门按它判「作业 Id 记在哪一处」，"
                 + "方法改名或搬走之后这一条要跟着改取法。");
         }
-        else if (!showJobState.Contains("_lastJobId = job.Id;", StringComparison.Ordinal))
+        else if (!showJobState.Contains("RememberOutcome(job);", StringComparison.Ordinal))
         {
-            problems.Add("ShowJobState 里没有记下作业 Id（应为 _lastJobId = job.Id;）：不记就只能在作业结束后"
+            problems.Add("ShowJobState 里没有记下这一次作业（应为 RememberOutcome(job);）：不记就只能在作业结束后"
                 + "去问 Running，而它那时已经答 null——终态与失败原因都读不回来。");
+        }
+
+        // ⑤b 起作业时当场记下（第三百八十六轮补的那一格），且作业启动点只许有一处。
+        var startTaskJob = Body(code, StartTaskJobHeader);
+        if (startTaskJob is null)
+        {
+            problems.Add("TasksPage 里找不到 StartTaskJob 的方法体：这一页起作业没收在一处，"
+                + "「起作业时当场记下欠账」这一判就没有对象，快失败的那一次会在没收进来的那一个启动点上又是沉默。");
+        }
+        else if (!startTaskJob.Contains("RememberOutcome(_jobs.Start(", StringComparison.Ordinal))
+        {
+            problems.Add("StartTaskJob 没有把 _jobs.Start 的返回值当场记下（应为 RememberOutcome(_jobs.Start(...))）："
+                + "作业几十毫秒内就失败时，界面第一次看到它之前它已经到终态，起作业时不记，"
+                + "OnTick 后半支永远走不到——用户按了「开始扫描」，屏上对这一次失败一句话都没有。");
+        }
+
+        var directStarts = Count(code, "_jobs.Start(");
+        if (directStarts != 1)
+        {
+            problems.Add($"TasksPage 里直接调用 _jobs.Start( 出现 {directStarts} 处（应为 1 处，只在 StartTaskJob 里）："
+                + "多出来的每一处都不记欠账，那一次作业结束之后屏上就是沉默（第三百八十五轮 wine 红话量的正是这个形状）。");
         }
 
         // ③ 顺序：OnTick 里「重读任务」在前、「说结果」在后。
@@ -542,6 +599,16 @@ public class JobOutcomeTests
             {
                 problems.Add("OnTick 里「说结果」排在「重读任务」之前：LoadTasks 会重建列表与状态行，"
                     + "刚写上去的那一句当场被盖掉。重读任务必须在说结果之前。");
+            }
+            else if (onTick.Contains("_runningShown", StringComparison.Ordinal))
+            {
+                problems.Add("OnTick 又按「界面看到过它在跑」那样的 flag 触发：那种 flag 只在看到它跑的那一次立起，"
+                    + "到终态比第一次看到它还早的作业因此永远说不出口。触发只看「还欠着一次结果没报」。");
+            }
+            else if (!onTick.Contains("_lastJobId", StringComparison.Ordinal))
+            {
+                problems.Add("OnTick 里没有按欠账（_lastJobId）决定要不要说结果：本门判「还欠着一次结果就说」，"
+                    + "那一判没了这一条就没有对象。");
             }
         }
 
@@ -578,6 +645,14 @@ public class JobOutcomeTests
                     + "那一句比这一次作业的结果更该留在屏上（屏上此刻连任务清单都没有）。");
             }
 
+            if (!showJobOutcome.Contains("_lastJobTaskId", StringComparison.Ordinal)
+                || !showJobOutcome.Contains("_selectedTask?.Id", StringComparison.Ordinal))
+            {
+                problems.Add("ShowJobOutcome 里没有把这一笔欠账与当前选中的任务比在一起（要同时见到 _lastJobTaskId "
+                    + "与 _selectedTask?.Id）：换过任务之后，上一个任务的旧结果会被念到当前这个任务头上"
+                    + "——状态行说的是「当前这个任务刚才那件事怎么样了」。");
+            }
+
             if (!showJobOutcome.Contains("JobOutcome.FinishedText(", StringComparison.Ordinal))
             {
                 problems.Add("ShowJobOutcome 里没有用 JobOutcome.FinishedText 取那一句："
@@ -604,6 +679,18 @@ public class JobOutcomeTests
                 problems.Add($"产品源码里调用 {needle} 出现 {total} 处（应为 1 处，在 ShowJobOutcome 里）："
                     + $"{why}只该有一处，第二处就是第二个说了算的人。");
             }
+        }
+
+        // 换任务那一处不许抹欠账（第三百八十六轮踩过的那一发）：LoadTasks 重建列表时 Items.Clear 也会走
+        // OnSelectedChanged，在那里抹掉就把 OnTick 刚要报的那一句一起抹了——「换任务不念旧结果」
+        // 由上面那一判（ShowJobOutcome 按 _lastJobTaskId 核）承担。
+        var onSelectedChanged = Body(code, OnSelectedChangedHeader);
+        if (onSelectedChanged is not null
+            && onSelectedChanged.Contains("_lastJobId = null;", StringComparison.Ordinal))
+        {
+            problems.Add("OnSelectedChanged 里抹了欠账（_lastJobId = null;）：作业结束那一次刷新走的是 "
+                + "OnTick → LoadTasks → ShowJobOutcome，而 LoadTasks 清空列表时也会触发选中事件走到这里，"
+                + "抹掉之后那一句永远说不出口。要挡住「对着另一个任务念旧结果」，请在 ShowJobOutcome 里按所属任务核。");
         }
 
         return problems;
