@@ -24,7 +24,9 @@ namespace ApifoxHelper.Tests;
 ///    两颗按钮的 <c>Focus()</c> 全文件只出现在 <c>RefreshNextBanner</c> 里、各一次；
 /// ④ 算式只有一份：<c>BannerFocusPlan.Landing</c> 在产品源码里恰好调用一处，界面不就地再写一遍真值表；
 /// ⑤ 冒烟段 <c>RunBannerFocus</c> 里真的量了这件事（把焦点放到次动作那颗 → 走一次把它藏起来的刷新 →
-///    读「键盘落到还在屏上的那一颗」）。
+///    读「键盘落到还在屏上的那一颗」）；
+/// ⑥ 夹具口径（第三百七十七轮）：三发注入喂的是<b>去注释后的代码</b>，且每一发都当场核「差异落在代码区」——
+///    判据读的是 <see cref="CodeScan.Text"/>，注入也必须落在同一层。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判「真机上焦点挪得顺不顺眼」——那要 Windows 真机（G-D5，真机 0 台）；
@@ -96,6 +98,12 @@ public class BannerFocusPlanTests
     /// ③ 把交键盘改成无条件交给主动作（不再读判定，下一轮接上次动作时就会静默抢键盘）；
     /// ④ 合规写法（不报）。
     /// </para>
+    /// <para>
+    /// <b>第三百七十七轮改的是夹具的取法，判据一条未动</b>：三发注入此前直接作用在<b>原文</b>（含注释）上，
+    /// 而判据读的是去注释之后的代码——两处口径不同，注入命中的若是注释里那一句，原文变了、代码一个字没动，
+    /// 那一发就白喂了。现在注入的输入是 <see cref="CodeScan.Text"/> 的结果，且每一发都经 <see cref="Inject"/>
+    /// 当场核「去注释之后仍然不同」；第 ⑤ 段拿一份「同一句只在注释里」的夹具验这道守卫自己抓不抓得住。
+    /// </para>
     /// </summary>
     [Fact]
     public void Detector_ReportsTheBreaksItMustCatch()
@@ -103,37 +111,58 @@ public class BannerFocusPlanTests
         // ④ 合规写法：仓里这一份一处都不报。
         Assert.Empty(Problems(TasksPage, Smoke));
 
+        // 注入的输入是**去注释后的代码**：判据读的是 CodeScan.Text，注入必须落在同一层。
+        var code = CodeScan.Text(TasksPage);
+
         // ① 删掉「记焦点」：判定读到的是「两颗都没有焦点」，被藏起来的那一颗拿着键盘时没人接。
-        var forgotten = TasksPage.Replace(
+        var forgotten = Inject(code,
             "        var primaryHadFocus = _nextPrimary.Focused;\n        var secondaryHadFocus = _nextSecondary.Focused;\n",
-            "",
-            StringComparison.Ordinal);
-        Assert.NotEqual(TasksPage, forgotten);
+            "");
         Assert.Contains(Problems(forgotten, Smoke),
             p => p.Contains("primaryHadFocus", StringComparison.Ordinal));
 
         // ② 顺序反了：把「记焦点」挪到换显隐之后——Visible = false 一落下去焦点就没了，那一判永远答「不用交」。
-        var reordered = TasksPage.Replace(
-            "        var primaryHadFocus = _nextPrimary.Focused;\n        var secondaryHadFocus = _nextSecondary.Focused;\n",
-            "",
-            StringComparison.Ordinal).Replace(
+        var reordered = Inject(
+            Inject(code,
+                "        var primaryHadFocus = _nextPrimary.Focused;\n        var secondaryHadFocus = _nextSecondary.Focused;\n",
+                ""),
             "        _nextSecondary.Visible = next.SecondaryLabel is not null;\n",
             "        _nextSecondary.Visible = next.SecondaryLabel is not null;\n"
-            + "        var primaryHadFocus = _nextPrimary.Focused;\n        var secondaryHadFocus = _nextSecondary.Focused;\n",
-            StringComparison.Ordinal);
-        Assert.NotEqual(TasksPage, reordered);
+            + "        var primaryHadFocus = _nextPrimary.Focused;\n        var secondaryHadFocus = _nextSecondary.Focused;\n");
         Assert.Contains(Problems(reordered, Smoke),
             p => p.Contains("换显隐之前", StringComparison.Ordinal));
 
         // ③ 无条件交给主动作：判定还在、但没人读它——次动作那颗拿着键盘时会被静默抢走。
-        var unconditional = TasksPage.Replace(
+        var unconditional = Inject(code,
             "        if (landing == BannerFocusPlan.Primary) _nextPrimary.Focus();\n"
             + "        else if (landing == BannerFocusPlan.Secondary) _nextSecondary.Focus();",
-            "        _nextPrimary.Focus();",
-            StringComparison.Ordinal);
-        Assert.NotEqual(TasksPage, unconditional);
+            "        _nextPrimary.Focus();");
         Assert.Contains(Problems(unconditional, Smoke),
             p => p.Contains("landing", StringComparison.Ordinal));
+
+        // ⑤ 守卫自检：同一句只出现在**注释**里时，代码区一个字没变——Inject 必须当场拒绝，
+        //    否则「注入命中的是注释」这件事会静默变成一发白喂的注入。
+        var commentOnly = "class C\n{\n    // var primaryHadFocus = _nextPrimary.Focused;\n    void M() { }\n}\n";
+        Assert.ThrowsAny<Exception>(() => Inject(commentOnly,
+            "var primaryHadFocus = _nextPrimary.Focused;", ""));
+    }
+
+    /// <summary>
+    /// 把 <paramref name="from"/> 换成 <paramref name="to"/>，并当场核「差异落在<b>代码区</b>」。
+    /// <para>
+    /// 第三百七十七轮补这一道。此前三发注入直接作用在<b>原文</b>（含注释）上，而判据读的是
+    /// <see cref="CodeScan.Text"/> 去注释之后的代码——两处口径不同：注入命中的若是注释里那一句，
+    /// <c>Assert.NotEqual(原文, 注入后)</c> 照样通过（原文确实变了），判据看到的代码却一个字没动，
+    /// 那一发要么假绿（判据恰好因为别的原因报出同一句话）、要么假红（判据什么都不报）。
+    /// 现在两件事一起做：注入的输入本身就是去注释后的代码，这一道再当场核一次「去注释之后仍然不同」。
+    /// </para>
+    /// </summary>
+    private static string Inject(string code, string from, string to)
+    {
+        var injected = code.Replace(from, to, StringComparison.Ordinal);
+        Assert.NotEqual(code, injected);
+        Assert.NotEqual(CodeScan.Text(code), CodeScan.Text(injected));
+        return injected;
     }
 
     /// <summary>
