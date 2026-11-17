@@ -393,4 +393,256 @@ public class DemoScriptTests
         Assert.Contains("narration", Readme);
         Assert.Contains("逐屏表", Readme);
     }
+
+    // ── 第三百八十轮（简报 P0-1）：把「降级答辩」从脚本升级为一页不跑 wine 也能照念的成品讲稿 ──
+
+    /// <summary>成品讲稿那一页（不跑 wine 也留在仓里，随时能翻出来念）。</summary>
+    private static string LecturePage => Repo.Source(".winecheck", "答辩讲稿.md");
+
+    /// <summary>
+    /// 讲稿页在位、且五块骨架齐（开场口径 / 当天四步 / 三档读数 / 逐屏一句话 / 结尾口径）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：此前能照念的讲稿只在运行时生成——<c>demo.sh</c> 跑一次 wine 才在
+    /// <c>/tmp/ah-demo/narration-*.txt</c> 落一份，机器一关就没；而当天从 Windows 侧进来时那四步是
+    /// 第一次真跑（见 NOTES「降级答辩脚本」敞口那一段），wine 或 Xvfb 不在场现场手里就没有屏序。
+    /// 这一页就是那段路的替代。这条门判它<b>在不在、五块齐不齐</b>，并点名四步各自跑的脚本，
+    /// 免得当天念到「第几步跑什么」时这一页给不出名字。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LecturePage_ExistsAndCarriesTheReadAloudBlocks()
+    {
+        var path = System.IO.Path.Combine(Repo.Root, ".winecheck", "答辩讲稿.md");
+        Assert.True(System.IO.File.Exists(path),
+            "缺 .winecheck/答辩讲稿.md——真机不可得时现场没有一份不跑 wine 也能照念的成品讲稿。");
+        var page = LecturePage;
+        foreach (var heading in new[] { "## 固定开场口径", "## 当天四步", "## 三档读数", "## 逐屏一句话讲稿", "## 结尾固定一句" })
+        {
+            Assert.Contains(heading, page, StringComparison.Ordinal);
+        }
+
+        foreach (var script in new[] { "defense-day.sh", "due-date.sh", "preflight.sh", "demo.sh" })
+        {
+            Assert.Contains(script, page, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>README 的「演示与录制口径」要点到这一页，否则现场的人不知道有一份不跑 wine 也能念的成品。</summary>
+    [Fact]
+    public void Readme_PointsAtTheLecturePage()
+    {
+        Assert.Contains("答辩讲稿.md", Readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 逐屏那一节的屏名与屏数，与 <c>docs/NOTES.md</c> 逐屏表<b>逐字锁死</b>：少一屏、多一屏、重名、
+    /// 把源码证据屏念成 wine 量到、引了跑不到的段、某屏没交代「缺什么」——六样各报一处。
+    /// <para>
+    /// <b>凭什么不是又一次自述</b>：这一页是逐屏表的「念稿展开」，不是第二份屏单；「屏单只有一份」这条纪律
+    /// 对脚本是靠运行时读表实现的，对静态页只能靠<b>测试时把两处的屏集合对齐</b>来兑现——表改了这页没跟上即红。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LecturePage_ScreensStayInLockstepWithTheTable()
+    {
+        Assert.Empty(LectureProblems(
+            LectureRows(),
+            Rows().Select(r => (r.Screen, r.Verdict)).ToList(),
+            Repo.SmokeSectionNames()));
+    }
+
+    /// <summary>
+    /// 上面那段判据<b>自己</b>被抓得住：六发注入各喂一次，每一发都必须报出自己那一处（最后一发合规、不报）。
+    /// </summary>
+    [Fact]
+    public void LectureScreenGate_ReportsTheDriftItMustCatch()
+    {
+        string[] registered = ["RunScanResultsInteraction"];
+        (string Screen, string Verdict)[] table =
+        [
+            ("注释缺口对话框", "wine 量到"),
+            ("同步预览与执行", "源码 + 编译证据"),
+        ];
+
+        // ① 少一屏：表里有「同步预览与执行」，页上没有。
+        var missing = LectureProblems(
+            [("注释缺口对话框", "`RunScanResultsInteraction`", "真机未复核（G-D5）")], table, registered);
+        Assert.Contains(missing, p => p.Contains("同步预览与执行", StringComparison.Ordinal)
+                                      && p.Contains("这一页没有", StringComparison.Ordinal));
+
+        // ② 多一屏：页上写了「检查任务页」，表里没有——凭空多写了屏单上没有的东西。
+        var extra = LectureProblems(
+            [("注释缺口对话框", "`RunScanResultsInteraction`", "真机未复核"), ("检查任务页", "只有源码证据", "真机未复核")],
+            table, registered);
+        Assert.Contains(extra, p => p.Contains("检查任务页", StringComparison.Ordinal)
+                                    && p.Contains("多出", StringComparison.Ordinal));
+
+        // ③ 重名：同一屏写两遍（屏数就对不上表了）。
+        var dup = LectureProblems(
+            [("注释缺口对话框", "`RunScanResultsInteraction`", "真机未复核"), ("注释缺口对话框", "x", "真机未复核"),
+             ("同步预览与执行", "只有源码与编译证据", "真实端到端未跑")],
+            table, registered);
+        Assert.Contains(dup, p => p.Contains("写了两遍", StringComparison.Ordinal));
+
+        // ④ 源码证据屏被引了段：把「源码 + 编译证据」念成 wine 量到。
+        var overstated = LectureProblems(
+            [("注释缺口对话框", "`RunScanResultsInteraction`", "真机未复核"), ("同步预览与执行", "`RunScanResultsInteraction`", "真实端到端未跑")],
+            table, registered);
+        Assert.Contains(overstated, p => p.Contains("源码证据屏「同步预览与执行」", StringComparison.Ordinal));
+
+        // ⑤ 引了注册清单外的段：照着念是空手。
+        var unresolved = LectureProblems(
+            [("注释缺口对话框", "`RunNotRegistered`", "真机未复核"), ("同步预览与执行", "只有源码与编译证据", "真实端到端未跑")],
+            table, registered);
+        Assert.Contains(unresolved, p => p.Contains("RunNotRegistered", StringComparison.Ordinal));
+
+        // ⑥ 某屏没交代「缺什么」。
+        var noGap = LectureProblems(
+            [("注释缺口对话框", "`RunScanResultsInteraction`", "  "), ("同步预览与执行", "只有源码与编译证据", "真实端到端未跑")],
+            table, registered);
+        Assert.Contains(noGap, p => p.Contains("「缺什么」是空的", StringComparison.Ordinal));
+
+        // ⑦ 合规：两处都不报。
+        Assert.Empty(LectureProblems(
+            [("注释缺口对话框", "`RunScanResultsInteraction`", "真机观感未复核（G-D5）"),
+             ("同步预览与执行", "只有源码与编译证据（`SyncExecutor` 用例）", "真实 Apifox 写入本环境不可得")],
+            table, registered));
+    }
+
+    /// <summary>
+    /// 讲稿页念的三档那个数，必须与 <c>.winecheck/reading.txt</c> 的 <c>tier= passed= failed=</c> 三行逐字对得上：
+    /// 三档失败都是 0、通过数三档同一个，页上出现的「N 通过 / 0 失败 ×3」只许是那一个 N。
+    /// <para>
+    /// <b>为什么钉这条</b>：这一页是不跑 wine 就能念的成品，正因为不现跑，它比 <c>narration-*.txt</c> 更容易
+    /// 停在上一版的数上。把它对到 <c>reading.txt</c>——那份由 <c>demo.sh</c> 写、<c>ReadingConsistencyTests</c> 已
+    /// 与 README / NOTES 逐字对账的记录——等于把这页也接进「念的数出自哪一版」这条链，不另造一个没人对的死数。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LecturePage_StatesTheSameTierCountAsTheReadingRecord()
+    {
+        var reading = Repo.Source(".winecheck", "reading.txt");
+        var tiers = Regex.Matches(reading, @"^tier=\d+ passed=(\d+) failed=(\d+) exit=\d+", RegexOptions.Multiline)
+            .Select(m => (Passed: int.Parse(m.Groups[1].Value), Failed: int.Parse(m.Groups[2].Value)))
+            .ToList();
+        Assert.True(tiers.Count == 3, $"reading.txt 的 tier= 行不是三档（读到 {tiers.Count} 行）——这一页没有可对账的读数出处。");
+        Assert.All(tiers, t => Assert.Equal(0, t.Failed));
+        var passed = tiers.Select(t => t.Passed).Distinct().ToList();
+        Assert.True(passed.Count == 1, $"三档通过数不一致（{string.Join(" / ", passed)}）——不能对三档念同一个「×3」。");
+        var count = passed[0];
+
+        Assert.Contains($"{count} 通过 / 0 失败 ×3", LecturePage, StringComparison.Ordinal);
+        var stated = Regex.Matches(LecturePage, @"(\d+) 通过 / 0 失败 ×3")
+            .Select(m => int.Parse(m.Groups[1].Value)).Distinct().ToList();
+        Assert.Equal(new[] { count }, stated);
+    }
+
+    /// <summary>
+    /// 开场与结尾两块都带齐三句诚实口径（不是真机结果 / 到期日 / G-D5 未达成），且与 <c>demo.sh</c>
+    /// 的录制口径第 4 条同词——这一页不许把模拟器证据说成真机结果，也不许在某一端漏掉那一句。
+    /// </summary>
+    [Fact]
+    public void LecturePage_KeepsTheHonestCaliberAtBothEnds()
+    {
+        var opening = LectureSection("## 固定开场口径", "## 当天四步");
+        var closing = LectureSection("## 结尾固定一句", null);
+        foreach (var block in new[] { opening, closing })
+        {
+            Assert.Contains("不是 Windows 真机结果", block, StringComparison.Ordinal);
+            Assert.Contains("2026-11-20", block, StringComparison.Ordinal);
+            Assert.Contains("G-D5 未达成（环境供给缺口）", block, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>逐屏那一节的四列行（屏 / 做什么 / 量到什么 / 缺什么），跳表头与分隔行。</summary>
+    private static List<(string Screen, string Measured, string Missing)> LectureRows()
+    {
+        var lines = LecturePage.ReplaceLineEndings("\n").Split('\n');
+        var start = Array.FindIndex(lines, l => l.StartsWith("## 逐屏一句话讲稿", StringComparison.Ordinal));
+        Assert.True(start >= 0, "答辩讲稿缺「## 逐屏一句话讲稿」一节。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        var rows = new List<(string, string, string)>();
+        foreach (var line in lines[start..(end < 0 ? lines.Length : end)])
+        {
+            if (!line.StartsWith("| ", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            Assert.True(cells.Count == 4, $"逐屏那一节有一行不是 4 列（{cells.Count} 列）：{line[..Math.Min(40, line.Length)]}…");
+            if (cells[0] == "屏" || cells[0].All(ch => ch is '-' or ':')) continue;
+            rows.Add((cells[0], cells[2], cells[3]));
+        }
+
+        Assert.True(rows.Count >= 12, $"逐屏那一节只有 {rows.Count} 行（地板 12）。");
+        return rows;
+    }
+
+    /// <summary>
+    /// 讲稿页与逐屏表的对账，返回「哪几处会念歪」的说明（空 = 全对上）。写成<b>纯数据进、问题出</b>的函数，
+    /// 是为了让 <see cref="LectureScreenGate_ReportsTheDriftItMustCatch"/> 能拿注入过的夹具喂它——
+    /// 与 <c>RowClaimMismatches</c> / <c>LayoutMeasurementGateTests.Problems</c> 同一形状。
+    /// </summary>
+    private static List<string> LectureProblems(
+        IReadOnlyList<(string Screen, string Measured, string Missing)> lectureRows,
+        IReadOnlyList<(string Screen, string Verdict)> tableRows,
+        IReadOnlyList<string> registered)
+    {
+        var problems = new List<string>();
+        var lectureScreens = lectureRows.Select(r => r.Screen).ToList();
+        var tableScreens = tableRows.Select(r => r.Screen).ToList();
+
+        foreach (var screen in tableScreens.Where(screen => !lectureScreens.Contains(screen, StringComparer.Ordinal)))
+        {
+            problems.Add($"逐屏表有屏「{screen}」，这一页没有——现场按表念到它时手里这一页空着。");
+        }
+
+        foreach (var screen in lectureScreens.Where(screen => !tableScreens.Contains(screen, StringComparer.Ordinal)))
+        {
+            problems.Add($"这一页多出屏「{screen}」，逐屏表里没有它——等于凭空多写了一份屏单上没有的屏。");
+        }
+
+        foreach (var dup in lectureScreens.GroupBy(s => s).Where(g => g.Count() > 1).Select(g => g.Key))
+        {
+            problems.Add($"这一页把屏「{dup}」写了两遍——逐屏表只有一行，屏数与念序都对不上。");
+        }
+
+        var sourceOnly = tableRows
+            .Where(r => r.Verdict.Contains("源码 + 编译证据", StringComparison.Ordinal))
+            .Select(r => r.Screen)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var (screen, measured, missing) in lectureRows)
+        {
+            foreach (var segment in Regex.Matches(measured, @"Run[A-Za-z0-9]+").Select(m => m.Value).Distinct(StringComparer.Ordinal))
+            {
+                if (!registered.Contains(segment, StringComparer.Ordinal))
+                {
+                    problems.Add($"这一页屏「{screen}」引用了 {segment}，它不在冒烟器注册清单里——这一段跑不到，照着念就是空手。");
+                }
+
+                if (sourceOnly.Contains(screen))
+                {
+                    problems.Add($"这一页把源码证据屏「{screen}」引了 {segment} 念成 wine 量到——与逐屏表「源码 + 编译证据」互相打脸。");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(missing))
+            {
+                problems.Add($"这一页屏「{screen}」的「缺什么」是空的——每屏都要交代还差什么（G-D5 或环境不具备），不许只报喜。");
+            }
+        }
+
+        return problems;
+    }
+
+    /// <summary>讲稿页里从某个二级标题到下一个二级标题（或到文件末）的正文。</summary>
+    private static string LectureSection(string startHeading, string? endHeading)
+    {
+        var lines = LecturePage.ReplaceLineEndings("\n").Split('\n');
+        var start = Array.FindIndex(lines, l => l.StartsWith(startHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0, $"答辩讲稿缺「{startHeading}」一节。");
+        var end = endHeading is null
+            ? lines.Length
+            : Array.FindIndex(lines, start + 1, l => l.StartsWith(endHeading, StringComparison.Ordinal));
+        Assert.True(end > start, $"答辩讲稿「{startHeading}」一节切不出边界。");
+        return string.Join('\n', lines[start..end]);
+    }
 }

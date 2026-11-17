@@ -114,6 +114,12 @@ xvfb-run -a -s "-screen 0 1600x1000x24" wine /tmp/ah-smoke-pub/ApifoxHelper.Smok
 到期日 **2026-11-20** 仍拿不到 Windows 真机时，初审答辩按这一节讲。它是 `docs/NOTES.md`「降级答辩脚本」
 一节的执行方式——**屏单只有一份，就是那张逐屏表**；脚本从表里读行，本 README 不再抄一份（抄的会漂）。
 
+> **不跑 wine 也能照念的成品讲稿**：`demo.sh` 跑一次才在 `/tmp/ah-demo/narration-<档位>.txt` 落一份运行时讲稿，
+> 机器一关就没；当天从 Windows 侧进来那四步是第一次真跑，wine / Xvfb 不在场时现场手里就没有屏序。
+> `.winecheck/答辩讲稿.md` 是那段路的替代——一份**入库**的完整讲稿（四步 / 三档读数 / 逐屏一句话：做什么 ·
+> 量到什么 · 缺什么），是逐屏表的念稿展开、不是第二份屏单，由 `DemoScriptTests` 的锁步门与逐屏表逐字对齐、
+> 三档那个数与 `.winecheck/reading.txt` 对账。
+
 ```bash
 bash .winecheck/defense-day.sh            # 到期日当天先跑这一条：①到期日 ②预检 ③三档 ④念序与结尾那句
 bash .winecheck/demo.sh                 # 三档各跑一次；产物在 /tmp/ah-demo
