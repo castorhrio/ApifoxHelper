@@ -1,4 +1,5 @@
 using ApifoxHelper.Desktop.Native;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace ApifoxHelper.Tests;
@@ -22,7 +23,12 @@ namespace ApifoxHelper.Tests;
 ///    会把刚写上去的那一句再盖掉；
 /// ④ 唯一落点（源码门）：<c>JobOutcome.FinishedText</c> 在产品源码里恰好调用一处，界面不就地再写一遍真值表；
 /// ⑤ 一次作业只报一次（源码门）：作业 Id 由 <c>ShowJobState</c> 记下、由 <c>ShowJobOutcome</c> 用掉即清；
-/// ⑥ 不覆盖读取失败（源码门）：<c>_loadFailed</c> 时那一句比这一次作业的结果更该留在屏上。
+/// ⑥ 不覆盖读取失败（源码门）：<c>_loadFailed</c> 时那一句比这一次作业的结果更该留在屏上；
+/// ⑦ 状态字面量两侧对账（第三百七十九轮）：<c>JobRunner</c> 写进 <c>Job.State</c> 的终态字面量集合，
+///    与 <c>JobOutcome.FinishedText</c> 接受的字面量集合必须一致——两侧各有一个定义不在被它判的对象里，
+///    所以这是对账门；另有一条真执行门把作业真的跑一遍（成功 / 失败 / 取消），验「写进去的就是认得的」；
+/// ⑧ 色调两侧对账（第三百七十九轮）：<c>JobOutcome.Tone</c> 会答的那两个字，必须正是状态行那一处
+///    「色调字 → 设计令牌」认的那两个字，且失败那一支落到 <c>BadText</c>、其余落到 <c>Muted</c>。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判「真机上那一行字读起来顺不顺眼」——那要 Windows 真机（G-D5，真机 0 台）；
@@ -36,6 +42,36 @@ public class JobOutcomeTests
     private const string ShowJobStateHeader = "private void ShowJobState(JobInfo? job)";
     private const string OnTickHeader = "private void OnTick()";
     private const string ShowJobOutcomeHeader = "private void ShowJobOutcome()";
+    private const string FinishedTextHeader = "public static string? FinishedText(";
+    private const string ToneHeader = "public static string Tone(string state)";
+
+    /// <summary>作业真的跑在后台的那一份（<c>Infrastructure/JobRunner.cs</c>，与测试工程共享编译）。</summary>
+    private static string JobRunner => Repo.Source("Infrastructure", "JobRunner.cs");
+
+    /// <summary>判定那一份（<c>Desktop/Native/JobOutcome.cs</c>，与测试工程共享编译）。</summary>
+    private static string JobOutcomeSource => Repo.Source("Desktop", "Native", "JobOutcome.cs");
+
+    /// <summary>
+    /// <c>JobRunner</c> 写进 <c>State</c> 的那一处：<c>job.State = "…";</c>。
+    /// <para>
+    /// 只认带点号的赋值：<c>JobInfo.State</c> 的出厂值写成 <c>public string State { get; set; } = "running";</c>
+    /// （没有 <c>.State =</c>），由 <see cref="InitialState"/> 单独取；比较式 <c>j.State == "running"</c> 也不会命中
+    /// （<c>==</c> 的第二个字符不是引号）。
+    /// </para>
+    /// </summary>
+    private static readonly Regex WrittenState = new(@"\.State\s*=\s*""(?<state>[^""]*)""", RegexOptions.Compiled);
+
+    /// <summary><c>JobInfo.State</c> 的出厂值（中间态）：<c>public string State { get; set; } = "running";</c>。</summary>
+    private static readonly Regex InitialState = new(@"State\s*\{\s*get;\s*set;\s*\}\s*=\s*""(?<state>[^""]*)""", RegexOptions.Compiled);
+
+    /// <summary><c>FinishedText</c> 的 switch 分支：<c>"succeeded" =&gt; …</c>。</summary>
+    private static readonly Regex AcceptedState = new(@"""(?<state>[^""]*)""\s*=>", RegexOptions.Compiled);
+
+    /// <summary><c>Tone</c> 的三元式：<c>state == "failed" ? "bad" : "muted"</c>。</summary>
+    private static readonly Regex ToneTernary = new(@"==\s*""(?<state>[^""]+)""\s*\?\s*""(?<whenTrue>[^""]+)""\s*:\s*""(?<whenFalse>[^""]+)""", RegexOptions.Compiled);
+
+    /// <summary>状态行那一处「色调字 → 设计令牌」：<c>JobOutcome.Tone(…) == "bad" ? UiTokens.BadText : UiTokens.Muted</c>。</summary>
+    private static readonly Regex StatusLineTone = new(@"JobOutcome\.Tone\([^)]*\)\s*==\s*""(?<word>[^""]+)""\s*\?\s*UiTokens\.(?<whenTrue>\w+)\s*:\s*UiTokens\.(?<whenFalse>\w+)", RegexOptions.Compiled);
 
     /// <summary>
     /// ① 文案本身：三种终态各一句，还在跑与认不出的状态不猜。
@@ -86,6 +122,102 @@ public class JobOutcomeTests
     }
 
     /// <summary>
+    /// ⑦ 状态字面量两侧对账（第三百七十九轮，简报 P0-1）：<c>JobRunner</c> 写进 <c>State</c> 的终态字面量集合，
+    /// 与 <c>JobOutcome.FinishedText</c> 接受的字面量集合必须一致。
+    /// <para>
+    /// <b>为什么要有这一条</b>：<c>FinishedText</c> 只认 <c>"succeeded"</c> / <c>"failed"</c> / <c>"canceled"</c>
+    /// 三个小写字面量，<c>"Succeeded"</c> 一律答 <c>null</c>——这是刻意的严格口径，但此前<b>没有任何一条门</b>
+    /// 保证 <c>JobRunner</c> 写进去的就是这三个。若它某处写了大写、或将来新增一个中间态字面量，
+    /// 用户会看到「按了按钮什么都没说」，正是第三百七十八轮要修的那个缺口的反面。
+    /// </para>
+    /// <para>
+    /// <b>五步法（第二百八十二轮）第 ② 步答「不是」</b>：断言里那两个口径名——<c>JobRunner</c> 写什么、
+    /// <c>FinishedText</c> 认什么——各有一个定义在对方之外，故这是<b>对账门</b>，不属「假门防护」那一族。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void JobRunnerStates_AreExactlyTheOnesFinishedTextAccepts()
+    {
+        Assert.Empty(StateProblems(JobRunner, JobOutcomeSource));
+    }
+
+    /// <summary>
+    /// ⑦ 的另一半：把作业<b>真的跑一遍</b>（成功 / 失败 / 取消），验「写进去的就是认得的」。
+    /// <para>
+    /// 上面那条是源码对账，它抓得住「字面量集合对不上」，抓不住「某个分支其实没走到」；这一条反过来，
+    /// 走的是真的 <c>JobRunner</c>（与测试工程共享编译，Linux 上真执行）：起三个作业、等它们到终态，
+    /// 把 <c>State</c> 与 <c>Error</c> 原样喂给 <see cref="JobOutcome.FinishedText"/>，三种终态都必须答得出那一句。
+    /// 失败那一支还要验原因真的从作业里带到了那一句上（<c>JobRunner</c> 的失败分支一定写 <c>Error</c>）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判作业本身做对了什么（那是各服务自己的门），也不判真机上那一行字的样子（G-D5）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task JobRunner_ReallyWritesTheStatesFinishedTextAccepts()
+    {
+        var runner = new JobRunner(NullLogger<JobRunner>.Instance);
+
+        var succeeded = runner.Start("t-ok", "源码扫描", _ => Task.FromResult<object?>(null));
+        await succeeded.Completion!;
+
+        var failed = runner.Start("t-bad", "源码扫描", _ => throw new UserException("磁盘只读。", 500));
+        await failed.Completion!;
+
+        var canceled = runner.Start("t-cancel", "源码扫描", async context =>
+        {
+            await Task.Delay(Timeout.Infinite, context.Token);
+            return null;
+        });
+        runner.Cancel("t-cancel");
+        await canceled.Completion!;
+
+        // 三个终态各是哪一个字面量：与 FinishedText 接受的那三个逐字相同。
+        Assert.Equal("succeeded", succeeded.State);
+        Assert.Equal("failed", failed.State);
+        Assert.Equal("canceled", canceled.State);
+
+        // 三种终态各说一句（不猜、不留空）。
+        Assert.Equal("源码扫描完成。", JobOutcome.FinishedText(succeeded.Kind, succeeded.State, succeeded.Error));
+        Assert.Equal("源码扫描已取消。", JobOutcome.FinishedText(canceled.Kind, canceled.State, canceled.Error));
+
+        // 失败那一句把作业记下的原因原样带出来——这是「作业 → 状态行」这条链真的接通了的那一半。
+        var failureText = JobOutcome.FinishedText(failed.Kind, failed.State, failed.Error);
+        Assert.NotNull(failureText);
+        Assert.Contains("磁盘只读。", failureText, StringComparison.Ordinal);
+
+        // 还在跑的时候（出厂值）什么都不说：进度行才是「正在做什么」的通道。
+        var running = runner.Start("t-running", "源码扫描", async context =>
+        {
+            await Task.Delay(Timeout.Infinite, context.Token);
+            return null;
+        });
+        Assert.Null(JobOutcome.FinishedText(running.Kind, running.State, running.Error));
+        runner.Cancel("t-running");
+        await running.Completion!;
+    }
+
+    /// <summary>
+    /// ⑧ 色调两侧对账（第三百七十九轮，简报 P0-2）：<c>JobOutcome.Tone</c> 会答的那两个字，
+    /// 必须正是状态行那一处「色调字 → 设计令牌」认的那两个字。
+    /// <para>
+    /// <b>为什么要有这一条</b>：<c>Tone</c> 答的是语义字（<c>bad</c> / <c>muted</c>），而状态行那一处
+    /// 拿它跟一个字面量比、再选一个设计令牌。此前<b>没有一条门</b>保证这两个字对得上——<c>Tone</c> 若改成答
+    /// <c>warn</c>，状态行会静默落到 <c>muted</c> 那一支，失败那一句看起来像「没事」，而所有门照旧全绿。
+    /// 注释里那句「颜色只作辅助信号、含义由文字承载」不是判据，这一条才是。
+    /// </para>
+    /// <para>
+    /// <b>五步法第 ② 步答「不是」</b>：<c>Tone</c> 的定义在 <c>JobOutcome.cs</c>、状态行那一处的定义在
+    /// <c>TasksPage.cs</c>，两侧各在对方之外，故这是<b>对账门</b>。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Tone_IsTheWordTheStatusLineRecognizes()
+    {
+        Assert.Empty(ToneProblems(JobOutcomeSource, TasksPage));
+    }
+
+    /// <summary>
     /// 上面那段判据<b>自己</b>被抓得住：四发注入各喂一次，每一发都必须报出自己那一处。
     /// <para>
     /// ① 把「说结果」那一句从 <c>OnTick</c> 里删掉（进度行照旧收起，结果没人说——本门要补的正是这个缺口）；
@@ -128,6 +260,48 @@ public class JobOutcomeTests
     }
 
     /// <summary>
+    /// ⑦⑧ 那两条对账门<b>自己</b>被抓得住：五发注入各喂一次，每一发都必须报出自己那一处。
+    /// <para>
+    /// ① <c>JobRunner</c> 把成功写成大写（<c>FinishedText</c> 只认小写三个字面量，作业结束之后屏上一句话都没有）；
+    /// ② <c>JobOutcome</c> 多认一个字面量（<c>JobRunner</c> 从不写它：那一支永远走不到，而真写进去的那一个没人认）；
+    /// ③ <c>Tone</c> 把失败答成 <c>muted</c>（状态行会把失败那一句染成次要文字色，看起来像「没事」）；
+    /// ④ 状态行比的是另一个字（<c>Tone</c> 答 <c>bad</c>、状态行比 <c>warn</c>，失败落到 <c>muted</c> 那一支）；
+    /// ⑤ 状态行把 <c>bad</c> 映射到次要文字色（失败那一句不再有警示色）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void StateAndToneGates_ReportTheBreaksTheyMustCatch()
+    {
+        // 合规写法：仓里这两份一处都不报。
+        Assert.Empty(StateProblems(JobRunner, JobOutcomeSource));
+        Assert.Empty(ToneProblems(JobOutcomeSource, TasksPage));
+
+        var runner = CodeScan.Text(JobRunner);
+        var outcome = CodeScan.Text(JobOutcomeSource);
+        var page = CodeScan.Text(TasksPage);
+
+        // ① 大写：JobRunner 写 "Succeeded"，FinishedText 只认 "succeeded"。
+        var capitalized = Inject(runner, "job.State = \"succeeded\";", "job.State = \"Succeeded\";");
+        Assert.Contains(StateProblems(capitalized, outcome), p => p.Contains("Succeeded", StringComparison.Ordinal));
+
+        // ② 多认一个：JobOutcome 认 "cancelled"，而 JobRunner 写的是 "canceled"。
+        var extra = Inject(outcome, "\"canceled\" => $\"{kind}已取消。\",", "\"cancelled\" => $\"{kind}已取消。\",");
+        Assert.Contains(StateProblems(runner, extra), p => p.Contains("cancelled", StringComparison.Ordinal));
+
+        // ③ 失败答成 muted：状态行会把失败那一句染成次要文字色。
+        var mutedFailure = Inject(outcome, "? \"bad\" : \"muted\"", "? \"muted\" : \"muted\"");
+        Assert.Contains(ToneProblems(mutedFailure, page), p => p.Contains("muted", StringComparison.Ordinal));
+
+        // ④ 状态行比的是另一个字：Tone 答 bad、状态行比 warn，失败落到 muted 那一支。
+        var otherWord = Inject(page, "JobOutcome.Tone(job.State) == \"bad\"", "JobOutcome.Tone(job.State) == \"warn\"");
+        Assert.Contains(ToneProblems(outcome, otherWord), p => p.Contains("warn", StringComparison.Ordinal));
+
+        // ⑤ 状态行把 bad 映射到次要文字色：失败那一句不再有警示色。
+        var wrongToken = Inject(page, "? UiTokens.BadText : UiTokens.Muted", "? UiTokens.Muted : UiTokens.Muted");
+        Assert.Contains(ToneProblems(outcome, wrongToken), p => p.Contains("BadText", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// 把 <paramref name="from"/> 换成 <paramref name="to"/>，并当场核「差异落在<b>代码区</b>」。
     /// <para>
     /// 与 <c>BannerFocusPlanTests.Inject</c> 同一形状：注入的输入本身就是去注释后的代码，这一道再当场核一次
@@ -140,6 +314,182 @@ public class JobOutcomeTests
         Assert.NotEqual(code, injected);
         Assert.NotEqual(CodeScan.Text(code), CodeScan.Text(injected));
         return injected;
+    }
+
+    /// <summary>
+    /// ⑦ 的对账：<c>JobRunner</c> 写进 <c>State</c> 的终态字面量集合 ↔ <c>JobOutcome.FinishedText</c>
+    /// 接受的字面量集合（空 = 对得上）。
+    /// <para>
+    /// 写成纯文本进、问题出的函数，是为了让上面那条自测能拿<b>注入过的</b>源码喂它——与
+    /// <c>BannerFocusPlanTests.Problems</c>、<c>DetailFocusCoordinationTests.Problems</c> 同一形状。
+    /// </para>
+    /// <para>
+    /// <b>取法上的两条假定（登记在此，不为它加门）</b>：① <c>JobRunner</c> 写 <c>State</c> 的写法是
+    /// <c>job.State = "…";</c> 这一种，改成经常量或方法写就要跟着改 <see cref="WrittenState"/>；
+    /// ② <c>FinishedText</c> 的接受集合写成 switch 分支 <c>"…" =&gt; …</c>，改成字典或别的形状同理。
+    /// 两条假定一旦不成立，本门会报「一处都没读到」而不是静默绿。
+    /// </para>
+    /// </summary>
+    private static List<string> StateProblems(string jobRunner, string jobOutcome)
+    {
+        var problems = new List<string>();
+        var runner = CodeScan.Text(jobRunner);
+        var outcome = CodeScan.Text(jobOutcome);
+
+        var written = WrittenState.Matches(runner)
+            .Select(m => m.Groups["state"].Value)
+            .Distinct()
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+        if (written.Count == 0)
+        {
+            problems.Add("JobRunner 里一处 `State = \"…\"` 都没读到：本门按这一形状取「作业真的写进哪几个终态字面量」，"
+                + "改成经常量或方法写之后这一条要跟着改取法。");
+            return problems;
+        }
+
+        var finishedText = Body(outcome, FinishedTextHeader);
+        if (finishedText is null)
+        {
+            problems.Add("JobOutcome 里找不到 FinishedText 的方法体：本门按它取「接受哪几个终态字面量」，"
+                + "方法改名或搬走之后这一条要跟着改取法。");
+            return problems;
+        }
+
+        var accepted = AcceptedState.Matches(finishedText)
+            .Select(m => m.Groups["state"].Value)
+            .Distinct()
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+        if (accepted.Count == 0)
+        {
+            problems.Add("JobOutcome.FinishedText 里一个 switch 分支字面量都没读到：本门按 `\"…\" => …` 这一形状取"
+                + "「接受哪几个终态字面量」，改成字典或别的形状之后这一条要跟着改取法。");
+            return problems;
+        }
+
+        if (!written.SequenceEqual(accepted, StringComparer.Ordinal))
+        {
+            problems.Add($"JobRunner 写进 State 的终态字面量是 [{string.Join(", ", written)}]，"
+                + $"而 JobOutcome.FinishedText 接受的是 [{string.Join(", ", accepted)}]：两边对不上时，"
+                + "作业结束之后状态行会对某一种终态答 null——用户按了按钮，屏上一句话都没有。");
+        }
+
+        // 真执行那一半：写进去的每一个字面量，FinishedText 都必须答得出那一句。
+        foreach (var state in written.Where(s => JobOutcome.FinishedText("源码扫描", s, null) is null))
+        {
+            problems.Add($"JobRunner 会写 State = \"{state}\"，而 JobOutcome.FinishedText 对它答 null："
+                + "这一种终态结束之后，状态行不会说任何一句话。");
+        }
+
+        // 中间态：JobInfo.State 的出厂值必须答 null（还在跑的时候不该说结果）。
+        var initial = InitialState.Match(runner);
+        if (!initial.Success)
+        {
+            problems.Add("JobRunner 里读不到 JobInfo.State 的出厂值（应为 `public string State { get; set; } = \"running\";`）："
+                + "本门按它判「中间态答不答 null」，那一行改了形状之后这一条要跟着改取法。");
+        }
+        else if (JobOutcome.FinishedText("源码扫描", initial.Groups["state"].Value, null) is not null)
+        {
+            problems.Add($"JobInfo.State 的出厂值是 \"{initial.Groups["state"].Value}\"，而 JobOutcome.FinishedText 对它答了一句结果："
+                + "还在跑的作业不该在状态行上说「完成」。");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// ⑧ 的对账：<c>JobOutcome.Tone</c> 会答的那两个字 ↔ 状态行那一处「色调字 → 设计令牌」认的那两个字
+    /// （空 = 对得上）。
+    /// <para>
+    /// <b>取法上的两条假定（登记在此，不为它加门）</b>：① <c>Tone</c> 写成三元式
+    /// <c>state == "…" ? "…" : "…"</c>；② 状态行那一处写成
+    /// <c>JobOutcome.Tone(…) == "…" ? UiTokens.X : UiTokens.Y</c>。两条一旦不成立，本门会报「读不到」而不是静默绿。
+    /// </para>
+    /// </summary>
+    private static List<string> ToneProblems(string jobOutcome, string tasksPage)
+    {
+        var problems = new List<string>();
+        var outcome = CodeScan.Text(jobOutcome);
+        var page = CodeScan.Text(tasksPage);
+
+        var tone = Expression(outcome, ToneHeader);
+        if (tone is null)
+        {
+            problems.Add("JobOutcome 里找不到 Tone 的表达式体：本门按它取「哪一个状态答哪一个色调」，"
+                + "方法改名或搬走之后这一条要跟着改取法。");
+            return problems;
+        }
+
+        var ternary = ToneTernary.Match(tone);
+        if (!ternary.Success)
+        {
+            problems.Add("JobOutcome.Tone 不再是「状态 == \"…\" ? \"…\" : \"…\"」这一形状：本门按这一形状取"
+                + "「哪一个状态答哪一个色调」，改成别的写法之后这一条要跟着改取法。");
+            return problems;
+        }
+
+        var failedState = ternary.Groups["state"].Value;
+        var failureTone = ternary.Groups["whenTrue"].Value;
+        var otherTone = ternary.Groups["whenFalse"].Value;
+
+        var showJobOutcome = Body(page, ShowJobOutcomeHeader);
+        if (showJobOutcome is null)
+        {
+            problems.Add("TasksPage 里找不到 ShowJobOutcome 的方法体：状态行那一处「色调字 → 设计令牌」没有落点。");
+            return problems;
+        }
+
+        var statusLine = StatusLineTone.Match(showJobOutcome);
+        if (!statusLine.Success)
+        {
+            problems.Add("ShowJobOutcome 里读不到「色调字 → 设计令牌」那一处（应为 "
+                + "`JobOutcome.Tone(…) == \"bad\" ? UiTokens.BadText : UiTokens.Muted`）：本门按这一处判"
+                + "「状态行认不认 JobOutcome 答的那两个字」，改成别的写法之后这一条要跟着改取法。");
+            return problems;
+        }
+
+        var comparedWord = statusLine.Groups["word"].Value;
+        var failureToken = statusLine.Groups["whenTrue"].Value;
+        var otherToken = statusLine.Groups["whenFalse"].Value;
+
+        if (failedState != "failed")
+        {
+            problems.Add($"JobOutcome.Tone 拿「{failedState}」当失败那一支：作业的失败终态字面量是 \"failed\""
+                + "（JobRunner 写的就是它），对不上时失败会被念成 muted。");
+        }
+
+        if (failureTone != comparedWord)
+        {
+            problems.Add($"JobOutcome.Tone 对失败答「{failureTone}」，而状态行比的是「{comparedWord}」："
+                + "两个字对不上时失败那一句会落到 muted 那一支，屏上看起来像「没事」。");
+        }
+
+        if (otherTone == comparedWord)
+        {
+            problems.Add($"JobOutcome.Tone 对成功与取消也答「{otherTone}」——与失败同一个字："
+                + "状态行会把成功与取消也染成警示色。");
+        }
+
+        if (otherTone != "muted")
+        {
+            problems.Add($"JobOutcome.Tone 对成功与取消答「{otherTone}」而不是「muted」："
+                + "成功不需要强调色、取消不是故障（设计验收 D3 双通道：颜色只作辅助信号）。");
+        }
+
+        if (failureToken != "BadText")
+        {
+            problems.Add($"状态行把「{comparedWord}」映射到 UiTokens.{failureToken} 而不是 UiTokens.BadText："
+                + "失败那一句该用警示色。");
+        }
+
+        if (otherToken != "Muted")
+        {
+            problems.Add($"状态行的另一支映射到 UiTokens.{otherToken} 而不是 UiTokens.Muted："
+                + "成功与取消该用次要文字色。");
+        }
+
+        return problems;
     }
 
     /// <summary>
@@ -265,6 +615,13 @@ public class JobOutcomeTests
     /// 按花括号配对数取，不按「下一个 <c>private</c>」取：方法体里有 <c>if</c> / <c>foreach</c> 的花括号，
     /// 按行首关键字切会把方法体截短，而截短之后「里面没有某一行」会假绿。
     /// </para>
+    /// <para>
+    /// <b>假定（第三百七十九轮按简报 P1-1 登记，取「只登记」那一支）</b>：本方法按花括号配对数取，
+    /// <b>不跳过字符串字面量里的 <c>{</c> / <c>}</c></b>。当前被取的三处方法体（<c>ShowJobState</c> /
+    /// <c>OnTick</c> / <c>ShowJobOutcome</c>）与 <c>FinishedText</c> 的 switch 块里，字面量中的花括号都是成对的
+    /// （<c>$"{kind}完成。"</c> 这种），配对结果不受影响。将来若在方法体里写进<b>不成对</b>的花括号字面量
+    /// （例如 <c>"{"</c>），本方法会取错边界——那时要改成跳过字符串字面量，或改用 Roslyn 解析。
+    /// </para>
     /// </summary>
     private static string? Body(string code, string signature)
     {
@@ -284,6 +641,21 @@ public class JobOutcomeTests
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 从去注释后的源码里取一个<b>表达式体</b>成员（从签名那一行到它自己的分号）。
+    /// <para>
+    /// <c>Tone</c> 是 <c>=&gt; …;</c> 这一种，没有花括号，<see cref="Body"/> 取不到它（它会一路找到下一个
+    /// 方法的花括号）。故单列一处：签名之后第一个分号就是它的结尾。
+    /// </para>
+    /// </summary>
+    private static string? Expression(string code, string signature)
+    {
+        var start = code.IndexOf(signature, StringComparison.Ordinal);
+        if (start < 0) return null;
+        var end = code.IndexOf(';', start);
+        return end < 0 ? null : code[start..(end + 1)];
     }
 
     private static int Count(string text, string needle)
