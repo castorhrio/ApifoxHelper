@@ -38,6 +38,16 @@ namespace ApifoxHelper.Tests;
 /// 判的是「这一格该不该这么分、折点读起来对不对」，只有人读得出来。副产品照旧：这一族里被量过的行数与计数不符时，
 /// 下面那条计数会红，逼着改的人先交代读数从哪来。
 /// </para>
+/// <para>
+/// <b>第三百九十五轮补的第三处（同一形状，另一屏）</b>：<c>Desktop/Native/CapabilitiesDialog.cs</c> 结果区那一句提示
+/// （<c>_resultHint</c>）此前也是「<c>Ui.Caption</c> 出厂 <c>AutoSize = true</c> + <c>Dock = Top</c>」——
+/// 与第二百七十二轮 <c>_detailHint</c> 那一发是同一个根因，只是后果不同：那一处是「居中没对象」，
+/// 这一处是<b>探测失败的原因被静默裁掉</b>（wine 96 档实测：结果区可用宽 748px，一句 1303px 的失败原因
+/// 标签宽 1303px、右边界 1319px，539px 落在结果区之外，既没有「…」也没有悬停提示）。
+/// 改法是关掉 AutoSize 让 <c>Dock = Top</c> 真的铺满那一格、再开 <c>AutoEllipsis</c>，
+/// 高度取 <c>PreferredHeight</c>（与 AutoSize 当时算出来的 17px 逐字相同，结果区给清单剩下的高度一分不变）。
+/// 读数在 <c>docs/CRITIQUE.md</c> 第三百九十五轮那一节与 <c>docs/NOTES.md</c> 同轮账本。
+/// </para>
 /// </summary>
 public class WrapAndFillTests
 {
@@ -71,6 +81,24 @@ public class WrapAndFillTests
 
     private const string HintAutoSizeBackOn = "_detailHint.AutoSize = true";
 
+    // ── 第三处：连接与写入探测结果区那一句提示（第三百九十五轮）────────────────────
+    /// <summary>那一句提示的字段名：判定按行首锚定，字段改名即红（判的就不是量过的那一行）。</summary>
+    private const string ProbeHint = "_resultHint";
+
+    /// <summary>关掉 autosize：<c>Dock = Top</c> 才铺得满那一格。</summary>
+    private const string ProbeHintStopsAutoSize = "_resultHint.AutoSize = false;";
+
+    /// <summary>长原因末尾给「…」并让框架把全文放进悬停提示（与 <c>Ui.StatusLine</c> 同一口径）。</summary>
+    private const string ProbeHintEllipsizes = "_resultHint.AutoEllipsis = true;";
+
+    /// <summary>高度取 PreferredHeight：与 AutoSize 当时算出来的数逐字相同，结果区预算因此不动。</summary>
+    private const string ProbeHintKeepsItsHeight = "_resultHint.Height = _resultHint.PreferredHeight;";
+
+    /// <summary>这一句铺的是结果区那一格；不再挂在那里时，量到的宽度就不属这一屏。</summary>
+    private const string ProbeHintDocksTop = "_resultHint.Dock = DockStyle.Top;";
+
+    private const string ProbeHintAutoSizeBackOn = "_resultHint.AutoSize = true";
+
     /// <summary>
     /// 三格进度条那一行按可用宽换行：不折行时那一行读不全，而它是「三个阶段各到哪一步」的唯一凭据。
     /// </summary>
@@ -100,6 +128,21 @@ public class WrapAndFillTests
     {
         var factory = SourceSlice.BodyOf(Repo.Source("Desktop", "Native", "Ui.cs"), "private static Label Label(");
         Assert.Equal(1, CodeScan.CountContaining(factory, "AutoSize = true,"));
+    }
+
+    /// <summary>
+    /// 探测结果区那一句提示仍然铺满它所在的那一格、长原因仍然给省略号，且高度仍取 PreferredHeight。
+    /// <para>
+    /// <b>为什么高度也要判</b>：关掉 AutoSize 之后高度就没人管了——写成字面量或干脆不写，
+    /// 结果区给清单剩下的高度会跟着这一句的文字长短变，而 <c>CapabilitiesLayout.ResultPaneHeight</c>
+    /// 那条预算（七项探测结果一屏读完）是按 17px 算出来的。取 <c>PreferredHeight</c> 是唯一
+    /// 「与 AutoSize 当时那个数逐字相同」的写法，所以它和另外三句一起被钉住。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ProbeResultHint_StillFillsItsCellAndStillEllipsizes()
+    {
+        Assert.Empty(ProbeHintProblems(ProbeCode()));
     }
 
     /// <summary>
@@ -159,6 +202,29 @@ public class WrapAndFillTests
             "FlowLayoutPanel _remoteActions = new() { AutoSize = true, WrapContents = false"));
         Assert.Single(oneRowBack);
         Assert.Contains("4 处", oneRowBack[0], StringComparison.Ordinal);
+
+        // ⑨⑩⑪ 第三处（第三百九十五轮）：探测结果区那一句提示的三发。
+        var probe = ProbeCode();
+        Assert.Empty(ProbeHintProblems(probe));
+
+        // ⑨ 第三百九十五轮之前那一版：autosize 没关，长原因被结果区右边界裁掉。
+        var probeAutoSizeBack = ProbeHintProblems(probe.Replace(
+            ProbeHintStopsAutoSize,
+            ProbeHintAutoSizeBackOn + ";"));
+        Assert.Single(probeAutoSizeBack);
+        Assert.Contains("AutoSize = true", probeAutoSizeBack[0], StringComparison.Ordinal);
+
+        // ⑩ 省略号没开：铺满了，但超出的部分仍被静默裁掉（用户看到半句话）。
+        var probeNoEllipsis = ProbeHintProblems(probe.Replace(ProbeHintEllipsizes, "// 省略号先不加"));
+        Assert.Single(probeNoEllipsis);
+        Assert.Contains("AutoEllipsis", probeNoEllipsis[0], StringComparison.Ordinal);
+
+        // ⑪ 高度改回字面量：结果区给清单剩下的高度跟着这一句的文字长短走，七项一屏读完那条预算就没人守了。
+        var probeHeightLiteral = ProbeHintProblems(probe.Replace(
+            ProbeHintKeepsItsHeight,
+            "_resultHint.Height = 17;"));
+        Assert.Single(probeHeightLiteral);
+        Assert.Contains("PreferredHeight", probeHeightLiteral[0], StringComparison.Ordinal);
     }
 
     /// <summary>去掉注释的界面源码：注释里点名 <c>WrapContents</c> 是在说明理由，不是在接线。</summary>
@@ -206,6 +272,68 @@ public class WrapAndFillTests
                 + "（740 / 624 / 440px），越出行面的那几颗按钮被行面裁掉、拖横向滚动条也到不了（读数出自冒烟段 RunDetailReach，"
                 + "逐档的数见 docs/DESIGN.md §8「任务页按钮行的横向可达性」那一行）。"
                 + "少一处就得先给那一行一份新的右边界读数，别把折行改回去而让门只看到计数。");
+        }
+
+        return problems;
+    }
+
+    /// <summary>探测结果区那一句提示的源码（去注释：注释里点名这几句是在说明理由，不是在接线）。</summary>
+    private static string ProbeCode() => CodeScan.Text(Repo.Source("Desktop", "Native", "CapabilitiesDialog.cs"));
+
+    /// <summary>
+    /// 探测结果区那一句提示不达形态的说明（空 = 合规）。
+    /// <para>
+    /// <b>四句各管一件事，缺一句就红</b>：关 autosize（铺得满）、开省略号（读得出「还有下文」）、
+    /// 高度取 PreferredHeight（结果区预算不动）、仍挂在结果区那一格（量到的宽度属这一屏）。
+    /// 与 <see cref="HintProblems"/> 同一形状：先看「改回去」那一句在不在，再看其余三句各几处。
+    /// </para>
+    /// </summary>
+    private static List<string> ProbeHintProblems(string dialog)
+    {
+        var problems = new List<string>();
+
+        var backOn = CodeScan.CountContaining(dialog, ProbeHintAutoSizeBackOn);
+        if (backOn != 0)
+        {
+            problems.Add(
+                $"「{ProbeHintAutoSizeBackOn}」出现了 {backOn} 次：这就是第三百九十五轮那一发的原样改回去——"
+                + "AutoSize 盖掉 Dock 给的尺寸，探测失败的原因会缩成文字本身那么大、越出结果区右边界被静默裁掉"
+                + "（wine 96 档实测：可用宽 748px、一句 1303px 的失败原因标签宽 1303px、右边界 1319px）。");
+        }
+        else
+        {
+            var off = CodeScan.CountContaining(dialog, ProbeHintStopsAutoSize);
+            if (off != 1)
+            {
+                problems.Add(
+                    $"「{ProbeHintStopsAutoSize}」在这一份源码里是 {off} 处（应是 1 处；被注释掉算没有）："
+                    + "少了这一句，Dock = Top 铺不满结果区那一格，长原因照样被裁掉（第三百九十五轮）。");
+            }
+        }
+
+        var ellipsis = CodeScan.CountContaining(dialog, ProbeHintEllipsizes);
+        if (ellipsis != 1)
+        {
+            problems.Add(
+                $"「{ProbeHintEllipsizes}」在这一份源码里是 {ellipsis} 处（应是 1 处）："
+                + "铺满之后超出的部分仍会被静默裁掉——用户看到的是半句话，既不知道「还有下文」，也读不到失败在哪。");
+        }
+
+        var height = CodeScan.CountContaining(dialog, ProbeHintKeepsItsHeight);
+        if (height != 1)
+        {
+            problems.Add(
+                $"「{ProbeHintKeepsItsHeight}」在这一份源码里是 {height} 处（应是 1 处）："
+                + "关掉 AutoSize 之后高度就没人管了，写成字面量或不写，结果区给清单剩下的高度会跟着这一句的文字长短变，"
+                + "而 CapabilitiesLayout.ResultPaneHeight 那条预算（七项探测结果一屏读完）是按 17px 算出来的。");
+        }
+
+        var dock = CodeScan.CountContaining(dialog, ProbeHintDocksTop);
+        if (dock != 1)
+        {
+            problems.Add(
+                $"「{ProbeHintDocksTop}」在这一份源码里是 {dock} 处（应是 1 处）："
+                + "这一句铺的是结果区那一格；不再挂在那里时，量到的宽度就不属这一屏。");
         }
 
         return problems;

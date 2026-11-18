@@ -131,6 +131,17 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         _headline.Visible = false;
         _resultHint = Ui.Caption("尚未运行写入探测。填写上方测试接口并勾选确认后运行；逐项检查结果在这里显示。");
         _resultHint.Dock = DockStyle.Top;
+        // 这一行装的是探测失败的原因（`Exception.Message`，带全路径，动辄两三百字符），而 `Ui.Caption`
+        // 出厂是 `AutoSize = true` 的标签——AutoSize 盖掉 Dock 给的尺寸，这一句会缩成文字本身那么大，
+        // 超出的部分被结果区右边界**静默裁掉**（wine 96 档实测：可用宽 748px，一句 1303px 的失败原因
+        // 标签宽 1303px、右边界 1319px，539px 落在结果区之外，既没有「…」也没有悬停提示）。
+        // 关掉 AutoSize 让 Dock = Top 真的铺满那一格，再开 AutoEllipsis：末尾出现「…」、WinForms 自动
+        // 把全文放进悬停提示——「有下文」与「看全文」两件事一起成立（与 `Ui.StatusLine` 同一口径）。
+        // 高度取 PreferredHeight：与 AutoSize 当时算出来的那一个数逐字相同（实测 17px），
+        // 所以结果区给清单剩下的高度一分不变，`CapabilitiesLayout.ResultPaneHeight` 那条预算不用动。
+        _resultHint.AutoSize = false;
+        _resultHint.AutoEllipsis = true;
+        _resultHint.Height = _resultHint.PreferredHeight;
         resultHost.Controls.Add(Ui.Hairline(_checks));
         resultHost.Controls.Add(_headline);
         resultHost.Controls.Add(_resultHint);

@@ -349,7 +349,7 @@ internal static class Program
         Section("按钮行高度（八屏按钮行量行高与最高按钮，真实控件）", nameof(RunActionRowFit));
         RunActionRowFit(services, dataRoot);
 
-        Section("连接与写入探测真的显示出来（四块停靠区高度对客户区、固定三块与 CapabilitiesLayout 对账、结果区实测高与算式对账、窗体客户区高与 DialogHeight 对账、结果区装得下七项探测结果、清单不出横向滚动条，真实控件量）", nameof(RunCapabilitiesShown));
+        Section("连接与写入探测真的显示出来（四块停靠区高度对客户区、固定三块与 CapabilitiesLayout 对账、结果区实测高与算式对账、窗体客户区高与 DialogHeight 对账、结果区装得下七项探测结果、清单不出横向滚动条、结果区那一句提示铺满可用宽且长原因给省略号，真实控件量）", nameof(RunCapabilitiesShown));
         RunCapabilitiesShown(services, dataRoot);
 
         Section("连接与写入探测那两颗钮的键盘落点（焦点在「运行写入探测」上 → 探测真在跑、这一行换成进度 + 停止 → 键盘交给那颗「停止」 → 探测结束 → 键盘回到那颗「运行写入探测」；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunProbeFocusHandover));
@@ -11544,6 +11544,76 @@ internal static class Program
             {
                 throw new InvalidOperationException(
                     $"结果清单出了横向滚动条：列宽合计 {columnSum}px 超过清单可视宽 {visible}px——「详情」那一列在真实那一屏上被藏。");
+            }
+        });
+
+        // 第三百九十五轮：结果区那一句提示（探测失败的原因就写在这一行上）铺不铺满结果区宽度。
+        // 与上面那一段同一个 Show()、同一块结果区，所以留在同一段里量——不新开段、不动三档段集合。
+        RunAction("连接与写入探测：结果区那一句提示铺满结果区宽度、长原因末尾给省略号（真实控件量）", () =>
+        {
+            using var dialog = new CapabilitiesDialog(services.GetRequiredService<CompatService>(), store, jobs, profile);
+            dialog.Show();
+            Application.DoEvents();
+
+            var result = dialog.Controls.Cast<Control>().SingleOrDefault(control => control.Dock == DockStyle.Fill)
+                ?? throw new InvalidOperationException("这一屏没有「填满剩余空间」的结果区：停靠分法变了，本段量测口径需要重定。");
+            // 那一句提示按它自己的出厂文字认（产品路径上由 FinishProbe / ShowResultHint 写，本段直接写文字：
+            // 几何是真的、语义是假的——与上面补夹具行、RunListColumnFit 补行同一纪律）。
+            var hint = FindAll<Label>(dialog).SingleOrDefault(label => label.Text.StartsWith("尚未运行写入探测", StringComparison.Ordinal))
+                ?? throw new InvalidOperationException("这一屏找不到结果区那一句提示：本段量测口径需要重定。");
+
+            // 一句真实长度的失败原因：探测失败时这一行装的就是 Exception.Message（带全路径，动辄两三百字符）。
+            var reason = "写入兼容探测失败：System.IO.IOException: 未能找到路径的一部分「"
+                + Path.Combine(dataRoot, "compat", "probe-20261118000000", "write-probe.json")
+                + "」——测试接口的说明已在停止前恢复，写入保持关闭。";
+            hint.Text = reason;
+            dialog.PerformLayout();
+            Application.DoEvents();
+
+            var available = result.ClientSize.Width - result.Padding.Horizontal;
+            var preferred = TextRenderer.MeasureText(
+                hint.Text,
+                hint.Font,
+                new Size(int.MaxValue, int.MaxValue),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix).Width;
+
+            _lines.Add(
+                $"     结果区那一句提示：结果区客户区宽 {result.ClientSize.Width}px、可用宽 {available}px；" +
+                $"这一句需 {preferred}px、标签宽 {hint.Width}px、标签高 {hint.Height}px；" +
+                $"AutoSize={(hint.AutoSize ? "开" : "关")}、AutoEllipsis={(hint.AutoEllipsis ? "开" : "关")}、" +
+                $"标签右边界 {hint.Right}px 对结果区客户区宽 {result.ClientSize.Width}px");
+
+            // 判据只在设计档成立：125% / 200% 档窗体被虚拟屏截断，那一刻的宽度属于「量不到」而不是「放不下」。
+            if (DpiScaleFactor.ShouldScale(DpiScale.ScaleFactor())) return;
+
+            // 前提：这一句真的比可用宽长——否则下面两条判的是「短句也铺满」，量不出这一行的问题。
+            if (preferred <= available)
+            {
+                throw new InvalidOperationException(
+                    $"这一句夹具只需 {preferred}px，没有超过可用宽 {available}px：本段量不出「长原因读不全」那一件事，"
+                    + "夹具要换一句更长的（探测失败时这一行装的是 Exception.Message，本来就比这一屏宽）。");
+            }
+
+            if (hint.AutoSize)
+            {
+                throw new InvalidOperationException(
+                    $"结果区那一句提示仍是 AutoSize 的标签：AutoSize 盖掉 Dock 给的尺寸，这一句会缩成文字本身那么大"
+                    + $"（实测标签宽 {hint.Width}px、需 {preferred}px、可用宽 {available}px），"
+                    + "超出的部分被结果区右边界静默裁掉——探测失败的原因就写在这一行上，读不全等于没有。");
+            }
+
+            if (hint.Width != available)
+            {
+                throw new InvalidOperationException(
+                    $"结果区那一句提示的标签宽 {hint.Width}px，而结果区可用宽 {available}px："
+                    + "这一行没有铺满它所在的那一格，长原因会越出结果区右边界被裁掉。");
+            }
+
+            if (!hint.AutoEllipsis)
+            {
+                throw new InvalidOperationException(
+                    $"结果区那一句提示没有开 AutoEllipsis：这一句需 {preferred}px、可用宽只有 {available}px，"
+                    + "超出的部分被静默裁掉——用户看到的是半句话，既不知道「还有下文」，也读不到失败在哪。");
             }
         });
     }
