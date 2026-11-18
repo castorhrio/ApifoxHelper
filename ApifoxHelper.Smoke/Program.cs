@@ -358,6 +358,9 @@ internal static class Program
         Section("连接与写入探测那一屏的关窗守卫（探测真在跑的时候关窗 → 窗口不关、状态行说一句为什么 → 探测结束之后关窗照常；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunProbeCloseGuard));
         RunProbeCloseGuard(services, dataRoot);
 
+        Section("同步预览那一屏的关窗守卫（同步真在跑的时候关窗 → 窗口不关、状态行说一句为什么 → 作业结束之后关窗照常；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunSyncCloseGuard));
+        RunSyncCloseGuard(services, dataRoot);
+
         Section("同步预览那几颗动作钮的键盘落点（焦点在「生成同步预览」上 → 真的点一次、作业真在跑、这一行换成「停止」 → 键盘交给那颗「停止」 → 作业结束 → 键盘回到那颗「生成同步预览」；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunSyncBusyFocusHandover));
         RunSyncBusyFocusHandover(services, dataRoot);
 
@@ -11900,6 +11903,148 @@ internal static class Program
         }
     }
 
+
+    /// <summary>
+    /// 同步预览那一屏（<c>SyncPreviewDialog</c>）「同步正在跑的时候关窗该不该拦下」（第四百零三轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：那颗「停止」是这一屏<b>唯一的停止入口</b>，而这一屏的「确认同步」是
+    /// <b>不可逆写入</b>。此前 Esc 走 <c>CancelButton</c>（那颗「关闭」）、标题栏 × 走同一条路——
+    /// 同步正在跑的时候按一下 Esc，窗口关掉、那颗「停止」跟着消失，而作业在服务层继续跑
+    /// （<c>JobRunner</c> 不因窗口关闭而取消）。用户以为「我取消了」，实际是「我把唯一的停止入口关掉了」。
+    /// 探测那一屏（第四百零二轮）是同一形状的第一处，这一屏是第二处。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：真的 <c>Show()</c> 出来、真的点一次那颗「生成同步预览」（走产品自己的
+    /// <c>Generate()</c> → <c>JobRunner.Start</c> → <c>SetBusy(true)</c> 那条路，不是造一个假的忙态），
+    /// 然后读两支——① 同步真在跑的时候关一次窗（Esc / 标题栏 × 在真机上走的就是 <c>FormClosing</c> 这一条路）
+    /// 被拦下、窗口没关、状态行说「先按『停止』再关闭窗口」那一句；② 作业结束之后关窗照常（窗口真的关掉、那一句收掉）。
+    /// </para>
+    /// <para>
+    /// <b>为什么「忙起来」那一支不泵消息</b>：忙态是 <c>SetBusy(true)</c> 同步落下的，而这一屏的 500ms 轮询
+    /// 一旦跑起来就会把这一行换回去（冒烟配置没有 Apifox 项目 ID，作业体当场失败）。所以那一支在
+    /// <c>PerformClick</c> 之后<b>不调 <c>Application.DoEvents()</c></b> 就读——读的是「点下去那一刻」的屏。
+    /// 第二支才泵消息，等这一屏自己的轮询把这一行换回来。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判同步计划生成得对不对（那要真实 Apifox，本段只借这条路径把这一屏推进忙态）；
+    /// 不判观感（随 G-D5 真机复核）；也不判「确认同步」那一支（它先弹原生确认对话框，冒烟器点不动那个框）——
+    /// 三支走的是同一个 <c>SetBusy</c>，判定与触达都只有那一处。
+    /// <b>这一跑是 wine + Xvfb 模拟器，不是真机。</b>
+    /// </para>
+    /// </summary>
+    private static void RunSyncCloseGuard(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "同步预览关窗守卫冒烟" });
+        // 勾选页要有一份检查结果才勾得上接口（与列表复制那一段同一份夹具）。
+        tasks.Write(task.Id, TaskFiles.Diff, CheckResultsFixture());
+
+        SyncPreviewDialog? dialog = null;
+        try
+        {
+            RunAction("同步预览关窗守卫：同步真在跑的时候关窗（Esc / 标题栏 × 都走 FormClosing）→ 窗口不关、状态行说一句为什么", () =>
+            {
+                dialog = new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var selectAll = FindAll<Button>(dialog)
+                        .FirstOrDefault(button => button.Text.StartsWith("全选可同步", StringComparison.Ordinal))
+                    ?? throw new InvalidOperationException("同步预览里没有「全选可同步」那颗按钮：入口改名或删除了，本段口径需要重定。");
+                var generate = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "生成同步预览")
+                    ?? throw new InvalidOperationException("同步预览里没有「生成同步预览」那颗按钮：入口改名或删除了，本段口径需要重定。");
+                var stop = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "停止")
+                    ?? throw new InvalidOperationException("同步预览里没有那颗「停止」：本段量测口径需要重定。");
+                var statusHost = FindAll<StatusLineHost>(dialog).FirstOrDefault()
+                    ?? throw new InvalidOperationException("这一屏找不到状态行宿主：本段量测口径需要重定。");
+
+                if (!selectAll.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        "检查结果夹具已经落盘，「全选可同步」却是停用的：勾不上接口就点不动「生成同步预览」，本段走不到忙态。");
+                }
+                selectAll.PerformClick();
+                Application.DoEvents();
+                if (!generate.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        "点过「全选可同步」之后「生成同步预览」仍是停用的：本段走不到忙态，量不到关窗守卫。");
+                }
+
+                // 真的点一次：走产品自己的 Generate() → JobRunner.Start → SetBusy(true)。
+                // 之后**不泵消息**——忙态是 SetBusy(true) 同步落下的，泵一次就可能让 500ms 轮询把这一行换回去。
+                generate.PerformClick();
+                if (!stop.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "点下「生成同步预览」之后那一行没有换成「停止」：这一屏没有进忙态，"
+                        + "本段量不到「同步真在跑的时候关窗」（状态行：" + StatusText(dialog) + "）。");
+                }
+
+                // 关窗：Esc 与标题栏 × 在真机上走的是同一条路（FormClosing，CloseReason.UserClosing），
+                // 这里直接调 Close() 量的就是那一条路——不另造一个只有冒烟器才走得到的入口。
+                dialog.Close();
+
+                if (!dialog.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "同步正在跑的时候关窗把窗口关掉了：那颗「停止」是这一屏唯一的停止入口，"
+                        + "窗口一关它就跟着消失，而作业在服务层继续跑——用户以为取消了，实际是把停止入口关掉了。");
+                }
+                if (statusHost.Label.Text != CloseGuardPlan.SyncBusyMessage)
+                {
+                    throw new InvalidOperationException(
+                        $"同步正在跑的时候关窗被拦下了，状态行却写着「{statusHost.Label.Text}」，"
+                        + $"产品口径那一句是「{CloseGuardPlan.SyncBusyMessage}」："
+                        + "拦下不说一句为什么，用户按 Esc 只会觉得窗口坏了。");
+                }
+                _lines.Add("     同步预览关窗守卫：同步真在跑时关窗被拦下，状态行说「" + CloseGuardPlan.SyncBusyMessage + "」");
+            });
+
+            RunAction("同步预览关窗守卫：作业结束之后关窗照常（窗口真的关掉、状态行不再挂着那一句）", () =>
+            {
+                if (dialog is not { } shown) throw new InvalidOperationException("上一段没有产出这一屏。");
+                var stop = FindAll<Button>(shown).SingleOrDefault(button => button.Text == "停止")
+                    ?? throw new InvalidOperationException("同步预览里没有那颗「停止」：本段量测口径需要重定。");
+                var statusHost = FindAll<StatusLineHost>(shown).FirstOrDefault()
+                    ?? throw new InvalidOperationException("这一屏找不到状态行宿主：本段量测口径需要重定。");
+
+                // 这一屏自己的 500ms 轮询把这一行换回来（换显隐的唯一落点是 SetBusy）。
+                PumpUntilCondition(() => !stop.Visible, "作业结束之后那一行换回「生成同步预览」", 20_000);
+                Application.DoEvents();
+                if (!shown.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "作业结束之后窗口已经不在屏上了：上一段拦下的那一次关窗把窗口留在了不该留的状态。");
+                }
+                if (statusHost.Label.Text == CloseGuardPlan.SyncBusyMessage)
+                {
+                    throw new InvalidOperationException(
+                        "同步已经结束，状态行还挂着「先按『停止』再关闭窗口」那一句："
+                        + "那一句只在作业跑着的时候成立，作业一结束就该收掉（只收自己写的那一句）。");
+                }
+                shown.Close();
+                Application.DoEvents();
+                if (shown.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "作业结束之后关窗没有关掉：守卫把「没在跑」也一起拦了——那会让这一屏再也关不上。");
+                }
+                _lines.Add("     同步预览关窗守卫：作业结束之后关窗照常");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
 
     /// <summary>
     /// 同步预览那一屏（<c>SyncPreviewDialog</c>）「作业一起来 / 作业一结束，键盘落在哪一颗」（第三百九十六轮，具名 pass：harden）。

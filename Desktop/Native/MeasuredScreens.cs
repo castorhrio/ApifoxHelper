@@ -301,6 +301,14 @@ internal static class MeasuredScreens
             + "读两支——「探测真在跑的时候关一次窗（Esc / 标题栏 × 都走 FormClosing）被拦下、窗口没关、状态行说"
             + "『先按「停止」再关闭窗口』那一句」与「探测结束之后关窗照常（窗口真的关掉、那一句收掉）」；"
             + "判定与那一句的唯一落点在 Desktop/Native/CloseGuardPlan.cs，门在 ApifoxHelper.Tests/CloseGuardPlanTests.cs；不是真机结果"),
+        new("同步预览那一屏的关窗守卫（同步真在跑的时候关窗被拦下并说一句为什么，作业结束之后关窗照常）", "RunSyncCloseGuard",
+            ["SyncPreviewDialog"], true, "第四百零三轮",
+            "docs/NOTES.md 第四百零三轮：真的显示这一屏、真的点一次「生成同步预览」（走产品自己的 Generate() → "
+            + "JobRunner.Start → SetBusy(true) 那条路，不是造一个假的忙态），读两支——「同步真在跑的时候关一次窗"
+            + "（Esc / 标题栏 × 都走 FormClosing）被拦下、窗口没关、状态行说『先按「停止」再关闭窗口』那一句」与"
+            + "「作业结束之后关窗照常（窗口真的关掉、那一句收掉）」；判定与那一句的唯一落点在 "
+            + "Desktop/Native/CloseGuardPlan.cs（算式只有一份，探测那一屏与这一屏共用），门在 "
+            + "ApifoxHelper.Tests/SyncCloseGuardTests.cs；不是真机结果"),
 
         // ── 第二百四十八轮起逐屏收口：这一节此前是「未量：冒烟器只 new 一次 + 建句柄，从不显示」，
         //    三屏（契约检查结果 / 接口追踪明细 / 手工填写说明）与最后一屏（扫描警告）已逐轮真的 Show() 出来。

@@ -44,6 +44,12 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
     private JobInfo? _job;
     private bool _busy;
     /// <summary>
+    /// 这一次关窗被守卫拦下过（第四百零三轮）：拦下之后状态行要说一句为什么，而这一屏的 500ms 轮询
+    /// 每周期都会把那一行换成进度——不记这一笔，那句话只闪半秒。写它一处（<see cref="OnFormClosing"/>）、
+    /// 清它一处（<see cref="SetBusy"/> 的忙完那一支）。
+    /// </summary>
+    private bool _closeRefusedWhileBusy;
+    /// <summary>
     /// 已经为哪一个作业请求过停止（第三百八十八轮）：点下「停止」到作业真的在当前动作之后停住之间有一段，
     /// 那一段里状态行要说「正在停止…」，而不是继续念「正在执行同步… 40%」。按<b>作业</b> Id 记，
     /// 起一次作业与结束一次作业都清掉（<see cref="SetBusy"/>），不把上一次的请求带给下一次。
@@ -566,6 +572,46 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         Ui.KeepKeyboardOnQueue(_selectList);
     }
 
+    /// <summary>
+    /// 同步正在跑的时候不关窗（第四百零三轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：那颗「停止」是这一屏<b>唯一的停止入口</b>，而这一屏的「确认同步」是
+    /// <b>不可逆写入</b>。此前 Esc 走 <c>CancelButton</c>（那颗「关闭」）、标题栏 × 走同一条路——
+    /// 同步正在跑的时候按一下 Esc，窗口关掉、那颗「停止」跟着消失，而作业在服务层继续跑
+    /// （<c>JobRunner</c> 不因窗口关闭而取消）。用户以为「我取消了」，实际是「我把唯一的停止入口关掉了」。
+    /// </para>
+    /// <para>
+    /// <b>为什么接在这里</b>：Esc、标题栏 ×、<c>CancelButton</c>（那颗「关闭」）三条路都汇到 <c>FormClosing</c>，
+    /// 判定只在这一处接一次（<see cref="CloseGuardPlan"/>），不在 <see cref="ProcessDialogKey"/> 里另写一份。
+    /// </para>
+    /// <para>
+    /// <b>「忙」问的是这一屏自己</b>（<c>_busy</c>），不是任务作用域：同一个任务里可能跑着别的屏起的作业
+    /// （任务页的扫描），拿作用域去问会把「别的屏在跑」读成「这一屏在跑」，拦下时那一句就指错了事。
+    /// 判定语义与探测那一屏同一支（<see cref="CloseGuardPlan.RefuseWhileBusy"/>），算式仍只有一份。
+    /// </para>
+    /// <para>
+    /// <b>拦下之后要说一句为什么</b>：那一句由 <see cref="CloseGuardPlan.SyncBusyMessage"/> 一处给
+    /// （界面与冒烟段读同一个常量），并记在 <c>_closeRefusedWhileBusy</c> 上——这一屏的轮询每 500ms
+    /// 重画一次状态行，不记这一笔那句话只闪半秒。
+    /// </para>
+    /// <para>
+    /// <b>不拦的三种</b>：系统关机、任务管理器结束进程、父窗口关闭（<c>CloseReason</c> 不是
+    /// <c>UserClosing</c>）——那些不是「用户想关这一屏」，拦下来只会让系统关不掉一个进程，
+    /// 而作业照样随进程结束。
+    /// </para>
+    /// </summary>
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (CloseGuardPlan.RefuseWhileBusy(_busy, e.CloseReason == CloseReason.UserClosing))
+        {
+            e.Cancel = true;
+            _closeRefusedWhileBusy = true;
+            _statusHost.SetText(CloseGuardPlan.SyncBusyMessage, UiTokens.WarnText);
+            return;
+        }
+        base.OnFormClosing(e);
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing) _timer.Dispose();
@@ -902,6 +948,9 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
             }
             return;
         }
+        // 忙完就把「关窗被拦下」那一笔收掉（第四百零三轮）：那一句只在作业跑着的时候成立，
+        // 作业一结束就该让位给结果那一句——只收自己写的那一笔，别人的消息一个字不碰。
+        _closeRefusedWhileBusy = false;
         var target = BusyReturnButton();
         if (SyncBusyFocusPlan.OnIdle(stopHadFocus, _stopButton.Visible, target is not null) == SyncBusyFocusPlan.Primary)
         {
@@ -1062,7 +1111,10 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         if (_job is not { } job) { _timer.Stop(); return; }
         if (job.FinishedAt is null)
         {
-            ShowRunningStatus(job);
+            // 关窗被拦下的那一句要一直挂着（第四百零三轮）：这一处每 500ms 走一次，
+            // 无条件换成进度会让那句话只闪半秒——用户按完 Esc 什么都没看见，等于没说。
+            if (_closeRefusedWhileBusy) _statusHost.SetText(CloseGuardPlan.SyncBusyMessage, UiTokens.WarnText);
+            else ShowRunningStatus(job);
             return;
         }
         _timer.Stop();

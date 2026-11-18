@@ -28,9 +28,10 @@ namespace ApifoxHelper.Tests;
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判「探测该不该起」「那颗『停止』该不该显出来」（那是这一屏自己的口径，
-/// 见 <c>RunProbe</c> 与 <c>ShowProbeRunning</c>）；不判真机上按 Esc 的手感（G-D5，真机 0 台）；
-/// 也不判「同步预览那一屏该不该同样拦」——那是同一形状的第二处，本轮不接，
-/// 边界写在 <see cref="CloseGuardPlan"/> 的类注释里。
+/// 见 <c>RunProbe</c> 与 <c>ShowProbeRunning</c>）；不判真机上按 Esc 的手感（G-D5，真机 0 台）。
+/// <b>同一形状的第二处（同步预览那一屏）不在这里判</b>：第四百零三轮接上之后，那一屏的接线、那一句的
+/// 形状与冒烟段由 <c>ApifoxHelper.Tests/SyncCloseGuardTests.cs</c> 判；本文件只判「判定算式只有一份」
+/// 与「探测这一屏接对了」——两处各判自己那一屏，算式那一份由本文件第 ③ 条按<b>本文件这一屏</b>数。
 /// </para>
 /// </summary>
 public class CloseGuardPlanTests
@@ -221,12 +222,13 @@ public class CloseGuardPlanTests
                 + "界面抄一份之后改一处就会两处说法不同。");
         }
 
-        // 判定在产品源码里恰好调用一处。
+        // 判定在<b>这一屏</b>的源码里恰好调用一处（第四百零三轮起同一支判定被两屏共用，
+        // 所以数的是「这一份源码里几处」而不是「全仓几处」——全仓那一侧由 SyncCloseGuardTests 判它自己那一屏）。
         var calls = Count(code, "CloseGuardPlan.RefuseWhileBusy(");
         if (calls != 1)
         {
-            problems.Add($"产品源码里调用 CloseGuardPlan.RefuseWhileBusy 出现 {calls} 处（应为 1 处，在 OnFormClosing 里）："
-                + "0 处 = 判定没人用；多于 1 处 = 有第二处也在决定关不关窗。");
+            problems.Add($"CapabilitiesDialog 里调用 CloseGuardPlan.RefuseWhileBusy 出现 {calls} 处（应为 1 处，在 OnFormClosing 里）："
+                + "0 处 = 判定没人用；多于 1 处 = 这一屏有第二处也在决定关不关窗。");
         }
 
         // Esc 仍走 Close()：绕开 Close() 的写法（Hide / Dispose）会跳过 FormClosing，守卫就接不到。
