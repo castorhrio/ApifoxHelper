@@ -310,7 +310,7 @@ internal static class Program
         Section("详情区换任务回到顶部（滚到详情底部 → 换另一个任务 → 详情回到顶部、新任务的头在屏上 → 刷新同一个任务不抹掉当前位置，真实控件量）", nameof(RunDetailScrollReset));
         RunDetailScrollReset(services, dataRoot);
 
-        Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变 → 次动作那颗正拿着键盘时刷新把它藏起来、键盘交给还在屏上的主动作那颗，真实控件）", nameof(RunBannerFocus));
+        Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变 → 次动作那颗正拿着键盘时刷新把它藏起来、键盘交给还在屏上的主动作那颗 → 那颗正拿着键盘而刷新没有把它藏起来时键盘原地不动、不白交一次，真实控件）", nameof(RunBannerFocus));
         RunBannerFocus(services, dataRoot);
 
         Section("三阶段进度条跳转之后的键盘落点（焦点在阶段按钮上 → 点一次 → 焦点落到那一区的第一颗可点按钮上 → 那一区一颗都不可点时焦点不往那一区塞 → 跳完按一次 Tab 详情不再被拉回顶部，真实控件与真实按键）", nameof(RunStageJumpFocus));
@@ -8367,6 +8367,13 @@ internal static class Program
     /// （远端 <c>interrupted</c>，<c>NextStep.Compute</c> 那一支只给主动作、不给次动作），
     /// 让产品自己的判定给出「只有一半」的那一步。
     /// </para>
+    /// <para>
+    /// <b>第四支（第三百八十九轮）量的是反向那一条</b>：<c>BannerFocusPlan.Landing</c> 对「原本聚焦的那一颗」
+    /// 有两条落点——被藏起来就交给还在屏上的那一颗（第三支量的正是这一条），仍在屏上就<b>什么都不做</b>。
+    /// 后一条此前只有 Linux 真值表：「每次都交给主动作」那种写法在屏上看不出区别（主动作本来就常被 Tab 走到），
+    /// 而它会把键盘从用户正拿着的那一颗上抢走。第四支因此真的把焦点放到次动作那颗、真的走一次不改变显隐的刷新，
+    /// 读「焦点还在次动作那颗身上」与「主动作那颗没有拿到焦点」两件事。
+    /// </para>
     /// </summary>
     private static void RunBannerFocus(IServiceProvider services, string dataRoot)
     {
@@ -8590,6 +8597,75 @@ internal static class Program
                         + "用户按完一次就得重新 Tab 回来——藏起来的那一颗拿着键盘时，键盘该交给还在屏上的那一颗。");
                 }
                 _lines.Add($"     横幅那一行（次动作那颗拿着键盘、刷新把它藏起来）：键盘落到还在屏上的「{primary.Text}」上");
+            });
+
+            RunAction("任务页引导横幅：次动作那颗正拿着键盘、刷新没有把它藏起来——键盘原地不动，既不白交一次也不顺手交给主动作（真实控件）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                // 上一段把状态改成了「远端被中断」（只有主动作的那一步），这一支要的仍是两颗按钮都在的那一步：
+                // 把那一格改回去，再选回同一个任务。
+                var revived = tasks.Create(new CreateTaskRequest
+                {
+                    ProfileId = profiles.List().First().Id,
+                    Name = "横幅不交键盘冒烟",
+                });
+                shown.RefreshData();
+                Application.DoEvents();
+                SelectTaskRow(shown, revived.Id);
+                Application.DoEvents();
+
+                var row = BannerRow(shown);
+                var step = NextStep.Compute(tasks.Get(revived.Id));
+                if (step.SecondaryLabel is null || step.PrimaryLabel is null)
+                {
+                    throw new InvalidOperationException(
+                        $"这一步（「{step.Title}」）没有给齐两颗按钮（主动作 {step.PrimaryLabel ?? "（无）"}、"
+                        + $"次动作 {step.SecondaryLabel ?? "（无）"}）：这一支要的是「原本聚焦的那一颗还在屏上」。");
+                }
+
+                var secondary = row.Controls.Cast<Control>().OfType<Button>()
+                    .FirstOrDefault(button => button.Visible && button.Text == step.SecondaryLabel)
+                    ?? throw new InvalidOperationException(
+                        $"横幅那一行没有写着「{step.SecondaryLabel}」的可见按钮：认不到起点，这一支就没在量那一击之后的落点。");
+                var primary = row.Controls.Cast<Control>().OfType<Button>()
+                    .FirstOrDefault(button => button.Visible && button.Text == step.PrimaryLabel)
+                    ?? throw new InvalidOperationException(
+                        $"横幅那一行没有写着「{step.PrimaryLabel}」的可见按钮：这一支要读「主动作那颗没被白交给焦点」。");
+
+                secondary.Focus();
+                Application.DoEvents();
+                if (!secondary.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到横幅那颗次动作「{secondary.Text}」上：起点就不在它身上，后面那一判等于没量。");
+                }
+
+                // 真的走一次刷新，且不改任何会让次动作消失的状态：那一颗刷新之后仍在屏上。
+                shown.RefreshData();
+                Application.DoEvents();
+
+                if (!secondary.Visible)
+                {
+                    throw new InvalidOperationException(
+                        $"刷新之后次动作那颗「{secondary.Text}」被藏起来了：这一支要的是「仍在屏上」那一支，落点变了。");
+                }
+                if (!secondary.Focused)
+                {
+                    var where = primary.Focused
+                        ? "落到主动作「" + primary.Text + "」上了"
+                        : shown.ContainsFocus ? "还在窗体里、但不在这两颗上" : "已经不在这个窗体里";
+                    throw new InvalidOperationException(
+                        $"次动作那颗仍然在屏上，刷新之后键盘却不在它身上（{where}）："
+                        + "「每次都把键盘交给主动作」会抢走用户手里那一击的下一步——"
+                        + "原本聚焦的那一颗还在屏上时，那一步就该什么都不做。");
+                }
+                if (primary.Focused)
+                {
+                    throw new InvalidOperationException("主动作那颗拿到了焦点，而次动作那颗仍在屏上：那是白交一次。");
+                }
+
+                _lines.Add($"     横幅那一行（次动作那颗拿着键盘、刷新之后仍在屏上）：键盘原地不动，"
+                    + $"焦点还在「{secondary.Text}」上（主动作「{primary.Text}」没有被白交一次）");
             });
         }
         finally
@@ -8854,7 +8930,7 @@ internal static class Program
     /// <para>
     /// <b>认那颗按钮为什么不按文案在全页找</b>：引导横幅在「未扫描」那一步里主动作也写着「开始扫描」，
     /// <c>Click(page, "开始扫描")</c> 按 <c>FindAll</c> 的先序会落到横幅那一颗。本段按「同一行里既有
-    /// 「开始扫描」又有那颗「取消」」认扫描区那一行——与 <see cref="BannerRow"/> 认横幅那一行同一个理由。
+    /// 「开始扫描」又有那颗「停止」」认扫描区那一行——与 <see cref="BannerRow"/> 认横幅那一行同一个理由。
     /// </para>
     /// </summary>
     private static void RunJobOutcomeStatus(IServiceProvider services, string dataRoot)
@@ -9095,7 +9171,7 @@ internal static class Program
     /// <summary>
     /// 扫描区那一行的那颗「开始扫描」与那颗进度标签。
     /// <para>
-    /// 按「同一行里既有「开始扫描」又有那颗「取消」」认，不按文案在全页找：引导横幅在「未扫描」那一步里
+    /// 按「同一行里既有「开始扫描」又有那颗「停止」」认，不按文案在全页找：引导横幅在「未扫描」那一步里
     /// 主动作也写着「开始扫描」（<see cref="BannerRow"/> 认横幅那一行是同一个理由）。那一行里唯一的
     /// Label 就是进度标签（<c>TasksPage._progress</c>），行挪走或多了标签都报错点名，不静默量别的东西。
     /// </para>
@@ -9104,12 +9180,12 @@ internal static class Program
     {
         var rows = FindAll<FlowLayoutPanel>(page)
             .Where(panel => panel.Controls.Cast<Control>().OfType<Button>().Any(button => button.Text == "开始扫描")
-                && panel.Controls.Cast<Control>().OfType<Button>().Any(button => button.Text == "取消"))
+                && panel.Controls.Cast<Control>().OfType<Button>().Any(button => button.Text == "停止"))
             .ToList();
         if (rows.Count != 1)
         {
             throw new InvalidOperationException(
-                $"按「一行里有『开始扫描』与那颗『取消』」认出 {rows.Count} 行扫描区动作按钮（应为 1 行）："
+                $"按「一行里有『开始扫描』与那颗『停止』」认出 {rows.Count} 行扫描区动作按钮（应为 1 行）："
                 + "这一行挪过或拆过，本段的量测口径要跟着改。");
         }
 

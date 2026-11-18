@@ -10,7 +10,7 @@ using ApifoxHelper.Tasks;
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与取消）
+/// 检查任务页：任务列表 + 选中任务的阶段概览 + 源码扫描（JobRunner 后台作业，进度与停止）
 /// + 注释候选（规则提取/模型生成/材料导出的生成入口、逐条审阅接受/搁置/驳回、注释回写）
 /// + 生成文档核对（后台作业、只读结果视图）
 /// + 响应契约（扫描时追踪落盘，逐条确认/拒绝/重置）
@@ -144,7 +144,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Button _checkButton;
     private readonly Button _viewButton;
     private readonly Label _progress = Ui.StatusText();
-    private readonly Button _cancelButton;
+    private readonly Button _stopButton;
     private readonly Label _generatedStatus = Ui.StatusText();
     private readonly Label _generatedNumbers = Ui.Mono();
     private readonly Button _contractButton;
@@ -314,8 +314,8 @@ internal sealed class TasksPage : UserControl, INativePage
         _applyButton.Click += (_, _) => ShowApply();
         _scanButton = Ui.Ghost("开始扫描");
         _scanButton.Click += (_, _) => StartScan();
-        _cancelButton = Ui.DangerGhost("取消");
-        _cancelButton.Click += (_, _) => CancelScan();
+        _stopButton = Ui.DangerGhost("停止");
+        _stopButton.Click += (_, _) => RequestStop();
         _scanActions.Controls.Add(_gapButton);
         _scanActions.Controls.Add(_candidatesButton);
         _scanActions.Controls.Add(_ruleButton);
@@ -323,9 +323,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _scanActions.Controls.Add(_exportMaterialButton);
         _scanActions.Controls.Add(_applyButton);
         _scanActions.Controls.Add(_scanButton);
-        _scanActions.Controls.Add(_cancelButton);
+        _scanActions.Controls.Add(_stopButton);
         _scanActions.Controls.Add(_progress);
-        _cancelButton.Visible = false;
+        _stopButton.Visible = false;
         _progress.Visible = false;
         _progress.Margin = new Padding(UiTokens.Md, 0, 0, 0);
 
@@ -1073,7 +1073,7 @@ internal sealed class TasksPage : UserControl, INativePage
         }
     }
 
-    /// <summary>扫描区按作业状态切换：按钮（空闲）或进度 + 取消（执行中）。控件位置固定，不跳位。</summary>
+    /// <summary>扫描区按作业状态切换：按钮（空闲）或进度 + 停止（执行中）。控件位置固定，不跳位。</summary>
     /// <summary>
     /// 详情区动作入口的可用状态（单一落点）：<see cref="ShowJobState"/> 与「没有选中任务」分支共用同一份判定，
     /// 不出现第二处门控。没有选中任务时全部停用——屏上写着「没有选中任务 / 读取任务失败」，
@@ -1082,7 +1082,7 @@ internal sealed class TasksPage : UserControl, INativePage
     private void RefreshDetailActions(JobInfo? job)
     {
         // 缺口清单、候选审阅、规则提取、注释回写、传播核对、响应契约与远端检查都基于扫描落盘产物：扫描完成后可用，
-        // 作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）；后台作业的进度与取消共用同一套固定占位控件。
+        // 作业执行中与未扫描时禁用（禁用态说明见下方固定说明行）；后台作业的进度与停止共用同一套固定占位控件。
         var scanReady = _selectedTask is { Stages.Source.ScannedAt: not null } && job is null;
         // 引导横幅的动作与各区按钮同一纪律：作业执行中一律禁用（进度在上方状态行）。
         foreach (var bannerButton in _nextActions.Controls.OfType<Button>())
@@ -1153,7 +1153,7 @@ internal sealed class TasksPage : UserControl, INativePage
             RememberOutcome(job);
             _scanButton.Visible = false;
             _progress.Visible = true;
-            _cancelButton.Visible = true;
+            _stopButton.Visible = true;
             _progress.Text = job.State == "running"
                 ? JobOutcome.StoppingText(job.Kind, _stopRequestedJobId == job.Id)
                     ?? $"正在{job.Kind}… {job.Progress:P0} {job.ProgressText}"
@@ -1161,7 +1161,7 @@ internal sealed class TasksPage : UserControl, INativePage
                     ? $"{job.Kind}失败：{job.Error} 正在刷新。"
                     : $"{job.Kind}结束（{TaskDisplay.JobStateText(job.State)}），正在刷新。";
             _progress.ForeColor = job.State == "failed" ? UiTokens.BadText : UiTokens.Text;
-            _cancelButton.Enabled = job.State == "running";
+            _stopButton.Enabled = job.State == "running";
         }
         else
         {
@@ -1169,7 +1169,7 @@ internal sealed class TasksPage : UserControl, INativePage
             _stopRequestedJobId = null;
             _scanButton.Visible = true;
             _progress.Visible = false;
-            _cancelButton.Visible = false;
+            _stopButton.Visible = false;
         }
     }
 
@@ -1252,7 +1252,7 @@ internal sealed class TasksPage : UserControl, INativePage
         }
     }
 
-    private void CancelScan()
+    private void RequestStop()
     {
         if (_selectedTask is null) return;
         var scope = _selectedTask.Id;

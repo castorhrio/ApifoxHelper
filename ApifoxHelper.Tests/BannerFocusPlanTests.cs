@@ -252,7 +252,7 @@ public class BannerFocusPlanTests
                 + "0 处 = 判定没人用；多于 1 处 = 有第二处也在决定键盘落点。");
         }
 
-        // ⑤ 冒烟段真的量了这件事。
+        // ⑤ 冒烟段真的量了这件事（正向与反向两支都要在段体里：判定有两条落点，读数只有一支等于另一支没量过）。
         var body = Body(CodeScan.Text(smoke), "private static void RunBannerFocus(");
         if (body is null)
         {
@@ -265,12 +265,15 @@ public class BannerFocusPlanTests
                          ("secondary.Focus();", "把键盘真的放到次动作那颗上"),
                          ("if (secondary.Visible)", "读「刷新之后次动作那颗真的被藏起来了」"),
                          ("primary.Focused", "读「键盘落到了还在屏上的主动作那颗」"),
+                         ("if (!secondary.Visible)", "读「这一次刷新没有把它藏起来」（第三百八十九轮补的反向那一支的前提）"),
+                         ("那是白交一次", "读「仍在屏上时不许把键盘交出去」（反向那一支的判据：什么都不做）"),
                      })
             {
                 if (!body.Contains(needle, StringComparison.Ordinal))
                 {
                     problems.Add($"RunBannerFocus 的段体里没有 {needle}（{why}）："
-                        + "这一段量的是「被藏起来的那一颗正拿着键盘时，键盘交给还在屏上的那一颗」，少了这一句就量不到那件事。");
+                        + "这一段量的是「被藏起来的那一颗正拿着键盘时，键盘交给还在屏上的那一颗」与"
+                        + "「那颗仍在屏上时什么都不做」两支，少了这一句就量不到那一支。");
                 }
             }
         }
