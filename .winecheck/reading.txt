@@ -7,7 +7,7 @@
 # 这份记的是 wine + Xvfb 模拟器的读数，不是 Windows 真机结果（G-D5 仍 [ ]，到期日 2026-11-20）。
 script=demo.sh
 tool=wine + Xvfb
-date=2026-11-18
+date=2026-11-19
 source=f698f5164cb3fb1c300a22cefae56bfcc236c283
 tier=96 passed=435 failed=0 exit=0
 tier=120 passed=435 failed=0 exit=0
