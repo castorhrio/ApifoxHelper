@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-19
-source=f698f5164cb3fb1c300a22cefae56bfcc236c283
-tier=96 passed=435 failed=0 exit=0
-tier=120 passed=435 failed=0 exit=0
-tier=192 passed=435 failed=0 exit=0
+source=4ac4afd3597b4c07cd22dd727a83dd41e9100a36
+tier=96 passed=437 failed=0 exit=0
+tier=120 passed=437 failed=0 exit=0
+tier=192 passed=437 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -60,6 +60,7 @@ section=RunListColumnFit tier=96 passed=15 failed=0
 section=RunActionRowFit tier=96 passed=8 failed=0
 section=RunCapabilitiesShown tier=96 passed=2 failed=0
 section=RunProbeFocusHandover tier=96 passed=2 failed=0
+section=RunProbeCloseGuard tier=96 passed=2 failed=0
 section=RunSyncBusyFocusHandover tier=96 passed=2 failed=0
 section=RunApplyBusyFocusHandover tier=96 passed=3 failed=0
 section=RunExtractBusyFocusHandover tier=96 passed=3 failed=0
@@ -131,6 +132,7 @@ section=RunListColumnFit tier=120 passed=15 failed=0
 section=RunActionRowFit tier=120 passed=8 failed=0
 section=RunCapabilitiesShown tier=120 passed=2 failed=0
 section=RunProbeFocusHandover tier=120 passed=2 failed=0
+section=RunProbeCloseGuard tier=120 passed=2 failed=0
 section=RunSyncBusyFocusHandover tier=120 passed=2 failed=0
 section=RunApplyBusyFocusHandover tier=120 passed=3 failed=0
 section=RunExtractBusyFocusHandover tier=120 passed=3 failed=0
@@ -202,6 +204,7 @@ section=RunListColumnFit tier=192 passed=15 failed=0
 section=RunActionRowFit tier=192 passed=8 failed=0
 section=RunCapabilitiesShown tier=192 passed=2 failed=0
 section=RunProbeFocusHandover tier=192 passed=2 failed=0
+section=RunProbeCloseGuard tier=192 passed=2 failed=0
 section=RunSyncBusyFocusHandover tier=192 passed=2 failed=0
 section=RunApplyBusyFocusHandover tier=192 passed=3 failed=0
 section=RunExtractBusyFocusHandover tier=192 passed=3 failed=0

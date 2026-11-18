@@ -55,6 +55,13 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
     /// </summary>
     private string? _stopRequestedJobId;
     /// <summary>
+    /// 探测跑着的时候关窗被拦下过一次（第四百零二轮）：那一句「先按『停止』再关闭窗口」要一直挂在状态行上，
+    /// 而这一屏的 500ms 轮询每周期都会把状态行清空（<c>ShowProbeRunning</c> 里那一句 <c>SetText("")</c>）——
+    /// 不记这一笔，用户按完 Esc 只看见一句话闪了半秒就没了，等于没说。
+    /// 写它一处（<c>OnFormClosing</c>）、清它一处（<c>ShowProbeRunning(null)</c>）。
+    /// </summary>
+    private bool _closeRefusedWhileBusy;
+    /// <summary>
     /// 探测这一作业的<b>种类</b>唯一落点：起作业时传给 <c>JobRunner</c> 的是它，进度行那句「正在…」「正在停止…」
     /// 里出现的也是它。两处必须是同一个字面——那一行报的作业名说的就是屏上这颗钮正在停的那一次。
     /// </summary>
@@ -175,6 +182,42 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
             return true;
         }
         return base.ProcessDialogKey(keyData);
+    }
+
+    /// <summary>
+    /// 探测正在跑的时候不关窗（第四百零二轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：那颗「停止」是这一屏<b>唯一的停止入口</b>。此前 Esc 在
+    /// <see cref="ProcessDialogKey"/> 里直接 <c>Close()</c>、标题栏 × 走同一条路——探测正在跑的时候按一下 Esc，
+    /// 窗口关掉、那颗「停止」跟着消失，而作业在服务层继续跑（<c>JobRunner</c> 不因窗口关闭而取消）。
+    /// 用户以为「我取消了」，实际是「我把唯一的停止入口关掉了」。
+    /// </para>
+    /// <para>
+    /// <b>为什么接在这里</b>：Esc、标题栏 ×、<c>CancelButton</c> 三条路都汇到 <c>FormClosing</c>，
+    /// 判定只在这一处接一次（<see cref="CloseGuardPlan"/>），不在 <see cref="ProcessDialogKey"/> 里另写一份。
+    /// </para>
+    /// <para>
+    /// <b>拦下之后要说一句为什么</b>：不说，用户按 Esc 只会觉得窗口坏了。那一句由
+    /// <see cref="CloseGuardPlan.ProbeBusyMessage"/> 一处给（界面与冒烟段读同一个常量），
+    /// 并记在 <c>_closeRefusedWhileBusy</c> 上——这一屏的轮询每 500ms 清一次状态行，
+    /// 不记这一笔那句话只闪半秒。
+    /// </para>
+    /// <para>
+    /// <b>不拦的三种</b>：系统关机、任务管理器结束进程、父窗口关闭（<c>CloseReason</c> 不是
+    /// <c>UserClosing</c>）——那些不是「用户想关这一屏」，拦下来只会让系统关不掉一个进程，
+    /// 而作业照样随进程结束。判定在 <see cref="CloseGuardPlan.RefuseWhileBusy"/>。
+    /// </para>
+    /// </summary>
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (CloseGuardPlan.RefuseWhileBusy(_jobs.Running(_scope) is not null, e.CloseReason == CloseReason.UserClosing))
+        {
+            e.Cancel = true;
+            _closeRefusedWhileBusy = true;
+            _statusHost.SetText(CloseGuardPlan.ProbeBusyMessage, UiTokens.WarnText);
+            return;
+        }
+        base.OnFormClosing(e);
     }
 
     protected override void Dispose(bool disposing)
@@ -340,8 +383,23 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         _progress.Text = JobOutcome.StoppingText(job?.Kind ?? ProbeKind, stoppingRequested)
             ?? $"正在{ProbeKind}…（逐项写入并回读核对，需要一些时间）";
         _progress.ForeColor = UiTokens.Text;
-        if (running) _statusHost.SetText("", _status.ForeColor);
-        if (!running) _stopRequestedJobId = null;
+        // 关窗被拦下的那一句要一直挂着（第四百零二轮）：这一处每 500ms 走一次，
+        // 无条件清空会让那句话只闪半秒——用户按完 Esc 什么都没看见，等于没说。
+        if (running)
+        {
+            _statusHost.SetText(_closeRefusedWhileBusy ? CloseGuardPlan.ProbeBusyMessage : "",
+                _closeRefusedWhileBusy ? UiTokens.WarnText : _status.ForeColor);
+        }
+        if (!running)
+        {
+            _stopRequestedJobId = null;
+            // 那一句只在探测跑着的时候成立：作业一结束就收掉（只收自己写的那一句）。
+            if (_closeRefusedWhileBusy)
+            {
+                _closeRefusedWhileBusy = false;
+                _statusHost.SetText("", UiTokens.Text);
+            }
+        }
         RefreshRunState();
 
         // 原本聚焦的那一颗被藏起来了：把键盘交给还在屏上的那一颗（两颗都不在屏上时不猜）。

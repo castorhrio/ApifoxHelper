@@ -295,6 +295,12 @@ internal static class MeasuredScreens
             + "「探测真在跑、这一行换成进度 + 停止时，键盘落在那颗『停止』上」与「探测结束之后，键盘回到那颗"
             + "『运行写入探测』上」；判据与落点在 Desktop/Native/ProbeFocusPlan.cs（算式只有一份，横幅那两颗、"
             + "作业区那两颗与探测区那两颗共用），门在 ApifoxHelper.Tests/ProbeFocusPlanTests.cs；不是真机结果"),
+        new("连接与写入探测那一屏的关窗守卫（探测真在跑的时候关窗被拦下并说一句为什么，探测结束之后关窗照常）", "RunProbeCloseGuard",
+            ["CapabilitiesDialog"], true, "第四百零二轮",
+            "docs/NOTES.md 第四百零二轮：真的显示这一屏、真的起一支在跑的探测作业（作业体空着、只等冒烟器放行），"
+            + "读两支——「探测真在跑的时候关一次窗（Esc / 标题栏 × 都走 FormClosing）被拦下、窗口没关、状态行说"
+            + "『先按「停止」再关闭窗口』那一句」与「探测结束之后关窗照常（窗口真的关掉、那一句收掉）」；"
+            + "判定与那一句的唯一落点在 Desktop/Native/CloseGuardPlan.cs，门在 ApifoxHelper.Tests/CloseGuardPlanTests.cs；不是真机结果"),
 
         // ── 第二百四十八轮起逐屏收口：这一节此前是「未量：冒烟器只 new 一次 + 建句柄，从不显示」，
         //    三屏（契约检查结果 / 接口追踪明细 / 手工填写说明）与最后一屏（扫描警告）已逐轮真的 Show() 出来。

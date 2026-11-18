@@ -355,6 +355,9 @@ internal static class Program
         Section("连接与写入探测那两颗钮的键盘落点（焦点在「运行写入探测」上 → 探测真在跑、这一行换成进度 + 停止 → 键盘交给那颗「停止」 → 探测结束 → 键盘回到那颗「运行写入探测」；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunProbeFocusHandover));
         RunProbeFocusHandover(services, dataRoot);
 
+        Section("连接与写入探测那一屏的关窗守卫（探测真在跑的时候关窗 → 窗口不关、状态行说一句为什么 → 探测结束之后关窗照常；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunProbeCloseGuard));
+        RunProbeCloseGuard(services, dataRoot);
+
         Section("同步预览那几颗动作钮的键盘落点（焦点在「生成同步预览」上 → 真的点一次、作业真在跑、这一行换成「停止」 → 键盘交给那颗「停止」 → 作业结束 → 键盘回到那颗「生成同步预览」；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunSyncBusyFocusHandover));
         RunSyncBusyFocusHandover(services, dataRoot);
 
@@ -11761,6 +11764,134 @@ internal static class Program
                         + "那颗「停止」被藏起来时框架把焦点挪走了，这一轮该把它交给还在屏上的那颗「运行写入探测」。");
                 }
                 _lines.Add("     探测区那一行：探测结束之后键盘回到那颗「运行写入探测」上");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 连接与写入探测那一屏（<c>CapabilitiesDialog</c>）「探测正在跑的时候关窗」（第四百零二轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一屏的「运行写入探测」会在用户的测试接口上做<b>三类往返写入</b>，
+    /// 而那颗「停止」是这一屏<b>唯一的停止入口</b>。此前 <c>ProcessDialogKey</c> 里 Esc 直接 <c>Close()</c>、
+    /// 标题栏 × 也走同一条路——探测正在跑的时候按一下 Esc，窗口关掉、那颗「停止」跟着消失，
+    /// 而作业在服务层继续跑（<c>JobRunner</c> 不因窗口关闭而取消）。用户以为「我取消了」，
+    /// 实际是「我把唯一的停止入口关掉了」。
+    /// </para>
+    /// <para>
+    /// <b>这一段先量、后改</b>（本仓第三百九十八轮同一纪律）：先只写这一段、产品一个字节不动，
+    /// 在 wine 96 档跑一次，当场读到「探测正在跑的时候关窗把窗口关掉了」。
+    /// </para>
+    /// <para>
+    /// <b>忙态是造出来的、但不是假的</b>：探测要往返写三段内容，wine 里没有 node，真探测一起就失败，
+    /// 界面来不及看见它在跑。所以这里与 <c>RunProbeFocusHandover</c> 同一手法——起一支<b>真的在跑的作业</b>
+    /// （作业体空着、只等冒烟器放行），这一屏自己的 500ms 轮询把那一行换成「进度 + 停止」，
+    /// 于是「探测正在跑」这个状态是真的（<c>JobRunner.Running(scope)</c> 真的答得出来），
+    /// 只是作业体不写任何东西。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判真机上按 Esc 的手感（G-D5，真机 0 台）；也不判「同步预览那一屏该不该同样拦」——
+    /// 那是同一形状的第二处，本轮不接（边界写在 <see cref="CloseGuardPlan"/> 的类注释里）。
+    /// </para>
+    /// </summary>
+    private static void RunProbeCloseGuard(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var jobs = services.GetRequiredService<JobRunner>();
+        // 工作区要真的建出来：配置校验会读那个 .csproj（「API 项目文件不存在」当场抛 UserException，
+        // 而它抛在 RunAction 之外，整支冒烟器会带着未处理异常退出——第一次跑就是这么红的）。
+        CreateProbeWorkspace(Path.Combine(dataRoot, "CloseGuard.Api"));
+        var profile = profiles.Save(new ProjectProfile
+        {
+            Name = "探测关窗守卫冒烟配置",
+            WorkspaceRoot = dataRoot,
+            ApiProject = "CloseGuard.Api/CloseGuard.Api.csproj",
+            AllowedSourcePaths = ["CloseGuard.Api/"],
+            Apifox = new ApifoxTarget { ProjectId = "1000001", BranchName = "main" },
+        }, isNew: true);
+        var scope = CompatEntries.JobScope(profile.Id);
+
+        CapabilitiesDialog? dialog = null;
+        try
+        {
+            RunAction("探测关窗守卫：探测真在跑的时候关窗（Esc / 标题栏 × 都走 FormClosing）→ 窗口不关、状态行说一句为什么", () =>
+            {
+                dialog = new CapabilitiesDialog(services.GetRequiredService<CompatService>(), store, jobs, profile);
+                dialog.Show();
+                Application.DoEvents();
+
+                var stopButton = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "停止")
+                    ?? throw new InvalidOperationException("这一屏找不到那颗「停止」：本段量测口径需要重定。");
+                var statusHost = FindAll<StatusLineHost>(dialog).FirstOrDefault()
+                    ?? throw new InvalidOperationException("这一屏找不到状态行宿主：本段量测口径需要重定。");
+
+                // 起一支真的在跑的探测作业：作业体空着，只等冒烟器放行（与 RunProbeFocusHandover 同一手法）。
+                var gate = new ManualResetEventSlim(false);
+                jobs.Start(scope, "写入兼容探测", ctx => { gate.Wait(ctx.Token); return Task.FromResult<object?>(null); });
+                try
+                {
+                    PumpUntilCondition(() => stopButton.Visible, "探测真在跑之后那一行换成「进度 + 停止」", 20_000);
+                    Application.DoEvents();
+
+                    // 关窗：Esc 与标题栏 × 在真机上走的是同一条路（FormClosing，CloseReason.UserClosing），
+                    // 这里直接调 Close() 量的就是那一条路——不另造一个只有冒烟器才走得到的入口。
+                    dialog.Close();
+                    Application.DoEvents();
+
+                    if (!dialog.Visible)
+                    {
+                        throw new InvalidOperationException(
+                            "探测正在跑的时候关窗把窗口关掉了：那颗「停止」是这一屏唯一的停止入口，"
+                            + "窗口一关它就跟着消失，而作业在服务层继续跑——用户以为取消了，实际是把停止入口关掉了。");
+                    }
+                    if (statusHost.Label.Text != CloseGuardPlan.ProbeBusyMessage)
+                    {
+                        throw new InvalidOperationException(
+                            $"探测正在跑的时候关窗被拦下了，状态行却写着「{statusHost.Label.Text}」，"
+                            + $"产品口径那一句是「{CloseGuardPlan.ProbeBusyMessage}」："
+                            + "拦下不说一句为什么，用户按 Esc 只会觉得窗口坏了。");
+                    }
+                    _lines.Add("     探测关窗守卫：探测真在跑时关窗被拦下，状态行说「" + CloseGuardPlan.ProbeBusyMessage + "」");
+                }
+                finally
+                {
+                    gate.Set();
+                }
+            });
+
+            RunAction("探测关窗守卫：探测结束之后关窗照常（窗口真的关掉、状态行不再挂着那一句）", () =>
+            {
+                if (dialog is not { } shown) throw new InvalidOperationException("上一段没有产出这一屏。");
+                var stopButton = FindAll<Button>(shown).SingleOrDefault(button => button.Text == "停止")
+                    ?? throw new InvalidOperationException("这一屏找不到那颗「停止」：本段量测口径需要重定。");
+                var statusHost = FindAll<StatusLineHost>(shown).FirstOrDefault()
+                    ?? throw new InvalidOperationException("这一屏找不到状态行宿主：本段量测口径需要重定。");
+
+                PumpUntilCondition(() => !stopButton.Visible, "探测结束之后那一行换回「运行写入探测」", 20_000);
+                Application.DoEvents();
+                if (!shown.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "探测结束之后窗口已经不在屏上了：上一段拦下的那一次关窗把窗口留在了不该留的状态。");
+                }
+                if (statusHost.Label.Text == CloseGuardPlan.ProbeBusyMessage)
+                {
+                    throw new InvalidOperationException(
+                        "探测已经结束，状态行还挂着「先按『停止』再关闭窗口」那一句："
+                        + "那一句只在探测跑着的时候成立，作业一结束就该收掉（只收自己写的那一句）。");
+                }
+                shown.Close();
+                Application.DoEvents();
+                if (shown.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "探测结束之后关窗没有关掉：守卫把「没在跑」也一起拦了——那会让这一屏再也关不上。");
+                }
+                _lines.Add("     探测关窗守卫：探测结束之后关窗照常");
             });
         }
         finally
