@@ -275,6 +275,12 @@ internal static class MeasuredScreens
             + "读两支——「忙起来那一刻键盘落在那颗『停止』上」与「作业结束之后键盘回到那颗『生成同步预览』上」；"
             + "判据与落点在 Desktop/Native/SyncBusyFocusPlan.cs（算式只有一份，横幅那两颗、作业区那两颗、探测区那两颗与这一屏共用），"
             + "门在 ApifoxHelper.Tests/SyncBusyFocusPlanTests.cs；不是真机结果"),
+        new("注释回写那一屏的键盘落点", "RunApplyBusyFocusHandover",
+            ["ApplyPlanDialog"], true, "第三百九十八轮",
+            "docs/NOTES.md 第三百九十八轮：真的显示这一屏、真的把键盘放到那颗「确认回写」上、真的点一次（走产品自己的 RunApply → SetBusy 那条路），"
+            + "读两支——「忙起来那一刻键盘落在文件清单上」与「回写结束之后键盘仍留在文件清单上（忙完不抢回按钮）」；"
+            + "判据与落点在 Desktop/Native/ApplyBusyFocusPlan.cs（算式只有一份，横幅那两颗、作业区那两颗、探测区那两颗、"
+            + "同步预览那几颗与这一屏共用），门在 ApifoxHelper.Tests/ApplyBusyFocusPlanTests.cs；不是真机结果"),
         new("连接与写入探测那两颗钮的键盘落点", "RunProbeFocusHandover",
             ["CapabilitiesDialog"], true, "第三百九十四轮",
             "docs/NOTES.md 第三百九十四轮：真的显示这一屏、真的把键盘放到那颗「运行写入探测」上、真的起一支在跑的探测作业"

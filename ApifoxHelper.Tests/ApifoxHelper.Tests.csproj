@@ -138,6 +138,8 @@
     <Compile Include="..\Desktop\Native\ProbeFocusPlan.cs" Link="Shared\ProbeFocusPlan.cs" />
     <!-- 同步预览那几颗动作钮的键盘落点（第三百九十六轮）：纯逻辑、不依赖 WinForms；与横幅、作业区、探测区共用同一份算式，门在 SyncBusyFocusPlanTests。 -->
     <Compile Include="..\Desktop\Native\SyncBusyFocusPlan.cs" Link="Shared\SyncBusyFocusPlan.cs" />
+    <!-- 注释回写那一屏忙起来时的键盘落点（第三百九十七轮）：纯逻辑、不依赖 WinForms；与横幅、作业区、探测区、同步预览共用同一份算式，门在 ApplyBusyFocusPlanTests。 -->
+    <Compile Include="..\Desktop\Native\ApplyBusyFocusPlan.cs" Link="Shared\ApplyBusyFocusPlan.cs" />
     <!-- 作业结束之后状态行该说的那一句（第三百七十八轮）：纯逻辑、不依赖 WinForms，门在 JobOutcomeTests。 -->
     <Compile Include="..\Desktop\Native\JobOutcome.cs" Link="Shared\JobOutcome.cs" />
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />

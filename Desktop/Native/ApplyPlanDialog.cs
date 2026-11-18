@@ -648,16 +648,51 @@ internal sealed class ApplyPlanDialog : DpiAwareForm
         }
     }
 
+    /// <summary>
+    /// 忙起来 / 忙完：换可用性，并把键盘交给还在屏上的那一颗（第三百九十八轮，判定在 <see cref="ApplyBusyFocusPlan"/>，
+    /// 算式在 <see cref="FocusHandover"/>）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：点下「确认回写」之后这一颗被<b>停用</b>，停用的控件接不住键盘，框架当场把焦点挪走——
+    /// 第三百九十八轮先写冒烟段、后改产品，同一版源码在 wine 96 档当场读到焦点落在<b>那颗「关闭」</b>上，
+    /// 而它同时是这一屏的 <c>AcceptButton</c> 与 <c>CancelButton</c>：回写正在跑的时候一次回车就把窗口关掉。
+    /// 这一屏的「确认回写」是不可逆写入，而这一屏没有「停止」（<c>CommentPlanService</c> 不接受取消），
+    /// 所以落点是<b>文件清单</b>——回写结果逐行写进「回写结果」那一列，用户下一步就在那张清单上逐行看。
+    /// </para>
+    /// <para>
+    /// <b>顺序是判据</b>：<c>Enabled = false</c> 一落下去框架当场就把焦点挪走了，之后再读 <c>Focused</c>
+    /// 读到的是「已经不在它身上」，那一判永远答「不用交」。所以焦点必须在换可用性<b>之前</b>记下来，
+    /// 交键盘排在最后（与横幅、作业区、探测区、同步预览那四处同一口径）。
+    /// </para>
+    /// <para>
+    /// <b>忙完那一支什么都不做</b>：那一刻键盘已经在文件清单上，用户正在那张清单上逐行看「回写结果」，
+    /// 再交一次就是把他正在看的那一行抢走（理由写在 <see cref="ApplyBusyFocusPlan"/> 的类注释里）。
+    /// </para>
+    /// </summary>
     private void SetBusy(bool busy)
     {
         _busy = busy;
+        // 先记下焦点：下面那几行 Enabled 一落下去，框架当场就把焦点挪走了。
+        var pressed = FocusedActionButton();
         // 作业运行期间清单正在被重建：关键词框一起停（口径见 ListFilter.KeywordEnabled）。
         _keyword.Enabled = ListFilter.KeywordEnabled(_plan is { Files.Count: > 0 }, busy);
         _skippedKeyword.Enabled = ListFilter.KeywordEnabled(_plan is { Skipped.Count: > 0 }, busy);
         _applyButton.Enabled = !busy && _plan is { Status: "ready" } && _plan.Files.Any(f => f.WriteAllowed);
         _patchButton.Enabled = !busy && _plan is { Files.Count: > 0 };
         _regenButton.Enabled = !busy;
+        // 最后交键盘：可用性已经落定，交给一颗停用的控件是空操作。
+        if (ApplyBusyFocusPlan.OnBusy(pressed is not null, pressed?.Enabled == true, _list.Visible && _list.Enabled)
+            == ApplyBusyFocusPlan.List)
+        {
+            _list.Focus();
+        }
     }
+
+    /// <summary>此刻拿着键盘的那一颗动作钮（三颗都不是就答 <c>null</c>）。</summary>
+    private Button? FocusedActionButton()
+        => _applyButton.Focused ? _applyButton
+            : _patchButton.Focused ? _patchButton
+            : _regenButton.Focused ? _regenButton
+            : null;
 
     /// <summary>
     /// 整屏不可用时的提示出口。<paramref name="canRetry"/> 决定那颗「重新生成计划」是否回到可用：

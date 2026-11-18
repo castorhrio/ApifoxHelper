@@ -120,9 +120,14 @@ public class ApplyPlanOpenFocusTests
         Assert.DoesNotContain("EnsureVisible", line, StringComparison.Ordinal);
         Assert.DoesNotContain("PopulateList", line, StringComparison.Ordinal);
         Assert.DoesNotContain(".Focus(", line, StringComparison.Ordinal);
-        // 整个对话框只经这一处入口交键盘，不自己写 .Focus()。
+        // 计划到达这一处只经 Ui.KeepKeyboardOnQueue 交键盘，不自己写 .Focus()。
+        // 全文件唯一一处自己写 .Focus() 的是第三百九十八轮 SetBusy 里那一句（忙起来把键盘交给文件清单，
+        // 判定在 ApplyBusyFocusPlan、门在 ApplyBusyFocusPlanTests）——这里按「恰一处、且就是那一句」判，
+        // 不按「一处都没有」判：那一句是另一件事的落点，不是这一处的第二个入口。
         var source = Repo.Source("Desktop", "Native", File);
-        Assert.Empty(Regex.Matches(source, @"(?m)^\s*\w+\.Focus\(\);$"));
+        var focusLines = Regex.Matches(source, @"(?m)^\s*\w+\.Focus\(\);$");
+        Assert.Single(focusLines);
+        Assert.Equal("_list.Focus();", focusLines[0].Value.Trim());
     }
 
     [Fact]

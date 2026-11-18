@@ -358,6 +358,9 @@ internal static class Program
         Section("同步预览那几颗动作钮的键盘落点（焦点在「生成同步预览」上 → 真的点一次、作业真在跑、这一行换成「停止」 → 键盘交给那颗「停止」 → 作业结束 → 键盘回到那颗「生成同步预览」；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunSyncBusyFocusHandover));
         RunSyncBusyFocusHandover(services, dataRoot);
 
+        Section("注释回写那一屏的键盘落点（焦点在「确认回写」上 → 真的点一次、这一屏进忙态 → 键盘交给文件清单 → 回写结束之后键盘留在清单上；真实控件、真实回写链路）", nameof(RunApplyBusyFocusHandover));
+        RunApplyBusyFocusHandover(services, dataRoot);
+
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
@@ -11886,6 +11889,129 @@ internal static class Program
                         + "那颗「停止」被藏起来时框架把焦点挪走了，这一轮该把它交给还在屏上的那颗「生成同步预览」。");
                 }
                 _lines.Add("     同步预览：作业结束之后键盘回到那颗「生成同步预览」上");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 注释回写那一屏（<c>ApplyPlanDialog</c>）「忙起来那一刻键盘落在哪」（第三百九十八轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：引导横幅（第三百七十六轮）、任务页作业区（第三百九十二轮）、连接与写入探测
+    /// （第三百九十四轮）、同步预览（第三百九十六轮）四处都接了「接不住键盘了就把键盘交给还在屏上的那一颗」。
+    /// 这一屏是<b>同一形状的第五处</b>，而它此前一处都没有：点下「确认回写」之后 <c>SetBusy(true)</c> 把刚按过的
+    /// 那一颗<b>停用</b>——停用的控件接不住键盘，框架当场把焦点挪走，于是「按完『确认回写』，键盘不在任何能按的东西上」。
+    /// 这一屏与那四处的区别是<b>它没有「停止」</b>（<c>CommentPlanService</c> 不接受取消），所以落点不是另一颗钮，
+    /// 而是这一屏的<b>文件清单</b>：回写结果逐行写进「回写结果」那一列，用户下一步就是在那张清单上逐行看。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：真的 <c>Show()</c> 出来（任务目录里先落一份能生成计划的已接受候选，走产品自己的读取路径），
+    /// 把键盘真的放到那颗「确认回写」上，真的点一次（走产品自己的 <c>RunApply</c> → <c>SetBusy</c> 那条路），
+    /// 然后读两件事——① 忙起来那一刻键盘落在文件清单上；② 回写结束之后键盘仍留在清单上（忙完不抢回按钮）。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判「回写该不该起」「那几颗钮该不该停用」（那是这一屏自己的口径）；
+    /// 不判「真机上焦点挪得顺不顺眼」——那要 Windows 真机（G-D5，真机 0 台）。
+    /// <b>这一跑是 wine + Xvfb 模拟器，不是真机。</b>
+    /// </para>
+    /// </summary>
+    private static void RunApplyBusyFocusHandover(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var tasks = services.GetRequiredService<TaskStore>();
+        var scan = services.GetRequiredService<SourceScanService>();
+        var drafts = services.GetRequiredService<DraftService>();
+        var plans = services.GetRequiredService<CommentPlanService>();
+
+        CheckTask? task = null;
+        ApplyPlanDialog? dialog = null;
+        try
+        {
+            RunAction("注释回写落点：准备一份能生成计划的已接受候选（真实服务落盘）", () =>
+            {
+                var projectDir = Path.Combine(dataRoot, "ProbeFocus.Api");
+                CreateProbeWorkspace(projectDir);
+                var profile = profiles.Save(new ProjectProfile
+                {
+                    Name = "回写落点配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "ProbeFocus.Api/ProbeFocus.Api.csproj",
+                    AllowedSourcePaths = ["ProbeFocus.Api/"],
+                }, isNew: true);
+                task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "回写落点任务" });
+                var job = new JobContext(new JobInfo { Id = "job-smoke-focus-apply", Scope = task.Id, Kind = "scan", StartedAt = DateTimeOffset.Now });
+                Task.Run(() => scan.ScanAsync(task.Id, job)).GetAwaiter().GetResult();
+                var output = tasks.Read<ScanOutput>(task.Id, TaskFiles.Symbols)
+                    ?? throw new InvalidOperationException("扫描后没有 symbols.json。");
+                var slot = output.Slots.FirstOrDefault(s => s.Status == "missing" && s.Editable && s.Tag == "summary")
+                    ?? throw new InvalidOperationException("扫描没有产出可回写的 summary 缺口。");
+                var candidate = Task.Run(() => drafts.AddManualAsync(
+                    task.Id,
+                    new ManualCandidateRequest { SlotId = slot.Id, Text = "按名称查询探针数据。" },
+                    CancellationToken.None)).GetAwaiter().GetResult();
+                Task.Run(() => drafts.UpdateAsync(
+                    task.Id,
+                    candidate.Id,
+                    new CandidateUpdateRequest { ReviewState = "accepted" },
+                    CancellationToken.None)).GetAwaiter().GetResult();
+                _lines.Add("     注释回写落点：一个源码文件接受一条候选（真实服务）");
+            });
+
+            RunAction("注释回写落点：焦点在「确认回写」上 → 真的点一次（走产品自己的 RunApply → SetBusy 那条路）→ 键盘交给文件清单", () =>
+            {
+                if (task is null) throw new InvalidOperationException("上一段没有产出任务。");
+                dialog = new ApplyPlanDialog(plans, tasks, task);
+                // 确认框是模态的，无人值守的冒烟器点不动它（与回写失败态那一段同一替身，产品默认实现不变）。
+                dialog.ConfirmApply = _ => true;
+                dialog.Show();
+                PumpUntil(dialog.PendingLoad);
+                Application.DoEvents();
+
+                var plan = dialog.Plan ?? throw new InvalidOperationException("对话框没有拿到注释计划。界面文案：" + LabelTexts(dialog));
+                if (plan.Status != "ready" || plan.Files.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"计划状态「{plan.Status}」、{plan.Files.Count} 个文件：本段走不到回写那一步。");
+                }
+                var list = PlanFileList(dialog);
+                var apply = ButtonOf(dialog, "确认回写");
+                if (!apply.Enabled)
+                {
+                    throw new InvalidOperationException("计划已就绪，「确认回写」却是停用的：本段走不到忙态。");
+                }
+                apply.Focus();
+                Application.DoEvents();
+                if (!apply.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到「确认回写」上（焦点在 {FocusWhere(dialog)}）：起点就没有焦点，后面那一判等于没量。");
+                }
+                apply.PerformClick();
+                if (!list.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"点下「确认回写」之后键盘没有落在文件清单上（焦点在 {FocusWhere(dialog)}）："
+                        + "那一颗被停用时框架把焦点挪走了，这一轮该把它交给还在屏上的文件清单。");
+                }
+                _lines.Add("     注释回写：忙起来那一刻键盘落在文件清单上");
+            });
+
+            RunAction("注释回写落点：回写结束之后键盘留在文件清单上（不抢回按钮）", () =>
+            {
+                if (dialog is not { } shown) throw new InvalidOperationException("上一段没有产出这一屏。");
+                PumpUntil(shown.PendingApply);
+                Application.DoEvents();
+                var list = PlanFileList(shown);
+                if (!list.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"回写结束之后键盘不在文件清单上（焦点在 {FocusWhere(shown)}）："
+                        + "忙完那一刻不该把键盘从用户正在看的那张清单上抢走。");
+                }
+                _lines.Add("     注释回写：回写结束之后键盘留在文件清单上");
             });
         }
         finally

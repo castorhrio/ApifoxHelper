@@ -279,9 +279,16 @@ public class ListFocusTests
         // 收窄不是放宽：那一份文件里动作钮的 `.Focus()` 由**另一条门**逐处判（`PlanOpenFocusTests`
         // 判「全文件恰好两处、且都在 SetBusy 里」，`SyncBusyFocusPlanTests` 判「顺序与唯一落点」），
         // 两条门合起来比这一条更紧——这一条只判「别的对话框有没有偷偷自己动键盘」。
+        //
+        // **第三百九十八轮按同一形状再收窄一处：`ApplyPlanDialog.cs`**。那一轮给注释回写那一屏补了
+        // 「忙起来那一刻键盘落在哪」（`ApplyBusyFocusPlan`）——点下「确认回写」之后那一颗被停用，
+        // 框架把焦点交给了那颗「关闭」（它同时是 AcceptButton 与 CancelButton），而这一屏没有「停止」，
+        // 所以落点是**文件清单**，只能落在清单自己身上（`Ui.KeepKeyboardOnQueue` 交的是队列，交不了「这一屏的清单」）。
+        // 收窄不是放宽：那一份文件里 `.Focus()` 由**另一条门**逐处判（`ApplyPlanOpenFocusTests` 判「全文件恰好一处、
+        // 且就是 `_list.Focus();`」，`ApplyBusyFocusPlanTests` 判「顺序与唯一落点」），两条门合起来比这一条更紧。
         foreach (var source in Repo.NativeSources().Where(s =>
                      !s.IsUi && s.Name != "TasksPage.cs" && s.Name != "ProjectsPage.cs"
-                     && s.Name != "SyncPreviewDialog.cs"))
+                     && s.Name != "SyncPreviewDialog.cs" && s.Name != "ApplyPlanDialog.cs"))
         {
             Assert.Empty(source.Matches(@"(?m)^\s*\w+\.Focus\(\);$"));
         }
