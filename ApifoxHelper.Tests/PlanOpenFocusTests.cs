@@ -118,11 +118,46 @@ public class PlanOpenFocusTests
         Assert.DoesNotContain(".Focus(", line, StringComparison.Ordinal);
         // 这一对话框有两页各一张清单，交键盘按清单认（第二百八十六轮勾选页也接上「打开时」这一口径）：
         // 勾选页两处（打开时、回到勾选页时）、预览页一处（那一页由隐藏变可见时），
-        // 别处再写一句就是多了一个不交键盘的入口。整个对话框不自己写 .Focus()。
+        // 别处再写一句就是多了一个不交键盘的入口。
         var source = Repo.Source("Desktop", "Native", File);
         Assert.Equal(2, Regex.Matches(source, @"Ui\.KeepKeyboardOnQueue\(_selectList\);").Count);
         Assert.Single(Regex.Matches(source, @"Ui\.KeepKeyboardOnQueue\(_actionList\);"));
-        Assert.Empty(Regex.Matches(source, @"(?m)^\s*\w+\.Focus\(\);$"));
+        // **第三百九十六轮把这一句从「整个对话框不自己写 .Focus()」收窄成「动作钮的 .Focus() 只在 SetBusy 里」**：
+        // 那一轮给这一屏补了「作业一起来 / 一结束，键盘落在哪一颗动作钮上」（`SyncBusyFocusPlan`），
+        // 而那一件事只能落在动作钮自己身上——`Ui.KeepKeyboardOnQueue` 交的是清单，交不了按钮。
+        // 收窄不是放宽：两张清单的键盘仍然只经 `Ui.KeepKeyboardOnQueue`（上面那两句照旧），
+        // 而动作钮的 `.Focus()` 全文件只许出现在 `SetBusy` 里、且只许两处（忙起来交给「停止」、忙完交回主动作）——
+        // 别处再写一句 `.Focus()` 就是第二个说了算的人，这一条当场红。
+        var setBusy = MethodBody(source, "private void SetBusy(bool busy)");
+        Assert.True(setBusy.Length > 0, "缺少 SetBusy：动作钮的键盘落点只该有这一处。");
+        var all = Regex.Matches(source, @"(?m)^\s*[\w!.]+\.Focus\(\);$").Count;
+        var inside = Regex.Matches(setBusy, @"(?m)^\s*[\w!.]+\.Focus\(\);$").Count;
+        Assert.True(all == inside && all == 2,
+            $"SyncPreviewDialog 里 .Focus() 共 {all} 处（其中在 SetBusy 里 {inside} 处，应为 2 / 2）："
+            + "动作钮的键盘落点只该有 SetBusy 那一处（忙起来交给「停止」、忙完交回主动作），"
+            + "第二处就是第二个说了算的人；清单的键盘仍只经 Ui.KeepKeyboardOnQueue。");
+        Assert.DoesNotContain("_selectList.Focus(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_actionList.Focus(", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>取一个方法体（从签名那一行到与之配对的右花括号；找不到答空串）。</summary>
+    private static string MethodBody(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        if (start < 0) return string.Empty;
+        var open = source.IndexOf('{', start);
+        if (open < 0) return string.Empty;
+        var depth = 0;
+        for (var i = open; i < source.Length; i++)
+        {
+            if (source[i] == '{') depth++;
+            else if (source[i] == '}')
+            {
+                depth--;
+                if (depth == 0) return source[open..(i + 1)];
+            }
+        }
+        return string.Empty;
     }
 
     [Fact]

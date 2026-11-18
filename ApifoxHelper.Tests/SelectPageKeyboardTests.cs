@@ -91,8 +91,17 @@ public class SelectPageKeyboardTests
         // 判定只有一份：本对话框不自己判「选中行与焦点行是不是同一行」。
         Assert.DoesNotContain("ListFocus.ShouldHandToQueue", source, StringComparison.Ordinal);
         Assert.DoesNotContain("FocusedItem", source, StringComparison.Ordinal);
-        // 也不自己写 .Focus()：键盘归属只有那一处入口。
-        Assert.Empty(Regex.Matches(source, @"(?m)^\s*\w+\.Focus\(\);$"));
+        // 也不自己写 .Focus() 去动**清单**：清单的键盘归属只有那一处入口。
+        //
+        // **第三百九十六轮把这一句从「整个对话框不写 .Focus()」收窄成「不写清单的 .Focus()」**：
+        // 那一轮给这一屏补了「作业一起来 / 一结束，键盘落在哪一颗动作钮上」（`SyncBusyFocusPlan`），
+        // 而 `Ui.KeepKeyboardOnQueue` 交的是清单、交不了按钮，动作钮只能自己接。
+        // 收窄不是放宽：动作钮的 `.Focus()` 由另一条门逐处判（`PlanOpenFocusTests` 判「全文件恰好两处、
+        // 且都在 SetBusy 里」，`SyncBusyFocusPlanTests` 判「顺序与唯一落点」）；这一条只管清单——
+        // 两张清单的键盘仍只经 `Ui.KeepKeyboardOnQueue`（上面那两句照旧），谁写一句 `_selectList.Focus()`
+        // 就是第二个说了算的人，这一条当场红。
+        Assert.DoesNotContain("_selectList.Focus(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_actionList.Focus(", source, StringComparison.Ordinal);
     }
 
     /// <summary>

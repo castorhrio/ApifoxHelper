@@ -355,6 +355,9 @@ internal static class Program
         Section("连接与写入探测那两颗钮的键盘落点（焦点在「运行写入探测」上 → 探测真在跑、这一行换成进度 + 停止 → 键盘交给那颗「停止」 → 探测结束 → 键盘回到那颗「运行写入探测」；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunProbeFocusHandover));
         RunProbeFocusHandover(services, dataRoot);
 
+        Section("同步预览那几颗动作钮的键盘落点（焦点在「生成同步预览」上 → 真的点一次、作业真在跑、这一行换成「停止」 → 键盘交给那颗「停止」 → 作业结束 → 键盘回到那颗「生成同步预览」；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunSyncBusyFocusHandover));
+        RunSyncBusyFocusHandover(services, dataRoot);
+
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
@@ -11760,6 +11763,143 @@ internal static class Program
         }
     }
 
+
+    /// <summary>
+    /// 同步预览那一屏（<c>SyncPreviewDialog</c>）「作业一起来 / 作业一结束，键盘落在哪一颗」（第三百九十六轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：引导横幅那两颗（第三百七十六轮）、任务页作业区那两颗（第三百九十二轮）、
+    /// 连接与写入探测那两颗（第三百九十四轮）都接了「接不住键盘了就把键盘交给还在屏上的那一颗」，
+    /// 这一屏是<b>同一形状的第四处</b>，而它此前一处都没有：点下「生成同步预览」或「确认同步」之后，
+    /// <c>SetBusy(true)</c> 把刚按过的那一颗<b>停用</b>、把「停止」显出来——停用的控件接不住键盘，
+    /// 框架当场把焦点挪走（挪到父面那一行上），于是「按完『确认同步』，键盘不在任何能按的东西上」。
+    /// 这一屏的停止是<b>正常操作</b>（执行说明那一行自己写着「可在动作之间停止」），而确认同步是不可逆写入。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：真的 <c>Show()</c> 出来、真的点一次那颗「生成同步预览」（走产品自己的
+    /// <c>Generate()</c> → <c>JobRunner.Start</c> → <c>SetBusy(true)</c> 那条路，不是造一个假的忙态），
+    /// 然后读两支——① 忙起来那一刻键盘落在那颗「停止」上；② 作业结束之后键盘回到那颗「生成同步预览」上。
+    /// </para>
+    /// <para>
+    /// <b>为什么「忙起来」那一支不泵消息</b>：忙态是 <c>SetBusy(true)</c> 同步落下的，而这一屏的 500ms 轮询
+    /// 一旦跑起来就会把这一行换回去（冒烟配置没有 Apifox 项目 ID，作业体当场失败）。所以那一支在
+    /// <c>PerformClick</c> 之后<b>不调 <c>Application.DoEvents()</c></b> 就读——读的是「点下去那一刻」的屏。
+    /// 第二支才泵消息，等这一屏自己的轮询把这一行换回来。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判同步计划生成得对不对（那要真实 Apifox，本段只借这条路径把这一屏推进忙态）；
+    /// 不判观感（随 G-D5 真机复核）；也不判「确认同步」那一支（它先弹原生确认对话框，冒烟器点不动那个框）——
+    /// 两支走的是同一个 <c>SetBusy</c>，判定与触达都只有那一处。
+    /// </para>
+    /// </summary>
+    private static void RunSyncBusyFocusHandover(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "同步预览落点冒烟" });
+        // 勾选页要有一份检查结果才勾得上接口（与列表复制那一段同一份夹具）。
+        tasks.Write(task.Id, TaskFiles.Diff, CheckResultsFixture());
+
+        SyncPreviewDialog? dialog = null;
+        try
+        {
+            RunAction("同步预览：焦点在「生成同步预览」上 → 真的点一次、这一屏进忙态（那一行换成「停止」）→ 键盘交给那颗「停止」（真实控件、真实后台作业、这一屏自己的轮询）", () =>
+            {
+                dialog = new SyncPreviewDialog(
+                    tasks,
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    services.GetRequiredService<JobRunner>(),
+                    task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var selectAll = FindAll<Button>(dialog)
+                        .FirstOrDefault(button => button.Text.StartsWith("全选可同步", StringComparison.Ordinal))
+                    ?? throw new InvalidOperationException("同步预览里没有「全选可同步」那颗按钮：入口改名或删除了，本段口径需要重定。");
+                var generate = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "生成同步预览")
+                    ?? throw new InvalidOperationException("同步预览里没有「生成同步预览」那颗按钮：入口改名或删除了，本段口径需要重定。");
+                var stop = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "停止")
+                    ?? throw new InvalidOperationException("同步预览里没有那颗「停止」：本段量测口径需要重定。");
+
+                if (!selectAll.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        "检查结果夹具已经落盘，「全选可同步」却是停用的：勾不上接口就点不动「生成同步预览」，本段走不到忙态。");
+                }
+                selectAll.PerformClick();
+                Application.DoEvents();
+                if (!generate.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        "点过「全选可同步」之后「生成同步预览」仍是停用的：本段走不到忙态，量不到键盘落点。");
+                }
+
+                // 真的把键盘放到那颗「生成同步预览」上（起点：焦点在那儿）。
+                generate.Focus();
+                Application.DoEvents();
+                if (!generate.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到那颗「{generate.Text}」上（焦点在 {FocusWhere(dialog)}）："
+                        + "起点就没有焦点，后面那一判等于没量。");
+                }
+
+                // 真的点一次：走产品自己的 Generate() → JobRunner.Start → SetBusy(true)。
+                // 之后**不泵消息**——忙态是 SetBusy(true) 同步落下的，泵一次就可能让 500ms 轮询把这一行换回去。
+                generate.PerformClick();
+                if (!stop.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "点下「生成同步预览」之后那一行没有换成「停止」：这一屏没有进忙态，"
+                        + "本段量不到「忙起来时键盘落在哪」（状态行：" + StatusText(dialog) + "）。");
+                }
+                if (!stop.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        "这一屏进了忙态，那颗「停止」却是停用的：按不倒就谈不上把键盘交给它。");
+                }
+                if (!stop.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"这一屏进了忙态，键盘没有落到那颗「停止」上（焦点在 {FocusWhere(dialog)}）："
+                        + "那颗「生成同步预览」被停用时框架把焦点挪走了，这一轮该把它交给还在屏上的那颗「停止」。");
+                }
+                _lines.Add("     同步预览：忙起来那一刻键盘落在那颗「停止」上");
+            });
+
+            RunAction("同步预览：作业结束之后那一行换回「生成同步预览」→ 键盘回到它身上（真实控件、真实后台作业、这一屏自己的轮询）", () =>
+            {
+                if (dialog is not { } shown) throw new InvalidOperationException("上一段没有产出这一屏。");
+                var generate = FindAll<Button>(shown).SingleOrDefault(button => button.Text == "生成同步预览")
+                    ?? throw new InvalidOperationException("同步预览里没有「生成同步预览」那颗按钮：入口改名或删除了，本段口径需要重定。");
+                var stop = FindAll<Button>(shown).SingleOrDefault(button => button.Text == "停止")
+                    ?? throw new InvalidOperationException("同步预览里没有那颗「停止」：本段量测口径需要重定。");
+
+                // 这一屏自己的 500ms 轮询把这一行换回来（换显隐的唯一落点是 SetBusy）。
+                PumpUntilCondition(() => !stop.Visible, "作业结束之后那一行换回「生成同步预览」", 20_000);
+                Application.DoEvents();
+                if (!generate.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"作业结束，键盘没有回到那颗「生成同步预览」上（焦点在 {FocusWhere(shown)}）："
+                        + "那颗「停止」被藏起来时框架把焦点挪走了，这一轮该把它交给还在屏上的那颗「生成同步预览」。");
+                }
+                _lines.Add("     同步预览：作业结束之后键盘回到那颗「生成同步预览」上");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>这一屏状态行此刻的文字（失败诊断用：读不到就答「（读不到）」）。</summary>
+    private static string StatusText(Form dialog)
+    {
+        var label = FindAll<Label>(dialog).FirstOrDefault(candidate => candidate.AutoEllipsis);
+        return label is null || string.IsNullOrWhiteSpace(label.Text) ? "（空）" : label.Text;
+    }
 
     /// <summary>
     /// 差异检查结果这一屏「真的显示出来」之后量一次（第二百四十八轮，简报 P0-1，具名 pass：layout + harden）。

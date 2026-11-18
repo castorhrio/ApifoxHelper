@@ -269,6 +269,12 @@ internal static class MeasuredScreens
         new("连接与写入探测", "RunCapabilitiesShown",
             ["CapabilitiesDialog"], true, "第二百四十七轮",
             "docs/NOTES.md 第二百四十七轮：真的 Show() 出来之后量到结果区只剩 82px、清单本体 39px（装得下 1 行），窗体高改按「结果区要给几行」算"),
+        new("同步预览那几颗动作钮的键盘落点", "RunSyncBusyFocusHandover",
+            ["SyncPreviewDialog"], true, "第三百九十六轮",
+            "docs/NOTES.md 第三百九十六轮：真的显示这一屏、真的点一次那颗「生成同步预览」（走产品自己的 Generate → JobRunner.Start → SetBusy 那条路），"
+            + "读两支——「忙起来那一刻键盘落在那颗『停止』上」与「作业结束之后键盘回到那颗『生成同步预览』上」；"
+            + "判据与落点在 Desktop/Native/SyncBusyFocusPlan.cs（算式只有一份，横幅那两颗、作业区那两颗、探测区那两颗与这一屏共用），"
+            + "门在 ApifoxHelper.Tests/SyncBusyFocusPlanTests.cs；不是真机结果"),
         new("连接与写入探测那两颗钮的键盘落点", "RunProbeFocusHandover",
             ["CapabilitiesDialog"], true, "第三百九十四轮",
             "docs/NOTES.md 第三百九十四轮：真的显示这一屏、真的把键盘放到那颗「运行写入探测」上、真的起一支在跑的探测作业"

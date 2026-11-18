@@ -272,8 +272,16 @@ public class ListFocusTests
     public void Dialogs_DoNotMoveFocusByHand()
     {
         // 交回键盘只有一处入口：对话框不各自写 .Focus()，两页的筛选框与结果第一行是第五十一轮既有口径。
+        //
+        // **第三百九十六轮把这一条从「所有对话框」收窄成「除同步预览之外的所有对话框」**：那一轮给
+        // SyncPreviewDialog 补了「作业一起来 / 一结束，键盘落在哪一颗动作钮上」（`SyncBusyFocusPlan`），
+        // 而那一件事只能落在动作钮自己身上——`Ui.KeepKeyboardOnQueue` 交的是清单，交不了按钮。
+        // 收窄不是放宽：那一份文件里动作钮的 `.Focus()` 由**另一条门**逐处判（`PlanOpenFocusTests`
+        // 判「全文件恰好两处、且都在 SetBusy 里」，`SyncBusyFocusPlanTests` 判「顺序与唯一落点」），
+        // 两条门合起来比这一条更紧——这一条只判「别的对话框有没有偷偷自己动键盘」。
         foreach (var source in Repo.NativeSources().Where(s =>
-                     !s.IsUi && s.Name != "TasksPage.cs" && s.Name != "ProjectsPage.cs"))
+                     !s.IsUi && s.Name != "TasksPage.cs" && s.Name != "ProjectsPage.cs"
+                     && s.Name != "SyncPreviewDialog.cs"))
         {
             Assert.Empty(source.Matches(@"(?m)^\s*\w+\.Focus\(\);$"));
         }

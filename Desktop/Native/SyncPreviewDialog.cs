@@ -856,8 +856,27 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _timer.Start();
     }
 
+    /// <summary>
+    /// 这一屏的忙闲（起一次作业与结束一次作业都走这里）：换可用性、换显隐，<b>最后交键盘</b>。
+    /// <para>
+    /// <b>第三百九十六轮补的是最后那一步</b>：点下「生成同步预览」或「确认同步」之后，刚按过的那一颗被
+    /// <b>停用</b>、那颗「停止」显出来——停用的控件接不住键盘，框架当场把焦点挪走（挪到父面那一行上），
+    /// 于是「按完『确认同步』，键盘不在任何能按的东西上」：想停掉这一次同步得先 Tab 一轮找回那颗「停止」。
+    /// 这一屏的停止是<b>正常操作</b>（执行说明那一行自己写着「可在动作之间停止」），而确认同步是不可逆写入——
+    /// 找不到那颗「停止」的代价不是多按几次 Tab。
+    /// </para>
+    /// <para>
+    /// <b>顺序是判据</b>：焦点必须在换可用性与换显隐<b>之前</b>记下来（<c>Enabled = false</c> 一落下去框架
+    /// 当场就把焦点挪走了，之后再读 <c>Focused</c> 读到的是「已经不在它身上」，那一判永远答「不用交」）；
+    /// 交键盘排在最后（可用性先落定，交给一颗停用的钮是空操作）。判定在 <see cref="SyncBusyFocusPlan"/>
+    /// （算式只有一份，在 <see cref="FocusHandover"/>），触达只在本方法一处。
+    /// </para>
+    /// </summary>
     private void SetBusy(bool busy)
     {
+        // 先记下焦点在哪一颗：换可用性与换显隐之后就读不到了（与引导横幅 / 作业区 / 探测区同一纪律）。
+        var pressed = FocusedActionButton();
+        var stopHadFocus = _stopButton.Focused;
         _busy = busy;
         // 起一次作业与结束一次作业都不该把上一次的停止请求带过去：这一屏的忙闲只在这一个落点变，
         // 那一笔就也只在这里清（RequestStop 是唯一写它的地方）。
@@ -873,7 +892,57 @@ internal sealed class SyncPreviewDialog : DpiAwareForm
         _generateButton.Enabled = !busy && _select.CheckedCount > 0;
         RefreshPlanActionButtons();
         _stopButton.Visible = busy;
+        // 最后交键盘：忙起来交给那颗「停止」，忙完交回这一页的主动作（判定在 SyncBusyFocusPlan）。
+        if (busy)
+        {
+            if (SyncBusyFocusPlan.OnBusy(pressed is not null, pressed is { Enabled: true, Visible: true },
+                    _stopButton is { Visible: true, Enabled: true }) == SyncBusyFocusPlan.Stop)
+            {
+                _stopButton.Focus();
+            }
+            return;
+        }
+        var target = BusyReturnButton();
+        if (SyncBusyFocusPlan.OnIdle(stopHadFocus, _stopButton.Visible, target is not null) == SyncBusyFocusPlan.Primary)
+        {
+            target!.Focus();
+        }
     }
+
+    /// <summary>
+    /// 忙起来之前拿着键盘的那一颗动作钮（<c>SetBusy</c> 会停用的那五颗里认一颗；都不在它身上就答 null）。
+    /// <para>
+    /// <b>边界</b>：只认动作钮。关键词框被停用时键盘的去向不在本口径内——那是另一件事，
+    /// 本轮不判、也不假装判过（见 <see cref="SyncBusyFocusPlan"/> 的「它不判什么」）。
+    /// </para>
+    /// </summary>
+    private Button? FocusedActionButton()
+        => _applyButton.Focused ? _applyButton
+            : _verifyButton.Focused ? _verifyButton
+            : _generateButton.Focused ? _generateButton
+            : _viewPlanButton.Focused ? _viewPlanButton
+            : _backButton.Focused ? _backButton
+            : null;
+
+    /// <summary>
+    /// 忙完之后该把键盘交回哪一颗：当前这一页的主动作（预览页「确认同步」，勾选页「生成同步预览」），
+    /// 那一颗此刻不可用就退到同页的次动作；都没有可交的落点就答 null（不猜，键盘留在框架给的位置上）。
+    /// <para>
+    /// <b>「当前是哪一页」读的是勾选页那一侧（<c>_page1.Visible</c>），不是预览页那一侧</b>——与
+    /// <see cref="ShowPlan"/> 第三百二十轮修的是同一个坑：<c>_page2</c> 在构造期<b>从来没有被隐藏过</b>
+    /// （两页互斥靠 z 序，勾选页后加、盖在上面），读它恒为真。第三百九十六轮第一版正是读 <c>_page2.Visible</c>，
+    /// 于是勾选页上作业结束时挑的是预览页那三颗（「确认同步」「重新核对」此刻都停用、「重新选择接口」藏着），
+    /// 一个可交的落点都挑不出来，键盘留在框架挪去的那一行上——冒烟段当场量到「焦点在 ListView」。
+    /// </para>
+    /// </summary>
+    private Button? BusyReturnButton()
+    {
+        if (_page1.Visible) return Reachable(_generateButton) ?? Reachable(_viewPlanButton);
+        return Reachable(_applyButton) ?? Reachable(_verifyButton) ?? Reachable(_backButton);
+    }
+
+    /// <summary>这一颗此刻接得住键盘吗（在屏上且可用）——接不住就不往它身上交。</summary>
+    private static Button? Reachable(Button button) => button is { Visible: true, Enabled: true } ? button : null;
 
     /// <summary>执行与核对的按钮可用性（口径见 SyncExecution，与冻结页面同一规则）。</summary>
     private void RefreshPlanActionButtons()

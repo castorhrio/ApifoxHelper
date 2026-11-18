@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-18
-source=b8d6c5757b086681d5a5218d23ae9ce10183166a
-tier=96 passed=427 failed=0 exit=0
-tier=120 passed=427 failed=0 exit=0
-tier=192 passed=427 failed=0 exit=0
+source=8edc11629ccca2c28b06c28b80bb03a58e554202
+tier=96 passed=429 failed=0 exit=0
+tier=120 passed=429 failed=0 exit=0
+tier=192 passed=429 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -60,6 +60,7 @@ section=RunListColumnFit tier=96 passed=15 failed=0
 section=RunActionRowFit tier=96 passed=8 failed=0
 section=RunCapabilitiesShown tier=96 passed=2 failed=0
 section=RunProbeFocusHandover tier=96 passed=2 failed=0
+section=RunSyncBusyFocusHandover tier=96 passed=2 failed=0
 section=RunCheckResultsShown tier=96 passed=1 failed=0
 section=RunSelectKeyboard tier=96 passed=1 failed=0
 section=RunSelectRoundTrip tier=96 passed=1 failed=0
@@ -128,6 +129,7 @@ section=RunListColumnFit tier=120 passed=15 failed=0
 section=RunActionRowFit tier=120 passed=8 failed=0
 section=RunCapabilitiesShown tier=120 passed=2 failed=0
 section=RunProbeFocusHandover tier=120 passed=2 failed=0
+section=RunSyncBusyFocusHandover tier=120 passed=2 failed=0
 section=RunCheckResultsShown tier=120 passed=1 failed=0
 section=RunSelectKeyboard tier=120 passed=1 failed=0
 section=RunSelectRoundTrip tier=120 passed=1 failed=0
@@ -196,6 +198,7 @@ section=RunListColumnFit tier=192 passed=15 failed=0
 section=RunActionRowFit tier=192 passed=8 failed=0
 section=RunCapabilitiesShown tier=192 passed=2 failed=0
 section=RunProbeFocusHandover tier=192 passed=2 failed=0
+section=RunSyncBusyFocusHandover tier=192 passed=2 failed=0
 section=RunCheckResultsShown tier=192 passed=1 failed=0
 section=RunSelectKeyboard tier=192 passed=1 failed=0
 section=RunSelectRoundTrip tier=192 passed=1 failed=0
