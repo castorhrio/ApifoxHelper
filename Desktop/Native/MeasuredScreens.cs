@@ -181,12 +181,13 @@ internal static class MeasuredScreens
             + "而 <c>ShowJobState</c> 给那个窗口的答案是那颗钮可见但点不动（产品在这里没错，无物可停时本就不该点得动）。"
             + "逐字红话留在 ApifoxHelper.Smoke/Program.cs 那一段的注释里；那两句的停留时长与实际字色仍随 G-D5 真机复核"),
         new("检查任务页作业区那两颗钮的键盘落点", "RunJobFocusHandover",
-            ["TasksPage"], true, "第三百九十二轮",
+            ["TasksPage"], true, "第三百九十三轮",
             "docs/NOTES.md 第三百九十二轮：真的显示任务页、真的把键盘放到那颗「开始扫描」上、真的起一支在跑的作业"
             + "（作业体空着、只等冒烟器放行——这一页最快的一支作业几十毫秒就跑完，界面来不及看见它在跑），"
             + "读两支——「作业真在跑、这一行换成进度 + 停止时，键盘落在那颗『停止』上」与「作业结束之后，键盘回到那颗"
-            + "『开始扫描』上」；判据与落点在 Desktop/Native/FocusHandover.cs（算式只有一份，横幅那两颗与作业区那两颗共用），"
-            + "门在 ApifoxHelper.Tests/JobFocusPlanTests.cs；不是真机结果"),
+            + "『开始扫描』上」；第三百九十三轮补第三支（跨行）：真的把键盘放到横幅那颗「开始扫描」上、真的起一支在跑的作业，"
+            + "读「横幅那两颗被停用之后，键盘落到作业区那颗『停止』上」；判据与落点在 Desktop/Native/FocusHandover.cs"
+            + "（算式只有一份，横幅那两颗与作业区那两颗共用），门在 ApifoxHelper.Tests/JobFocusPlanTests.cs；不是真机结果"),
         new("状态行完整错误入口（页面侧）", "RunStatusFullText",
             ["ProjectsPage", "TasksPage"], true, "第一百六十五轮",
             "docs/NOTES.md 第一百六十五轮：短句放得下不给入口、真实失败长句放不下才给、点开正文与状态行逐字相同"),

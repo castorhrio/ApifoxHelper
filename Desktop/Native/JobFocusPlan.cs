@@ -43,4 +43,21 @@ public static class JobFocusPlan
     /// </summary>
     public static int Landing(bool scanHadFocus, bool stopHadFocus, bool scanVisible, bool stopVisible)
         => FocusHandover.Landing(scanHadFocus, stopHadFocus, scanVisible, stopVisible);
+
+    /// <summary>
+    /// 横幅那一行原本拿着键盘的那一颗被<b>停用</b>了（作业在跑时横幅那两颗一律停用），
+    /// 而作业区那颗「停止」此刻还能按 → 把键盘交给它（第三百九十三轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="Landing"/> 管的是作业区<b>这一行</b>里换显隐。而「按了横幅那颗
+    /// 『开始扫描』」这一支跨了两行：作业一起来，横幅那两颗被停用，而键盘正落在刚按过的那一颗上——
+    /// 停用的控件接不住键盘，框架当场把焦点挪走（挪到父面那一行上），于是「按完横幅那颗『开始扫描』，
+    /// 键盘不在任何能按的东西上」，想停掉这一支得先 Tab 一轮。
+    /// </para>
+    /// <para>
+    /// 算式在 <see cref="FocusHandover.HandsAcross"/>：与「同一行里换显隐」是同一条规则的两个面
+    /// ——藏起来与停用都让那一颗接不住键盘，区别只在这条规则跨了行。本方法只带作业区这一套叫法。
+    /// </para>
+    /// </summary>
+    public static bool BannerHandsToStop(bool bannerHadFocus, bool bannerReachable, bool stopReachable)
+        => FocusHandover.HandsAcross(bannerHadFocus, bannerReachable, stopReachable);
 }

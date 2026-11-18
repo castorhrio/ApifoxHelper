@@ -51,4 +51,27 @@ public static class FocusHandover
         if (secondHadFocus) return secondVisible ? None : (firstVisible ? First : None);
         return None;
     }
+
+    /// <summary>
+    /// 原本拿着键盘的那一颗<b>接不住键盘了</b>（藏起来或停用），而这一行没有可交的落点 →
+    /// 交给另一行那一颗此刻唯一还能按的（第三百九十三轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<see cref="Landing"/> 管的是<b>同一行</b>里换显隐。而「按了横幅那颗
+    /// 『开始扫描』」这一支跨了两行：作业一起来，横幅那两颗被<b>停用</b>（作业执行中一律禁用，
+    /// <c>TasksPage.RefreshDetailActions</c>），而键盘正落在刚按过的那一颗上——停用的控件接不住键盘，
+    /// 框架当场把焦点挪走（挪到父面那一行上），于是「按完横幅那颗『开始扫描』，键盘不在任何能按的东西上」，
+    /// 想停掉这一支得先 Tab 一轮找回作业区那颗「停止」。
+    /// </para>
+    /// <para>
+    /// <b>为什么「停用」与「藏起来」是同一件事</b>：两者都让那一颗接不住键盘，用户看到的结果一样
+    /// （键盘不在任何能按的东西上）。所以这一判与 <see cref="Landing"/> 同一口径，区别只在这条规则跨了行。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判「该不该停用」（那是各屏自己的口径）；不判「交出去的那一颗能不能按」
+    /// ——那由调用方把 <c>targetReachable</c> 算准（可见且可用）喂进来；也不判「真机上焦点挪得顺不顺眼」
+    /// （G-D5，真机 0 台）。
+    /// </para>
+    /// </summary>
+    public static bool HandsAcross(bool hadFocus, bool stillReachable, bool targetReachable)
+        => hadFocus && !stillReachable && targetReachable;
 }

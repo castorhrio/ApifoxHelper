@@ -1145,10 +1145,13 @@ internal sealed class TasksPage : UserControl, INativePage
 
     private void ShowJobState(JobInfo? job)
     {
-        RefreshDetailActions(job);
-        // 先记下焦点在哪一颗：换显隐之后就读不到了（与引导横幅同一纪律，算式在 JobFocusPlan）。
+        // 先记下焦点在哪一颗：换显隐与换可用性之后就读不到了（与引导横幅同一纪律，算式在 JobFocusPlan）。
+        // 横幅那一行也记（第三百九十三轮）：作业在跑时它那两颗一律停用（RefreshDetailActions），
+        // 而停用的那一颗接不住键盘——记下是哪一颗，换完可用性之后才判得出它还在不在。
         var scanHadFocus = _scanButton.Focused;
         var stopHadFocus = _stopButton.Focused;
+        var bannerHadFocus = _nextPrimary.Focused ? _nextPrimary : _nextSecondary.Focused ? _nextSecondary : null;
+        RefreshDetailActions(job);
         if (job is not null)
         {
             // 记下 Id：作业一结束 Running 就答 null，终态与失败原因只能按 Id 读回（见 ShowJobOutcome）。
@@ -1178,6 +1181,16 @@ internal sealed class TasksPage : UserControl, INativePage
         // 原本聚焦的那一颗被藏起来了：把键盘交给还在屏上的那一颗（两颗都不在屏上时不猜）。
         // 这一行只有这一处换显隐：作业起来时「开始扫描」藏、「停止」显，作业结束时反过来。
         var landing = JobFocusPlan.Landing(scanHadFocus, stopHadFocus, _scanButton.Visible, _stopButton.Visible);
+        // 横幅那一行原本拿着键盘的那一颗被停用了（作业在跑时横幅那两颗一律停用）：这一行没有可交的落点，
+        // 交给作业区那颗「停止」——它是这一屏此刻唯一还能按的下一步（第三百九十三轮）。
+        if (landing == JobFocusPlan.None
+            && JobFocusPlan.BannerHandsToStop(
+                bannerHadFocus is not null,
+                bannerHadFocus is null || (bannerHadFocus.Visible && bannerHadFocus.Enabled),
+                _stopButton.Visible && _stopButton.Enabled))
+        {
+            landing = JobFocusPlan.Stop;
+        }
         if (landing == JobFocusPlan.Scan) _scanButton.Focus();
         else if (landing == JobFocusPlan.Stop) _stopButton.Focus();
     }

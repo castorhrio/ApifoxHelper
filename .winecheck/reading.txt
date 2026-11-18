@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-18
-source=3741ee0700f477f6d74174635cc5489225395da6
-tier=96 passed=423 failed=0 exit=0
-tier=120 passed=423 failed=0 exit=0
-tier=192 passed=423 failed=0 exit=0
+source=e1c521f6093661cedb0189e93235fae2f5d07b87
+tier=96 passed=424 failed=0 exit=0
+tier=120 passed=424 failed=0 exit=0
+tier=192 passed=424 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -48,7 +48,7 @@ section=RunDetailScrollReset tier=96 passed=3 failed=0
 section=RunBannerFocus tier=96 passed=4 failed=0
 section=RunStageJumpFocus tier=96 passed=3 failed=0
 section=RunJobOutcomeStatus tier=96 passed=3 failed=0
-section=RunJobFocusHandover tier=96 passed=1 failed=0
+section=RunJobFocusHandover tier=96 passed=2 failed=0
 section=RunStatusFullText tier=96 passed=4 failed=0
 section=RunDialogStatusFullText tier=96 passed=12 failed=0
 section=RunDialogStatusSweep tier=96 passed=60 failed=0
@@ -115,7 +115,7 @@ section=RunDetailScrollReset tier=120 passed=3 failed=0
 section=RunBannerFocus tier=120 passed=4 failed=0
 section=RunStageJumpFocus tier=120 passed=3 failed=0
 section=RunJobOutcomeStatus tier=120 passed=3 failed=0
-section=RunJobFocusHandover tier=120 passed=1 failed=0
+section=RunJobFocusHandover tier=120 passed=2 failed=0
 section=RunStatusFullText tier=120 passed=4 failed=0
 section=RunDialogStatusFullText tier=120 passed=12 failed=0
 section=RunDialogStatusSweep tier=120 passed=60 failed=0
@@ -182,7 +182,7 @@ section=RunDetailScrollReset tier=192 passed=3 failed=0
 section=RunBannerFocus tier=192 passed=4 failed=0
 section=RunStageJumpFocus tier=192 passed=3 failed=0
 section=RunJobOutcomeStatus tier=192 passed=3 failed=0
-section=RunJobFocusHandover tier=192 passed=1 failed=0
+section=RunJobFocusHandover tier=192 passed=2 failed=0
 section=RunStatusFullText tier=192 passed=4 failed=0
 section=RunDialogStatusFullText tier=192 passed=12 failed=0
 section=RunDialogStatusSweep tier=192 passed=60 failed=0

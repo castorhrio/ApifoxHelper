@@ -319,7 +319,7 @@ internal static class Program
         Section("作业结束之后状态行说结果（真的点一次扫描区那颗「开始扫描」：成功 → 进度行收起之后状态行逐字写着「源码扫描完成。」、色调 muted、磁盘上真有扫描时间 → 那一句在之后三次轮询里逐字未变 → 几十毫秒内就失败的那一次（API 项目在配置保存之后被删掉），那一句原因也在屏上说过、色调 bad；真实控件、真实后台作业、页面自己的轮询）", nameof(RunJobOutcomeStatus));
         RunJobOutcomeStatus(services, dataRoot);
 
-        Section("作业区那两颗钮的键盘落点（焦点在「开始扫描」上 → 作业真在跑、这一行换成进度 + 停止 → 键盘交给那颗「停止」 → 作业结束 → 键盘回到那颗「开始扫描」；真实控件、真实后台作业、页面自己的轮询）", nameof(RunJobFocusHandover));
+        Section("作业区那两颗钮的键盘落点（焦点在「开始扫描」上 → 作业真在跑、这一行换成进度 + 停止 → 键盘交给那颗「停止」 → 作业结束 → 键盘回到那颗「开始扫描」；第三百九十三轮补跨行那一支：焦点在横幅那颗「开始扫描」上 → 作业一起来横幅那两颗被停用 → 键盘交给作业区那颗「停止」；真实控件、真实后台作业、页面自己的轮询）", nameof(RunJobFocusHandover));
         RunJobFocusHandover(services, dataRoot);
 
         Section("状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）", nameof(RunStatusFullText));
@@ -9312,6 +9312,75 @@ internal static class Program
                 }
                 _lines.Add("     作业区那一行：作业真在跑时键盘落在那颗「停止」上，作业结束之后回到那颗「开始扫描」上"
                     + $"（进度行可见 {progress.Visible}）");
+            });
+
+            RunAction("任务页作业区：焦点在横幅那颗「开始扫描」上 → 作业真在跑、横幅那两颗被停用 → 键盘交给作业区那颗「停止」（跨行那一支，真实控件、真实后台作业、页面自己的轮询）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                var (scanButton, stopButton, _) = ScanActionRow(shown);
+
+                // 横幅那一行此刻的主动作就是「开始扫描」（任务还没扫过，NextStep 走的是 notStarted 那一支）。
+                var banner = BannerRow(shown);
+                var bannerPrimary = banner.Controls.Cast<Control>().OfType<Button>()
+                    .FirstOrDefault(button => button.Visible)
+                    ?? throw new InvalidOperationException(
+                        "横幅那一行没有可见按钮：这一段量的是「按了横幅那颗之后键盘落在哪」，没有落点。");
+                if (bannerPrimary.Text != "开始扫描")
+                {
+                    throw new InvalidOperationException(
+                        $"横幅那颗可见按钮写着「{bannerPrimary.Text}」，不是「开始扫描」："
+                        + "这一段要的是「按了横幅那颗『开始扫描』」那一支，造出来的状态没有走到它。");
+                }
+
+                bannerPrimary.Focus();
+                Application.DoEvents();
+                if (!bannerPrimary.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到横幅那颗「{bannerPrimary.Text}」上（焦点在 {FocusWhere(host!)}）："
+                        + "起点就没有焦点，后面那一判等于没量。");
+                }
+
+                // 起一支真的在跑的作业：作业体空着，只等冒烟器放行（与上一段同一手法）。
+                var gate = new ManualResetEventSlim(false);
+                runner.Start(task.Id, "源码扫描", ctx => { gate.Wait(ctx.Token); return Task.FromResult<object?>(null); });
+                try
+                {
+                    PumpUntilCondition(() => stopButton.Visible, "作业真在跑之后那一行换成「进度 + 停止」", 20_000);
+                    Application.DoEvents();
+
+                    // 横幅那两颗此刻一律停用（RefreshDetailActions）：停用的控件接不住键盘。
+                    if (bannerPrimary.Enabled)
+                    {
+                        throw new InvalidOperationException(
+                            "作业真在跑，横幅那颗「开始扫描」还是可用的：作业执行中横幅那两颗一律停用，"
+                            + "这一支要的正是「它接不住键盘了」那一刻。");
+                    }
+                    if (!stopButton.Focused)
+                    {
+                        throw new InvalidOperationException(
+                            $"作业真在跑，键盘没有落到作业区那颗「停止」上（焦点在 {FocusWhere(host!)}）："
+                            + "横幅那颗「开始扫描」被停用时框架把焦点挪走了，这一轮该把它交给作业区那颗「停止」——"
+                            + "它是这一屏此刻唯一还能按的下一步。");
+                    }
+                    _lines.Add("     跨行那一支：焦点在横幅那颗「开始扫描」上、作业一起来横幅那两颗被停用，"
+                        + "键盘落到作业区那颗「停止」上");
+                }
+                finally
+                {
+                    gate.Set();
+                }
+
+                // 作业结束之后：这一行换回「开始扫描」，键盘跟着回到它身上（与上一段同一判）。
+                PumpUntilCondition(() => scanButton.Visible && !stopButton.Visible,
+                    "作业结束之后那一行换回「开始扫描」", 20_000);
+                Application.DoEvents();
+                if (!scanButton.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"作业结束，键盘没有回到那颗「开始扫描」上（焦点在 {FocusWhere(host!)}）："
+                        + "跨行那一支交出去之后，收回来这一支也得走同一条规则。");
+                }
             });
         }
         finally

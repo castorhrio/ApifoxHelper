@@ -22,7 +22,15 @@ namespace ApifoxHelper.Tests;
 /// ④ 算式只有一份（源码门）：横幅与作业区是同一条规则，两处都调 <c>FocusHandover.Landing</c>，
 ///    真值表在产品源码里只出现一份（<c>FocusHandover.cs</c>）；
 /// ⑤ 冒烟段 <c>RunJobFocusHandover</c> 里真的量了这件事（真的起一支在跑的作业 → 读「键盘落到那颗『停止』上」
-///    → 作业结束 → 读「键盘回到那颗『开始扫描』上」）。
+///    → 作业结束 → 读「键盘回到那颗『开始扫描』上」；第三百九十三轮补上跨行那一支：焦点在横幅那颗
+///    「开始扫描」上 → 作业起来、横幅那两颗被停用 → 读「键盘落到作业区那颗『停止』上」）。
+/// </para>
+/// <para>
+/// <b>第三百九十三轮补的那一支（跨行）</b>：<see cref="JobFocusPlan.Landing"/> 管的是作业区<b>这一行</b>
+/// 里换显隐，判不到「按了横幅那颗『开始扫描』」——那一支跨了两行：作业一起来，横幅那两颗被<b>停用</b>
+/// （作业执行中一律禁用），而键盘正落在刚按过的那一颗上，停用的控件接不住键盘，框架当场把焦点挪走。
+/// 判定在 <see cref="JobFocusPlan.BannerHandsToStop"/>（算式在 <see cref="FocusHandover.HandsAcross"/>），
+/// 触达仍在 <c>ShowJobState</c> 那一处（不新增第二个说了算的人）。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判「作业该不该起」「停止」那颗该不该停用（那是各屏自己的口径）；
@@ -74,6 +82,37 @@ public class JobFocusPlanTests
         Assert.Equal(JobFocusPlan.None, JobFocusPlan.Landing(true, true, true, true));
         Assert.Equal(JobFocusPlan.Stop, JobFocusPlan.Landing(true, true, false, true));
         Assert.Equal(JobFocusPlan.None, JobFocusPlan.Landing(true, true, false, false));
+    }
+
+    /// <summary>
+    /// 跨行那一支的判定本身（第三百九十三轮）：横幅那一行原本拿着键盘的那一颗被停用之后，
+    /// 该不该把键盘交给作业区那颗「停止」。
+    /// <para>
+    /// 三种入参各答一件事：横幅那一行原本有没有拿着键盘、它此刻还接不接得住（可见且可用）、
+    /// 作业区那颗「停止」此刻能不能按。三条都成立才交——少一条都不交（不猜、不抢）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void BannerHandsToStop_AnswersWhenTheBannerRowLosesTheKeyboard()
+    {
+        // 横幅那一行原本没拿着键盘：无论其余两条如何都不交（这一判不替用户挑落点）。
+        foreach (var bannerReachable in new[] { true, false })
+        {
+            foreach (var stopReachable in new[] { true, false })
+            {
+                Assert.False(JobFocusPlan.BannerHandsToStop(false, bannerReachable, stopReachable));
+            }
+        }
+
+        // 横幅那一行还接得住键盘（没被停用）：不交——它自己还拿着键盘，白交一次会让「焦点原本在哪」不再被读。
+        Assert.False(JobFocusPlan.BannerHandsToStop(true, true, true));
+        Assert.False(JobFocusPlan.BannerHandsToStop(true, true, false));
+
+        // 横幅那一行接不住键盘了，而作业区那颗「停止」也按不动（终态那一帧）：不猜，键盘不硬塞给别处。
+        Assert.False(JobFocusPlan.BannerHandsToStop(true, false, false));
+
+        // 三条都成立：交给作业区那颗「停止」——它是这一屏此刻唯一还能按的下一步。
+        Assert.True(JobFocusPlan.BannerHandsToStop(true, false, true));
     }
 
     /// <summary>
@@ -182,6 +221,39 @@ public class JobFocusPlanTests
                 problems.Add("ShowJobState 里没有把「换显隐之前记下的焦点」与「换显隐之后的可见性」一起喂给 "
                     + "JobFocusPlan.Landing：判定要的是这两半，少一半就答不出该交给谁。");
             }
+
+            // 跨行那一支（第三百九十三轮）：横幅那一行原本拿着键盘的那一颗被停用之后，键盘交给作业区那颗「停止」。
+            const string bannerRecorded = "var bannerHadFocus = _nextPrimary.Focused ? _nextPrimary : _nextSecondary.Focused ? _nextSecondary : null;";
+            var bannerRecordedAt = show.IndexOf(bannerRecorded, StringComparison.Ordinal);
+            var actionsRefreshedAt = show.IndexOf("RefreshDetailActions(job);", StringComparison.Ordinal);
+            if (bannerRecordedAt < 0)
+            {
+                problems.Add("ShowJobState 里没有在换可用性之前记下横幅那一行拿着键盘的是哪一颗（应为 "
+                    + bannerRecorded + "）：作业在跑时横幅那两颗一律停用，停用的那一颗接不住键盘，"
+                    + "不记就判不出「它原本拿着键盘、此刻接不住了」，那一支的键盘就丢在父面那一行上。");
+            }
+            else if (actionsRefreshedAt < 0)
+            {
+                problems.Add("ShowJobState 里找不到 RefreshDetailActions(job);：本门按「记横幅焦点在换可用性之前」判顺序，"
+                    + "那一行没了这一判就没有对象。");
+            }
+            else if (bannerRecordedAt > actionsRefreshedAt)
+            {
+                problems.Add("ShowJobState 里「记横幅焦点」排在 RefreshDetailActions 之后：停用一落下去框架当场就把焦点挪走了，"
+                    + "之后再读 Focused 读到的是「已经不在它身上」，那一判永远答「不用交」。");
+            }
+
+            var across = Count(show, "JobFocusPlan.BannerHandsToStop(");
+            if (across != 1)
+            {
+                problems.Add($"ShowJobState 里调用 JobFocusPlan.BannerHandsToStop 出现 {across} 处（应为 1 处）："
+                    + "0 处 = 跨行那一支没人判；多于 1 处 = 有第二处也在决定键盘落点。");
+            }
+            if (!show.Contains("if (landing == JobFocusPlan.None", StringComparison.Ordinal))
+            {
+                problems.Add("ShowJobState 里跨行那一支没有排在「这一行自己的判定答 None」之后："
+                    + "作业区这一行自己有落点时，跨行那一支不许抢——它补的是「这一行没有可交的落点」那一格。");
+            }
         }
 
         // ③ 唯一落点：这一对的两颗 Focus() 全文件只出现在 ShowJobState 里、各一次。
@@ -217,13 +289,16 @@ public class JobFocusPlanTests
                          ("scanButton.Focus();", "把键盘真的放到那颗「开始扫描」上"),
                          ("stopButton.Focused", "读「键盘落到了那颗『停止』上」"),
                          ("scanButton.Focused", "读「作业结束后键盘回到那颗『开始扫描』上」"),
+                         ("bannerPrimary.Focus();", "把键盘真的放到横幅那颗「开始扫描」上（跨行那一支的起点）"),
+                         ("bannerPrimary.Enabled", "读「横幅那颗被停用了、接不住键盘」"),
                      })
             {
                 if (!body.Contains(needle, StringComparison.Ordinal))
                 {
                     problems.Add($"RunJobFocusHandover 的段体里没有 {needle}（{why}）："
-                        + "这一段量的是「作业真在跑的时候键盘交给那颗『停止』」与「作业结束之后键盘回到那颗"
-                        + "『开始扫描』」两支，少了这一句就量不到那一支。");
+                        + "这一段量的是「作业真在跑的时候键盘交给那颗『停止』」「作业结束之后键盘回到那颗"
+                        + "『开始扫描』」与「焦点在横幅那颗『开始扫描』上时作业一起来、键盘交给作业区那颗『停止』」"
+                        + "三支，少了这一句就量不到那一支。");
                 }
             }
         }
