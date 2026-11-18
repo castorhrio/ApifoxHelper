@@ -319,6 +319,9 @@ internal static class Program
         Section("作业结束之后状态行说结果（真的点一次扫描区那颗「开始扫描」：成功 → 进度行收起之后状态行逐字写着「源码扫描完成。」、色调 muted、磁盘上真有扫描时间 → 那一句在之后三次轮询里逐字未变 → 几十毫秒内就失败的那一次（API 项目在配置保存之后被删掉），那一句原因也在屏上说过、色调 bad；真实控件、真实后台作业、页面自己的轮询）", nameof(RunJobOutcomeStatus));
         RunJobOutcomeStatus(services, dataRoot);
 
+        Section("作业区那两颗钮的键盘落点（焦点在「开始扫描」上 → 作业真在跑、这一行换成进度 + 停止 → 键盘交给那颗「停止」 → 作业结束 → 键盘回到那颗「开始扫描」；真实控件、真实后台作业、页面自己的轮询）", nameof(RunJobFocusHandover));
+        RunJobFocusHandover(services, dataRoot);
+
         Section("状态行的完整错误入口（放得下不给 → 放不下给 → 点开读全 → 恢复后收起，真实控件）", nameof(RunStatusFullText));
         RunStatusFullText(services, dataRoot);
 
@@ -8932,6 +8935,26 @@ internal static class Program
     /// <c>Click(page, "开始扫描")</c> 按 <c>FindAll</c> 的先序会落到横幅那一颗。本段按「同一行里既有
     /// 「开始扫描」又有那颗「停止」」认扫描区那一行——与 <see cref="BannerRow"/> 认横幅那一行同一个理由。
     /// </para>
+    /// <para>
+    /// <b>第三百九十一轮为「正在停止…」那一句试过的一走法，被这一跑自己证伪（逐字红话留在这里，别让下一轮再走一遍）</b>：
+    /// 那一版的判断是——<c>JobRunner.Start</c> 同步把作业写进 <c>_running</c>、摘登记只发生在线程池那一头的
+    /// <c>finally</c>，所以「点『开始扫描』→ 立刻点『停止』」两次 <c>PerformClick</c> 之间<b>一次消息都不泵</b>，
+    /// 那一击就必然落在「请求已收下而作业还在跑」那一段里，于是不需要造慢作业。段体真按这一判断写过两支
+    /// （在既有的三支之后，即第四、第五支），三档各跑一次，<b>每一档都红两发</b>。96 档逐字红话：
+    /// 「点过「开始扫描」之后那颗「停止」还是点不动（可见 True、可选 False、父链 Button:True ←
+    /// FlowLayoutPanel:True ← TableLayoutPanel:True ← ScrollPanel:True ← SplitterPanel:True ←
+    /// SplitContainer:True ← TasksPage:True ← Form:True、进度行「源码扫描结束（成功），正在刷新。」）」，
+    /// 第二支随后「等 30002ms 之后状态行还是「源码扫描完成。」」。
+    /// <b>错在哪一环</b>：漏了 <c>StartScan</c> 在 <c>StartTaskJob</c> 之后<b>自己就调一次 <c>RefreshDetail</c></b>——
+    /// 那一次重画要重建整个详情区，UI 线程在那一段里花掉的时间比这一页最快那支作业跑得完的时间还长；
+    /// 于是等两击都落下去，作业<b>已经到终态、只是还没从 <c>_running</c> 摘掉</c>。
+    /// <c>TasksPage.ShowJobState</c> 对那一个「登记着但已终态」的窗口给的是 <c>_stopButton.Visible = true</c>
+    /// 而 <c>Enabled = job.State == "running"</c> 答 false——<b>产品在这里没有错</b>：无物可停时那颗钮就不该点得动
+    /// （<c>PerformClick</c> 对不可选的控件本身就是空操作，那一击什么都不是）。
+    /// 结论按实物收下：<b>那两句在本模拟器里仍然没有读数</b>，而理由比第三百八十至三百九十轮那一句
+    /// 「那颗钮来不及出现」更准——<b>它来得及出现，但出现的那一帧已经是终态、点不动</b>；
+    /// 停留时长与实际字色仍随 G-D5 真机复核。<b>不要为了读数去改产品的取消语义，也不要造慢作业。</b>
+    /// </para>
     /// </summary>
     private static void RunJobOutcomeStatus(IServiceProvider services, string dataRoot)
     {
@@ -9003,7 +9026,7 @@ internal static class Program
                         $"选中没有落到「{scanned.Name}」那一行（现在选中的是 {selectedId ?? "（无）"}）：点下去跑的不是这一支要量的那个作业。");
                 }
 
-                var (scanButton, progress) = ScanActionRow(page);
+                var (scanButton, _, progress) = ScanActionRow(page);
                 var status = StatusLabel(page);
                 if (!scanButton.Visible || !scanButton.CanSelect)
                 {
@@ -9065,7 +9088,7 @@ internal static class Program
             RunAction("任务页作业结果：那一句在之后连续三次轮询里逐字未变——没被清空、也没被下一次刷新盖掉（真实控件、页面自己的轮询）", () =>
             {
                 if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
-                var (_, progress) = ScanActionRow(shown);
+                var (_, _, progress) = ScanActionRow(shown);
                 var status = StatusLabel(shown);
                 var said = status.Text;
                 if (said != "源码扫描完成。")
@@ -9104,7 +9127,7 @@ internal static class Program
                         $"选中没有落到「{failedTask.Name}」那一行（现在选中的是 {selectedId ?? "（无）"}）：点下去跑的不是这一支要量的那个作业。");
                 }
 
-                var (scanButton, progress) = ScanActionRow(shown);
+                var (scanButton, _, progress) = ScanActionRow(shown);
                 var status = StatusLabel(shown);
                 if (!scanButton.Visible || !scanButton.CanSelect)
                 {
@@ -9169,6 +9192,144 @@ internal static class Program
     }
 
     /// <summary>
+    /// 作业区那两颗钮（「开始扫描」与「停止」）的键盘落点（第三百九十二轮）。
+    /// <para>
+    /// <b>量的是哪一件事</b>：作业真在跑的时候，屏上那一行换成「进度 + 停止」，那颗「开始扫描」被藏起来了——
+    /// 此刻键盘若正落在它身上，框架当场把焦点挪走（wine 96 档实测落在父面那一行上），用户想停掉这一支作业
+    /// 得先 Tab 一轮找回那颗「停止」。这一段量两支：① 作业真在跑的时候，键盘落到那颗「停止」上；
+    /// ② 作业结束之后，键盘回到那颗「开始扫描」上。
+    /// </para>
+    /// <para>
+    /// <b>为什么起的是一支「等着放行」的作业</b>：这一页最快的一支作业几十毫秒就跑完了，界面来不及看见它在跑，
+    /// 「在跑」这一态量不到（第三百九十一轮量到的正是这件事：那一击落在「已终态、还没摘登记」的窗口里）。
+    /// 所以这一段起的是一支<b>作业体空着、只等冒烟器放行</b>的作业：产品代码一行未改，跑的是产品自己的
+    /// <c>JobRunner</c> 与页面自己的 500ms 轮询，量的是页面真的把这一行换成「进度 + 停止」那一刻键盘落在哪。
+    /// </para>
+    /// </summary>
+    private static void RunJobFocusHandover(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var runner = services.GetRequiredService<JobRunner>();
+        var sortMemory = new ListSortMemory(Path.Combine(dataRoot, "ui", "list-sort-job-focus.json"));
+        var projectDir = Path.Combine(dataRoot, "Focus.Api");
+        CreateProbeWorkspace(projectDir);
+        var profile = profiles.Save(new ProjectProfile
+        {
+            Name = "作业区落点冒烟配置",
+            WorkspaceRoot = dataRoot,
+            ApiProject = "Focus.Api/Focus.Api.csproj",
+            AllowedSourcePaths = ["Focus.Api/"],
+        }, isNew: true);
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "作业区落点冒烟" });
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("任务页作业区：焦点在「开始扫描」上 → 作业真在跑（这一行换成进度 + 停止）→ 键盘交给那颗「停止」 → 作业结束 → 键盘回到那颗「开始扫描」（真实控件、真实后台作业、页面自己的轮询）", () =>
+            {
+                host = new Form { Width = 1280, Height = 800, Text = "作业区落点冒烟" };
+                page = new TasksPage(
+                    tasks,
+                    services.GetRequiredService<SourceScanService>(),
+                    services.GetRequiredService<JobRunner>(),
+                    profiles,
+                    services.GetRequiredService<DraftService>(),
+                    services.GetRequiredService<CommentPlanService>(),
+                    services.GetRequiredService<PropagationService>(),
+                    services.GetRequiredService<BuildService>(),
+                    services.GetRequiredService<ContractReviewService>(),
+                    services.GetRequiredService<CheckService>(),
+                    services.GetRequiredService<DecisionService>(),
+                    services.GetRequiredService<SupplementService>(),
+                    services.GetRequiredService<ReportExportService>(),
+                    services.GetRequiredService<SyncPlanService>(),
+                    services.GetRequiredService<SyncExecutor>(),
+                    sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                // 页面自己的 500ms 轮询在这一点上（OnPageShown 里 _timer.Start()）：
+                // 「作业真在跑」与「作业结束」两支都靠它把这一行换过来。
+                page.OnPageShown();
+                Application.DoEvents();
+
+                SelectTaskRow(page, task.Id);
+                var (scanButton, stopButton, progress) = ScanActionRow(page);
+
+                // 真的把键盘放到那颗「开始扫描」上（起点：焦点在那儿）。
+                scanButton.Focus();
+                Application.DoEvents();
+                if (!scanButton.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到那颗「{scanButton.Text}」上（焦点在 {FocusWhere(host)}）："
+                        + "起点就没有焦点，后面那一判等于没量。");
+                }
+
+                // 起一支真的在跑的作业：作业体空着，只等冒烟器放行。
+                var gate = new ManualResetEventSlim(false);
+                runner.Start(task.Id, "源码扫描", ctx => { gate.Wait(ctx.Token); return Task.FromResult<object?>(null); });
+                try
+                {
+                    // 页面自己的轮询把这一行换成「进度 + 停止」（那一行换显隐的唯一落点是 ShowJobState）。
+                    PumpUntilCondition(() => stopButton.Visible, "作业真在跑之后那一行换成「进度 + 停止」", 20_000);
+                    Application.DoEvents();
+
+                    if (scanButton.Visible)
+                    {
+                        throw new InvalidOperationException(
+                            "作业真在跑，那颗「开始扫描」还在屏上：这一行该换的是进度 + 停止。");
+                    }
+                    if (!stopButton.Enabled)
+                    {
+                        throw new InvalidOperationException(
+                            "作业真在跑，那颗「停止」是停用的：按不倒就谈不上把键盘交给它。");
+                    }
+                    if (!stopButton.Focused)
+                    {
+                        throw new InvalidOperationException(
+                            $"作业真在跑，键盘没有落到那颗「停止」上（焦点在 {FocusWhere(host)}）："
+                            + "那颗「开始扫描」被藏起来时框架把焦点挪走了，这一轮该把它交给还在屏上的那颗「停止」。");
+                    }
+                }
+                finally
+                {
+                    gate.Set();
+                }
+
+                // 作业结束之后：页面自己的轮询把这一行换回来，键盘该回到那颗「开始扫描」上。
+                PumpUntilCondition(() => scanButton.Visible && !stopButton.Visible,
+                    "作业结束之后那一行换回「开始扫描」", 20_000);
+                Application.DoEvents();
+                if (!scanButton.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"作业结束，键盘没有回到那颗「开始扫描」上（焦点在 {FocusWhere(host)}）："
+                        + "那颗「停止」被藏起来时框架把焦点挪走了，这一轮该把它交给还在屏上的那颗「开始扫描」。");
+                }
+                _lines.Add("     作业区那一行：作业真在跑时键盘落在那颗「停止」上，作业结束之后回到那颗「开始扫描」上"
+                    + $"（进度行可见 {progress.Visible}）");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    /// <summary>焦点此刻落在哪一颗控件上（人读的那一句；测不到就照实说「不在这个窗体里」）。</summary>
+    private static string FocusWhere(Form host)
+    {
+        var active = host.ActiveControl;
+        if (active is null) return "不在这个窗体里";
+        return string.IsNullOrWhiteSpace(active.Text) ? active.GetType().Name : $"「{active.Text}」";
+    }
+
+    /// <summary>
     /// 扫描区那一行的那颗「开始扫描」与那颗进度标签。
     /// <para>
     /// 按「同一行里既有「开始扫描」又有那颗「停止」」认，不按文案在全页找：引导横幅在「未扫描」那一步里
@@ -9176,7 +9337,7 @@ internal static class Program
     /// Label 就是进度标签（<c>TasksPage._progress</c>），行挪走或多了标签都报错点名，不静默量别的东西。
     /// </para>
     /// </summary>
-    private static (Button Scan, Label Progress) ScanActionRow(TasksPage page)
+    private static (Button Scan, Button Stop, Label Progress) ScanActionRow(TasksPage page)
     {
         var rows = FindAll<FlowLayoutPanel>(page)
             .Where(panel => panel.Controls.Cast<Control>().OfType<Button>().Any(button => button.Text == "开始扫描")
@@ -9196,7 +9357,10 @@ internal static class Program
             throw new InvalidOperationException($"扫描区那一行读到 {labels.Count} 个标签，进度标签不再独占那一行：量不到「进度行收起」这一判。");
         }
 
-        return (buttons.First(button => button.Text == "开始扫描"), labels[0]);
+        return (
+            buttons.First(button => button.Text == "开始扫描"),
+            buttons.First(button => button.Text == "停止"),
+            labels[0]);
     }
 
     /// <summary>

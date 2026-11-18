@@ -10,10 +10,14 @@ namespace ApifoxHelper.Desktop.Native;
 /// 框架会把焦点挪走，挪到哪一颗不由这一页决定（实测落在父面那一行上），于是「按完一次就得重新 Tab 回来」。
 /// </para>
 /// <para>
-/// <b>本文件只放判定</b>（不依赖 WinForms、与测试工程共享编译，真值表在 Linux 真执行）：
+/// <b>本文件只放词汇与判定</b>（不依赖 WinForms、与测试工程共享编译，真值表在 Linux 真执行）：
 /// 焦点原本在哪一颗、刷新之后哪几颗还在屏上，答「该把键盘交给哪一颗」。
 /// 触达控件的那一步收在 <c>TasksPage.RefreshNextBanner</c> 一处——它是横幅这一行「换字 + 显隐 + 交键盘」
 /// 的唯一落点，顺序（先记下焦点、再换显隐、最后交键盘）也只在那一处写一次。
+/// </para>
+/// <para>
+/// <b>算式只有一份</b>（第三百九十二轮）：这一条规则与作业区那两颗钮（<c>JobFocusPlan</c>）是同一条，
+/// 所以真值表收在 <see cref="FocusHandover"/> 里，两处各带一套叫法、各自调用它——不在两处各抄一份。
 /// </para>
 /// <para>
 /// <b>为什么顺序是判据</b>：<c>Visible = false</c> 一落下去，框架当场就把焦点挪走了——之后再读
@@ -28,13 +32,13 @@ namespace ApifoxHelper.Desktop.Native;
 public static class BannerFocusPlan
 {
     /// <summary>不动键盘（原本聚焦的那一颗还在屏上，或两颗都没有焦点）。</summary>
-    public const int None = -1;
+    public const int None = FocusHandover.None;
 
     /// <summary>把键盘交给主动作那一颗。</summary>
-    public const int Primary = 0;
+    public const int Primary = FocusHandover.First;
 
     /// <summary>把键盘交给次动作那一颗。</summary>
-    public const int Secondary = 1;
+    public const int Secondary = FocusHandover.Second;
 
     /// <summary>
     /// 刷新之后该把键盘交给哪一颗：<see cref="Primary"/> / <see cref="Secondary"/> / <see cref="None"/>。
@@ -46,9 +50,5 @@ public static class BannerFocusPlan
     /// </para>
     /// </summary>
     public static int Landing(bool primaryHadFocus, bool secondaryHadFocus, bool primaryVisible, bool secondaryVisible)
-    {
-        if (primaryHadFocus) return primaryVisible ? None : (secondaryVisible ? Secondary : None);
-        if (secondaryHadFocus) return secondaryVisible ? None : (primaryVisible ? Primary : None);
-        return None;
-    }
+        => FocusHandover.Landing(primaryHadFocus, secondaryHadFocus, primaryVisible, secondaryVisible);
 }

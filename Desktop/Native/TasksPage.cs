@@ -1146,6 +1146,9 @@ internal sealed class TasksPage : UserControl, INativePage
     private void ShowJobState(JobInfo? job)
     {
         RefreshDetailActions(job);
+        // 先记下焦点在哪一颗：换显隐之后就读不到了（与引导横幅同一纪律，算式在 JobFocusPlan）。
+        var scanHadFocus = _scanButton.Focused;
+        var stopHadFocus = _stopButton.Focused;
         if (job is not null)
         {
             // 记下 Id：作业一结束 Running 就答 null，终态与失败原因只能按 Id 读回（见 ShowJobOutcome）。
@@ -1171,6 +1174,12 @@ internal sealed class TasksPage : UserControl, INativePage
             _progress.Visible = false;
             _stopButton.Visible = false;
         }
+
+        // 原本聚焦的那一颗被藏起来了：把键盘交给还在屏上的那一颗（两颗都不在屏上时不猜）。
+        // 这一行只有这一处换显隐：作业起来时「开始扫描」藏、「停止」显，作业结束时反过来。
+        var landing = JobFocusPlan.Landing(scanHadFocus, stopHadFocus, _scanButton.Visible, _stopButton.Visible);
+        if (landing == JobFocusPlan.Scan) _scanButton.Focus();
+        else if (landing == JobFocusPlan.Stop) _stopButton.Focus();
     }
 
     private void OnTick()

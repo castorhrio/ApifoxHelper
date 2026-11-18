@@ -131,6 +131,9 @@
     <Compile Include="..\Desktop\Native\DetailFocusPlan.cs" Link="Shared\DetailFocusPlan.cs" />
     <!-- 引导横幅「刷新之后键盘落在哪一颗」的判定（第三百七十六轮）：纯逻辑、不依赖 WinForms，门在 BannerFocusPlanTests。 -->
     <Compile Include="..\Desktop\Native\BannerFocusPlan.cs" Link="Shared\BannerFocusPlan.cs" />
+    <!-- 键盘落点那一条规则的唯一算式（第三百九十二轮）：纯逻辑、不依赖 WinForms；横幅与作业区共用它，门在 JobFocusPlanTests。 -->
+    <Compile Include="..\Desktop\Native\FocusHandover.cs" Link="Shared\FocusHandover.cs" />
+    <Compile Include="..\Desktop\Native\JobFocusPlan.cs" Link="Shared\JobFocusPlan.cs" />
     <!-- 作业结束之后状态行该说的那一句（第三百七十八轮）：纯逻辑、不依赖 WinForms，门在 JobOutcomeTests。 -->
     <Compile Include="..\Desktop\Native\JobOutcome.cs" Link="Shared\JobOutcome.cs" />
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />
