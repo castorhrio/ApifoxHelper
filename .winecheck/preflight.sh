@@ -62,10 +62,12 @@ else
 fi
 
 # ② 源指纹：与 demo.sh 同一取法（源码内容、排除 bin/obj 与测试工程），不另立第二份口径。
+# 取的是**仓库内相对路径**（先 cd 到仓库根、`find .`），所以同一版源码换一个 clone 路径算出同一个指纹
+# （第三百九十九轮修掉的那条冷启动缺陷：旧取法把绝对路径哈希进去，换路径即红）。
 source_fingerprint() {
-  find "$REPO" -name bin -prune -o -name obj -prune -o \
-    -name '*.cs' -not -path "$REPO/ApifoxHelper.Tests/*" -print0 \
-    | LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum | cut -d' ' -f1
+  ( cd "$REPO" && find . -name bin -prune -o -name obj -prune -o \
+      -name '*.cs' -not -path './ApifoxHelper.Tests/*' -print0 \
+      | LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum | cut -d' ' -f1 )
 }
 
 echo

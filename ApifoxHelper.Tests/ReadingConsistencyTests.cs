@@ -1550,6 +1550,17 @@ public class ReadingConsistencyTests
             "取法退化：.winecheck/demo.sh 里找不到 source_fingerprint() 那个函数——"
             + "这一条门就失去了「与 shell 那一支逐字比」的对象。");
 
+        Assert.Equal(ShellFingerprint(bash, function.Value, Repo.Root), SourceFingerprint.OfRepo());
+    }
+
+    /// <summary>
+    /// 把 <c>demo.sh</c> 里那个 <c>source_fingerprint()</c> 原文交给 bash 跑一遍，返回它算出来的值。
+    /// <para>
+    /// <b>为什么原文取出来跑</b>：测试里抄第三份管道，就等于让「两份实现是否一致」这条门自己也有第三份口径。
+    /// </para>
+    /// </summary>
+    private static string ShellFingerprint(string bash, string function, string repo)
+    {
         var psi = new ProcessStartInfo(bash)
         {
             RedirectStandardInput = true,
@@ -1562,7 +1573,7 @@ public class ReadingConsistencyTests
         psi.Environment["LANG"] = "C.UTF-8";
 
         using var process = Process.Start(psi)!;
-        process.StandardInput.Write($"REPO={Repo.Root}\n{function.Value}\nsource_fingerprint\n");
+        process.StandardInput.Write($"REPO={repo}\n{function}\nsource_fingerprint\n");
         process.StandardInput.Close();
         var output = process.StandardOutput.ReadToEnd().Trim();
         var error = process.StandardError.ReadToEnd();
@@ -1570,7 +1581,84 @@ public class ReadingConsistencyTests
 
         Assert.True(process.ExitCode == 0,
             $"demo.sh 的 source_fingerprint() 退出码 {process.ExitCode}：{error.Trim()}");
-        Assert.Equal(output, SourceFingerprint.OfRepo());
+        return output;
+    }
+
+    /// <summary>
+    /// <b>同一版源码在两个不同路径下算出同一个指纹</b>（第三百九十九轮，简报 P0）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：旧取法把 <c>sha1sum</c> 打出来的<b>绝对路径</b>一起哈希进去，于是
+    /// <c>/opt/ApifoxHelper</c> 与 <c>/tmp/ah-cold</c> 各得一个指纹——同一版源码、换一个 clone 路径，
+    /// <c>preflight.sh</c> 第 ② 条就判「读数属于上一版代码」。答辩现场换一台机器 clone 一次即红，
+    /// 而源码一个字节没变。这一条把「指纹与 clone 路径无关」变成机械可判。
+    /// </para>
+    /// <para>
+    /// <b>为什么用两棵临时小树而不是两次 clone</b>：判的是<b>算法</b>与路径无关，不是这个仓有多大。
+    /// 两棵树内容逐字相同、路径不同（名字长度也不同，绝对路径的字节数因此不同），并且各自带一份
+    /// <c>bin/</c>、<c>obj/</c> 与 <c>ApifoxHelper.Tests/</c>——剪枝规则也一起判到。
+    /// 旧算法在这两棵树上必然算出两个值（绝对路径不同），所以这条门在磁盘变异实测下会红。
+    /// </para>
+    /// <para>
+    /// <b>判三件事</b>：① C# 这一份两棵树同值；② shell 那一份两棵树同值；③ 两份实现同值
+    /// （同一棵树）。没有 bash 的机器上 ②③ 判不到，只判 ①——判不到就说判不到，不静默绿。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void SourceFingerprint_IsTheSameForTheSameSourceAtTwoDifferentPaths()
+    {
+        var a = TempSourceTree("ah-fp-path-a-");
+        var b = TempSourceTree("ah-fp-path-b-with-a-longer-name-");
+        try
+        {
+            // ① C# 这一份：两棵树同值。
+            Assert.Equal(SourceFingerprint.Of(a), SourceFingerprint.Of(b));
+
+            var bash = RealMachineEvidenceTests.LocateBash();
+            if (bash is null) return; // 这台机器上没有 bash：②③ 判不到，不静默绿也不假装判过。
+
+            var demo = Repo.Source(".winecheck", "demo.sh");
+            var function = Regex.Match(demo, @"(?ms)^source_fingerprint\(\) \{.*?^\}");
+            Assert.True(function.Success,
+                "取法退化：.winecheck/demo.sh 里找不到 source_fingerprint() 那个函数——"
+                + "这一条门就失去了「两个路径各算一次」的对象。");
+
+            // ② shell 那一份：两棵树同值（旧算法在这里红——绝对路径进了哈希）。
+            var shellA = ShellFingerprint(bash, function.Value, a);
+            var shellB = ShellFingerprint(bash, function.Value, b);
+            Assert.Equal(shellA, shellB);
+
+            // ③ 两份实现同值：C# 与 shell 只有一处能改。
+            Assert.Equal(shellA, SourceFingerprint.Of(a));
+        }
+        finally
+        {
+            foreach (var dir in new[] { a, b })
+            {
+                try { Directory.Delete(dir, true); } catch (IOException) { /* 临时目录清不掉不影响判据 */ }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 一棵临时小树：内容固定、路径由调用方给（两棵树内容逐字相同，只有所在路径不同）。
+    /// 带 <c>bin/</c>、<c>obj/</c> 与 <c>ApifoxHelper.Tests/</c> 各一份，剪枝规则一起判到。
+    /// </summary>
+    private static string TempSourceTree(string prefix)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(dir, "Desktop", "Native"));
+        Directory.CreateDirectory(Path.Combine(dir, "Api"));
+        Directory.CreateDirectory(Path.Combine(dir, "bin", "Debug"));
+        Directory.CreateDirectory(Path.Combine(dir, "obj"));
+        Directory.CreateDirectory(Path.Combine(dir, "ApifoxHelper.Tests"));
+        File.WriteAllText(Path.Combine(dir, "Program.cs"), "class A { }");
+        File.WriteAllText(Path.Combine(dir, "Api", "ApiRoutes.cs"), "class R { }");
+        File.WriteAllText(Path.Combine(dir, "Desktop", "Native", "Ui.cs"), "class U { }");
+        // 下面三份必须被剪掉：进了哈希就说明剪枝规则坏了（那时两棵树仍同值，但值会与仓里那一份不同）。
+        File.WriteAllText(Path.Combine(dir, "bin", "Debug", "Generated.cs"), "class G { }");
+        File.WriteAllText(Path.Combine(dir, "obj", "Temp.cs"), "class T { }");
+        File.WriteAllText(Path.Combine(dir, "ApifoxHelper.Tests", "Tests.cs"), "class X { }");
+        return dir;
     }
 
     // ---------- 第二百八十五轮（简报 P0-2）：散文里那个指纹与文件里那个数 ----------

@@ -15,11 +15,19 @@ namespace ApifoxHelper.Tests;
 /// </para>
 /// <para>
 /// <b>口径逐字照抄 shell 那一支</b>（<c>demo.sh</c> 里那五行）：
-/// <c>find "$REPO" -name bin -prune -o -name obj -prune -o -name '*.cs'
-/// -not -path "$REPO/ApifoxHelper.Tests/*" -print0 | LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum</c>。
+/// <c>cd "$REPO" &amp;&amp; find . -name bin -prune -o -name obj -prune -o -name '*.cs'
+/// -not -path './ApifoxHelper.Tests/*' -print0 | LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum</c>。
 /// 也就是：<b>全部 <c>*.cs</c>，剪掉任何一层叫 <c>bin</c> / <c>obj</c> 的目录，剪掉测试工程</b>
 /// （测试工程不编进冒烟产物，改了它不该要求重发冒烟器），按路径字节序排好，逐文件 sha1，
-/// 再把「<c>哈希 + 两个空格 + 绝对路径</c>」这一串整体 sha1 一次。
+/// 再把「<c>哈希 + 两个空格 + 仓库内相对路径</c>」这一串整体 sha1 一次。
+/// </para>
+/// <para>
+/// <b>为什么是相对路径（第三百九十九轮）</b>：旧口径把<b>绝对路径</b>哈希进去，于是同一版源码
+/// 在 <c>/opt/ApifoxHelper</c> 与 <c>/tmp/ah-cold</c> 各得一个指纹——答辩现场换一台机器 clone 一次，
+/// <c>preflight.sh</c> 第 ② 条就判「读数属于上一版代码」，而源码一个字节没变。现在参与哈希的
+/// 是 <c>./Api/X.cs</c> 这种<b>仓库内相对路径</b>，与仓库所在的那一段路径无关。
+/// 这条性质由 <c>ReadingConsistencyTests.SourceFingerprint_IsTheSameForTheSameSourceAtTwoDifferentPaths</c>
+/// 机械判住（两棵内容相同、路径不同的树各算一次，逐字比）。
 /// </para>
 /// <para>
 /// <b>两份实现会不会漂</b>：会，而且漂了以后两边各自「自洽」。所以
@@ -42,7 +50,7 @@ internal static class SourceFingerprint
         {
             text.Append(Sha1Hex(File.ReadAllBytes(file)))
                 .Append("  ")
-                .Append(file)
+                .Append(RelativeKey(root, file))
                 .Append('\n');
         }
 
@@ -50,10 +58,26 @@ internal static class SourceFingerprint
     }
 
     /// <summary>
-    /// 参与指纹的文件（绝对路径，已按字节序排好）——与 shell 那一支的 <c>find</c> 逐条对应。
+    /// 参与哈希的那一串字符：<c>./</c> + 仓库内相对路径 + <c>/</c> 分隔
+    /// （与 shell 那一支 <c>find .</c> 打出来的形状逐字相同）。
+    /// <para>
+    /// <b>为什么不是绝对路径</b>：绝对路径里带着仓库所在的那一段，同一版源码换一个 clone 路径
+    /// 就算出另一个指纹（第三百九十九轮修掉的冷启动缺陷）。
+    /// </para>
+    /// </summary>
+    public static string RelativeKey(string root, string file) =>
+        "./" + Path.GetRelativePath(root, file).Replace('\\', '/');
+
+    /// <summary>
+    /// 参与指纹的文件（绝对路径，已按<b>相对路径</b>的字节序排好）——与 shell 那一支的 <c>find</c> 逐条对应。
     /// <para>
     /// 剪枝在<b>遍历时</b>做（不是先枚举再过滤）：<c>bin</c> / <c>obj</c> 底下有成千上万个文件，
     /// 先枚举再丢掉只是把同一件事做慢。
+    /// </para>
+    /// <para>
+    /// 排序键是<b>参与哈希的那串字符</b>（相对路径），不是绝对路径：两者只差一个公共前缀，
+    /// 排出来的次序通常一样，但「按什么排」与「按什么算」必须是同一件事（<c>demo.ps1</c>
+    /// 第二百零七轮就是栽在这条上）。
     /// </para>
     /// </summary>
     public static IReadOnlyList<string> Files(string root)
@@ -61,7 +85,7 @@ internal static class SourceFingerprint
         var tests = Path.Combine(root, "ApifoxHelper.Tests") + Path.DirectorySeparatorChar;
         return Walk(root)
             .Where(f => !f.StartsWith(tests, StringComparison.Ordinal))
-            .OrderBy(f => f, StringComparer.Ordinal)
+            .OrderBy(f => RelativeKey(root, f), StringComparer.Ordinal)
             .ToList();
     }
 

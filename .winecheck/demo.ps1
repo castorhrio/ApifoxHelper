@@ -73,15 +73,24 @@ function Get-Sha1Hex([byte[]]$bytes) {
 
 # 念出来的数必须出自当前源码。算式与 demo.sh 的 source_fingerprint 是同一条：排掉 bin 与 obj、
 # 排掉测试工程（它不编进这份产物，改了它不该要求重发冒烟器）、按路径排序、逐文件 sha1、
-# 再对「<sha1>  <路径>」拼起来的那份清单整体 sha1。跨平台时路径写法不同，判出的就是「不属于当前代码」——
-# 那正是这一条要的保守方向：宁可要求重发一次，也不把上一版的读数念成当前的。
+# 再对「<sha1>  <路径>」拼起来的那份清单整体 sha1。
+# 第三百九十九轮：参与哈希的那串字符是**仓库内相对路径**（`./Api/X.cs` 这种形状，与 demo.sh 的 `find .`
+# 逐字同形），不是绝对路径——旧取法把 clone 路径哈希进去，同一版源码换一个目录 clone 出来就判「不属于
+# 当前代码」，答辩现场换一台机器就红。现在同一版源码在任意 clone 路径下算出同一个指纹。
 function Get-SourceFingerprint {
-    $tests = (Join-Path $Repo 'ApifoxHelper.Tests').Replace('\', '/')
-    # 先把路径归一成 / 分隔，再排——排序键必须就是参与哈希的那串字符，否则「按什么排」与「按什么算」不是一回事。
-    $files = [string[]] @(Get-ChildItem -LiteralPath $Repo -Recurse -Filter '*.cs' |
+    $root = $Repo.TrimEnd('\', '/')
+    $tests = (Join-Path $root 'ApifoxHelper.Tests').Replace('\', '/')
+    # 先把路径归一成「./ + 仓库内相对路径 + / 分隔」，再排——排序键必须就是参与哈希的那串字符，
+    # 否则「按什么排」与「按什么算」不是一回事。绝对路径只用来读文件，不进哈希。
+    $full = @{}
+    $files = [string[]] @(Get-ChildItem -LiteralPath $root -Recurse -Filter '*.cs' |
         Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
         Where-Object { -not $_.FullName.Replace('\', '/').StartsWith($tests) } |
-        ForEach-Object { $_.FullName.Replace('\', '/') })
+        ForEach-Object {
+            $key = './' + $_.FullName.Substring($root.Length).TrimStart('\', '/').Replace('\', '/')
+            $full[$key] = $_.FullName
+            $key
+        })
     # 排字面量这一段：Sort-Object 默认按当前区域的语言序（忽略大小写与标点），会把
     # Api/ApiRoutes.cs 排到 Api/ApifoxRoutes.cs 之后（'f' < 'R' 在字母序里成立、在字节序里不成立），
     # 而 demo.sh 用的是 LC_ALL=C sort——字节序。第二百零七轮第一次真跑本脚本就是被这一点挡在门外：
@@ -89,7 +98,7 @@ function Get-SourceFingerprint {
     # 更坏的是用它 PUBLISH=1 跑一次会写下自己那份指纹，下一支 demo.sh 又反过来认不出来——
     # 两台机器之间来回踢。口径以 demo.sh 为准：这里显式取字节序（Ordinal）。
     [Array]::Sort($files, [System.StringComparer]::Ordinal)
-    $lines = @($files | ForEach-Object { (Get-Sha1Hex ([System.IO.File]::ReadAllBytes($_))) + '  ' + $_ })
+    $lines = @($files | ForEach-Object { (Get-Sha1Hex ([System.IO.File]::ReadAllBytes($full[$_]))) + '  ' + $_ })
     return (Get-Sha1Hex ([System.Text.Encoding]::UTF8.GetBytes(($lines -join "`n") + "`n")))
 }
 

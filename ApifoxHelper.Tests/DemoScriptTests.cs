@@ -359,7 +359,13 @@ public class DemoScriptTests
         Assert.Contains("| LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum", script, StringComparison.Ordinal);
         Assert.DoesNotContain("-newer \"$SMOKE_EXE\"", script, StringComparison.Ordinal);
         // 测试工程不编进这份产物：改了它不该要求重发冒烟器（否则每轮都会被自己的测试改动挡住）。
-        Assert.Contains(@"-not -path ""$REPO/ApifoxHelper.Tests/*""", script, StringComparison.Ordinal);
+        Assert.Contains(@"-not -path './ApifoxHelper.Tests/*'", script, StringComparison.Ordinal);
+        // 第三百九十九轮：参与哈希的是**仓库内相对路径**（先 cd 到仓库根、`find .`），不是绝对路径——
+        // 旧取法把 clone 路径哈希进去，同一版源码换一个目录 clone 出来就算出另一个指纹。
+        // 这一条判的是「取法的形状」；「两个不同路径算出同一个值」由
+        // ReadingConsistencyTests.SourceFingerprint_IsTheSameForTheSameSourceAtTwoDifferentPaths 真跑一遍判。
+        Assert.Contains(@"cd ""$REPO"" && find .", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"-not -path ""$REPO/", script, StringComparison.Ordinal);
         // bin/obj 必须排掉，否则构建产物自己进指纹。
         Assert.Contains("-name bin -prune", script, StringComparison.Ordinal);
         Assert.Contains("-name obj -prune", script, StringComparison.Ordinal);

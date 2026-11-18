@@ -40,10 +40,14 @@ esac
 # 硬链接，增量构建不刷新它的时间戳，结果「按脚本给的补救做完仍然被拦」——一个解不开的闸门比没有更糟。
 # 现按源码**内容**判：PUBLISH=1 强制重建并把指纹记在产物旁边，没给 PUBLISH 时逐字比那份指纹。
 # 测试工程不参与：它不编进这份产物，改了它不该要求重发冒烟器。
+# 第三百九十九轮：指纹必须与 clone 路径无关。旧取法把 `sha1sum` 打出来的**绝对路径**一起哈希进去，
+# 于是同一版源码在两个不同的 clone 路径下各得一个指纹——答辩现场换一台机器 clone 一次，
+# preflight ② 就判「读数属于上一版代码」，而源码一个字节没变。现改为先 cd 到仓库根、用 `find .` 取
+# **仓库内相对路径**（`./Api/X.cs` 这种形状），参与哈希的字符串里不再有仓库所在的那一段路径。
 source_fingerprint() {
-  find "$REPO" -name bin -prune -o -name obj -prune -o \
-    -name '*.cs' -not -path "$REPO/ApifoxHelper.Tests/*" -print0 \
-    | LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum | cut -d' ' -f1
+  ( cd "$REPO" && find . -name bin -prune -o -name obj -prune -o \
+      -name '*.cs' -not -path './ApifoxHelper.Tests/*' -print0 \
+      | LC_ALL=C sort -z | xargs -0 sha1sum | sha1sum | cut -d' ' -f1 )
 }
 
 STAMP="$(dirname "$SMOKE_EXE")/smoke-source.sha"
