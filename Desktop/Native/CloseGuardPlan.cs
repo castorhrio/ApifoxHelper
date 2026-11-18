@@ -41,6 +41,24 @@ namespace ApifoxHelper.Desktop.Native;
 /// 因为同一个任务作用域里可能跑着别的屏起的作业（任务页的扫描），拿作用域去问会把「别的屏在跑」
 /// 读成「这一屏在跑」，拦下时那一句就指错了事。判定语义一个字没改：<b>忙 + 用户按出来的关窗 = 拦</b>。
 /// </para>
+/// <para>
+/// <b>第三处：已核查，无第三处（第四百零四轮，控制仓简报 P0-2 的只读核查）</b>。核查口径是那三件套——
+/// 「作业跑着 + 那颗『停止』是唯一停止入口 + Esc / × 关窗」。逐屏现读的结果：
+/// <b>① 注释回写那一屏</b>（<c>ApplyPlanDialog</c>）跑作业，但这一屏<b>没有「停止」</b>
+/// （<c>CommentPlanService</c> 不接受取消），关窗不会关掉任何停止入口，形状不成立；
+/// <b>② 配置高级那一屏</b>（<c>ProfileAdvancedDialog</c>）的「从接口提取」是一次直接 <c>await</c>
+/// （<c>CancellationToken.None</c>），不走 <c>JobRunner</c>、也没有停止入口，形状不成立；
+/// <b>③ 主窗口</b>（<c>NativeShellForm</c>）关窗 = 退出应用，作业随进程结束，它走的是
+/// 「确认 + 宽限取消」那一支（<c>OnFormClosing</c> 里问一句、再 <c>StopAsync(grace)</c>），
+/// 不是「关掉唯一停止入口」这个形状；<b>④ 任务页</b>（<c>TasksPage</c>）有那颗「停止」，但它是主窗口里的
+/// 一页、不是能单独关掉的对话框，关它这件事不存在。其余各屏既不跑作业、也没有停止入口。
+/// </para>
+/// <para>
+/// <b>这句话现在有机械形态</b>：<c>ApifoxHelper.Tests/CloseGuardCoverageTests.cs</c> 拿
+/// 「对话框 + <c>Ui.DangerGhost("停止")</c> + <c>JobRunner</c>」三件套扫 <c>Desktop/Native/</c>，
+/// 与那张登记表两侧对账——<b>下一轮谁再给某一屏加一颗「停止」，这一条当场红</b>，逼他决定接不接守卫。
+/// 所以「无第三处」不再只是一句散文：它由那条门在每一轮重新核一遍。
+/// </para>
 /// </summary>
 public static class CloseGuardPlan
 {
