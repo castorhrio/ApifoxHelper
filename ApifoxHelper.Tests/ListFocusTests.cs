@@ -286,9 +286,17 @@ public class ListFocusTests
         // 所以落点是**文件清单**，只能落在清单自己身上（`Ui.KeepKeyboardOnQueue` 交的是队列，交不了「这一屏的清单」）。
         // 收窄不是放宽：那一份文件里 `.Focus()` 由**另一条门**逐处判（`ApplyPlanOpenFocusTests` 判「全文件恰好一处、
         // 且就是 `_list.Focus();`」，`ApplyBusyFocusPlanTests` 判「顺序与唯一落点」），两条门合起来比这一条更紧。
+        //
+        // **第四百轮按同一形状再收窄一处：`ProfileAdvancedDialog.cs`**。那一轮给「模块与模板」那一屏补了
+        // 「点下『从接口提取』之后键盘落在哪」（`ExtractBusyFocusPlan`）——那一颗被停用之后框架把焦点交给了
+        // 那颗「取消」（它同时是 CancelButton，一次回车就把整屏取消掉），而这一屏没有「停止」，
+        // 能接住键盘又不带副作用的落点只有多行输入框，所以落点是「模块」那一格（`_modules.Focus();`）。
+        // 收窄不是放宽：那一份文件里 `.Focus()` 由**另一条门**逐处判（`ExtractBusyFocusPlanTests` 判
+        // 「全文件恰好一处、且就是 `_modules.Focus();`」与「顺序与唯一落点」），两条门合起来比这一条更紧。
         foreach (var source in Repo.NativeSources().Where(s =>
                      !s.IsUi && s.Name != "TasksPage.cs" && s.Name != "ProjectsPage.cs"
-                     && s.Name != "SyncPreviewDialog.cs" && s.Name != "ApplyPlanDialog.cs"))
+                     && s.Name != "SyncPreviewDialog.cs" && s.Name != "ApplyPlanDialog.cs"
+                     && s.Name != "ProfileAdvancedDialog.cs"))
         {
             Assert.Empty(source.Matches(@"(?m)^\s*\w+\.Focus\(\);$"));
         }

@@ -140,6 +140,8 @@
     <Compile Include="..\Desktop\Native\SyncBusyFocusPlan.cs" Link="Shared\SyncBusyFocusPlan.cs" />
     <!-- 注释回写那一屏忙起来时的键盘落点（第三百九十七轮）：纯逻辑、不依赖 WinForms；与横幅、作业区、探测区、同步预览共用同一份算式，门在 ApplyBusyFocusPlanTests。 -->
     <Compile Include="..\Desktop\Native\ApplyBusyFocusPlan.cs" Link="Shared\ApplyBusyFocusPlan.cs" />
+    <!-- 「模块与模板」那一屏点下「从接口提取」之后的键盘落点（第四百轮）：纯逻辑、不依赖 WinForms；与横幅、作业区、探测区、同步预览、注释回写共用同一份算式，门在 ExtractBusyFocusPlanTests。 -->
+    <Compile Include="..\Desktop\Native\ExtractBusyFocusPlan.cs" Link="Shared\ExtractBusyFocusPlan.cs" />
     <!-- 作业结束之后状态行该说的那一句（第三百七十八轮）：纯逻辑、不依赖 WinForms，门在 JobOutcomeTests。 -->
     <Compile Include="..\Desktop\Native\JobOutcome.cs" Link="Shared\JobOutcome.cs" />
     <Compile Include="..\Desktop\Native\TaskCreation.cs" Link="Shared\TaskCreation.cs" />

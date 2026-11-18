@@ -361,6 +361,9 @@ internal static class Program
         Section("注释回写那一屏的键盘落点（焦点在「确认回写」上 → 真的点一次、这一屏进忙态 → 键盘交给文件清单 → 回写结束之后键盘留在清单上；真实控件、真实回写链路）", nameof(RunApplyBusyFocusHandover));
         RunApplyBusyFocusHandover(services, dataRoot);
 
+        Section("模块与模板那一屏的键盘落点（焦点在「从接口提取」上 → 真的点一次、这一颗被停用 → 读键盘落在哪 → 提取结束之后键盘在哪；真实控件、真实 CLI 读取链路）", nameof(RunExtractBusyFocusHandover));
+        RunExtractBusyFocusHandover(services, dataRoot);
+
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
@@ -12018,6 +12021,147 @@ internal static class Program
         {
             dialog?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 「模块与模板」那一屏（<c>ProfileAdvancedDialog</c>）点下「从接口提取」之后键盘落在哪（第四百轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：引导横幅那两颗（第三百七十六轮）、任务页作业区那两颗（第三百九十二轮）、
+    /// 连接与写入探测那两颗（第三百九十四轮）、同步预览那几颗动作钮（第三百九十六轮）、注释回写那一屏
+    /// （第三百九十八轮）都接了「接不住键盘了就把键盘交给还在屏上的那一颗」。这一屏是<b>同一形状的第六处</b>，
+    /// 而它此前一处都没有：点下「从接口提取」之后 <c>_extractButton.Enabled = false</c> 把刚按过的那一颗
+    /// <b>停用</b>——停用的控件接不住键盘，框架当场把焦点挪走。
+    /// </para>
+    /// <para>
+    /// <b>这一段先量、后改</b>（本仓第三百九十八轮同一纪律）：第四百轮先只写这一段、产品一个字节不动，
+    /// 在 wine 96 档跑一次，当场读到「点下『从接口提取』之后键盘落在「取消」上」——框架把焦点交给了那颗
+    /// 「取消」，而它是这一屏的 <c>CancelButton</c>，也是一颗<b>按钮</b>：键盘停在按钮上时一次回车就是点那一颗，
+    /// 于是「提取正在跑的时候按一下回车」= 把整屏取消掉。**挪到哪去了不靠推**，落点按量到的实物定。
+    /// </para>
+    /// <para>
+    /// <b>本环境量不到的那一半，如实说</b>：wine 里没有 node，<c>ApifoxCli.Resolve</c> 在第一个 await 之前就抛，
+    /// 于是这一屏的忙态窗口是<b>零长</b>（<c>Enabled = false</c> 与 <c>finally</c> 里的 <c>Enabled = true</c>
+    /// 落在同一个调用栈里）。所以这一段读的是<b>落点</b>，不判忙态长短——真机上窗口是秒级，落点同一处；
+    /// 「忙态持续多久」这一条随 G-D5 真机复核，本段不冒充量到。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判提取本身成不成功（那要真实 Apifox；本段只借这条路径把这一屏推进忙态，
+    /// 提取失败时状态行如实写失败原因，与键盘落点无关）；不判真机上焦点挪得顺不顺眼（G-D5，真机 0 台）。
+    /// </para>
+    /// </summary>
+    private static void RunExtractBusyFocusHandover(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var cli = services.GetRequiredService<ApifoxCli>();
+        ProfileAdvancedDialog? dialog = null;
+        try
+        {
+            RunAction("模块与模板落点：准备一份带项目 ID 的配置（真实落盘）", () =>
+            {
+                CreateProbeWorkspace(Path.Combine(dataRoot, "ExtractFocus.Api"));
+                profiles.Save(new ProjectProfile
+                {
+                    Name = "提取落点配置",
+                    WorkspaceRoot = dataRoot,
+                    ApiProject = "ExtractFocus.Api/ExtractFocus.Api.csproj",
+                    AllowedSourcePaths = ["ExtractFocus.Api/"],
+                    // 项目 ID 必须填：这一屏的「从接口提取」在项目 ID 为空时当场停在状态行、根本走不到忙态。
+                    Apifox = new ApifoxTarget { ProjectId = "1000001", BranchName = "main" },
+                }, isNew: true);
+                // 回读一遍：这一段的价值全在「落盘的那一份带着项目 ID」——项目 ID 为空时这一屏的
+                // 「从接口提取」当场停在状态行、根本走不到忙态，后面那两支就都量不到东西。
+                var saved = profiles.List().FirstOrDefault(p => p.Name == "提取落点配置")
+                    ?? throw new InvalidOperationException("配置没有落盘：后面两支要靠它把这一屏推进忙态。");
+                if (string.IsNullOrWhiteSpace(saved.Apifox.ProjectId))
+                {
+                    throw new InvalidOperationException(
+                        "落盘的配置里项目 ID 是空的：这一屏的「从接口提取」会当场停在状态行，本段走不到忙态。");
+                }
+                _lines.Add($"     模块与模板落点：一份带项目 ID 的配置（真实服务落盘，回读项目 ID = {saved.Apifox.ProjectId}）");
+            });
+
+            RunAction("模块与模板落点：焦点在「从接口提取」上 → 真的点一次 → 键盘落在「模块」那一格上", () =>
+            {
+                var profile = profiles.List().First(p => p.Name == "提取落点配置");
+                dialog = new ProfileAdvancedDialog(cli, profile);
+                dialog.Show();
+                Application.DoEvents();
+
+                var extract = ButtonOf(dialog, "从接口提取");
+                // 接口 ID 那一格：按「与那颗『从接口提取』同一行」认，不按「空输入框」认——
+                // 这一屏空着的输入框不止一个（目录 ID / 服务 ID / 标签 / 接口 ID 都由 LoadValues 填成空串），
+                // 按「唯一空框」取会当场读到多个（第四百轮实测：Sequence contains more than one matching element）。
+                var endpoint = FindAll<TextBox>(extract.Parent
+                        ?? throw new InvalidOperationException("那颗「从接口提取」没有父行：本段量测口径需要重定。"))
+                    .SingleOrDefault(box => !box.Multiline)
+                    ?? throw new InvalidOperationException("这一屏找不到与「从接口提取」同一行的接口 ID 输入框：本段量测口径需要重定。");
+                endpoint.Text = "2000002";
+                Application.DoEvents();
+
+                if (!extract.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        "填好接口 ID 之后那颗「从接口提取」仍是停用的：停用的钮接不住键盘，起点放不上焦点，后面那一判等于没量。");
+                }
+
+                extract.Focus();
+                Application.DoEvents();
+                if (!extract.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到「从接口提取」上（焦点在 {FocusWhere(dialog)}）：起点就没有焦点，后面那一判等于没量。");
+                }
+
+                extract.PerformClick();
+                Application.DoEvents();
+                var modules = FieldBoxByLabel(dialog, "模块");
+                if (!modules.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"点下「从接口提取」之后键盘没有落在「模块」那一格上（焦点在 {FocusWhere(dialog)}）："
+                        + "那颗钮被停用之后框架把焦点交给了别处，而这一屏的落点判定没有把它接回来。");
+                }
+                _lines.Add($"     模块与模板：点下「从接口提取」之后键盘落在「模块」那一格上（{FocusWhere(dialog)}）");
+            });
+
+            RunAction("模块与模板落点：提取结束之后键盘仍在「模块」那一格上（忙完不抢回按钮）", () =>
+            {
+                if (dialog is not { } shown) throw new InvalidOperationException("上一段没有产出这一屏。");
+                PumpUntil(shown.PendingExtract);
+                Application.DoEvents();
+                var modules = FieldBoxByLabel(shown, "模块");
+                if (!modules.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"提取结束之后键盘不在「模块」那一格上了（焦点在 {FocusWhere(shown)}）："
+                        + "忙完再交一次键盘就是把他正在看的那一格抢走。");
+                }
+                _lines.Add($"     模块与模板：提取结束之后键盘仍在「模块」那一格上（{FocusWhere(shown)}）");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 按字段名取两列字段网格里那一格的输入框（左列字段名、右列输入框，<c>Ui.FieldRow</c> 出厂）。
+    /// <para>
+    /// 不按「第几个输入框」「唯一空框」认：这一屏空着的输入框不止一个，按位置取会在字段增删时静默量到别的东西。
+    /// 字段名找不到、那一行右列是空的、或那一行里没有输入框，都当场报错点名，不静默量别的。
+    /// </para>
+    /// </summary>
+    private static TextBox FieldBoxByLabel(Control root, string label)
+    {
+        var grid = FindAll<TableLayoutPanel>(root)
+            .FirstOrDefault(panel => panel.Controls.Cast<Control>().OfType<Label>().Any(caption => caption.Text == label))
+            ?? throw new InvalidOperationException($"这一屏找不到字段名「{label}」所在的两列网格：本段量测口径需要重定。");
+        var caption = grid.Controls.Cast<Control>().OfType<Label>().First(c => c.Text == label);
+        var field = grid.GetControlFromPosition(1, grid.GetRow(caption))
+            ?? throw new InvalidOperationException($"字段名「{label}」那一行的右列是空的：本段量测口径需要重定。");
+        return FindAll<TextBox>(field).FirstOrDefault()
+            ?? throw new InvalidOperationException($"字段名「{label}」那一行里没有输入框：本段量测口径需要重定。");
     }
 
     /// <summary>这一屏状态行此刻的文字（失败诊断用：读不到就答「（读不到）」）。</summary>

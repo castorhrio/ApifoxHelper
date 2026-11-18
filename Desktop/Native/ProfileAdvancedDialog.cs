@@ -33,6 +33,9 @@ internal sealed class ProfileAdvancedDialog : DpiAwareForm
     // 状态行宿主：与两个主页面同一接线口径——放不下时右侧给「查看完整错误」入口。
     // 对话框的状态行宽度随对话框固定，长错误同样会被截断，此前只有悬停提示。
     private readonly StatusLineHost _statusLineHost;
+    /// <summary>冒烟器用：最近一次「从接口提取」的异步任务（按钮点击后由冒烟器等待完成）。</summary>
+    internal Task? PendingExtract { get; private set; }
+
     /// <summary>字段标识 → 描边面板：解析失败按 UserException.Field 定位描红（DESIGN.md §6 校验失败描边）。</summary>
     private readonly Dictionary<string, Ui.FieldBox> _fields = [];
 
@@ -52,7 +55,7 @@ internal sealed class ProfileAdvancedDialog : DpiAwareForm
         Font = UiTokens.Body.Value;
 
         _extractButton = Ui.Ghost("从接口提取");
-        _extractButton.Click += async (_, _) => await ExtractAsync();
+        _extractButton.Click += (_, _) => PendingExtract = ExtractAsync();
 
         var applyButton = Ui.Primary("确定");
         applyButton.Click += (_, _) => ApplyFields();
@@ -206,7 +209,17 @@ internal sealed class ProfileAdvancedDialog : DpiAwareForm
             SetStatus(ErrorCopy.NoApifoxProjectMessage, UiTokens.BadText);
             return;
         }
+        // 忙起来那一刻的键盘落点（第四百轮）：先记下焦点、再换可用性、最后交键盘——顺序是判据。
+        // Enabled = false 一落下去框架当场就把焦点挪走（wine 96 档实测挪到那颗「取消」上，而它是一颗按钮：
+        // 键盘停在按钮上时一次回车就是点那一颗，于是「提取正在跑的时候按一下回车」= 把整屏取消掉）。
+        // 之后再读 Focused 读到的是「已经不在它身上」，那一判永远答「不用交」，所以焦点必须在这之前记下来。
+        var pressed = _extractButton.Focused;
         _extractButton.Enabled = false;
+        if (ExtractBusyFocusPlan.OnBusy(pressed, _extractButton.Enabled, _modules.Visible && _modules.Enabled)
+            == ExtractBusyFocusPlan.FirstField)
+        {
+            _modules.Focus();
+        }
         SetStatus("正在按接口 ID 读取接口详情…", UiTokens.Muted);
         try
         {
