@@ -352,6 +352,9 @@ internal static class Program
         Section("连接与写入探测真的显示出来（四块停靠区高度对客户区、固定三块与 CapabilitiesLayout 对账、结果区实测高与算式对账、窗体客户区高与 DialogHeight 对账、结果区装得下七项探测结果、清单不出横向滚动条，真实控件量）", nameof(RunCapabilitiesShown));
         RunCapabilitiesShown(services, dataRoot);
 
+        Section("连接与写入探测那两颗钮的键盘落点（焦点在「运行写入探测」上 → 探测真在跑、这一行换成进度 + 停止 → 键盘交给那颗「停止」 → 探测结束 → 键盘回到那颗「运行写入探测」；真实控件、真实后台作业、这一屏自己的轮询）", nameof(RunProbeFocusHandover));
+        RunProbeFocusHandover(services, dataRoot);
+
         Section("差异检查结果真的显示出来（七块停靠区高度对客户区、接口清单装得下八行、两张清单都不出横向滚动条，真实控件量）", nameof(RunCheckResultsShown));
         RunCheckResultsShown(services, dataRoot);
 
@@ -11543,6 +11546,148 @@ internal static class Program
                     $"结果清单出了横向滚动条：列宽合计 {columnSum}px 超过清单可视宽 {visible}px——「详情」那一列在真实那一屏上被藏。");
             }
         });
+    }
+
+
+    /// <summary>
+    /// 连接与写入探测那一屏那两颗钮（「运行写入探测」与「停止」）的键盘落点（第三百九十四轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：引导横幅那两颗（第三百七十六轮）与任务页作业区那两颗（第三百九十二轮）都接了
+    /// 「被藏起来就把键盘交给还在屏上的那一颗」。这一屏是<b>同一形状的第三处</b>：探测一起来，
+    /// 「运行写入探测」被藏起来、「停止」显出来；探测结束之后反过来——而这一对至今没有落点纪律。
+    /// 焦点正落在被藏起来的那颗上时框架当场把焦点挪走（挪到父面那一行上），于是「按完『运行写入探测』，
+    /// 键盘不在任何能按的东西上」：想停掉这一次探测得先 Tab 一轮找回那颗「停止」。而这一屏的探测要往返写三段
+    /// 内容再逐项回读，<b>中途停下是正常操作</b>——找不到那颗「停止」的代价比别的屏更高。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：真的 <c>Show()</c> 出这一屏（<c>OnLoad</c> 会去查 CLI / 登录 / 项目读取，
+    /// 本环境查不到，那是产品路径上的失败态，不影响焦点），真的把键盘放到那颗「运行写入探测」上，
+    /// 真的起一支<b>作业体空着、只等冒烟器放行</b>的探测作业（与 <c>RunJobFocusHandover</c> 同一手法：
+    /// 产品代码一行未改，跑的是产品自己的 <c>JobRunner</c> 与这一屏自己的 500ms 轮询），读两支——
+    /// ① 探测真在跑、这一行换成「进度 + 停止」时，键盘落在那颗「停止」上；
+    /// ② 探测结束之后，键盘回到那颗「运行写入探测」上。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判探测本身跑不跑得通（那要真实 Apifox 测试接口），不判观感（随 G-D5 真机复核），
+    /// 也不判「交出去的那一颗能不能按」（界面自己的 <c>Enabled</c> 说了算）。
+    /// <b>这一跑是 wine + Xvfb 模拟器，不是真机。</b>
+    /// </para>
+    /// </summary>
+    private static void RunProbeFocusHandover(IServiceProvider services, string dataRoot)
+    {
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var store = services.GetRequiredService<FileStore>();
+        var jobs = services.GetRequiredService<JobRunner>();
+        var profile = profiles.Save(new ProjectProfile
+        {
+            Name = "探测区落点冒烟配置",
+            WorkspaceRoot = dataRoot,
+            ApiProject = "Focus.Api/Focus.Api.csproj",
+            AllowedSourcePaths = ["Focus.Api/"],
+            // 两个 Id 都填上：这一屏那颗「运行写入探测」只在「项目 ID + 接口 ID + 勾选确认」三条都成立时可用，
+            // 而停用的钮接不住键盘——起点放不上焦点，后面那一判就等于没量。
+            Apifox = new ApifoxTarget { ProjectId = "1000001", BranchName = "main" },
+        }, isNew: true);
+        var scope = CompatEntries.JobScope(profile.Id);
+
+        CapabilitiesDialog? dialog = null;
+        try
+        {
+            RunAction("连接与写入探测：焦点在「运行写入探测」上 → 探测真在跑（这一行换成进度 + 停止）→ 键盘交给那颗「停止」（真实控件、真实后台作业、这一屏自己的轮询）", () =>
+            {
+                dialog = new CapabilitiesDialog(services.GetRequiredService<CompatService>(), store, jobs, profile);
+                dialog.Show();
+                Application.DoEvents();
+
+                var runButton = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "运行写入探测")
+                    ?? throw new InvalidOperationException("这一屏找不到那颗「运行写入探测」：本段量测口径需要重定。");
+                var stopButton = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "停止")
+                    ?? throw new InvalidOperationException("这一屏找不到那颗「停止」：本段量测口径需要重定。");
+
+                // 接口 ID 那一格此刻是空的（项目 ID 与分支由 OnLoad 从配置填进来）：按「空的那一格」认，
+                // 不按控件顺序猜。勾选确认那一格是这一屏唯一的 CheckBox。
+                var endpoint = FindAll<TextBox>(dialog).SingleOrDefault(box => box.Text.Length == 0)
+                    ?? throw new InvalidOperationException("这一屏找不到空的「测试接口 ID」输入框：本段量测口径需要重定。");
+                var confirm = FindAll<CheckBox>(dialog).SingleOrDefault()
+                    ?? throw new InvalidOperationException("这一屏找不到「我确认这是可修改的测试接口」那一格：本段量测口径需要重定。");
+                endpoint.Text = "2000002";
+                confirm.Checked = true;
+                Application.DoEvents();
+
+                if (!runButton.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        "填好项目 ID / 接口 ID 并勾选确认之后，那颗「运行写入探测」仍是停用的："
+                        + "停用的钮接不住键盘，起点放不上焦点，后面那一判等于没量。");
+                }
+
+                // 真的把键盘放到那颗「运行写入探测」上（起点：焦点在那儿）。
+                runButton.Focus();
+                Application.DoEvents();
+                if (!runButton.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"焦点放不到那颗「{runButton.Text}」上（焦点在 {FocusWhere(dialog)}）："
+                        + "起点就没有焦点，后面那一判等于没量。");
+                }
+
+                // 起一支真的在跑的探测作业：作业体空着，只等冒烟器放行。
+                var gate = new ManualResetEventSlim(false);
+                jobs.Start(scope, "写入兼容探测", ctx => { gate.Wait(ctx.Token); return Task.FromResult<object?>(null); });
+                try
+                {
+                    // 这一屏自己的 500ms 轮询把这一行换成「进度 + 停止」（换显隐的唯一落点是 ShowProbeRunning）。
+                    PumpUntilCondition(() => stopButton.Visible, "探测真在跑之后那一行换成「进度 + 停止」", 20_000);
+                    Application.DoEvents();
+
+                    if (runButton.Visible)
+                    {
+                        throw new InvalidOperationException(
+                            "探测真在跑，那颗「运行写入探测」还在屏上：这一行该换的是进度 + 停止。");
+                    }
+                    if (!stopButton.Enabled)
+                    {
+                        throw new InvalidOperationException(
+                            "探测真在跑，那颗「停止」是停用的：按不倒就谈不上把键盘交给它。");
+                    }
+                    if (!stopButton.Focused)
+                    {
+                        throw new InvalidOperationException(
+                            $"探测真在跑，键盘没有落到那颗「停止」上（焦点在 {FocusWhere(dialog)}）："
+                            + "那颗「运行写入探测」被藏起来时框架把焦点挪走了，这一轮该把它交给还在屏上的那颗「停止」。");
+                    }
+                    _lines.Add("     探测区那一行：探测真在跑时键盘落在那颗「停止」上");
+                }
+                finally
+                {
+                    gate.Set();
+                }
+            });
+
+            RunAction("连接与写入探测：探测结束之后这一行换回「运行写入探测」→ 键盘回到它身上（真实控件、真实后台作业、这一屏自己的轮询）", () =>
+            {
+                if (dialog is not { } shown) throw new InvalidOperationException("上一段没有产出这一屏。");
+                var runButton = FindAll<Button>(shown).SingleOrDefault(button => button.Text == "运行写入探测")
+                    ?? throw new InvalidOperationException("这一屏找不到那颗「运行写入探测」：本段量测口径需要重定。");
+                var stopButton = FindAll<Button>(shown).SingleOrDefault(button => button.Text == "停止")
+                    ?? throw new InvalidOperationException("这一屏找不到那颗「停止」：本段量测口径需要重定。");
+
+                PumpUntilCondition(() => runButton.Visible && !stopButton.Visible,
+                    "探测结束之后那一行换回「运行写入探测」", 20_000);
+                Application.DoEvents();
+                if (!runButton.Focused)
+                {
+                    throw new InvalidOperationException(
+                        $"探测结束，键盘没有回到那颗「运行写入探测」上（焦点在 {FocusWhere(shown)}）："
+                        + "那颗「停止」被藏起来时框架把焦点挪走了，这一轮该把它交给还在屏上的那颗「运行写入探测」。");
+                }
+                _lines.Add("     探测区那一行：探测结束之后键盘回到那颗「运行写入探测」上");
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
     }
 
 

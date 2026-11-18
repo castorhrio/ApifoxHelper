@@ -269,6 +269,13 @@ internal static class MeasuredScreens
         new("连接与写入探测", "RunCapabilitiesShown",
             ["CapabilitiesDialog"], true, "第二百四十七轮",
             "docs/NOTES.md 第二百四十七轮：真的 Show() 出来之后量到结果区只剩 82px、清单本体 39px（装得下 1 行），窗体高改按「结果区要给几行」算"),
+        new("连接与写入探测那两颗钮的键盘落点", "RunProbeFocusHandover",
+            ["CapabilitiesDialog"], true, "第三百九十四轮",
+            "docs/NOTES.md 第三百九十四轮：真的显示这一屏、真的把键盘放到那颗「运行写入探测」上、真的起一支在跑的探测作业"
+            + "（作业体空着、只等冒烟器放行——探测要往返写三段内容，界面来不及看见它在跑），读两支——"
+            + "「探测真在跑、这一行换成进度 + 停止时，键盘落在那颗『停止』上」与「探测结束之后，键盘回到那颗"
+            + "『运行写入探测』上」；判据与落点在 Desktop/Native/ProbeFocusPlan.cs（算式只有一份，横幅那两颗、"
+            + "作业区那两颗与探测区那两颗共用），门在 ApifoxHelper.Tests/ProbeFocusPlanTests.cs；不是真机结果"),
 
         // ── 第二百四十八轮起逐屏收口：这一节此前是「未量：冒烟器只 new 一次 + 建句柄，从不显示」，
         //    三屏（契约检查结果 / 接口追踪明细 / 手工填写说明）与最后一屏（扫描警告）已逐轮真的 Show() 出来。

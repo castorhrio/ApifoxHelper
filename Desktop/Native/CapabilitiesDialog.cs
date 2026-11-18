@@ -298,9 +298,26 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         OnTick();
     }
 
-    /// <summary>探测执行中：输入禁用、运行钮换成停止（位置固定不跳位），状态行显示进行中说明。</summary>
+    /// <summary>
+    /// 探测执行中：输入禁用、运行钮换成停止（位置固定不跳位），状态行显示进行中说明。
+    /// <para>
+    /// <b>键盘跟着落到还在屏上的那一颗</b>（第三百九十四轮）：这一行与引导横幅、任务页作业区是同一形状
+    /// ——一颗被藏起来、另一颗显出来，而被藏起来的那颗此刻正拿着键盘。焦点落在被藏起来的那颗上时，
+    /// 框架当场把焦点挪走（挪到父面那一行上），于是「按完『运行写入探测』，键盘不在任何能按的东西上」：
+    /// 想停掉这一次探测得先 Tab 一轮找回那颗「停止」。判定在 <see cref="ProbeFocusPlan"/>（算式在
+    /// <see cref="FocusHandover"/>，三处共用一份），触达只在本方法一处。
+    /// </para>
+    /// <para>
+    /// <b>顺序是判据</b>：焦点必须在换显隐<b>之前</b>记下来（<c>Visible = false</c> 一落下去框架当场就把焦点挪走了，
+    /// 之后再读 <c>Focused</c> 永远答「不用交」）；交键盘排在 <see cref="RefreshRunState"/> 之后
+    /// （可用性先落定，交给一颗停用的钮是空操作）。
+    /// </para>
+    /// </summary>
     private void ShowProbeRunning(JobInfo? job)
     {
+        // 先记下焦点在哪一颗：换显隐与换可用性之后就读不到了（与引导横幅、任务页作业区同一纪律）。
+        var runHadFocus = _runButton.Focused;
+        var stopHadFocus = _stopButton.Focused;
         var running = job is not null;
         _runButton.Visible = !running;
         _stopButton.Visible = running;
@@ -315,6 +332,12 @@ internal sealed class CapabilitiesDialog : DpiAwareForm
         if (running) _statusHost.SetText("", _status.ForeColor);
         if (!running) _stopRequestedJobId = null;
         RefreshRunState();
+
+        // 原本聚焦的那一颗被藏起来了：把键盘交给还在屏上的那一颗（两颗都不在屏上时不猜）。
+        // 这一行只有这一处换显隐：探测起来时「运行写入探测」藏、「停止」显，探测结束时反过来。
+        var landing = ProbeFocusPlan.Landing(runHadFocus, stopHadFocus, _runButton.Visible, _stopButton.Visible);
+        if (landing == ProbeFocusPlan.Run) _runButton.Focus();
+        else if (landing == ProbeFocusPlan.Stop) _stopButton.Focus();
     }
 
     /// <summary>

@@ -233,14 +233,34 @@ public class CapabilitiesLayoutTests
     /// 通用的对账在 <c>MeasuredScreensTests</c>；这一条只钉「这一屏这一轮真的被认领了」，
     /// 免得下一轮有人把 <c>RunCapabilitiesShown</c> 删掉而登记表悄悄退回「未量」还全绿。
     /// </para>
+    /// <para>
+    /// <b>按段名取那一行，不按类名取</b>（第三百九十四轮）：这一屏此后有两行登记——
+    /// 「真的显示出来并量到高度」是 <c>RunCapabilitiesShown</c>（第二百四十七轮），
+    /// 「那两颗钮的键盘落点」是 <c>RunProbeFocusHandover</c>（第三百九十四轮），
+    /// 两行都认领同一个 <c>CapabilitiesDialog</c>。按类名取会撞上「不唯一」，
+    /// 那一行到底被认领成什么样就读不出来了；按段名取，两行各自被钉住。
+    /// </para>
     /// </summary>
     [Fact]
     public void MeasuredScreens_RegistersThisScreenAsMeasured()
     {
-        var row = MeasuredScreens.All.Single(r => r.Classes.Contains("CapabilitiesDialog", StringComparer.Ordinal));
+        var row = MeasuredScreens.All.Single(r => r.Section == "RunCapabilitiesShown");
         Assert.True(row.Measured, "「连接与写入探测」在登记表里又退回未量了：本轮真的 Show() 过它。");
-        Assert.Equal("RunCapabilitiesShown", row.Section);
+        Assert.Contains("CapabilitiesDialog", row.Classes);
         Assert.Equal("第二百四十七轮", row.Round);
+    }
+
+    /// <summary>
+    /// 这一屏的第二行登记（第三百九十四轮）：键盘落点那一段自己也真的显示过这一屏，
+    /// 也真的量到过「键盘落在那颗『停止』上」——所以它同样是「已量」，同样要写清轮次与出处。
+    /// </summary>
+    [Fact]
+    public void MeasuredScreens_RegistersTheFocusHandoverRowAsMeasured()
+    {
+        var row = MeasuredScreens.All.Single(r => r.Section == "RunProbeFocusHandover");
+        Assert.True(row.Measured, "键盘落点那一段真的显示过这一屏，登记表却标着未量——登记与实物对不上。");
+        Assert.Contains("CapabilitiesDialog", row.Classes);
+        Assert.Equal("第三百九十四轮", row.Round);
     }
 
     /// <summary>共享编译：这条算式与测试工程是同一份，不是测试里抄的第二份。</summary>
