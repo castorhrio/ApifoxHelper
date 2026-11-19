@@ -1,7 +1,7 @@
 namespace ApifoxHelper.Desktop.Native;
 
 /// <summary>
-/// 「新建任务」对话框里「模块」那一行下面的说明句该说哪一句（第四百一十二轮，具名 pass：harden）。
+/// 「新建任务」对话框里「模块」那一行下面的说明句该说哪一句（第四百一十二轮立，第四百一十三轮补第三句）。
 /// <para>
 /// <b>补的是哪个缺口</b>：这一句此前是一句写死的字面——「勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。」
 /// 而它下面那个清单是<b>按选中那一份配置的模块清单填的</b>：配置里一个模块都没配时，清单是空的，
@@ -11,9 +11,16 @@ namespace ApifoxHelper.Desktop.Native;
 /// 说明句必须点名<b>此刻屏上真的那一个对象</b>；没有那个对象时，它该说的是「没有」以及「那会怎样」。
 /// </para>
 /// <para>
-/// <b>这一份是什么</b>：这两句话的唯一落点——<see cref="WithModules"/>（有模块可勾时，就是此前那一句，
-/// 一字未改）、<see cref="NoModules"/>（这份配置没有模块时）、以及判定 <see cref="For"/>。
-/// 界面层不就地拼这两句，也不自己判「模块清单空不空」。
+/// <b>第四百一十三轮补的是同一族的第三条边</b>：第四百一十二轮只分了「有模块」与「没有模块」两种，
+/// 而<b>一份配置都没选中</b>（清单里一份配置都没有，下拉一项都没选）时走的是「有模块」那一句——
+/// 屏上是一个空框加一句「勾选要检查的模块」，而<b>连「这份配置」都还不存在</b>。用户既不知道
+/// 「为什么没有可勾的」，也不知道「先做什么」。所以判定由两向变三向，第三句说的是<b>下一步</b>：
+/// 先选一份配置，下面那个框才会列出它可勾的模块。
+/// </para>
+/// <para>
+/// <b>这一份是什么</b>：这三句话的唯一落点——<see cref="WithModules"/>（有模块可勾时，就是第四百一十二轮
+/// 之前那一句，一字未改）、<see cref="NoModules"/>（这份配置没有模块时）、<see cref="NoProfileSelected"/>
+/// （一份配置都没选中时）、以及判定 <see cref="For"/>。界面层不就地拼这三句，也不自己判「清单空不空」。
 /// </para>
 /// <para>
 /// <b>为什么说明句要跟着下拉一起换</b>：这个对话框里「项目配置」下拉一换，模块清单就整份重填
@@ -22,11 +29,13 @@ namespace ApifoxHelper.Desktop.Native;
 /// 所以判定与清单重填在同一处发生，两件事同一轮推导。
 /// </para>
 /// <para>
-/// <b>为什么「认不出」按「有模块」算</b>：<see cref="For"/> 收的是 <c>int?</c>——调用方在
-/// <b>一份配置都没选中</b>时给 <c>null</c>（清单为空，下拉一项都没选）。那时<b>不</b>说「这份配置没有模块」：
-/// 屏上根本没有「这份配置」，说成「没有模块」是把「没有对象」说成「对象是空的」
-/// （与 <see cref="FirstRunPlan.EmptyActionFor"/>、<see cref="ProfileLoadState"/> 那一族同一取舍）。
-/// 走的是此前那一句——认不出时不变差，认得出时才变好。
+/// <b>为什么「有没有选中配置」是一个独立的入参</b>：<see cref="For"/> 收 <c>(bool hasProfile, int moduleCount)</c>，
+/// 而不是一个 <c>int?</c>——「一份配置都没选中」与「选中的这份配置没有模块」是<b>两件事</b>：
+/// 前者屏上根本没有「这份配置」，说成「这份配置没有模块」是把「没有对象」说成「对象是空的」
+/// （与 <see cref="FirstRunPlan.EmptyActionFor"/>、<see cref="ProfileLoadState"/> 那一族同一取舍）；
+/// 后者对象在、只是它是空的。收成一个可空整数时，这两件事只能靠「传 null 还是传 0」的约定分开，
+/// 而约定写在调用点、判在另一处——第四百一十二轮正是这样，于是「一份配置都没有」那一格被读成了「有模块」。
+/// 拆成两个入参之后，调用点写的是它<b>真的知道</b>的那件事（选没选中），判定写的是「该说哪一句」。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判「模块清单该按什么排」（那是配置里 <c>Modules</c> 的顺序，这一轮不动它）；
@@ -49,12 +58,23 @@ public static class NewTaskModuleHint
     public const string NoModules = "这份配置没有模块：将检查该 API 项目的全部接口。";
 
     /// <summary>
-    /// 说明句该说哪一句：<b>模块清单是空的</b>（且确实选中了一份配置）时说 <see cref="NoModules"/>，
-    /// 其余（含认不出）说 <see cref="WithModules"/>。
+    /// <b>一份配置都没选中</b>时那一句（第四百一十三轮）：屏上那个框是空的，因为还没有「这份配置」——
+    /// 所以它说的是<b>下一步</b>（先选一份配置），以及那个框<b>什么时候</b>才会有东西（列出它可勾的模块）。
+    /// 它不出现「勾选」：此刻没有任何东西可勾，教人勾就是指向一个不存在的对象。
+    /// </summary>
+    public const string NoProfileSelected = "先选一份配置：下面列出它可勾的模块。";
+
+    /// <summary>
+    /// 说明句该说哪一句：<b>一份配置都没选中</b>时说 <see cref="NoProfileSelected"/>；
+    /// 选中了但<b>模块清单是空的</b>时说 <see cref="NoModules"/>；其余说 <see cref="WithModules"/>。
     /// <para>
-    /// 认不出（<c>null</c>）按「有模块」算的理由见类注释——不把「没有对象」说成「对象是空的」。
+    /// 两个入参各答一件事：<paramref name="hasProfile"/> 答「屏上有没有『这份配置』」，
+    /// <paramref name="moduleCount"/> 答「它里面有几个模块」。前者为假时后者没有意义（清单必空），
+    /// 所以先判它——把「没有对象」说成「对象是空的」正是第四百一十二轮那一格留下的边。
     /// </para>
     /// </summary>
-    public static string For(int? moduleCount) =>
-        moduleCount == 0 ? NoModules : WithModules;
+    public static string For(bool hasProfile, int moduleCount) =>
+        !hasProfile ? NoProfileSelected
+        : moduleCount == 0 ? NoModules
+        : WithModules;
 }

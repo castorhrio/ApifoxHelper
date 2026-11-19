@@ -319,7 +319,7 @@ internal static class Program
         Section("新建任务对话框的「项目配置」默认选中项（刚保存的那一份在清单里 → 默认选中它，哪怕它按名字排在后面 → 认不出（没保存过 / 已被删掉）→ 回退到清单第一项 → 清单为空 → 一项都不选 → 真的点空态那颗「新建任务」→ 对话框里选中的就是刚保存的那一份，真实控件）", nameof(RunNewTaskProfileDefault));
         RunNewTaskProfileDefault(services, dataRoot);
 
-        Section("新建任务对话框「模块」那一行的说明句（有模块的配置 → 原来那一句、清单两行 → 换到没有模块的配置 → 换成「这份配置没有模块：将检查该 API 项目的全部接口。」、清单真的空 → 再换回来 → 说明句与清单一起回来，真实控件）", nameof(RunNewTaskModuleHint));
+        Section("新建任务对话框「模块」那一行的说明句（有模块的配置 → 原来那一句、清单两行 → 换到没有模块的配置 → 换成「这份配置没有模块：将检查该 API 项目的全部接口。」、清单真的空 → 再换回来 → 说明句与清单一起回来 → 一份配置都没有的机器 → 换成「先选一份配置：下面列出它可勾的模块。」，真实控件）", nameof(RunNewTaskModuleHint));
         RunNewTaskModuleHint(services, dataRoot);
 
         Section("注释草稿四条入口的门控（未扫描 → 五颗全停用 → 已扫描且配置没配模型服务 → 「模型生成候选」那颗停用、其余四颗照常可用 → 已扫描且配置配了 OpenAI 兼容服务 → 五颗全可用 → 真的点一次停用的那颗：状态行一个字没变、没有作业起来，真实控件）", nameof(RunDraftEntryGates));
@@ -9249,9 +9249,12 @@ internal static class Program
     /// </para>
     /// <para>
     /// <b>这一段量什么</b>：一台机器上两份配置（一份两个模块、一份一个模块都没有），真的显示「新建任务」对话框，
-    /// 读三件事——① 默认选中那份有模块的配置时，说明句逐字是 <see cref="NewTaskModuleHint.WithModules"/>、清单里两行；
+    /// 读四件事——① 默认选中那份有模块的配置时，说明句逐字是 <see cref="NewTaskModuleHint.WithModules"/>、清单里两行；
     /// ② 把下拉换到那份没有模块的配置之后，说明句逐字换成 <see cref="NewTaskModuleHint.NoModules"/>、清单真的空；
-    /// ③ 再换回来，说明句与清单一起回来（说明句不是只在出厂时定一次）。
+    /// ③ 再换回来，说明句与清单一起回来（说明句不是只在出厂时定一次）；
+    /// ④ 换一台<b>一份配置都没有</b>的机器（第四百一十三轮），说明句逐字是
+    /// <see cref="NewTaskModuleHint.NoProfileSelected"/>、清单空——这一格此前走的是「有模块」那一句，
+    /// 屏上是一个空框加一句「勾选要检查的模块」，而连「这份配置」都还不存在。
     /// </para>
     /// <para>
     /// <b>它不量什么</b>：不量真机上这一句在 200% 档折不折行（随 G-D5 真机复核）。
@@ -9339,6 +9342,45 @@ internal static class Program
                         $"换回有模块的配置「{withModules.Name}」之后清单里 {list.Items.Count} 行，期望 2 行。");
                 }
                 _lines.Add($"     换回「{combo.SelectedItem}」→ 说明句「{hint.Text}」、清单 {list.Items.Count} 行");
+
+                // ④ 一份配置都没有的机器（第四百一十三轮）：屏上连「这份配置」都不存在，
+                //    说明句该说的是下一步（先选一份配置），而不是教人去勾一个不存在的模块。
+                //    这一格此前走的是「有模块」那一句——构造期没有 SelectedIndexChanged 可触发，
+                //    说明句就停在出厂那一句上。
+                var emptyProfiles = new ProfileStore(new FileStore(Path.Combine(root, "no-profiles")));
+                using var emptyDialog = new NewTaskDialog(emptyProfiles);
+                emptyDialog.Show();
+                Application.DoEvents();
+                var emptyCombo = FindFirst<ComboBox>(emptyDialog)
+                    ?? throw new InvalidOperationException("「新建任务」对话框（一份配置都没有）里找不到「项目配置」下拉框。");
+                var emptyList = FindFirst<ListView>(emptyDialog)
+                    ?? throw new InvalidOperationException("「新建任务」对话框（一份配置都没有）里找不到「模块」清单。");
+                // 那一格按工厂标记 + 出厂那一句 / 第三句认（同一屏另有四行说明，标记相同、文字不同）：
+                // 认两种字面，是为了让「说明句停在出厂那一句上」这件事被读成一句红话，而不是「找不到标签」。
+                var emptyHint = FindAll<Label>(emptyDialog).FirstOrDefault(label =>
+                        Equals(label.Tag, Ui.HintRowMarker)
+                        && (label.Text == NewTaskModuleHint.WithModules
+                            || label.Text == NewTaskModuleHint.NoProfileSelected))
+                    ?? throw new InvalidOperationException(
+                        "「新建任务」对话框（一份配置都没有）里找不到「模块」那一行的说明句（按 Ui.HintRowMarker 认）。");
+                if (!string.Equals(emptyHint.Text, NewTaskModuleHint.NoProfileSelected, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"一份配置都没有时，说明句是「{emptyHint.Text}」，期望「{NewTaskModuleHint.NoProfileSelected}」："
+                        + "它仍在教人「勾选要检查的模块」，而屏上连「这份配置」都还不存在——"
+                        + "构造期没有 SelectedIndexChanged 可触发，说明句就停在出厂那一句上了。");
+                }
+                if (emptyCombo.SelectedIndex != -1)
+                {
+                    throw new InvalidOperationException(
+                        $"一份配置都没有时下拉却选中了第 {emptyCombo.SelectedIndex} 项（期望一项都不选）。");
+                }
+                if (emptyList.Items.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"一份配置都没有时模块清单里还有 {emptyList.Items.Count} 行（期望 0 行）。");
+                }
+                _lines.Add($"     一份配置都没有 → 说明句「{emptyHint.Text}」、清单 {emptyList.Items.Count} 行");
             });
         }
         finally

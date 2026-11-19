@@ -1844,8 +1844,9 @@ internal sealed class NewTaskDialog : DpiAwareForm
     private readonly TextBox _keys = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly TextBox _note = Ui.Input();
     private readonly CheckBox _offline = new() { Text = "离线模式（本次任务不访问 Apifox，仅源码阶段）", AutoSize = true };
-    // 「模块」那一行下面的说明句（第四百一十二轮）：文字随选中那一份配置的模块数换，判定与两句字面
-    // 都在 NewTaskModuleHint 一处——本对话框只把「此刻清单里有几项」读给它，不就地拼这两句。
+    // 「模块」那一行下面的说明句（第四百一十二轮立、第四百一十三轮补第三句）：文字随「选没选中配置」
+    // 与「这份配置有几个模块」换，判定与三句字面都在 NewTaskModuleHint 一处——本对话框只把这两件事读给它，
+    // 不就地拼这三句。
     // 出厂那一句仍由 Ui.HintRow 那一行（裸语句）写下，这里只是把那一格取回来（见 ModuleHintLabel）。
     private readonly Label? _moduleHint;
     private readonly Label _status = Ui.StatusLine();
@@ -1950,6 +1951,10 @@ internal sealed class NewTaskDialog : DpiAwareForm
         // 而用户刚保存的那一份未必排第一——判定收在 NewTaskProfileChoice 一处，这里只落它的答案。
         var index = NewTaskProfileChoice.Index(available.Select(p => p.Id).ToList(), preferredProfileId);
         if (index != NewTaskProfileChoice.None) _profile.SelectedIndex = index;
+        // 一份配置都没有时，上面那一行不会触发 SelectedIndexChanged，说明句就停在出厂那一句上——
+        // 而屏上是一个空框加一句「勾选要检查的模块」（第四百一十三轮）。这里补一次推导：
+        // 清单本来就是空的，重填是空操作，真正要的是让说明句换成「先选一份配置」那一句。
+        else LoadModules();
     }
 
     /// <summary>
@@ -1969,8 +1974,9 @@ internal sealed class NewTaskDialog : DpiAwareForm
     /// <see cref="NewTaskModuleHint"/> 一处，本方法只把「此刻清单里有几项」读给它。
     /// </para>
     /// <para>
-    /// <b>没选中配置时给 <c>null</c> 而不是 0</b>：清单为空、下拉一项都没选时，屏上根本没有「这份配置」，
-    /// 说成「这份配置没有模块」是把「没有对象」说成「对象是空的」（取舍见 <see cref="NewTaskModuleHint.For"/>）。
+    /// <b>「一份配置都没选中」与「这份配置没有模块」是两件事</b>（第四百一十三轮）：前者屏上根本没有
+    /// 「这份配置」，说成「这份配置没有模块」是把「没有对象」说成「对象是空的」（取舍见
+    /// <see cref="NewTaskModuleHint.For"/>）。所以判定收两个入参——选没选中、这份配置里有几个模块。
     /// </para>
     /// </summary>
     private void LoadModules()
@@ -1988,7 +1994,10 @@ internal sealed class NewTaskDialog : DpiAwareForm
         _modules.EndUpdate();
         if (_moduleHint is not null)
         {
-            _moduleHint.Text = NewTaskModuleHint.For(selected is null ? null : _modules.Items.Count);
+            // 两个入参各答一件事（第四百一十三轮）：选没选中配置、这份配置里有几个模块。
+            // 此前收成一个可空整数，于是「一份配置都没有」与「这份配置没有模块」只能靠传 null / 0 分开，
+            // 而那一格被读成了「有模块」——屏上是一个空框加一句「勾选要检查的模块」。
+            _moduleHint.Text = NewTaskModuleHint.For(selected is not null, _modules.Items.Count);
         }
     }
 

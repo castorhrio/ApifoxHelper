@@ -5,7 +5,7 @@ using Xunit;
 namespace ApifoxHelper.Tests;
 
 /// <summary>
-/// 「新建任务」对话框里「模块」那一行下面的说明句（第四百一十二轮，具名 pass：harden）。
+/// 「新建任务」对话框里「模块」那一行下面的说明句（第四百一十二轮立，第四百一十三轮补第三句）。
 /// <para>
 /// <b>补的是哪个缺口</b>：这一句此前是一句写死的字面——「勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。」
 /// 而它下面那个清单是按<b>选中那一份配置的模块清单</b>填的。配置里一个模块都没配时清单是空的，
@@ -14,13 +14,19 @@ namespace ApifoxHelper.Tests;
 /// 这与第四十六轮「文字不指向不存在的按钮」、第五十轮「提示所指引的恢复路径不可达」是同一族。
 /// </para>
 /// <para>
-/// <b>本文件判什么</b>：① 判定 <c>NewTaskModuleHint.For</c> 三个方向（0 / 正数 / 认不出）各答哪一句；
-/// ② 两句都说出「那会怎样」（检查该 API 项目的全部接口），而「没有模块」那一句<b>不再教人去勾</b>；
-/// ③ 有模块那一句<b>逐字</b>是改动之前那一句（这一轮改的是「什么时候说哪一句」，不是话本身）；
-/// ④ 两句都是单句、长度在说明行的上限之内（<c>CaptionBrevityTests</c> 那一族的口径）；
+/// <b>第四百一十三轮补的是同一族的第三条边</b>：一份配置都没选中时，屏上连「这份配置」都不存在，
+/// 而说明句走的是「有模块」那一句。判定由两向变三向，第三句说的是<b>下一步</b>（先选一份配置）。
+/// </para>
+/// <para>
+/// <b>本文件判什么</b>：① 判定 <c>NewTaskModuleHint.For</c> 三个方向（没选中配置 / 选中了但没模块 / 有模块）各答哪一句；
+/// ② 三句都说出「那会怎样」或「下一步做什么」，而「没有模块」与「没选中配置」那两句<b>不再教人去勾</b>；
+/// ③ 有模块那一句<b>逐字</b>是第四百一十二轮之前那一句、没有模块那一句<b>逐字</b>是第四百一十二轮那一句
+/// （这一轮改的是「什么时候说哪一句」，不是话本身）；
+/// ④ 三句都是单句、长度在说明行的上限之内（<c>CaptionBrevityTests</c> 那一族的口径）；
 /// ⑤ 对话框读的是这一处判定，不自己拼字面、也不自己判「清单空不空」；
-/// ⑥ 说明句与清单<b>同一轮推导</b>（<c>LoadModules</c> 是唯一赋值点），且下拉的订阅在说明行出厂之后
-/// （否则第一次选中事件会撞上一个还没赋值的标签）。
+/// ⑥ 说明句与清单<b>同一轮推导</b>（<c>LoadModules</c> 是唯一赋值点），下拉的订阅在说明行出厂之后
+/// （否则第一次选中事件会撞上一个还没赋值的标签），且<b>一份配置都没有</b>时构造期也推导一次
+/// （否则说明句停在出厂那一句上，屏上是一个空框加一句「勾选要检查的模块」）。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判真机上这一句在 200% 档折不折行（随 G-D5 真机复核）；
@@ -35,29 +41,35 @@ public class NewTaskModuleHintTests
     private const int MaxHintLength = 40;
 
     /// <summary>
-    /// ① 三个方向：清单空（且确实选中了一份配置）说「没有模块」那一句；有模块说原来那一句；
-    /// 认不出（一份配置都没选中）按「有模块」算——不把「没有对象」说成「对象是空的」。
+    /// ① 三个方向：一份配置都没选中说「先选一份配置」那一句；选中了但清单空说「没有模块」那一句；
+    /// 有模块说原来那一句。两个入参各答一件事，所以「没选中」与「选中了但空」不再共用一格。
     /// </summary>
     [Fact]
     public void For_AnswersTheSentenceThatMatchesTheList()
     {
-        Assert.Equal(NewTaskModuleHint.NoModules, NewTaskModuleHint.For(0));
-        Assert.Equal(NewTaskModuleHint.WithModules, NewTaskModuleHint.For(1));
-        Assert.Equal(NewTaskModuleHint.WithModules, NewTaskModuleHint.For(3));
-        // 认不出：一份配置都没选中时屏上没有「这份配置」，说成「没有模块」是把没有对象说成对象是空的。
-        Assert.Equal(NewTaskModuleHint.WithModules, NewTaskModuleHint.For(null));
+        // 一份配置都没选中：屏上没有「这份配置」，说的是下一步。
+        Assert.Equal(NewTaskModuleHint.NoProfileSelected, NewTaskModuleHint.For(false, 0));
+        // 选中了、但这份配置一个模块都没有：对象在、只是它是空的。
+        Assert.Equal(NewTaskModuleHint.NoModules, NewTaskModuleHint.For(true, 0));
+        // 有模块：第四百一十二轮之前那一句。
+        Assert.Equal(NewTaskModuleHint.WithModules, NewTaskModuleHint.For(true, 1));
+        Assert.Equal(NewTaskModuleHint.WithModules, NewTaskModuleHint.For(true, 3));
+        // 没选中配置时模块数没有意义（清单必空）：传什么数都答同一句，不因为传了个正数就改口。
+        Assert.Equal(NewTaskModuleHint.NoProfileSelected, NewTaskModuleHint.For(false, 2));
     }
 
     /// <summary>
-    /// ② 两句都说出「那会怎样」，而「没有模块」那一句不再教人去勾一个不存在的东西。
+    /// ② 三句各答一件用户真正要知道的事，而「没有模块」与「没选中配置」那两句不再教人去勾一个不存在的东西。
     /// <para>
-    /// 这一条是这一轮的全部意义：空清单 + 「勾选要检查的模块」= 指着一个屏上不存在的对象。
+    /// 这一条是这一族的全部意义：空清单 + 「勾选要检查的模块」= 指着一个屏上不存在的对象。
     /// </para>
     /// </summary>
     [Fact]
     public void NoModules_SaysWhyTheBoxIsEmptyAndWhatHappensInstead()
     {
         Assert.NotEqual(NewTaskModuleHint.WithModules, NewTaskModuleHint.NoModules);
+        Assert.NotEqual(NewTaskModuleHint.WithModules, NewTaskModuleHint.NoProfileSelected);
+        Assert.NotEqual(NewTaskModuleHint.NoModules, NewTaskModuleHint.NoProfileSelected);
         // 两句都答「那这一次检查什么」——用户真正要知道的那件事。
         Assert.Contains("该 API 项目的全部接口", NewTaskModuleHint.WithModules, StringComparison.Ordinal);
         Assert.Contains("该 API 项目的全部接口", NewTaskModuleHint.NoModules, StringComparison.Ordinal);
@@ -65,25 +77,33 @@ public class NewTaskModuleHintTests
         Assert.DoesNotContain("勾选", NewTaskModuleHint.NoModules, StringComparison.Ordinal);
         // 它先说「没有」：用户看到的空框因此有了解释。
         Assert.Contains("没有模块", NewTaskModuleHint.NoModules, StringComparison.Ordinal);
+        // 没选中配置那一句答的是「下一步」：先选一份配置，那个框才会有东西。
+        Assert.DoesNotContain("勾选", NewTaskModuleHint.NoProfileSelected, StringComparison.Ordinal);
+        Assert.Contains("先选一份配置", NewTaskModuleHint.NoProfileSelected, StringComparison.Ordinal);
+        Assert.Contains("模块", NewTaskModuleHint.NoProfileSelected, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// ③ 有模块那一句逐字是改动之前那一句：这一轮改的是「什么时候说哪一句」，不是话本身
+    /// ③ 前两句逐字是改动之前那两句：这一轮改的是「什么时候说哪一句」，不是话本身
     /// （与 <c>HintRowTests.TheHintTexts_AreWordForWordUnchanged</c> 同一纪律）。
     /// </summary>
     [Fact]
     public void WithModules_IsWordForWordTheSentenceThatWasThereBefore()
     {
         Assert.Equal("勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。", NewTaskModuleHint.WithModules);
+        Assert.Equal("这份配置没有模块：将检查该 API 项目的全部接口。", NewTaskModuleHint.NoModules);
     }
 
     /// <summary>
-    /// ④ 两句都是单句、长度在说明行上限之内：说明行是注脚，不是段落（<c>CaptionBrevityTests</c> 同一口径）。
+    /// ④ 三句都是单句、长度在说明行上限之内：说明行是注脚，不是段落（<c>CaptionBrevityTests</c> 同一口径）。
     /// </summary>
     [Fact]
     public void BothSentences_AreOneShortSentence()
     {
-        foreach (var text in new[] { NewTaskModuleHint.WithModules, NewTaskModuleHint.NoModules })
+        foreach (var text in new[]
+                 {
+                     NewTaskModuleHint.WithModules, NewTaskModuleHint.NoModules, NewTaskModuleHint.NoProfileSelected,
+                 })
         {
             Assert.EndsWith("。", text, StringComparison.Ordinal);
             // 句号只出现在末尾：中间再断一句，这一行就成了两句话的段落。
@@ -108,7 +128,8 @@ public class NewTaskModuleHintTests
             TasksPageSource, StringComparison.Ordinal);
         // 那一格按工厂标记 + 出厂字面取回（同一屏另有四行说明，标记相同、文字不同）。
         Assert.Contains("_moduleHint = ModuleHintLabel(grid);", TasksPageSource, StringComparison.Ordinal);
-        Assert.Contains("_moduleHint.Text = NewTaskModuleHint.For(selected is null ? null : _modules.Items.Count);",
+        // 判定收两个入参：选没选中配置、这份配置里有几个模块（第四百一十三轮）。
+        Assert.Contains("_moduleHint.Text = NewTaskModuleHint.For(selected is not null, _modules.Items.Count);",
             TasksPageSource, StringComparison.Ordinal);
         // 取不到那一格时不重写、也不抛：屏上留着出厂那一句（不变差）。
         Assert.Contains("if (_moduleHint is not null)", TasksPageSource, StringComparison.Ordinal);
@@ -116,11 +137,17 @@ public class NewTaskModuleHintTests
         Assert.Contains("_moduleHint.Text = NewTaskModuleHint.For(", TasksPageSource, StringComparison.Ordinal);
         // 判定不在这里再写一遍：对话框里不出现「模块数 == 0」这类第二份判据。
         Assert.DoesNotContain("Modules.Count == 0", TasksPageSource, StringComparison.Ordinal);
+        // 也不许把「选没选中」再收成一个可空整数（第四百一十三轮之前正是那个形状）。
+        Assert.DoesNotContain("For(selected is null ? null :", TasksPageSource, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// ⑥ 说明句与清单<b>同一轮推导</b>：<c>LoadModules</c> 是 <c>_moduleHint.Text</c> 的唯一赋值点，
     /// 且下拉的订阅在说明行出厂<b>之后</b>——订阅早于赋值的话，第一次选中事件会撞上一个还没赋值的标签。
+    /// <para>
+    /// 第四百一十三轮补的那一条：<b>一份配置都没有</b>时，构造期不会触发 <c>SelectedIndexChanged</c>，
+    /// 所以构造期必须自己推导一次——否则说明句停在出厂那一句上，屏上是一个空框加一句「勾选要检查的模块」。
+    /// </para>
     /// </summary>
     [Fact]
     public void TheSentenceFollowsTheProfileSelection_AndTheSubscriptionComesAfterTheHintRow()
@@ -139,6 +166,12 @@ public class NewTaskModuleHintTests
         Assert.True(subscription >= 0, "对话框里找不到「下拉一换就重填模块清单」那一处订阅。");
         Assert.True(hintRow < subscription,
             "下拉的订阅排在说明行出厂之前：第一次选中事件会撞上一个还没赋值的 _moduleHint（构造期空引用）。");
+
+        // 一份配置都没有时构造期也推导一次：`if (index != None) … else LoadModules();`
+        var constructor = MethodBody(TasksPageSource, "public NewTaskDialog(ProfileStore profiles, string? preferredProfileId = null)");
+        Assert.Contains("if (index != NewTaskProfileChoice.None) _profile.SelectedIndex = index;", constructor,
+            StringComparison.Ordinal);
+        Assert.Contains("else LoadModules();", constructor, StringComparison.Ordinal);
     }
 
     /// <summary>按「下一个顶格 <c>private</c> 声明」切方法体（与 <c>HintRowTests</c> 同一取法）。</summary>
