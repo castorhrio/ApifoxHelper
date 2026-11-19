@@ -1844,6 +1844,10 @@ internal sealed class NewTaskDialog : DpiAwareForm
     private readonly TextBox _keys = Ui.Input(multiline: true, scrollBars: ScrollBars.Vertical);
     private readonly TextBox _note = Ui.Input();
     private readonly CheckBox _offline = new() { Text = "离线模式（本次任务不访问 Apifox，仅源码阶段）", AutoSize = true };
+    // 「模块」那一行下面的说明句（第四百一十二轮）：文字随选中那一份配置的模块数换，判定与两句字面
+    // 都在 NewTaskModuleHint 一处——本对话框只把「此刻清单里有几项」读给它，不就地拼这两句。
+    // 出厂那一句仍由 Ui.HintRow 那一行（裸语句）写下，这里只是把那一格取回来（见 ModuleHintLabel）。
+    private readonly Label? _moduleHint;
     private readonly Label _status = Ui.StatusLine();
     // 状态行宿主：与外层页面同一接线口径——放不下时右侧给「查看完整错误」入口。
     private readonly StatusLineHost _statusHost;
@@ -1884,8 +1888,6 @@ internal sealed class NewTaskDialog : DpiAwareForm
         AcceptButton = scanButton;
         CancelButton = cancelButton;
 
-        _profile.SelectedIndexChanged += (_, _) => LoadModules();
-
         // 指定接口为多行输入：内层文本框定高，Ui.Field 的尺寸双向同步会带着描边面板一起变高。
         _keys.Height = 62;
         // 列宽留在 AddRow 的字段下限（380）之内：多出来的宽度是整行勾选的可点面，不逼出横向滚动条。
@@ -1899,6 +1901,8 @@ internal sealed class NewTaskDialog : DpiAwareForm
         var moduleHost = Ui.Hairline(_modules);
         moduleHost.Height = 96;
         AddRow(grid, "模块", moduleHost);
+        // 这一句随选中那一份配置的模块数换（第四百一十二轮）：出厂先给「有模块」那一句（就是此前那一句，
+        // 逐字未改）；真正的取值在 LoadModules 里按 NewTaskModuleHint.For 一处判。
         Ui.HintRow(grid, "勾选要检查的模块；都不勾选则检查该 API 项目的全部接口。", HintRowForm.Field);
         AddRow(grid, "路径前缀", Ui.Field(_prefixes));
         Ui.HintRow(grid, "补充接口路径前缀，用「,」「;」分隔；可与模块并用。", HintRowForm.Field);
@@ -1908,6 +1912,10 @@ internal sealed class NewTaskDialog : DpiAwareForm
         _note.PlaceholderText = TaskCreation.NotePlaceholder;
         Ui.HintRow(grid, TaskCreation.NoteFallbackHint, HintRowForm.Field);
         AddRow(grid, "", _offline);
+        // 把「模块」那一行的说明句取回来（第四百一十二轮）：它由上面那一句 Ui.HintRow 出厂，
+        // 换配置时要重写它的文字。取法按工厂留的标记 + 出厂那一句的字面（同一屏另有四行说明，
+        // 标记相同、文字不同），取不到就答 null——那时不重写，屏上留着出厂那一句（不变差）。
+        _moduleHint = ModuleHintLabel(grid);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(UiTokens.Xl, UiTokens.Sm, UiTokens.Xl, UiTokens.Lg), BackColor = UiTokens.Panel };
         // RightToLeft 流向：先加的在最右，主行动（创建并扫描）在最右。
@@ -1929,6 +1937,10 @@ internal sealed class NewTaskDialog : DpiAwareForm
         Controls.Add(buttons);
         Controls.Add(statusHost);
 
+        // 下拉一换就重填模块清单（说明句跟着换，见 LoadModules）。订阅放在这里而不是构造开头：
+        // 说明行那一格在它之前出厂，订阅早于赋值的话，第一次选中事件会撞上一个还没赋值的 _moduleHint。
+        _profile.SelectedIndexChanged += (_, _) => LoadModules();
+
         var available = _profiles.List();
         foreach (var profile in available)
         {
@@ -1940,18 +1952,44 @@ internal sealed class NewTaskDialog : DpiAwareForm
         if (index != NewTaskProfileChoice.None) _profile.SelectedIndex = index;
     }
 
+    /// <summary>
+    /// 取回「模块」那一行的说明句标签（第四百一十二轮）：按工厂留的标记 <see cref="Ui.HintRowMarker"/>
+    /// 与出厂那一句的字面认——同一屏另有四行说明，标记相同、文字不同。取不到答 <c>null</c>，
+    /// 调用方据此不重写（屏上留着出厂那一句，不变差），不抛、也不猜另一格。
+    /// </summary>
+    private static Label? ModuleHintLabel(TableLayoutPanel grid) =>
+        grid.Controls.OfType<Label>().FirstOrDefault(label =>
+            Equals(label.Tag, Ui.HintRowMarker) && label.Text == NewTaskModuleHint.WithModules);
+
+    /// 按选中那一份配置重填模块清单，并把「模块」那一行的说明句换成与它相符的那一句（第四百一十二轮）。
+    /// <para>
+    /// <b>两件事在同一处发生</b>：说明句说的是「这个清单里有什么」，清单换了它就得跟着换——
+    /// 只在出厂时定一次的话，换到另一份配置之后它说的还是上一份的情况（配置里没有模块时，
+    /// 它仍在教人「勾选要检查的模块」，而框里一个可勾的都没有）。判定与两句字面都在
+    /// <see cref="NewTaskModuleHint"/> 一处，本方法只把「此刻清单里有几项」读给它。
+    /// </para>
+    /// <para>
+    /// <b>没选中配置时给 <c>null</c> 而不是 0</b>：清单为空、下拉一项都没选时，屏上根本没有「这份配置」，
+    /// 说成「这份配置没有模块」是把「没有对象」说成「对象是空的」（取舍见 <see cref="NewTaskModuleHint.For"/>）。
+    /// </para>
+    /// </summary>
     private void LoadModules()
     {
         _modules.BeginUpdate();
         _modules.Items.Clear();
-        if (_profile.SelectedItem is ProfileItem item)
+        var selected = _profile.SelectedItem as ProfileItem;
+        if (selected is not null)
         {
-            foreach (var module in item.Profile.Modules)
+            foreach (var module in selected.Profile.Modules)
             {
                 _modules.Items.Add(new ListViewItem(TaskCreation.ModuleRowText(module)) { Tag = module });
             }
         }
         _modules.EndUpdate();
+        if (_moduleHint is not null)
+        {
+            _moduleHint.Text = NewTaskModuleHint.For(selected is null ? null : _modules.Items.Count);
+        }
     }
 
     private void AddRow(TableLayoutPanel grid, string label, Control field)

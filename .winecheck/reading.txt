@@ -8,10 +8,10 @@
 script=demo.sh
 tool=wine + Xvfb
 date=2026-11-20
-source=34ae24dd05f0df96626005034856902808dd3c94
-tier=96 passed=445 failed=0 exit=0
-tier=120 passed=445 failed=0 exit=0
-tier=192 passed=445 failed=0 exit=0
+source=c4b0ea605ba739adf3fcde6a744f8b56be2cc2d4
+tier=96 passed=446 failed=0 exit=0
+tier=120 passed=446 failed=0 exit=0
+tier=192 passed=446 failed=0 exit=0
 overbudget=tier=96 form=0 formbudget=45px hint=0 hintbudget=45px
 overbudget=tier=120 form=0 formbudget=50px hint=0 hintbudget=50px
 overbudget=tier=192 form=0 formbudget=65px hint=0 hintbudget=65px
@@ -48,6 +48,7 @@ section=RunDetailScrollReset tier=96 passed=3 failed=0
 section=RunBannerFocus tier=96 passed=4 failed=0
 section=RunFirstRunPath tier=96 passed=2 failed=0
 section=RunNewTaskProfileDefault tier=96 passed=2 failed=0
+section=RunNewTaskModuleHint tier=96 passed=1 failed=0
 section=RunDraftEntryGates tier=96 passed=2 failed=0
 section=RunStageJumpFocus tier=96 passed=3 failed=0
 section=RunJobOutcomeStatus tier=96 passed=3 failed=0
@@ -124,6 +125,7 @@ section=RunDetailScrollReset tier=120 passed=3 failed=0
 section=RunBannerFocus tier=120 passed=4 failed=0
 section=RunFirstRunPath tier=120 passed=2 failed=0
 section=RunNewTaskProfileDefault tier=120 passed=2 failed=0
+section=RunNewTaskModuleHint tier=120 passed=1 failed=0
 section=RunDraftEntryGates tier=120 passed=2 failed=0
 section=RunStageJumpFocus tier=120 passed=3 failed=0
 section=RunJobOutcomeStatus tier=120 passed=3 failed=0
@@ -200,6 +202,7 @@ section=RunDetailScrollReset tier=192 passed=3 failed=0
 section=RunBannerFocus tier=192 passed=4 failed=0
 section=RunFirstRunPath tier=192 passed=2 failed=0
 section=RunNewTaskProfileDefault tier=192 passed=2 failed=0
+section=RunNewTaskModuleHint tier=192 passed=1 failed=0
 section=RunDraftEntryGates tier=192 passed=2 failed=0
 section=RunStageJumpFocus tier=192 passed=3 failed=0
 section=RunJobOutcomeStatus tier=192 passed=3 failed=0

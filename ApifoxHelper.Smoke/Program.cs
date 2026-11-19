@@ -319,6 +319,9 @@ internal static class Program
         Section("新建任务对话框的「项目配置」默认选中项（刚保存的那一份在清单里 → 默认选中它，哪怕它按名字排在后面 → 认不出（没保存过 / 已被删掉）→ 回退到清单第一项 → 清单为空 → 一项都不选 → 真的点空态那颗「新建任务」→ 对话框里选中的就是刚保存的那一份，真实控件）", nameof(RunNewTaskProfileDefault));
         RunNewTaskProfileDefault(services, dataRoot);
 
+        Section("新建任务对话框「模块」那一行的说明句（有模块的配置 → 原来那一句、清单两行 → 换到没有模块的配置 → 换成「这份配置没有模块：将检查该 API 项目的全部接口。」、清单真的空 → 再换回来 → 说明句与清单一起回来，真实控件）", nameof(RunNewTaskModuleHint));
+        RunNewTaskModuleHint(services, dataRoot);
+
         Section("注释草稿四条入口的门控（未扫描 → 五颗全停用 → 已扫描且配置没配模型服务 → 「模型生成候选」那颗停用、其余四颗照常可用 → 已扫描且配置配了 OpenAI 兼容服务 → 五颗全可用 → 真的点一次停用的那颗：状态行一个字没变、没有作业起来，真实控件）", nameof(RunDraftEntryGates));
         RunDraftEntryGates(services, dataRoot);
 
@@ -9234,6 +9237,127 @@ internal static class Program
                 try { Directory.Delete(root, recursive: true); } catch (IOException) { /* 删不掉也不该红这一段。 */ }
             }
         }
+    }
+
+    /// <summary>
+    /// 「新建任务」对话框里「模块」那一行的说明句（第四百一十二轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这一句此前是一句写死的字面，而它下面那个清单是按<b>选中那一份配置的模块清单</b>填的。
+    /// 配置里一个模块都没配时清单是空的，说明句却仍在教人「勾选要检查的模块」——<b>它指着一个屏上不存在的东西</b>。
+    /// 判定与两句字面收在 <see cref="NewTaskModuleHint"/> 一处、门在 <c>NewTaskModuleHintTests</c>，
+    /// 但「那一行真的接到了那个标签上、换配置时真的跟着换」正是 Linux 侧静态门判不到的那一半。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：一台机器上两份配置（一份两个模块、一份一个模块都没有），真的显示「新建任务」对话框，
+    /// 读三件事——① 默认选中那份有模块的配置时，说明句逐字是 <see cref="NewTaskModuleHint.WithModules"/>、清单里两行；
+    /// ② 把下拉换到那份没有模块的配置之后，说明句逐字换成 <see cref="NewTaskModuleHint.NoModules"/>、清单真的空；
+    /// ③ 再换回来，说明句与清单一起回来（说明句不是只在出厂时定一次）。
+    /// </para>
+    /// <para>
+    /// <b>它不量什么</b>：不量真机上这一句在 200% 档折不折行（随 G-D5 真机复核）。
+    /// </para>
+    /// </summary>
+    private static void RunNewTaskModuleHint(IServiceProvider services, string dataRoot)
+    {
+        var root = Path.Combine(dataRoot, "new-task-module-hint");
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        var store = new FileStore(root);
+        var profiles = new ProfileStore(store);
+        CreateProbeWorkspace(Path.Combine(root, "Probe.Api"));
+
+        ProjectProfile Save(string name, params string[] modules)
+        {
+            var profile = new ProjectProfile
+            {
+                Name = name,
+                WorkspaceRoot = root,
+                ApiProject = "Probe.Api/Probe.Api.csproj",
+                AllowedSourcePaths = ["Probe.Api/"],
+            };
+            foreach (var module in modules) profile.Modules.Add(new ModuleScope { Name = module });
+            return profiles.Save(profile, isNew: true);
+        }
+
+        var withModules = Save("A 有模块", "订单", "库存");
+        var withoutModules = Save("B 无模块");
+
+        try
+        {
+            RunAction("新建任务对话框「模块」那一行的说明句（有模块的配置 → 原来那一句、清单两行 → 换到没有模块的配置 → 换成「这份配置没有模块…」、清单真的空 → 再换回来 → 说明句与清单一起回来，真实控件）", () =>
+            {
+                using var dialog = new NewTaskDialog(profiles, withModules.Id);
+                dialog.Show();
+                Application.DoEvents();
+
+                var combo = FindFirst<ComboBox>(dialog)
+                    ?? throw new InvalidOperationException("「新建任务」对话框里找不到「项目配置」下拉框。");
+                var list = FindFirst<ListView>(dialog)
+                    ?? throw new InvalidOperationException("「新建任务」对话框里找不到「模块」清单。");
+                // 说明句那一格按产品自己那一套认法取回：工厂标记 + 出厂那一句的字面（同一屏另有四行说明，标记相同、文字不同）。
+                var hint = FindAll<Label>(dialog).FirstOrDefault(label =>
+                        Equals(label.Tag, Ui.HintRowMarker) && label.Text == NewTaskModuleHint.WithModules)
+                    ?? throw new InvalidOperationException(
+                        "「新建任务」对话框里找不到「模块」那一行的说明句（按 Ui.HintRowMarker + 出厂那一句认）："
+                        + "这一支量不到「说明句跟着配置换」这件事。");
+
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException(
+                        $"默认选中「{combo.SelectedItem}」时模块清单里 {list.Items.Count} 行，期望 2 行："
+                        + "这一段的前提是「这一份配置有两个模块」，前提不成立就量不出说明句换没换。");
+                }
+                _lines.Add($"     默认选中「{combo.SelectedItem}」→ 说明句「{hint.Text}」、清单 {list.Items.Count} 行");
+
+                // ② 换到那份一个模块都没有的配置：说明句必须跟着换，否则它指着一个屏上不存在的对象。
+                combo.SelectedIndex = IndexOf(combo, withoutModules.Name);
+                Application.DoEvents();
+                if (!string.Equals(hint.Text, NewTaskModuleHint.NoModules, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"换到没有模块的配置「{withoutModules.Name}」之后，说明句还是「{hint.Text}」："
+                        + "它仍在教人「勾选要检查的模块」，而框里一个可勾的都没有——说明句只在出厂时定了一次。");
+                }
+                if (list.Items.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"换到没有模块的配置「{withoutModules.Name}」之后清单里还有 {list.Items.Count} 行。");
+                }
+                _lines.Add($"     换到「{combo.SelectedItem}」→ 说明句「{hint.Text}」、清单 {list.Items.Count} 行");
+
+                // ③ 再换回来：说明句与清单一起回来（不是单向的、也不是换过就回不去）。
+                combo.SelectedIndex = IndexOf(combo, withModules.Name);
+                Application.DoEvents();
+                if (!string.Equals(hint.Text, NewTaskModuleHint.WithModules, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"换回有模块的配置「{withModules.Name}」之后，说明句是「{hint.Text}」，期望「{NewTaskModuleHint.WithModules}」："
+                        + "说明句与清单没有同一轮推导。");
+                }
+                if (list.Items.Count != 2)
+                {
+                    throw new InvalidOperationException(
+                        $"换回有模块的配置「{withModules.Name}」之后清单里 {list.Items.Count} 行，期望 2 行。");
+                }
+                _lines.Add($"     换回「{combo.SelectedItem}」→ 说明句「{hint.Text}」、清单 {list.Items.Count} 行");
+            });
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                try { Directory.Delete(root, recursive: true); } catch (IOException) { /* 删不掉也不该红这一段。 */ }
+            }
+        }
+    }
+
+    /// <summary>下拉里按显示文字找那一项的下标；找不到即抛（这一段的前提不成立，量出来的数没有意义）。</summary>
+    private static int IndexOf(ComboBox combo, string text)
+    {
+        for (var i = 0; i < combo.Items.Count; i++)
+        {
+            if (string.Equals(combo.Items[i]?.ToString(), text, StringComparison.Ordinal)) return i;
+        }
+        throw new InvalidOperationException($"下拉里找不到「{text}」那一项。");
     }
 
     /// <summary>

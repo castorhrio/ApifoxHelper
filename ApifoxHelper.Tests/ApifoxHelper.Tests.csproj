@@ -80,6 +80,8 @@
     <Compile Include="..\Desktop\Native\FirstRunPlan.cs" Link="Shared\FirstRunPlan.cs" />
     <!-- 「新建任务」对话框里「项目配置」下拉默认选中哪一份（第四百零八轮）：纯逻辑、不依赖 WinForms，门在 NewTaskProfileChoiceTests。 -->
     <Compile Include="..\Desktop\Native\NewTaskProfileChoice.cs" Link="Shared\NewTaskProfileChoice.cs" />
+    <!-- 「模块」那一行下面的说明句该说哪一句（第四百一十二轮）：纯数据、不依赖 WinForms，门在 NewTaskModuleHintTests。 -->
+    <Compile Include="..\Desktop\Native\NewTaskModuleHint.cs" Link="Shared\NewTaskModuleHint.cs" />
     <!-- 「从任务详情跳到它绑定的配置」这一跳的口径（第二百六十三轮）：纯数据、不依赖 WinForms，门在 ProfileJumpTests。 -->
     <Compile Include="..\Desktop\Native\ProfileJump.cs" Link="Shared\ProfileJump.cs" />
     <Compile Include="..\Desktop\Native\ListRows.cs" Link="Shared\ListRows.cs" />
