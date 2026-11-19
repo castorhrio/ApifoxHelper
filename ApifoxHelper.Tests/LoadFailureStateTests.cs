@@ -248,7 +248,10 @@ public class LoadFailureStateTests
         Assert.Matches(@"(?m)^\s*_emptyClear\.Visible = !_loadFailed && filtered;", refresh);
         Assert.Matches(@"(?m)^\s*_emptyRetry\.Visible = LoadFailureState\.RetryVisible\(_loadFailed\);", refresh);
         Assert.Matches(@"(?m)^\s*_emptyTitle\.Text = _loadFailed \? LoadFailureState\.Tasks\.Title", refresh);
-        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = _loadFailed \? LoadFailureState\.Tasks\.Hint", refresh);
+        // 第四百零五轮起「没有任务」那一句由 FirstRunPlan 一处给（首程与「有配置、缺任务」两态各一句），
+        // 本页只把「此刻有几份配置」读给它——判的仍是「读取失败态优先」这条规则（形状同 ListFilterTests）。
+        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = _loadFailed$", refresh);
+        Assert.Matches(@"(?m)^\s*\? LoadFailureState\.Tasks\.Hint$", refresh);
     }
 
     [Fact]

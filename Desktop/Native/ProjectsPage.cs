@@ -34,7 +34,9 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private readonly Label _emptyTitle = Ui.Title(EmptyTitle);
     private readonly Label _emptyHint = Ui.Body(EmptyHint, muted: true);
     // 「新建配置」文字单一落点：工具栏实心主按钮与空态按钮同名同源，不出现第二处字面。
-    private const string NewProfileLabel = "新建配置";
+    // 第四百零五轮起这个字面收在 FirstRunPlan（两页共用一份词汇：任务页首程那一跳要说出这颗按钮的名字），
+    // 本页只留一个别名，不再写第二份字面。
+    private const string NewProfileLabel = FirstRunPlan.NewProfileLabel;
     // 空态的唯一行动按钮（DESIGN.md §7，与任务页同一规则）：没有配置时指向「新建配置」，
     // 筛到零行时指向「清空筛选」——同一时刻只显示其中一个，实心主按钮始终只有工具栏那一个。
     private readonly Button _emptyCreate = Ui.Ghost(NewProfileLabel);
@@ -538,6 +540,24 @@ internal sealed class ProjectsPage : UserControl, INativePage
             LoadProfiles();
         }
     }
+
+    /// <summary>
+    /// 「首程：去建一份配置」这一跳的落点（第四百零五轮）：打开「新建配置」对话框。
+    /// <para>
+    /// <b>为什么要有这一步</b>：任务页空态在「一份配置都没有」时把用户送到本页（那颗按钮写着「新建配置」），
+    /// 而本页此前只有工具栏那颗实心主按钮与空态那颗 ghost 能打开这个对话框——两处都是<b>本页内部</b>的接线，
+    /// 从另一页跳过来时没有落点。切页由壳做（<c>NativeShellForm</c>），本方法只负责「到了这一页之后把对话框打开」。
+    /// </para>
+    /// <para>
+    /// <b>动作仍走同一个入口</b>：<see cref="ShowDialog"/> 是工具栏、空态与这一跳共用的唯一路径
+    /// （保存后重建清单、选中刚保存的那一份），本方法不复制创建逻辑、不自己读配置清单。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判「该不该跳过来」（那是任务页与壳的事），也不判真机上对话框弹出来的位置
+    /// （随 G-D5 真机复核）。
+    /// </para>
+    /// </summary>
+    public void OpenNewProfile() => ShowDialog(null);
 
     /// <summary>打开连接与写入探测（只读连接检查 + 可选的写入兼容探测，写入边界在 CompatService 单一口径）。</summary>
     private void ShowCapabilities()

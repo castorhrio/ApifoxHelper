@@ -62,7 +62,9 @@ public class EmptyStateActionTests
         var page = Repo.Source("Desktop", "Native", "TasksPage.cs");
         Assert.Matches(@"(?m)^\s*private readonly Button _emptyCreate = Ui\.Ghost\(NewTaskLabel\);", page);
         // 动作与工具栏同一入口：新建走 ShowNewTaskDialog，清空走 ClearListFilter，都不复制逻辑。
-        Assert.Matches(@"(?m)^\s*_emptyCreate\.Click \+= \(_, _\) => ShowNewTaskDialog\(\);", page);
+        // 第四百零五轮起空态那颗按钮先按「此刻指向哪一步」分发（首程那一态指向「新建配置」）：
+        // 分发只读 RefreshEmptyState 记下的那一笔，两条路各自仍汇到既有唯一入口（见 FirstRunPlanTests）。
+        Assert.Matches(@"(?m)^\s*_emptyCreate\.Click \+= \(_, _\) => RunEmptyCreate\(\);", page);
         Assert.Matches(@"(?m)^\s*_emptyClear\.Click \+= \(_, _\) => ClearListFilter\(\);", page);
         Assert.Matches(@"(?m)^\s*emptyActions\.Controls\.Add\(_emptyCreate\);", page);
         Assert.Matches(@"(?m)^\s*emptyActions\.Controls\.Add\(_emptyClear\);", page);
@@ -166,20 +168,43 @@ public class EmptyStateActionTests
     public void CreateActions_TakeLabelsFromASingleSource()
     {
         // 新建入口的文字常量单一落点：工具栏与空态按钮同取一个常量（对话框标题属另一界面，不在此口径）。
+        // 第四百零五轮起这两个字面收在 FirstRunPlan（两页共用一份词汇，首程那一跳要同时说出两颗按钮的名字）：
+        // 两页各留一个别名指向它，字面本身全仓只有一份——写第二份即红。
         var tasks = Repo.Source("Desktop", "Native", "TasksPage.cs");
-        Assert.Matches(@"(?m)^\s*private const string NewTaskLabel = ""新建任务"";", tasks);
+        Assert.Matches(@"(?m)^\s*private const string NewTaskLabel = FirstRunPlan\.NewTaskLabel;", tasks);
         Assert.Matches(@"(?m)^\s*var newButton = Ui\.Primary\(NewTaskLabel\);", tasks);
         var profiles = Repo.Source("Desktop", "Native", "ProjectsPage.cs");
-        Assert.Matches(@"(?m)^\s*private const string NewProfileLabel = ""新建配置"";", profiles);
+        Assert.Matches(@"(?m)^\s*private const string NewProfileLabel = FirstRunPlan\.NewProfileLabel;", profiles);
         Assert.Matches(@"(?m)^\s*var newButton = Ui\.Primary\(NewProfileLabel\);", profiles);
+        var plan = Repo.Source("Desktop", "Native", "FirstRunPlan.cs");
+        Assert.Matches(@"(?m)^\s*public const string NewTaskLabel = ""新建任务"";", plan);
+        Assert.Matches(@"(?m)^\s*public const string NewProfileLabel = ""新建配置"";", plan);
+        // 字面只有一份：两页里带这两个词的字符串字面各只剩一处，且那一处是**对话框标题**
+        // （`NewTaskDialog` / `ProfileDialog` 的 `Text =`，属另一界面，本口径历来不含它）——
+        // 空态那颗按钮与工具栏那颗主按钮都不许再写第二份字面。
+        Assert.Single(Regex.Matches(tasks, "\"[^\"\r\n]*新建任务[^\"\r\n]*\""));
+        Assert.Single(Regex.Matches(profiles, "\"[^\"\r\n]*新建配置[^\"\r\n]*\""));
+        Assert.Matches(@"(?m)^\s*Text = ""新建任务"";", tasks);
+        Assert.Matches(@"(?m)^\s*Text = editing is null \? ""新建配置"" : ", profiles);
     }
 
     [Fact]
     public void TasksPage_HintNamesTheEntryThatExists()
     {
         // 无数据空态的说明文字指名的入口，就是空态上那个按钮（不指向界面上不存在的东西）。
+        // 第四百零五轮起这一句由 FirstRunPlan 一处给（两态各一句），所以判的是那两句：
+        // 「有配置」那一句点名「新建任务」，「一份配置都没有」那一句点名「新建配置」——
+        // 而这两颗按钮此刻真的在屏上（空态那颗按钮的文字与说明同一轮推导，见 FirstRunPlanTests）。
+        var plan = Repo.Source("Desktop", "Native", "FirstRunPlan.cs");
+        var newTask = Literal(plan, "NewTaskLabel");
+        var newProfile = Literal(plan, "NewProfileLabel");
+        Assert.Contains(newTask, FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewTask));
+        Assert.Contains(newProfile, FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile));
+        Assert.Contains(newTask, FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile));
+        // 本页不再就地拼这一句：说明文字只从 FirstRunPlan 取。
         var page = Repo.Source("Desktop", "Native", "TasksPage.cs");
-        Assert.Contains(Literal(page, "NewTaskLabel"), Literal(page, "EmptyHint"));
+        Assert.Contains("FirstRunPlan.Hint(", page);
+        Assert.DoesNotContain("const string EmptyHint", page);
     }
 
     // ---------- 判据自己被抓得住（第二百五十八轮，简报 P1-1） ----------
@@ -270,6 +295,15 @@ public class EmptyStateActionTests
             if (id.StartsWith("PageNames.", StringComparison.Ordinal))
             {
                 text.Append(PageNameOf(id));
+                continue;
+            }
+            // 第四百零五轮：两个新建入口的字面收进 FirstRunPlan 之后，两页里只剩别名
+            // （`private const string NewTaskLabel = FirstRunPlan.NewTaskLabel;`）。
+            // 这里按同一口径把那一份文件里的常量展开——判的仍是「最终那句话里有没有那个按钮的名字」，
+            // 不是「右边是不是一个字面量」（第一百六十轮同一课：门钉住的是一条规则，不是一种写法）。
+            if (id.StartsWith("FirstRunPlan.", StringComparison.Ordinal))
+            {
+                text.Append(Literal(Repo.Source("Desktop", "Native", "FirstRunPlan.cs"), id["FirstRunPlan.".Length..]));
                 continue;
             }
             text.Append(Literal(source, id));

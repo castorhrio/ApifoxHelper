@@ -56,14 +56,22 @@ internal sealed class TasksPage : UserControl, INativePage
     private readonly Panel _empty;
     // 空态文字按「还没有任务」与「筛到零行」两态切换：筛到零行不说成没有任务，并给出清空筛选的下一步。
     private const string EmptyTitle = "还没有检查任务";
-    private const string EmptyHint = "先在「" + PageNames.Projects + "」新建配置，然后点「" + NewTaskLabel + "」开始源码扫描。";
+    // 空态说明那一句由 FirstRunPlan 一处给（第四百零五轮）：首程（一份配置都没有）与「有配置、缺任务」
+    // 两态说的是两句不同的话，而两句都点名「此刻屏上真的那一颗按钮」——本页不就地拼这两句。
     private readonly Label _emptyTitle = Ui.Title(EmptyTitle);
-    private readonly Label _emptyHint = Ui.Body(EmptyHint, muted: true);
+    private readonly Label _emptyHint = Ui.Body(FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewTask), muted: true);
     // 「新建任务」文字单一落点：工具栏实心主按钮与空态按钮同名同源，不出现第二处字面。
-    private const string NewTaskLabel = "新建任务";
+    // 第四百零五轮起这个字面收在 FirstRunPlan（两页共用一份词汇），本页只留一个别名，不再写第二份字面。
+    private const string NewTaskLabel = FirstRunPlan.NewTaskLabel;
     // 空态的唯一行动按钮（DESIGN.md §7）：没有任务时指向「新建任务」，筛到零行时指向「清空筛选」——
     // 同一时刻只显示其中一个，实心主按钮始终只有工具栏那一个。
+    // 第四百零五轮起它的文字随「有没有配置」切换（首程那一态写「新建配置」，见 FirstRunPlan）：
+    // 出厂这一句是「有配置」那一态的字，真正的取值在 RefreshEmptyState 里按同一份判定换。
     private readonly Button _emptyCreate = Ui.Ghost(NewTaskLabel);
+    // 空态那颗按钮「此刻指向哪一步」（第四百零五轮）：出厂是「有配置」那一态，真正的取值在
+    // RefreshEmptyState 里按 FirstRunPlan.EmptyActionFor 一处判、与按钮文字同一轮推导；
+    // 点击只读这一笔，不在点击里再判一次「有没有配置」（判两次就会与屏上那颗字对不上）。
+    private FirstRunPlan.EmptyAction _emptyAction = FirstRunPlan.EmptyAction.NewTask;
     private readonly Button _emptyClear = Ui.Ghost(ListFilter.ClearActionLabel);
     // 读取失败态的唯一行动按钮（LoadFailureState 口径）：动作回到 LoadTasks 同一个入口，不复制读取逻辑。
     private readonly Button _emptyRetry = Ui.Ghost(LoadFailureState.RetryLabel);
@@ -377,7 +385,9 @@ internal sealed class TasksPage : UserControl, INativePage
         _reportButton.Click += (_, _) => ShowReports();
 
         // 空态按钮是独立实例：同一控件不能同时挂在工具栏与空态面板上；动作与工具栏同一入口，不复制逻辑。
-        _emptyCreate.Click += (_, _) => ShowNewTaskDialog();
+        // 第四百零五轮起它按「此刻指向哪一步」分发（首程那一态指向「新建配置」，见 FirstRunPlan）：
+        // 分发只读 RefreshEmptyState 记下的那一笔，不在点击里再判一次「有没有配置」。
+        _emptyCreate.Click += (_, _) => RunEmptyCreate();
         _emptyClear.Click += (_, _) => ClearListFilter();
         _emptyRetry.Click += (_, _) => LoadTasks();
         var emptyActions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = UiTokens.Bg };
@@ -513,6 +523,21 @@ internal sealed class TasksPage : UserControl, INativePage
     /// </para>
     /// </summary>
     public event Action<string, string>? OpenProfileRequested;
+
+    /// <summary>
+    /// 「首程：去建一份配置」这一跳的请求（第四百零五轮）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：一份配置都没有时，任务页空态上唯一那颗按钮写着「新建任务」，点下去被一句
+    /// 「请先在『项目设置』新建配置」拒回来——<b>屏上没有一步能到「项目设置」</b>。侧栏那颗导航按钮在，
+    /// 但空态那句话与那颗按钮都没有把用户送过去，用户得自己想到「去点左边那一栏」。
+    /// 这与第四十二轮「禁用不得移除下一步」、第五十轮「提示所指引的恢复路径不可达」是同一族。
+    /// </para>
+    /// <para>
+    /// <b>本页不自己切页、也不引用另一页</b>：与 <see cref="OpenProfileRequested"/> 同一纪律——
+    /// 两页都由壳建、由壳切，这里只把「用户点了这一跳」这件事交出去，接线在 <c>NativeShellForm</c> 那一处。
+    /// </para>
+    /// </summary>
+    public event Action? NewProfileRequested;
 
     /// <summary>
     /// 点「打开配置」：没有选中任务、或这个任务没有绑定配置（配置 Id 为空）时不发请求——
@@ -692,11 +717,66 @@ internal sealed class TasksPage : UserControl, INativePage
     private void RefreshEmptyState()
     {
         var filtered = ListFilter.IsActive(_filter.Text);
+        // 首程那一态（第四百零五轮）：一份配置都没有时，空态那颗按钮指向「新建配置」而不是「新建任务」——
+        // 否则第一次打开的人照着屏上唯一可点的东西按下去，被一句「请先在『项目设置』新建配置」拒回来，
+        // 而屏上没有一步能到那一页。判定与文字都在 FirstRunPlan 一处，本页只把「此刻有几份配置」读给它。
+        _emptyAction = FirstRunPlan.EmptyActionFor(ProfileCount());
         _emptyTitle.Text = _loadFailed ? LoadFailureState.Tasks.Title : filtered ? ListFilter.TaskNoMatchTitle : EmptyTitle;
-        _emptyHint.Text = _loadFailed ? LoadFailureState.Tasks.Hint : filtered ? ListFilter.TaskNoMatchHint : EmptyHint;
+        _emptyHint.Text = _loadFailed
+            ? LoadFailureState.Tasks.Hint
+            : filtered ? ListFilter.TaskNoMatchHint : FirstRunPlan.Hint(_emptyAction);
+        _emptyCreate.Text = FirstRunPlan.Label(_emptyAction);
         _emptyCreate.Visible = !_loadFailed && !filtered;
         _emptyClear.Visible = !_loadFailed && filtered;
         _emptyRetry.Visible = LoadFailureState.RetryVisible(_loadFailed);
+    }
+
+    /// <summary>
+    /// 此刻磁盘上有几份配置（<see cref="FirstRunPlan.EmptyActionFor"/> 的入参）；读不出来时答 <c>null</c>。
+    /// <para>
+    /// <b>为什么读不出来答 <c>null</c> 而不是 0</b>：这一屏连「有没有配置」都还不知道，说成「还没有配置」
+    /// 是把「读不出来」说成「读到了空」（与 <see cref="ProfileLoadState"/> 那一族同一取舍）。
+    /// <c>null</c> 在 <see cref="FirstRunPlan.EmptyActionFor"/> 里按「有配置」算——那时点下去走
+    /// <see cref="ShowNewTaskDialog"/>，它自己会把读取失败的原因写进状态行，那是如实说、不是猜。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判「该不该把失败原因写进状态行」（那是 <see cref="ShowNewTaskDialog"/> 的事），
+    /// 也不缓存——配置清单随时可能被另一页改掉，缓存一次就会让空态那颗按钮指着上一步的答案。
+    /// </para>
+    /// </summary>
+    private int? ProfileCount()
+    {
+        try
+        {
+            return _profiles.List().Count;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            // 收窄到「读配置清单真会失败的那几种」：磁盘读不到、权限不足、某一份 JSON 坏了。
+            // 这三件之外的不吞——那是别的缺陷，吞了等于把它藏起来（错误通道纪律：catch 至少做一件事）。
+            // 答 null（不是 0）：这一屏连「有没有配置」都还不知道，说成「还没有配置」是把读不出来说成读到了空。
+            // 原因由 <see cref="ShowNewTaskDialog"/> 自己写进状态行（那一处会念脱敏后的原因），不是猜。
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 空态那颗按钮点下去做什么（第四百零五轮）：按 <see cref="RefreshEmptyState"/> 记下的那一笔分发——
+    /// 首程那一态把请求交给壳（切到项目设置页并打开「新建配置」），其余走本页既有的
+    /// <see cref="ShowNewTaskDialog"/> 同一个入口，不复制创建逻辑。
+    /// <para>
+    /// <b>本页不自己切页、也不引用另一页</b>：与「打开配置」那一跳（第二百六十三轮）同一纪律——
+    /// 两页都由壳建、由壳切，这里只把「用户点了这一跳」这件事交出去，接线在 <c>NativeShellForm</c> 那一处。
+    /// </para>
+    /// </summary>
+    private void RunEmptyCreate()
+    {
+        if (_emptyAction == FirstRunPlan.EmptyAction.NewProfile)
+        {
+            NewProfileRequested?.Invoke();
+            return;
+        }
+        ShowNewTaskDialog();
     }
 
     /// <summary>
@@ -1687,7 +1767,8 @@ internal sealed class TasksPage : UserControl, INativePage
         {
             if (_profiles.List().Count == 0)
             {
-                SetStatus("还没有项目配置。请先在「" + PageNames.Projects + "」新建配置，再创建任务。", UiTokens.WarnText);
+                // 那一句的单一落点在 FirstRunPlan（第四百零五轮）：界面与冒烟段都读它，不各写一份字面。
+                SetStatus(FirstRunPlan.NoProfileStatus, UiTokens.WarnText);
                 return;
             }
         }

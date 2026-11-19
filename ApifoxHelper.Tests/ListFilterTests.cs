@@ -188,7 +188,11 @@ public class ListFilterTests
         Assert.Matches(@"(?m)^\s*_selectedId = _selectedTask\?\.Id;", page);
         // 空态文字按筛选状态切换，不把筛选结果说成没有任务；读取失败态优先（第一百五十二轮，LoadFailureState 口径）。
         Assert.Matches(@"(?m)^\s*_emptyTitle\.Text = _loadFailed \? LoadFailureState\.Tasks\.Title : filtered \? ListFilter\.TaskNoMatchTitle : EmptyTitle;", page);
-        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = _loadFailed \? LoadFailureState\.Tasks\.Hint : filtered \? ListFilter\.TaskNoMatchHint : EmptyHint;", page);
+        // 第四百零五轮起「没有任务」那一句由 FirstRunPlan 一处给（首程与「有配置、缺任务」两态各一句），
+        // 本页只把「此刻有几份配置」读给它——判的仍是「空态文字按筛选状态切换、读取失败态优先」这条规则。
+        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = _loadFailed$", page);
+        Assert.Matches(@"(?m)^\s*\? LoadFailureState\.Tasks\.Hint$", page);
+        Assert.Matches(@"(?m)^\s*: filtered \? ListFilter\.TaskNoMatchHint : FirstRunPlan\.Hint\(_emptyAction\);$", page);
     }
 
     [Fact]

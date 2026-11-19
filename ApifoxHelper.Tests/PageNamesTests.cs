@@ -43,7 +43,9 @@ public class PageNamesTests
         ("NativeShellForm.cs", "PageNames.Projects", 2),
         ("NativeShellForm.cs", "PageNames.Tasks", 2),
         // 首程指路：任务页空态与「还没有配置」的状态行。
-        ("TasksPage.cs", "PageNames.Projects", 2),
+        // 第四百零五轮起这两句收进 FirstRunPlan（两态各一句说明 + 那一句状态行），任务页只引用、
+        // 不再就地拼页面名——所以这一笔从 TasksPage.cs 挪到 FirstRunPlan.cs，处数不变（仍是 2 处）。
+        ("FirstRunPlan.cs", "PageNames.Projects", 2),
         // 响应契约 / 接口追踪：分析设置在哪一页。
         ("ContractsDialog.cs", "PageNames.Projects", 1),
         // 第三百一十四轮：这一屏多了一种状态——那份产物根本不存在（扫描还没跑过），那一步在任务页那颗
@@ -135,10 +137,13 @@ public class PageNamesTests
     public void GuideText_TakesThePageNameFromTheSharedSource()
     {
         // 逐文件数「有几处」：新加一处没接线的引导文案，这里当场点名是哪个文件。
+        // 数的是**代码部分**：文档注释里那一句 <see cref="PageNames.Projects"/> 是在讲「这一句从哪取」，
+        // 不是又一处引导文案——把它算进去，改一句注释就会把这一族判据顶红（第四百零五轮那一处就是）。
+        // 去注释的口径只有一份（<see cref="CodeScan"/>），与本文件别处的扫描同源。
         foreach (var (file, name, count) in GuideSites)
         {
             var source = Repo.Source("Desktop", "Native", file);
-            var actual = Regex.Matches(source, Regex.Escape(name)).Count;
+            var actual = Regex.Matches(CodeScan.Text(source), Regex.Escape(name)).Count;
             Assert.True(actual == count,
                 $"{file} 里 {name} 出现 {actual} 处，登记的是 {count} 处——"
                 + "新加/删掉一处引导文案要回来改 PageNamesTests.GuideSites 这个数。"

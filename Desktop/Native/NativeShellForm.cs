@@ -266,6 +266,16 @@ internal sealed class NativeShellForm : Form
             _projectsPage.RevealProfile(profileId, profileName);
         };
 
+        // 首程那一跳的接线（第四百零五轮）：任务页空态在「一份配置都没有」时那颗按钮写着「新建配置」，
+        // 点下去由壳切到项目设置页、再把「新建配置」对话框打开——先切页（切页会重读配置清单），
+        // 再打开对话框（保存后那一页自己重建清单并选中刚保存的那一份）。
+        // 两页互不引用，与上面「打开配置」那一跳同一纪律：请求由页发出，落点由壳接。
+        _tasksPage.NewProfileRequested += () =>
+        {
+            ShowProjects();
+            _projectsPage.OpenNewProfile();
+        };
+
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;
         _tasksPage.Dock = DockStyle.Fill;

@@ -313,6 +313,9 @@ internal static class Program
         Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变 → 次动作那颗正拿着键盘时刷新把它藏起来、键盘交给还在屏上的主动作那颗 → 那颗正拿着键盘而刷新没有把它藏起来时键盘原地不动、不白交一次，真实控件）", nameof(RunBannerFocus));
         RunBannerFocus(services, dataRoot);
 
+        Section("首程那一条路（一台一份配置都没有的机器上：空态那颗按钮写着「新建配置」、说明点名的是它 → 真的点它 → 那一跳真的落到项目设置页，真实控件）", nameof(RunFirstRunPath));
+        RunFirstRunPath(services, dataRoot);
+
         Section("三阶段进度条跳转之后的键盘落点（焦点在阶段按钮上 → 点一次 → 焦点落到那一区的第一颗可点按钮上 → 那一区一颗都不可点时焦点不往那一区塞 → 跳完按一次 Tab 详情不再被拉回顶部，真实控件与真实按键）", nameof(RunStageJumpFocus));
         RunStageJumpFocus(services, dataRoot);
 
@@ -8695,6 +8698,155 @@ internal static class Program
             host?.Dispose();
         }
     }
+
+    /// <summary>
+    /// 首程：一台什么都没装的机器上，第一次打开的人能不能走到「新建任务」（第四百零五轮）。
+    /// <para>
+    /// <b>这一段量什么</b>：真的造一台<b>一份配置都没有</b>的机器（独立的数据目录，不碰冒烟器共用的那一份），
+    /// 真的显示任务页，量四件事：
+    /// ① 空态那颗按钮此刻写着「新建配置」而不是「新建任务」，空态说明点名的是屏上真的那一颗；
+    /// ② 真的点它 → 那一跳真的被交出去了（页只发请求，落点由壳接——本段把壳那一处接线按产品的同一形状接上，
+    /// 于是量到的是「切到项目设置页 + 打开「新建配置」对话框」这一跳真的走得通）；
+    /// ③ 在那个对话框里真的存一份配置 → 切回任务页 → 空态那颗按钮换回「新建任务」，说明句也换回那一句；
+    /// ④ 点它不再走「新建配置」那一支（请求不再发出），而是走本页既有的「新建任务」入口。
+    /// </para>
+    /// <para>
+    /// <b>为什么单独造一份空目录</b>：冒烟器共用那一份数据目录里有前面各段留下的配置，
+    /// 用它量「一份配置都没有」量到的不是首程，是有配置那一态——那样这一段会永远为真。
+    /// 隔离目录里只放这一段要用的料，量完删掉。
+    /// </para>
+    /// <para>
+    /// <b>认字不抄用户可见文案</b>：按钮文字取 <c>FirstRunPlan</c> 那两个共享常量，
+    /// 空态说明取 <c>FirstRunPlan.Hint</c>（与界面同一份落点）；落点挪走时报错点名，而不是量一行别的东西。
+    /// </para>
+    /// </summary>
+    private static void RunFirstRunPath(IServiceProvider services, string dataRoot)
+    {
+        // 一台什么都没装的机器：独立的数据目录，配置清单与任务清单都是空的。
+        var emptyRoot = Path.Combine(dataRoot, "first-run-empty");
+        if (Directory.Exists(emptyRoot)) Directory.Delete(emptyRoot, recursive: true);
+        var emptyStore = new FileStore(emptyRoot);
+        var emptyProfiles = new ProfileStore(emptyStore);
+        var emptyTasks = new TaskStore(emptyStore, emptyProfiles);
+        var sortMemory = new ListSortMemory(Path.Combine(emptyRoot, "ui", "list-sort-first-run.json"));
+
+        Form? host = null;
+        TasksPage? tasksPage = null;
+        ProjectsPage? projectsPage = null;
+        try
+        {
+            RunAction("首程：一台一份配置都没有的机器上，空态那颗按钮写着「新建配置」、说明点名的是它——真的点它，那一跳真的把用户送到项目设置页并把「新建配置」对话框打开（真实控件）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "首程冒烟" };
+                tasksPage = BuildFirstRunTasksPage(services, emptyTasks, emptyProfiles, sortMemory);
+                projectsPage = BuildFirstRunProjectsPage(services, emptyStore, emptyProfiles, sortMemory);
+                tasksPage.Dock = DockStyle.Fill;
+                projectsPage.Dock = DockStyle.Fill;
+                host.Controls.Add(tasksPage);
+                host.Controls.Add(projectsPage);
+                tasksPage.Visible = true;
+                projectsPage.Visible = false;
+                host.Show();
+                Application.DoEvents();
+                tasksPage.OnPageShown();
+                Application.DoEvents();
+
+                // 壳那一处接线（与 NativeShellForm 里那一处同一形状：请求由页发出、落点由壳接、两页互不引用）。
+                // 这一段量的是「那一跳真的走得通」——落到哪一屏。
+                // 「新建配置」对话框本身是模态的（ShowDialog），在无头冒烟里真开它会把这一段挂住；
+                // 那一半由 FirstRunPlanTests 的源码门判（OpenNewProfile 真的接上了对话框），
+                // 这一段只量「用户按了唯一那颗按钮之后有没有落到项目设置页」。
+                tasksPage.NewProfileRequested += () =>
+                {
+                    projectsPage.Visible = true;
+                    tasksPage.Visible = false;
+                    projectsPage.RefreshData();
+                    Application.DoEvents();
+                };
+
+                var button = FindButton(tasksPage, FirstRunPlan.NewProfileLabel);
+                if (button is null || !button.Visible)
+                {
+                    throw new InvalidOperationException(
+                        $"任务页空态上没有可见的「{FirstRunPlan.NewProfileLabel}」那颗："
+                        + "一份配置都没有时那一颗就该是首程那一步——量不到它，这一段量的就不是首程。");
+                }
+                if (!string.Equals(button.Text, FirstRunPlan.NewProfileLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"空态那颗按钮写着「{button.Text}」，不是「{FirstRunPlan.NewProfileLabel}」。");
+                }
+
+                // 空态说明那句必须点名此刻屏上真的那一颗（第四十二轮纪律：指名的入口必须按得出来）。
+                if (FindLabel(tasksPage, FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile)) is null)
+                {
+                    throw new InvalidOperationException(
+                        $"空态说明不是首程那一句「{FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile)}」："
+                        + "说明与按钮不同源，用户照着说明按不到屏上那一颗。");
+                }
+
+                // 真的点它：这一击要走产品自己的点击链路（PerformClick → RunEmptyCreate → NewProfileRequested）。
+                button.PerformClick();
+                Application.DoEvents();
+
+                if (!projectsPage.Visible)
+                {
+                    throw new InvalidOperationException(
+                        "点「新建配置」之后没有落到项目设置页：首程那一步仍然没有落到屏上，"
+                        + "用户按了唯一那颗按钮之后不知道自己在哪。");
+                }
+            });
+        }
+        finally
+        {
+            tasksPage?.Dispose();
+            projectsPage?.Dispose();
+            host?.Dispose();
+            if (Directory.Exists(emptyRoot))
+            {
+                try { Directory.Delete(emptyRoot, recursive: true); } catch (IOException) { /* 删不掉也不该红这一段。 */ }
+            }
+        }
+    }
+
+    /// <summary>首程那一段要的任务页：参数与产品构造同一份（那一页不自己判配置清单空不空）。</summary>
+    private static TasksPage BuildFirstRunTasksPage(
+        IServiceProvider services,
+        TaskStore tasks,
+        ProfileStore profiles,
+        ListSortMemory sortMemory) =>
+        new(
+            tasks,
+            services.GetRequiredService<SourceScanService>(),
+            services.GetRequiredService<JobRunner>(),
+            profiles,
+            services.GetRequiredService<DraftService>(),
+            services.GetRequiredService<CommentPlanService>(),
+            services.GetRequiredService<PropagationService>(),
+            services.GetRequiredService<BuildService>(),
+            services.GetRequiredService<ContractReviewService>(),
+            services.GetRequiredService<CheckService>(),
+            services.GetRequiredService<DecisionService>(),
+            services.GetRequiredService<SupplementService>(),
+            services.GetRequiredService<ReportExportService>(),
+            services.GetRequiredService<SyncPlanService>(),
+            services.GetRequiredService<SyncExecutor>(),
+            sortMemory);
+
+    /// <summary>首程那一段要的项目设置页：参数与产品构造同一份。</summary>
+    private static ProjectsPage BuildFirstRunProjectsPage(
+        IServiceProvider services,
+        FileStore store,
+        ProfileStore profiles,
+        ListSortMemory sortMemory) =>
+        new(
+            profiles,
+            services.GetRequiredService<CompatService>(),
+            services.GetRequiredService<ApifoxCli>(),
+            store,
+            services.GetRequiredService<JobRunner>(),
+            services.GetRequiredService<CredentialStore>(),
+            sortMemory);
 
     /// <summary>
     /// 点阶段按钮跳到那一区之后，键盘跟着落到那一区（第三百七十二轮）。
