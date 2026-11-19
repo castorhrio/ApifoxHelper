@@ -152,6 +152,112 @@ public class FirstRunPlanTests
         Assert.Contains(PageNames.Projects, status);
     }
 
+    // ---------- ②'' 项目设置页空态那一句：动词与屏上那颗按钮对齐（第四百零七轮，具名 pass：quieter） ----------
+
+    [Fact]
+    public void ProjectsEmptyHint_NamesTheButtonThatIsOnScreen()
+    {
+        // 这一句是配置页空态上唯一那句说明，而空态上唯一那颗按钮写着「新建配置」。
+        // 第四十二轮纪律：说明点名的入口必须是此刻屏上真的那一颗——此前这一句说的是
+        // 「先绑定代码仓库与 Apifox 项目」，屏上没有一颗叫「绑定」的按钮，用户得自己翻译一次。
+        var hint = FirstRunPlan.ProjectsEmptyHint;
+        Assert.Contains(FirstRunPlan.NewProfileLabel, hint);
+        Assert.DoesNotContain("绑定", hint);
+        // 一句话、一颗按钮、一个下一步：仍在说明行 80 字 / 2 句的上限内（CaptionBrevityTests 那一族）。
+        Assert.True(hint.Length <= 80, $"配置页空态说明 {hint.Length} 字，超过说明行 80 字上限。");
+        Assert.True(hint.Count(c => c == '。') <= 2, "配置页空态说明超过两句。");
+        // 与任务页首程那一句不是同一句：两屏各说各的下一步（任务页说「再回来点新建任务」，
+        // 配置页只说「点新建配置」——这一屏上还没有任务可建）。
+        Assert.NotEqual(FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile), hint);
+        // 两句都点名同一颗按钮：两屏的下一步是同一颗「新建配置」。
+        Assert.Contains(FirstRunPlan.NewProfileLabel, FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile));
+    }
+
+    [Fact]
+    public void ProjectsPage_TakesTheEmptyHintFromTheSingleSource()
+    {
+        var page = Repo.Source("Desktop", "Native", "ProjectsPage.cs");
+        // 出厂与刷新两处都取同一份落点（出厂那一句是「还没有配置」那一态的字，刷新时按三态换）。
+        Assert.Contains("Ui.Body(FirstRunPlan.ProjectsEmptyHint, muted: true)", page);
+        Assert.Contains(": FirstRunPlan.ProjectsEmptyHint;", page);
+        // 本页不再留第二份字面：私有常量与旧句都不许复活。
+        // 判的是**代码区**（CodeScan.Text 剥掉注释）：类注释里引述旧句是为了说明改了什么，
+        // 那不是第二份字面——本仓「接线断言被注释行骗过」那一族（第二十七轮）的反面同样要守住。
+        var code = CodeScan.Text(page);
+        Assert.DoesNotContain("const string EmptyHint", code);
+        Assert.DoesNotContain("先绑定代码仓库", code);
+        // 字面全仓只有一份（在 FirstRunPlan 里）。
+        var plan = Repo.Source("Desktop", "Native", "FirstRunPlan.cs");
+        Assert.Contains("public const string ProjectsEmptyHint =", plan);
+        // 同一口径：旧句只许留在类注释里（说明改了什么），代码区不许再有第二份字面。
+        Assert.DoesNotContain("先绑定代码仓库", CodeScan.Text(plan));
+    }
+
+    [Fact]
+    public void ProjectsHintDetector_ReportsTheBreaksItMustCatch()
+    {
+        // 夹具：一份合规的配置页片段，与三发注入（每一发只坏一处）。
+        const string good = """
+            private readonly Label _emptyHint = Ui.Body(FirstRunPlan.ProjectsEmptyHint, muted: true);
+            private void RefreshEmptyState()
+            {
+                _emptyHint.Text = _loadFailed ? ProfileLoadState.FailureHint : filtered ? ListFilter.ProfileNoMatchHint : FirstRunPlan.ProjectsEmptyHint;
+            }
+            """;
+        Assert.Empty(ProjectsHintProblems(good));
+
+        // ① 退回本页私有字面（第二份字面：改一处漏一处）。
+        Assert.Contains(ProjectsHintProblems(good.Replace(
+            "private readonly Label _emptyHint = Ui.Body(FirstRunPlan.ProjectsEmptyHint, muted: true);",
+            "private const string EmptyHint = \"先绑定代码仓库与 Apifox 项目，然后才能创建检查任务。\";\n"
+            + "    private readonly Label _emptyHint = Ui.Body(EmptyHint, muted: true);")),
+            p => p.Contains("EmptyHint", StringComparison.Ordinal));
+
+        // ② 刷新那一支不取共享落点（出厂与刷新各说各的）。
+        Assert.Contains(ProjectsHintProblems(good.Replace(
+            ": FirstRunPlan.ProjectsEmptyHint;",
+            ": \"先绑定代码仓库与 Apifox 项目，然后才能创建检查任务。\";")),
+            p => p.Contains("刷新", StringComparison.Ordinal));
+
+        // ③ 旧句复活（动词又回到「绑定」，屏上没有那颗按钮）——注入在**代码区**：
+        // 注释里引述旧句不算（判据读的是 CodeScan.Text），所以这一发必须写成真的字面。
+        Assert.Contains(ProjectsHintProblems(good.Replace(
+            "private readonly Label _emptyHint = Ui.Body(FirstRunPlan.ProjectsEmptyHint, muted: true);",
+            "private readonly Label _emptyHint = Ui.Body(FirstRunPlan.ProjectsEmptyHint, muted: true);\n"
+            + "    private const string OldHint = \"先绑定代码仓库与 Apifox 项目，然后才能创建检查任务。\";")),
+            p => p.Contains("先绑定", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 拿一段配置页源码文本判「空态说明是不是从唯一落点取」，返回每一处不符（空 = 对得上）。
+    /// <para>
+    /// 与 <see cref="Breaks"/> 同一形状：判据写成「文本进、问题出」，上面那条注入自验才喂得进坏源码。
+    /// </para>
+    /// </summary>
+    private static List<string> ProjectsHintProblems(string page)
+    {
+        // 与判据同一层：只看代码区（注释里引述旧句不算第二份字面）。
+        page = CodeScan.Text(page);
+        var problems = new List<string>();
+        if (!page.Contains("Ui.Body(FirstRunPlan.ProjectsEmptyHint, muted: true)", StringComparison.Ordinal))
+        {
+            problems.Add("空态说明的出厂没有取 FirstRunPlan.ProjectsEmptyHint：本页又写了一份字面。");
+        }
+        if (!page.Contains(": FirstRunPlan.ProjectsEmptyHint;", StringComparison.Ordinal))
+        {
+            problems.Add("刷新那一支没有取 FirstRunPlan.ProjectsEmptyHint：出厂与刷新各说各的。");
+        }
+        if (page.Contains("const string EmptyHint", StringComparison.Ordinal))
+        {
+            problems.Add("本页又有了私有 EmptyHint 常量：字面出现第二份。");
+        }
+        if (page.Contains("先绑定代码仓库", StringComparison.Ordinal))
+        {
+            problems.Add("旧句「先绑定代码仓库…」还在：动词又回到屏上没有的那颗按钮上。");
+        }
+        return problems;
+    }
+
     // ---------- ③ 接线：口径存在但界面没接线等于没有 ----------
 
     [Fact]

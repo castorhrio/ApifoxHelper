@@ -8836,6 +8836,37 @@ internal static class Program
                         $"点一次「新建配置」发出了 {profileRequests} 次「去建配置」请求（期望 1 次）："
                         + "这一跳的计数对不上，第二支拿它判「不再发」就没有意义。");
                 }
+
+                // 落到项目设置页之后，这一屏自己的空态说明也要点名它自己那颗按钮（第四百零七轮，具名 pass：quieter）。
+                // 此前这一句是「先绑定代码仓库与 Apifox 项目，然后才能创建检查任务。」——屏上没有一颗叫「绑定」的
+                // 按钮，而空态那颗写着「新建配置」；用户得自己把「绑定仓库与项目」翻译成「点下面那颗」。
+                // 这里量的是「说明真的在屏上」与「说明里那个名字就是屏上那颗按钮的文字」，不是抄一句文案。
+                if (FindLabel(projectsPage, FirstRunPlan.ProjectsEmptyHint) is null)
+                {
+                    throw new InvalidOperationException(
+                        $"项目设置页空态说明不是「{FirstRunPlan.ProjectsEmptyHint}」："
+                        + "这一屏的说明与它自己那颗按钮不同源，用户照着说明按不到屏上那一颗。");
+                }
+                var projectsButton = FindEmptyStateButton(
+                    projectsPage,
+                    FirstRunPlan.ProjectsEmptyHint,
+                    FirstRunPlan.NewProfileLabel);
+                if (projectsButton is null || !projectsButton.Visible)
+                {
+                    throw new InvalidOperationException(
+                        $"项目设置页空态上没有可见的「{FirstRunPlan.NewProfileLabel}」那颗："
+                        + "说明点名的入口必须按得出来（第四十二轮纪律）。");
+                }
+                if (!FirstRunPlan.ProjectsEmptyHint.Contains(projectsButton.Text, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"项目设置页空态说明「{FirstRunPlan.ProjectsEmptyHint}」里没有屏上那颗按钮的文字"
+                        + $"「{projectsButton.Text}」：说明与按钮各说各的。");
+                }
+
+                _lines.Add(
+                    $"     落到项目设置页：空态说明「{FirstRunPlan.ProjectsEmptyHint}」、"
+                    + $"空态那颗按钮「{projectsButton.Text}」（说明里点名的就是它）");
             });
 
             RunAction("首程：真的建一份配置再回到任务页——空态那颗按钮换回「新建任务」、说明也换回那一句，点它弹出的是本页既有的「新建任务」对话框（不再发「去建配置」那一跳，真实控件）", () =>

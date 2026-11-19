@@ -216,7 +216,9 @@ public class ListFilterTests
         Assert.Matches(@"(?m)^\s*SetStatus\(ListFilter\.IsActive\(_filter\.Text\) \? \$""筛选出 \{profiles\.Count\} 个配置（共 \{all\.Count\} 个）"" : null, UiTokens\.Muted\);", load);
         // 三态（第一百五十轮）：读取失败 > 筛到零行 > 还没有配置，失败态优先（ProfileLoadState 口径）。
         Assert.Matches(@"(?m)^\s*_emptyTitle\.Text = _loadFailed \? ProfileLoadState\.FailureTitle : filtered \? ListFilter\.ProfileNoMatchTitle : EmptyTitle;", page);
-        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = _loadFailed \? ProfileLoadState\.FailureHint : filtered \? ListFilter\.ProfileNoMatchHint : EmptyHint;", page);
+        // 第四百零七轮起「还没有配置」那一句由 FirstRunPlan 一处给（`ProjectsEmptyHint`，动词与空态那颗按钮对齐），
+        // 本页不再留私有字面——判的仍是「三态、读取失败态优先」这条规则，不是那一句写的是什么。
+        Assert.Matches(@"(?m)^\s*_emptyHint\.Text = _loadFailed \? ProfileLoadState\.FailureHint : filtered \? ListFilter\.ProfileNoMatchHint : FirstRunPlan\.ProjectsEmptyHint;", page);
     }
 
     [Fact]

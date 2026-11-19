@@ -30,9 +30,12 @@ internal sealed class ProjectsPage : UserControl, INativePage
     private readonly Panel _empty;
     // 空态文字按「还没有配置」与「筛到零行」两态切换：筛到零行不说成没有配置，并给出清空筛选的下一步。
     private const string EmptyTitle = "还没有项目配置";
-    private const string EmptyHint = "先绑定代码仓库与 Apifox 项目，然后才能创建检查任务。";
+    // 空态说明那一句由 FirstRunPlan 一处给（第四百零七轮）：此前是本页的私有常量
+    // 「先绑定代码仓库与 Apifox 项目，然后才能创建检查任务。」——两个主页面的空态说明里只有它
+    // 不点名屏上那颗按钮（屏上没有一颗叫「绑定」的按钮，而空态那颗写着「新建配置」）。
+    // 现在与任务页那两句同一份落点，动词与按钮对齐，字面全仓只有一份。
     private readonly Label _emptyTitle = Ui.Title(EmptyTitle);
-    private readonly Label _emptyHint = Ui.Body(EmptyHint, muted: true);
+    private readonly Label _emptyHint = Ui.Body(FirstRunPlan.ProjectsEmptyHint, muted: true);
     // 「新建配置」文字单一落点：工具栏实心主按钮与空态按钮同名同源，不出现第二处字面。
     // 第四百零五轮起这个字面收在 FirstRunPlan（两页共用一份词汇：任务页首程那一跳要说出这颗按钮的名字），
     // 本页只留一个别名，不再写第二份字面。
@@ -436,7 +439,7 @@ internal sealed class ProjectsPage : UserControl, INativePage
         // 三态：读取失败 > 筛到零行 > 还没有配置。失败态优先——这一屏连「有没有配置」都还不知道，
         // 说成「筛到零行」或「还没有配置」都是把读不出来说成读到了空。
         _emptyTitle.Text = _loadFailed ? ProfileLoadState.FailureTitle : filtered ? ListFilter.ProfileNoMatchTitle : EmptyTitle;
-        _emptyHint.Text = _loadFailed ? ProfileLoadState.FailureHint : filtered ? ListFilter.ProfileNoMatchHint : EmptyHint;
+        _emptyHint.Text = _loadFailed ? ProfileLoadState.FailureHint : filtered ? ListFilter.ProfileNoMatchHint : FirstRunPlan.ProjectsEmptyHint;
         _emptyCreate.Visible = !_loadFailed && !filtered;
         _emptyClear.Visible = !_loadFailed && filtered;
         _emptyRetry.Visible = ProfileLoadState.RetryVisible(_loadFailed);
