@@ -316,6 +316,9 @@ internal static class Program
         Section("首程那一条路（一台一份配置都没有的机器上：空态那颗按钮写着「新建配置」、说明点名的是它 → 真的点它 → 那一跳真的落到项目设置页 → 真的建一份配置再回到任务页 → 空态那颗按钮换回「新建任务」、说明也换回那一句 → 点它弹出的是本页既有的「新建任务」对话框、不再发「去建配置」那一跳，真实控件）", nameof(RunFirstRunPath));
         RunFirstRunPath(services, dataRoot);
 
+        Section("新建任务对话框的「项目配置」默认选中项（刚保存的那一份在清单里 → 默认选中它，哪怕它按名字排在后面 → 认不出（没保存过 / 已被删掉）→ 回退到清单第一项 → 清单为空 → 一项都不选 → 真的点空态那颗「新建任务」→ 对话框里选中的就是刚保存的那一份，真实控件）", nameof(RunNewTaskProfileDefault));
+        RunNewTaskProfileDefault(services, dataRoot);
+
         Section("三阶段进度条跳转之后的键盘落点（焦点在阶段按钮上 → 点一次 → 焦点落到那一区的第一颗可点按钮上 → 那一区一颗都不可点时焦点不往那一区塞 → 跳完按一次 Tab 详情不再被拉回顶部，真实控件与真实按键）", nameof(RunStageJumpFocus));
         RunStageJumpFocus(services, dataRoot);
 
@@ -8996,6 +8999,236 @@ internal static class Program
             if (Directory.Exists(emptyRoot))
             {
                 try { Directory.Delete(emptyRoot, recursive: true); } catch (IOException) { /* 删不掉也不该红这一段。 */ }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 「新建任务」对话框里「项目配置」下拉默认选中哪一份（第四百零八轮，具名 pass：harden）。
+    /// <para>
+    /// <b>这一段量什么</b>：真的造一台<b>有三份配置</b>的机器（独立的数据目录，不碰冒烟器共用的那一份），
+    /// 三份配置的名字按清单的排序口径（<c>ProfileStore.List</c> 按名称排）排成 A / M / Z，
+    /// 而「刚保存的那一份」是<b>排在最后的 Z</b>——于是「默认选中第一项」与「默认选中刚保存的那一份」
+    /// 在这台机器上是两个不同的答案，量得出来。四支：
+    /// </para>
+    /// <para>
+    /// <b>第一支</b>：<c>new NewTaskDialog(profiles, Z 的 Id)</c> → 下拉选中的是 Z（不是第一项 A）。
+    /// <b>第二支</b>：<c>new NewTaskDialog(profiles, null)</c>（这一次启动还没保存过配置）→ 回退到第一项 A。
+    /// <b>第三支</b>：<c>new NewTaskDialog(profiles, "p-gone")</c>（那一份已被删掉）→ 同样回退到第一项 A。
+    /// <b>第四支</b>：清单为空 → 下拉一项都不选（<c>SelectedIndex == -1</c>），不抛、也不假装选中了什么。
+    /// </para>
+    /// <para>
+    /// <b>第五支（真的点一次）</b>：真的显示任务页、把「刚保存的那一份」按壳那一处接线的同一形状交给它
+    /// （<c>PreferredProfileId</c>），真的点空态那颗「新建任务」——<c>ShowNewTaskDialog</c> 那条路真的弹出对话框，
+    /// 在它泵起来的消息循环里读下拉选中的是哪一份，再点对话框自己那颗「取消」关掉。
+    /// 这一支量的是「那一笔真的从页带进了对话框」，不是「对话框自己判得对」——后者前三支已经量过。
+    /// </para>
+    /// <para>
+    /// <b>为什么单独造一份目录</b>：冒烟器共用那一份数据目录里有前面各段留下的配置，名字与顺序都不由这一段定，
+    /// 用它量「刚保存的那一份排在后面」量不到——那样这一段会永远为真。
+    /// </para>
+    /// <para>
+    /// <b>认字不抄用户可见文案</b>：对话框标题取 <c>FirstRunPlan.NewTaskLabel</c>、空态说明取
+    /// <c>FirstRunPlan.Hint(EmptyActionFor(3))</c>、按钮文字取 <c>FirstRunPlan.Label(...)</c>，
+    /// 与界面同一份落点；落点挪走时报错点名，而不是量一行别的东西。
+    /// </para>
+    /// </summary>
+    private static void RunNewTaskProfileDefault(IServiceProvider services, string dataRoot)
+    {
+        // 一台有三份配置的机器：独立的数据目录，量完删掉。
+        var root = Path.Combine(dataRoot, "new-task-default");
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        var store = new FileStore(root);
+        var profiles = new ProfileStore(store);
+        var tasks = new TaskStore(store, profiles);
+        var sortMemory = new ListSortMemory(Path.Combine(root, "ui", "list-sort-new-task-default.json"));
+        CreateProbeWorkspace(Path.Combine(root, "Probe.Api"));
+
+        // 三份配置：名字按清单的排序口径排成 A / M / Z；「刚保存的那一份」是最后保存的 Z。
+        ProjectProfile Save(string name)
+        {
+            var saved = profiles.Save(
+                new ProjectProfile
+                {
+                    Name = name,
+                    WorkspaceRoot = root,
+                    ApiProject = "Probe.Api/Probe.Api.csproj",
+                    AllowedSourcePaths = ["Probe.Api/"],
+                },
+                isNew: true);
+            return saved;
+        }
+
+        var first = Save("A 默认项冒烟");
+        var middle = Save("M 默认项冒烟");
+        var justSaved = Save("Z 默认项冒烟");
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("新建任务对话框的「项目配置」默认选中项：刚保存的那一份在清单里就选它（哪怕它按名字排在最后），认不出时回退到第一项，清单为空时一项都不选（真实控件）", () =>
+            {
+                var listed = profiles.List();
+                if (listed.Count != 3)
+                {
+                    throw new InvalidOperationException($"配置清单里 {listed.Count} 份，期望 3 份：这一段量不到「刚保存的那一份排在后面」。");
+                }
+                if (!string.Equals(listed[0].Id, first.Id, StringComparison.Ordinal)
+                    || !string.Equals(listed[2].Id, justSaved.Id, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "配置清单的顺序不是「A / M / Z」："
+                        + string.Join("、", listed.Select(p => p.Name))
+                        + "——这一段的前提是「刚保存的那一份按名字排在最后」，前提不成立就量不出默认值错没错。");
+                }
+
+                // ① 刚保存的那一份在清单里：默认选中它（不是第一项）。
+                using (var dialog = new NewTaskDialog(profiles, justSaved.Id))
+                {
+                    var combo = FindFirst<ComboBox>(dialog)
+                        ?? throw new InvalidOperationException("「新建任务」对话框里找不到「项目配置」下拉框。");
+                    if (combo.SelectedIndex != 2)
+                    {
+                        throw new InvalidOperationException(
+                            $"刚保存的是第三份（{justSaved.Name}），下拉却选中第 {combo.SelectedIndex} 项"
+                            + $"（「{combo.SelectedItem}」）：默认值又回到「按名字排第一的那一份」，"
+                            + "照着默认值点「创建并扫描」就把任务绑到了另一份配置上。");
+                    }
+                    if (!string.Equals(combo.SelectedItem?.ToString(), justSaved.Name, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            $"下拉选中的是「{combo.SelectedItem}」，不是刚保存的「{justSaved.Name}」。");
+                    }
+                    _lines.Add($"     刚保存的那一份（{justSaved.Name}，清单第 3 项）→ 下拉默认选中「{combo.SelectedItem}」");
+                }
+
+                // ② 这一次启动还没保存过配置：回退到第一项（就是这一屏此前的行为）。
+                using (var dialog = new NewTaskDialog(profiles, null))
+                {
+                    var combo = FindFirst<ComboBox>(dialog)
+                        ?? throw new InvalidOperationException("「新建任务」对话框里找不到「项目配置」下拉框。");
+                    if (combo.SelectedIndex != 0 || !string.Equals(combo.SelectedItem?.ToString(), first.Name, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            $"没保存过配置时下拉选中第 {combo.SelectedIndex} 项（「{combo.SelectedItem}」），"
+                            + $"期望回退到第一项「{first.Name}」：认不出时不该让下拉空着。");
+                    }
+                    _lines.Add($"     没保存过配置（preferred = null）→ 回退到第一项「{combo.SelectedItem}」");
+                }
+
+                // ③ 指向一份已经被删掉的配置：同样回退到第一项。
+                using (var dialog = new NewTaskDialog(profiles, "p-gone"))
+                {
+                    var combo = FindFirst<ComboBox>(dialog)
+                        ?? throw new InvalidOperationException("「新建任务」对话框里找不到「项目配置」下拉框。");
+                    if (combo.SelectedIndex != 0 || !string.Equals(combo.SelectedItem?.ToString(), first.Name, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            $"指向一份已被删掉的配置时下拉选中第 {combo.SelectedIndex} 项（「{combo.SelectedItem}」），"
+                            + $"期望回退到第一项「{first.Name}」。");
+                    }
+                    _lines.Add($"     指向已被删掉的配置（preferred = p-gone）→ 回退到第一项「{combo.SelectedItem}」");
+                }
+
+                // ④ 清单为空：一项都不选（不抛、也不假装选中了什么）。
+                var emptyRoot = Path.Combine(root, "empty");
+                var emptyProfiles = new ProfileStore(new FileStore(emptyRoot));
+                using (var dialog = new NewTaskDialog(emptyProfiles, justSaved.Id))
+                {
+                    var combo = FindFirst<ComboBox>(dialog)
+                        ?? throw new InvalidOperationException("「新建任务」对话框里找不到「项目配置」下拉框。");
+                    if (combo.Items.Count != 0)
+                    {
+                        throw new InvalidOperationException($"清单为空时下拉里却有 {combo.Items.Count} 项。");
+                    }
+                    if (combo.SelectedIndex != NewTaskProfileChoice.None)
+                    {
+                        throw new InvalidOperationException(
+                            $"清单为空时下拉的 SelectedIndex 是 {combo.SelectedIndex}，期望 {NewTaskProfileChoice.None}（一项都不选）。");
+                    }
+                    _lines.Add($"     清单为空 → 下拉 {combo.Items.Count} 项、SelectedIndex = {combo.SelectedIndex}（一项都不选）");
+                }
+            });
+
+            RunAction("新建任务对话框的「项目配置」默认选中项：真的点空态那颗「新建任务」——对话框里选中的就是刚保存的那一份（那一笔真的从页带进了对话框，真实控件）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "新建任务默认项冒烟" };
+                page = BuildFirstRunTasksPage(services, tasks, profiles, sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                page.OnPageShown();
+                Application.DoEvents();
+
+                // 壳那一处接线（与 NativeShellForm 里那一处同一形状：配置页保存成功之后把那一份的 Id 交给任务页）。
+                page.PreferredProfileId = justSaved.Id;
+
+                var label = FirstRunPlan.Label(FirstRunPlan.EmptyActionFor(profiles.List().Count));
+                var hint = FirstRunPlan.Hint(FirstRunPlan.EmptyActionFor(profiles.List().Count));
+                var button = FindEmptyStateButton(page, hint, label);
+                if (button is null || !button.Visible)
+                {
+                    throw new InvalidOperationException(
+                        $"任务页空态上没有可见的「{label}」那颗：有配置、没任务时那一颗就该是「新建任务」。");
+                }
+
+                string? selected = null;
+                var opened = false;
+                using var probe = new System.Windows.Forms.Timer { Interval = 30 };
+                // ShowDialog 是模态的：Click 会卡在对话框里，核对与关闭只能排在它泵起来的消息循环内做。
+                // 关它走的也是对话框自己那颗「取消」的 PerformClick，不直接调 Close()（那绕过了产品路径）。
+                probe.Tick += (_, _) =>
+                {
+                    if (opened) return;
+                    var dialog = Application.OpenForms.Cast<Form>()
+                        .FirstOrDefault(form => !ReferenceEquals(form, host)
+                            && string.Equals(form.Text, FirstRunPlan.NewTaskLabel, StringComparison.Ordinal));
+                    if (dialog is null) return;
+                    var combo = FindFirst<ComboBox>(dialog);
+                    if (combo is null) return;
+                    selected = combo.SelectedItem?.ToString();
+                    var cancel = FindButton(dialog, "取消");
+                    if (cancel is null) return;
+                    cancel.PerformClick();
+                    opened = true;
+                };
+                probe.Start();
+                try
+                {
+                    button.PerformClick();
+                }
+                finally
+                {
+                    probe.Stop();
+                }
+                Application.DoEvents();
+
+                if (!opened)
+                {
+                    throw new InvalidOperationException(
+                        $"点了「{label}」却没等到「{FirstRunPlan.NewTaskLabel}」对话框：这一支量不到「那一笔真的带进了对话框」。");
+                }
+                if (!string.Equals(selected, justSaved.Name, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"对话框里「项目配置」选中的是「{selected}」，不是刚保存的「{justSaved.Name}」："
+                        + "那一笔没有从页带进对话框，用户照着默认值点「创建并扫描」就把任务绑到了另一份配置上。");
+                }
+
+                _lines.Add(
+                    $"     真的点空态那颗「{label}」→ 对话框里「项目配置」选中「{selected}」"
+                    + $"（刚保存的那一份，清单第 3 项；任务 {tasks.List().Count} 个）");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+            if (Directory.Exists(root))
+            {
+                try { Directory.Delete(root, recursive: true); } catch (IOException) { /* 删不掉也不该红这一段。 */ }
             }
         }
     }

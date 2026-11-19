@@ -276,6 +276,13 @@ internal sealed class NativeShellForm : Form
             _projectsPage.OpenNewProfile();
         };
 
+        // 「刚保存的那一份配置」这一笔的接线（第四百零八轮）：项目设置页保存成功之后把那一份的 Id 交给任务页，
+        // 任务页「新建任务」对话框的「项目配置」下拉默认选中它（判定在 NewTaskProfileChoice 一处）。
+        // 此前那个下拉一律选中清单第一项，而清单按配置名称排——刚建好的那一份未必排第一，
+        // 照着默认值点「创建并扫描」就把任务绑到了另一份配置上（扫另一个仓库、写另一个 Apifox 项目）。
+        // 两页互不引用，与上面两跳同一纪律：请求由页发出，落点由壳接。
+        _projectsPage.ProfileSaved += profileId => _tasksPage.PreferredProfileId = profileId;
+
         _content.Controls.Clear();
         _projectsPage.Dock = DockStyle.Fill;
         _tasksPage.Dock = DockStyle.Fill;

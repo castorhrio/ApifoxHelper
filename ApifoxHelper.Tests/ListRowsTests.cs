@@ -148,7 +148,11 @@ public class ListRowsTests
             "ProfileDialog 缺少 Saved 属性——调用方无法得知刚保存的配置。");
         Assert.True(Regex.IsMatch(page, @"^            Saved = _profile;", RegexOptions.Multiline),
             "保存成功路径未记录 Saved（保存失败保持 null）。");
-        Assert.True(Regex.IsMatch(page, @"^            if \(dialog\.Saved is \{ \} saved\) _selectedId = saved\.Id;", RegexOptions.Multiline),
+        // 第四百零八轮起这一支由单行变成块：除了定位刚保存的那一行，还要把那一份的 Id 交给壳
+        // （任务页「新建任务」对话框的默认选中项读它）。判的是「定位」与「交出去」两件事都在同一支里。
+        Assert.True(Regex.IsMatch(page, @"^            if \(dialog\.Saved is \{ \} saved\)\n            \{\n                _selectedId = saved\.Id;", RegexOptions.Multiline),
             "配置对话框确认后未定位刚保存的配置——新建/编辑保存后还要手动找行。");
+        Assert.True(Regex.IsMatch(page, @"^                ProfileSaved\?\.Invoke\(saved\.Id\);", RegexOptions.Multiline),
+            "配置对话框确认后未把刚保存的那一份交给壳——任务页「新建任务」对话框的默认选中项认不出它。");
     }
 }

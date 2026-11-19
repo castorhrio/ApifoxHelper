@@ -188,6 +188,26 @@ internal sealed class ProjectsPage : UserControl, INativePage
 
     private ProjectProfile? Selected() => Ui.SelectedItem(_list)?.Tag as ProjectProfile;
 
+    /// <summary>
+    /// 「刚保存了一份配置」这一笔（第四百零八轮，具名 pass：harden）：参数是那一份的 Id。
+    /// <para>
+    /// <b>为什么要有这一笔</b>：任务页「新建任务」对话框里「项目配置」下拉此前一律选中清单第一项，
+    /// 而清单是按<b>配置名称</b>排的——用户刚在本页建好（或改好）的那一份未必排第一，于是对话框默认选中的
+    /// 是别人，照着默认值点「创建并扫描」就把任务绑到了另一份配置上。判定收在
+    /// <see cref="NewTaskProfileChoice"/> 一处，本页只负责把「刚保存的是哪一份」这件事交出去。
+    /// </para>
+    /// <para>
+    /// <b>本页不引用另一页</b>：与「打开配置」「去建配置」两跳同一纪律——两页都由壳建、由壳切，
+    /// 请求由页发出、落点由壳接（<c>NativeShellForm</c> 把这一笔交给任务页的
+    /// <c>PreferredProfileId</c>）。本页不读任务页、也不缓存配置清单。
+    /// </para>
+    /// <para>
+    /// <b>只在真的保存成功之后发</b>：取消、校验失败、读取失败都不发——那时没有「刚保存的那一份」，
+    /// 发一次就会让任务页的默认值指向一份没落盘的配置。
+    /// </para>
+    /// </summary>
+    public event Action<string>? ProfileSaved;
+
     public void OnPageShown()
     {
         // 首次显示与每次切回都重读，反映资料目录的最新状态。
@@ -539,7 +559,13 @@ internal sealed class ProjectsPage : UserControl, INativePage
         if (dialog.ShowDialog(FindForm()) == DialogResult.OK)
         {
             // 刚保存的配置（新建或编辑）在重建后选中，编辑/探测入口保持可用。
-            if (dialog.Saved is { } saved) _selectedId = saved.Id;
+            if (dialog.Saved is { } saved)
+            {
+                _selectedId = saved.Id;
+                // 把「刚保存的是哪一份」交给壳（第四百零八轮）：任务页「新建任务」对话框的默认选中项读它。
+                // 只在真的保存成功之后发——取消与校验失败时没有「刚保存的那一份」。
+                ProfileSaved?.Invoke(saved.Id);
+            }
             LoadProfiles();
         }
     }

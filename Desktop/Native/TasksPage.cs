@@ -540,6 +540,27 @@ internal sealed class TasksPage : UserControl, INativePage
     public event Action? NewProfileRequested;
 
     /// <summary>
+    /// 「新建任务」对话框里「项目配置」下拉默认选中的那一份（第四百零八轮，具名 pass：harden）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：这个下拉此前一律选中清单第一项，而清单是按<b>配置名称</b>排的
+    /// （<c>ProfileStore.List</c>），不是按创建时间。首程那条路上用户刚建完配置、回到本页点「新建任务」，
+    /// 只要清单里还有一份名字排在它前面的配置，对话框默认选中的就是别人——照着默认值点「创建并扫描」，
+    /// 任务就绑到了另一份配置上（扫另一个仓库、写另一个 Apifox 项目）。判定收在
+    /// <see cref="NewTaskProfileChoice"/> 一处，本页只负责把「刚保存的那一份」这一笔带过去。
+    /// </para>
+    /// <para>
+    /// <b>谁写这一笔</b>：壳（<c>NativeShellForm</c>）——项目设置页保存成功之后把那一份的 Id 交过来，
+    /// 与「打开配置」「去建配置」两跳同一纪律：两页互不引用，请求由页发出、落点由壳接。
+    /// 本页不自己读另一页的选中行，也不缓存配置清单。
+    /// </para>
+    /// <para>
+    /// <b>认不出时不变差</b>：<c>null</c>（这一次启动还没保存过配置）或指向一份已被删掉的配置时，
+    /// 下拉回退到第一项——就是本页此前的行为（见 <see cref="NewTaskProfileChoice.Index"/>）。
+    /// </para>
+    /// </summary>
+    public string? PreferredProfileId { get; set; }
+
+    /// <summary>
     /// 点「打开配置」：没有选中任务、或这个任务没有绑定配置（配置 Id 为空）时不发请求——
     /// 认不出该跳到哪一份配置时不跳，也不拿清单第一行顶替（判定在 <see cref="ProfileJump.CanJump"/>）。
     /// </summary>
@@ -1777,7 +1798,9 @@ internal sealed class TasksPage : UserControl, INativePage
             SetStatus("读取配置失败：" + Redactor.Redact(ex.Message));
             return;
         }
-        using var dialog = new NewTaskDialog(_profiles);
+        // 默认选中哪一份由 NewTaskProfileChoice 一处判（第四百零八轮）：刚保存的那一份优先，
+        // 认不出（没保存过 / 已被删掉）时回退到清单第一项——本页此前的行为。
+        using var dialog = new NewTaskDialog(_profiles, PreferredProfileId);
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         try
         {
@@ -1835,7 +1858,11 @@ internal sealed class NewTaskDialog : DpiAwareForm
         public override string ToString() => Text;
     }
 
-    public NewTaskDialog(ProfileStore profiles)
+    /// <param name="preferredProfileId">
+    /// 「项目配置」下拉默认选中的那一份（第四百零八轮）：由 <see cref="NewTaskProfileChoice.Index"/> 判，
+    /// 认不出时回退到清单第一项。传 <c>null</c> 就是本对话框此前的行为。
+    /// </param>
+    public NewTaskDialog(ProfileStore profiles, string? preferredProfileId = null)
     {
         _profiles = profiles;
         Text = "新建任务";
@@ -1902,11 +1929,15 @@ internal sealed class NewTaskDialog : DpiAwareForm
         Controls.Add(buttons);
         Controls.Add(statusHost);
 
-        foreach (var profile in _profiles.List())
+        var available = _profiles.List();
+        foreach (var profile in available)
         {
             _profile.Items.Add(new ProfileItem(profile.Name, profile));
         }
-        if (_profile.Items.Count > 0) _profile.SelectedIndex = 0;
+        // 默认选中哪一份不在这里判（第四百零八轮）：清单是按名称排的，选中第一项等于「按名字排第一的那一份」，
+        // 而用户刚保存的那一份未必排第一——判定收在 NewTaskProfileChoice 一处，这里只落它的答案。
+        var index = NewTaskProfileChoice.Index(available.Select(p => p.Id).ToList(), preferredProfileId);
+        if (index != NewTaskProfileChoice.None) _profile.SelectedIndex = index;
     }
 
     private void LoadModules()
