@@ -2,5 +2,5 @@
 # 对账的门在 ApifoxHelper.Tests/ReadingConsistencyTests.cs：reading.txt 的 source= 必须逐字等于这里的 source=；
 #   不等 = 最近一次整支跑通的那一版源码不是当前源码（读数过期），重跑 PUBLISH=1 bash .winecheck/defense-day.sh。
 script=defense-day.sh
-date=2026-11-19
-source=28ffdc488b4c7737ede4ae5f9976ba01f63cf81b
+date=2026-11-20
+source=34ae24dd05f0df96626005034856902808dd3c94

@@ -319,6 +319,9 @@ internal static class Program
         Section("新建任务对话框的「项目配置」默认选中项（刚保存的那一份在清单里 → 默认选中它，哪怕它按名字排在后面 → 认不出（没保存过 / 已被删掉）→ 回退到清单第一项 → 清单为空 → 一项都不选 → 真的点空态那颗「新建任务」→ 对话框里选中的就是刚保存的那一份，真实控件）", nameof(RunNewTaskProfileDefault));
         RunNewTaskProfileDefault(services, dataRoot);
 
+        Section("注释草稿四条入口的门控（未扫描 → 五颗全停用 → 已扫描且配置没配模型服务 → 「模型生成候选」那颗停用、其余四颗照常可用 → 已扫描且配置配了 OpenAI 兼容服务 → 五颗全可用 → 真的点一次停用的那颗：状态行一个字没变、没有作业起来，真实控件）", nameof(RunDraftEntryGates));
+        RunDraftEntryGates(services, dataRoot);
+
         Section("三阶段进度条跳转之后的键盘落点（焦点在阶段按钮上 → 点一次 → 焦点落到那一区的第一颗可点按钮上 → 那一区一颗都不可点时焦点不往那一区塞 → 跳完按一次 Tab 详情不再被拉回顶部，真实控件与真实按键）", nameof(RunStageJumpFocus));
         RunStageJumpFocus(services, dataRoot);
 
@@ -9220,6 +9223,217 @@ internal static class Program
                 _lines.Add(
                     $"     真的点空态那颗「{label}」→ 对话框里「项目配置」选中「{selected}」"
                     + $"（刚保存的那一份，清单第 3 项；任务 {tasks.List().Count} 个）");
+            });
+        }
+        finally
+        {
+            page?.Dispose();
+            host?.Dispose();
+            if (Directory.Exists(root))
+            {
+                try { Directory.Delete(root, recursive: true); } catch (IOException) { /* 删不掉也不该红这一段。 */ }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 注释草稿四条入口在真实任务页上的门控（第四百零九轮，简报 P1-2：模型生成这条可选增强路径的可演示性证据）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：<c>DraftEntries.CanGenerateModel</c> 这条口径有单元门
+    /// （<c>DraftEntriesTests.CanGenerateModel_OnlyForOpenAiMode</c> 六档取值），但<b>没有任何一段量过它接在屏上之后的样子</b>——
+    /// 「配置了模型服务 → 那条路出现；没配 → 那条路不出现、其余三条照常」这句话此前只有源码里那一行
+    /// <c>_modelButton.Enabled = scanReady &amp;&amp; DraftEntries.CanGenerateModel(…)</c> 作证，
+    /// 而「那一行真的接到了那颗按钮上」正是 Linux 侧静态门判不到的那一半（要真的把任务页显示出来、真的选中一行）。
+    /// 冲第一口径下「模型生成」是本产品唯一的 AI 增强路径，它得能被演示，而不只是能被引用。
+    /// </para>
+    /// <para>
+    /// <b>这一段量什么</b>：同一台机器上两份配置（一份 <c>none</c>、一份 <c>openai</c>）各建一个任务，再加一个没扫描过的任务，
+    /// 在<b>同一个</b>真实 <see cref="TasksPage"/> 上逐行选中，读五颗草稿入口的 <c>Enabled</c>：
+    /// ① 未扫描 → 五颗全停用（扫描产物是这四条路的共同前提）；
+    /// ② 已扫描 + 配置 <c>none</c> → 「模型生成候选」停用，其余四颗可用；
+    /// ③ 已扫描 + 配置 <c>openai</c> → 五颗全可用（那条路真的出现）；
+    /// ④ 真的点一次停用的那颗 → 状态行一个字没变、没有作业起来（停用不是「点了没反应」的另一种说法，是它压根不该被点）。
+    /// </para>
+    /// <para>
+    /// <b>它不量什么</b>：那颗按钮点下去之后的那一步是原生 <c>MessageBox</c>（<c>TasksPage.StartModelGeneration</c> 的
+    /// 「确认发送材料」），冒烟器点不到系统模态框——与 <c>ProfileExportAction</c> 中间隔着一个 <c>SaveFileDialog</c>
+    /// 同一取舍。所以「确认之后真的发出去了」这一半仍不在本段内，如实留在这里，不拿「按钮可用」冒充「那条路跑通了」。
+    /// </para>
+    /// </summary>
+    private static void RunDraftEntryGates(IServiceProvider services, string dataRoot)
+    {
+        var root = Path.Combine(dataRoot, "draft-entry-gates");
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        var store = new FileStore(root);
+        var profiles = new ProfileStore(store);
+        var tasks = new TaskStore(store, profiles);
+        var sortMemory = new ListSortMemory(Path.Combine(root, "ui", "list-sort-draft-entry-gates.json"));
+        CreateProbeWorkspace(Path.Combine(root, "Probe.Api"));
+
+        // 两份配置：A 没配模型服务（none，缺省值），B 配了 OpenAI 兼容服务（openai）。
+        var plain = profiles.Save(
+            new ProjectProfile
+            {
+                Name = "A 未配模型",
+                WorkspaceRoot = root,
+                ApiProject = "Probe.Api/Probe.Api.csproj",
+                AllowedSourcePaths = ["Probe.Api/"],
+            },
+            isNew: true);
+        var withModel = profiles.Save(
+            new ProjectProfile
+            {
+                Name = "B 配了模型",
+                WorkspaceRoot = root,
+                ApiProject = "Probe.Api/Probe.Api.csproj",
+                AllowedSourcePaths = ["Probe.Api/"],
+                Generation = new GenerationSettings
+                {
+                    Mode = "openai",
+                    BaseUrl = "https://model.invalid/v1",
+                    Model = "probe-model",
+                },
+            },
+            isNew: true);
+
+        // 前提现读：两份配置的生成方式真的落成了 none / openai（落不成的话下面三支量的是同一件事）。
+        var plainMode = profiles.Get(plain.Id).Generation.Mode;
+        var modelMode = profiles.Get(withModel.Id).Generation.Mode;
+        if (!string.Equals(plainMode, "none", StringComparison.Ordinal)
+            || !string.Equals(modelMode, "openai", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"两份配置的生成方式读回来是「{plainMode}」/「{modelMode}」，期望「none」/「openai」："
+                + "前提不成立，下面三支量不出「那条路出不出现」。");
+        }
+
+        var unscanned = tasks.Create(new CreateTaskRequest { ProfileId = plain.Id, Name = "未扫描" });
+        var scannedPlain = tasks.Create(new CreateTaskRequest { ProfileId = plain.Id, Name = "已扫描·未配模型" });
+        var scannedModel = tasks.Create(new CreateTaskRequest { ProfileId = withModel.Id, Name = "已扫描·配了模型" });
+        // 扫描完成态按产品自己会写的那一个字段落盘（RefreshDetailActions 的 scanReady 判的就是它）。
+        foreach (var id in new[] { scannedPlain.Id, scannedModel.Id })
+        {
+            tasks.UpdateAsync(id, changed => changed.Stages.Source.ScannedAt = DateTimeOffset.Now).GetAwaiter().GetResult();
+        }
+
+        // 五颗草稿入口的按钮文字取产品源码里那五处出厂字面（这一段按文字找控件，不按字段名反射）。
+        string[] entries =
+        [
+            "查看注释缺口", "查看注释候选", "规则提取候选", "模型生成候选", "导出材料",
+        ];
+        const string modelEntry = "模型生成候选";
+
+        Form? host = null;
+        TasksPage? page = null;
+        try
+        {
+            RunAction("注释草稿四条入口的门控：未扫描全停用 → 已扫描且没配模型服务时只有「模型生成候选」停用 → 已扫描且配了模型服务时五颗全可用（真实控件）", () =>
+            {
+                host = new Form { Width = 1200, Height = 760, Text = "草稿入口门控冒烟" };
+                page = BuildFirstRunTasksPage(services, tasks, profiles, sortMemory);
+                page.Dock = DockStyle.Fill;
+                host.Controls.Add(page);
+                host.Show();
+                Application.DoEvents();
+                page.OnPageShown();
+                Application.DoEvents();
+
+                // 说明行在屏上：停用的理由由这一句承载（颜色+文字双通道里的文字那一半）。
+                var hint = FindLabel(page, "什么时候可用？扫描完成后；回写另需已接受的候选，模型生成另需配置模型服务。");
+                if (hint is null)
+                {
+                    throw new InvalidOperationException(
+                        "任务页上找不到「什么时候可用？…模型生成另需配置模型服务。」那一句说明行："
+                        + "「模型生成候选」停用时屏上就没有任何一处讲它为什么停用。");
+                }
+
+                Dictionary<string, bool> Read(string taskId, string label)
+                {
+                    SelectTaskRow(page, taskId);
+                    var states = new Dictionary<string, bool>(StringComparer.Ordinal);
+                    foreach (var text in entries)
+                    {
+                        var button = FindButton(page, text)
+                            ?? throw new InvalidOperationException(
+                                $"任务页上找不到「{text}」那颗按钮：这一段量的是这五颗的门控，少一颗就量不全。");
+                        states[text] = button.Enabled;
+                    }
+                    _lines.Add($"     {label} → " + string.Join("、", entries.Select(t => t + "=" + (states[t] ? "可用" : "停用"))));
+                    return states;
+                }
+
+                // ① 未扫描：五颗全停用。
+                var beforeScan = Read(unscanned.Id, "未扫描");
+                var wronglyOn = entries.Where(t => beforeScan[t]).ToList();
+                if (wronglyOn.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "还没扫描时这几颗却是可用的：" + string.Join("、", wronglyOn)
+                        + "——四条草稿入口都以扫描产物为前提，未扫描时可用等于把不可作用的东西说成可作用。");
+                }
+
+                // ② 已扫描 + 配置 none：只有「模型生成候选」停用。
+                var plainStates = Read(scannedPlain.Id, "已扫描·配置 none");
+                if (plainStates[modelEntry])
+                {
+                    throw new InvalidOperationException(
+                        "配置的草稿生成方式是「none」，「模型生成候选」那颗却是可用的："
+                        + "点下去只会走到「没有配置模型服务」的拒绝上，那条路不该出现。");
+                }
+                var othersOff = entries.Where(t => t != modelEntry && !plainStates[t]).ToList();
+                if (othersOff.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "没配模型服务时这几颗跟着一起停用了：" + string.Join("、", othersOff)
+                        + "——模型服务是可选增强，其余三条路（规则提取 / 材料导出 / 手工填写）必须照常可用。");
+                }
+
+                // ③ 已扫描 + 配置 openai：五颗全可用（那条路真的出现）。
+                var modelStates = Read(scannedModel.Id, "已扫描·配置 openai");
+                var stillOff = entries.Where(t => !modelStates[t]).ToList();
+                if (stillOff.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "配置了 OpenAI 兼容模型服务，这几颗却还是停用的：" + string.Join("、", stillOff)
+                        + "——「模型生成候选」那条路没有出现，可选增强在屏上等于不存在。");
+                }
+            });
+
+            RunAction("注释草稿四条入口的门控：真的点一次停用的那颗「模型生成候选」——状态行一个字没变、没有作业起来（真实控件）", () =>
+            {
+                if (page is not { } shown) throw new InvalidOperationException("上一段没有产出任务页。");
+                SelectTaskRow(shown, scannedPlain.Id);
+                var button = FindButton(shown, modelEntry)
+                    ?? throw new InvalidOperationException($"任务页上找不到「{modelEntry}」那颗按钮。");
+                if (button.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        "这一支要的是「停用的那颗点了不动作」，而它此刻是可用的：前提不成立。");
+                }
+                var statusHost = FindAll<StatusLineHost>(shown).FirstOrDefault()
+                    ?? throw new InvalidOperationException("任务页上找不到状态行宿主：这一支量不到「状态行有没有变」。");
+                var before = statusHost.Label.Text;
+                var jobs = services.GetRequiredService<JobRunner>();
+                // 作业的作用域就是任务 Id（TasksPage.StartTaskJob 传的是 taskId），所以这里问的是
+                // 「这个任务上有没有作业在跑」，不是「整台机器上有没有作业」。
+                var runningBefore = jobs.Running(scannedPlain.Id);
+
+                button.PerformClick();
+                Application.DoEvents();
+
+                if (!string.Equals(statusHost.Label.Text, before, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"点了停用的「{modelEntry}」之后状态行由「{before}」变成「{statusHost.Label.Text}」："
+                        + "停用的那颗不该有任何副作用。");
+                }
+                if (!ReferenceEquals(jobs.Running(scannedPlain.Id), runningBefore))
+                {
+                    throw new InvalidOperationException(
+                        "点了停用的「" + modelEntry + "」之后起来了作业：停用的那颗不该起作业。");
+                }
+                _lines.Add($"     真的点一次停用的「{modelEntry}」→ 状态行仍是「{before}」、作业仍是 "
+                    + (runningBefore is null ? "没有在跑" : "同一个"));
             });
         }
         finally
