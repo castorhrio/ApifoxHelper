@@ -160,13 +160,17 @@ internal static class MeasuredScreens
             + "刷新四次控件数与实例都不变）、第三段第三百七十六轮（次动作那颗正拿着键盘时刷新把它藏起来，键盘交给还在屏上的"
             + "主动作那颗）、第四段第三百八十九轮（那颗正拿着键盘而这一次刷新没把它藏起来时键盘原地不动，既不白交一次也不"
             + "顺手交给别一颗）；认那一行按 Ui.BannerRowMarker，不抄用户可见文案"),
-        new("检查任务页首程那一条路（一台一份配置都没有的机器上，空态那颗按钮写着「新建配置」、点它真的落到项目设置页）", "RunFirstRunPath",
-            ["TasksPage", "ProjectsPage"], true, "第四百零五轮",
-            "docs/NOTES.md 第四百零五轮：真的造一台独立数据目录的空机器（一份配置都没有），真的显示任务页，"
-            + "读「空态那颗按钮写着「新建配置」而不是「新建任务」」「空态说明点名的是屏上真的那一颗」，"
-            + "然后真的点它（PerformClick → RunEmptyCreate → NewProfileRequested），读「那一跳真的落到项目设置页」；"
+        new("检查任务页首程那一条路（一台一份配置都没有的机器上，空态那颗按钮写着「新建配置」、点它真的落到项目设置页；建完配置回来之后那颗按钮换回「新建任务」、点它走的是本页既有的「新建任务」入口）", "RunFirstRunPath",
+            ["TasksPage", "ProjectsPage"], true, "第四百零六轮",
+            "docs/NOTES.md 第四百零六轮：两支量完 FirstRunPlan.EmptyActionFor 那两条边——第一支（第四百零五轮）真的造一台"
+            + "独立数据目录的空机器（一份配置都没有），真的显示任务页，读「空态那颗按钮写着「新建配置」而不是「新建任务」」"
+            + "「空态说明点名的是屏上真的那一颗」，然后真的点它（PerformClick → RunEmptyCreate → NewProfileRequested），"
+            + "读「那一跳真的落到项目设置页」；第二支（第四百零六轮）真的写一份配置（ProfileStore.Save 唯一入口）、"
+            + "真的回到任务页（OnPageShown → LoadTasks → RefreshEmptyState），读「空态那颗按钮换回「新建任务」」"
+            + "「说明也换回有配置那一句、首程那一句不再留在屏上」，再真的点它，读「弹出的是本页既有的「新建任务」对话框」"
+            + "「「去建配置」请求计数不动、也没有被送回项目设置页」；"
             + "认字取 FirstRunPlan 那两个共享常量与 Hint，不抄用户可见文案；"
-            + "「新建配置」对话框本身是模态的，那一半由 FirstRunPlanTests 的源码门判，冒烟段只量用户有没有被送到下一屏"),
+            + "两个对话框本身都是模态的，那一半由 FirstRunPlanTests 的源码门判，冒烟段只量用户有没有被送到下一屏"),
         new("检查任务页三阶段进度条跳转之后的键盘落点", "RunStageJumpFocus",
             ["TasksPage"], true, "第三百七十三轮",
             "docs/NOTES.md 第三百七十三轮：真的显示任务页、真的把焦点放到阶段按钮上、真的 PerformClick 一次，"

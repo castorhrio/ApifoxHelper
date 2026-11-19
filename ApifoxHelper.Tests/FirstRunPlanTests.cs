@@ -17,9 +17,18 @@ namespace ApifoxHelper.Tests;
 /// <para>
 /// <b>这一条判什么</b>：① 判定本身（<see cref="FirstRunPlan.EmptyActionFor"/> 的四种入参逐格对账，真执行）；
 /// ② 文字与判定同一份（<see cref="FirstRunPlan.Label"/> / <see cref="FirstRunPlan.Hint"/> 与判定同源，
-/// 说明里点名的入口就是那一刻屏上真的那一颗）；③ 接线（源码门：空态那颗按钮按记下的那一笔分发、
+/// 说明里点名的入口就是那一刻屏上真的那一颗）；②' <b>两条边一起换</b>（第四百零六轮：配置数从 0 变 1 之后
+/// 判定、按钮文字、空态说明三样同时换，且换边的门槛只有 0 与 1 之间那一处；同一情境下空态说明与状态行
+/// 那两句分工不同但不互相矛盾）；③ 接线（源码门：空态那颗按钮按记下的那一笔分发、
 /// 两条路各自汇到既有唯一入口、壳把「去建配置」这一跳接到项目设置页的落点上）；
 /// ④ 判据自己被抓得住（拿注入的坏源码喂一遍，每一发都必须报出自己那一处）。
+/// </para>
+/// <para>
+/// <b>为什么第四百零六轮要补 ②'</b>：<see cref="FirstRunPlan.EmptyActionFor"/> 是一条有两条边的状态机，
+/// 第四百零五轮只把第一条边（0 份配置 → 点下去落到项目设置页）量到了屏上。第二条边——「建完配置回来，
+/// 空态那颗按钮换回『新建任务』」——是首程闭环的关键一步，也是「用户会不会又被指到『新建配置』、
+/// 又被拒一次」这一族缺陷的落点。源码门判得到「判定与文字同源」，判不到「配置数从 0 变 1 之后
+/// 界面真的重推了一次」；那一次重推由冒烟段 `RunFirstRunPath` 的第二支真的量（见 `MeasuredScreens`）。
 /// </para>
 /// <para>
 /// <b>它不判什么</b>：不判真机上切页之后键盘落在哪、对话框弹出来的位置（随 G-D5 真机复核）；
@@ -81,6 +90,68 @@ public class FirstRunPlanTests
         Assert.DoesNotContain("失败", FirstRunPlan.NoProfileStatus);
     }
 
+    // ---------- ②' 两条边：配置数从 0 变 1 之后三样同时换（第四百零六轮） ----------
+
+    [Fact]
+    public void BothEdges_OfTheFirstRunStateMachine_SwitchTogether()
+    {
+        // EmptyActionFor 是一条有两条边的状态机（0 → NewProfile、≥1 → NewTask）。
+        // 第四百零五轮只把第一条边量到屏上；这一条把两条边逐格对账，判「换边时三样一起换」——
+        // 判定、按钮文字、空态说明。少换一样，用户就会读到「按钮换了字而说明还停在上一句」。
+        var firstRun = FirstRunPlan.EmptyActionFor(0);
+        var withProfile = FirstRunPlan.EmptyActionFor(1);
+        Assert.NotEqual(firstRun, withProfile);
+
+        // ① 判定换边。
+        Assert.Equal(FirstRunPlan.EmptyAction.NewProfile, firstRun);
+        Assert.Equal(FirstRunPlan.EmptyAction.NewTask, withProfile);
+
+        // ② 按钮文字跟着换，且与判定同源（界面不另判一次）。
+        Assert.Equal(FirstRunPlan.NewProfileLabel, FirstRunPlan.Label(firstRun));
+        Assert.Equal(FirstRunPlan.NewTaskLabel, FirstRunPlan.Label(withProfile));
+        Assert.NotEqual(FirstRunPlan.Label(firstRun), FirstRunPlan.Label(withProfile));
+
+        // ③ 空态说明跟着换，且两句不是同一句。
+        Assert.NotEqual(FirstRunPlan.Hint(firstRun), FirstRunPlan.Hint(withProfile));
+
+        // ④ 每一条边上，说明点名的入口就是那一刻屏上真的那一颗（第四十二轮纪律）。
+        Assert.Contains(FirstRunPlan.Label(firstRun), FirstRunPlan.Hint(firstRun));
+        Assert.Contains(FirstRunPlan.Label(withProfile), FirstRunPlan.Hint(withProfile));
+
+        // ⑤ 换边的门槛只有一处：0 与 1 之间换，1 与 7 之间不换（不是「每多一份配置就换一次」）。
+        Assert.Equal(withProfile, FirstRunPlan.EmptyActionFor(7));
+        Assert.Equal(FirstRunPlan.Hint(withProfile), FirstRunPlan.Hint(FirstRunPlan.EmptyActionFor(7)));
+    }
+
+    [Fact]
+    public void NoProfileStatus_AndTheFirstRunHint_SplitTheWorkWithoutContradicting()
+    {
+        // 同一情境（一份配置都没有）下屏上会出现两句：空态说明（Hint(NewProfile)）与
+        // 用户按了工具栏那颗「新建任务」之后状态行那一句（NoProfileStatus）。
+        // 两句分工不同——一句在空态上指屏上那颗按钮，一句在状态行里说「先建配置」——
+        // 但说的必须是同一件事、同一步，不许一句说「还没有配置」另一句说别的。
+        var hint = FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile);
+        var status = FirstRunPlan.NoProfileStatus;
+
+        // ① 同一件事：两句都说「还没有项目配置」。
+        Assert.Contains("还没有项目配置", hint);
+        Assert.Contains("还没有项目配置", status);
+
+        // ② 同一步：两句都点名「新建配置」这一颗（下一步只有一步，不各指一处）。
+        Assert.Contains(FirstRunPlan.NewProfileLabel, hint);
+        Assert.Contains(FirstRunPlan.NewProfileLabel, status);
+
+        // ③ 都不冒充「失败」：这一次根本没有走到创建那一步。
+        Assert.DoesNotContain("失败", hint);
+        Assert.DoesNotContain("失败", status);
+
+        // ④ 分工不同：不是同一句（同一句写两遍就是两处字面，改一处漏一处）。
+        Assert.NotEqual(hint, status);
+        // 空态那一句指屏上那颗按钮（不指侧栏），状态行那一句指页面名（用户要落到的那一屏）。
+        Assert.DoesNotContain(PageNames.Projects, hint);
+        Assert.Contains(PageNames.Projects, status);
+    }
+
     // ---------- ③ 接线：口径存在但界面没接线等于没有 ----------
 
     [Fact]
@@ -94,6 +165,7 @@ public class FirstRunPlanTests
         Assert.Contains("NewProfileRequested?.Invoke();", dispatch);
         Assert.Contains("ShowNewTaskDialog();", dispatch);
         // 判定与文字同一轮推导：空态刷新里三件事一起换（判定、说明、按钮文字）。
+        // 这一处判的是「同一轮推导」，两条边共用这一处——所以它同时覆盖 0 → NewProfile 与 ≥1 → NewTask。
         var refresh = Slice(page, "private void RefreshEmptyState()", "private int? ProfileCount()");
         Assert.Contains("_emptyAction = FirstRunPlan.EmptyActionFor(ProfileCount());", refresh);
         Assert.Contains("FirstRunPlan.Hint(_emptyAction)", refresh);

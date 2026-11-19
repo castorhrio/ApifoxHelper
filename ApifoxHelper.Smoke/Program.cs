@@ -313,7 +313,7 @@ internal static class Program
         Section("引导横幅那两颗按钮的同一颗与键盘焦点（焦点放到横幅那颗按钮上 → 走一次刷新 → 同一颗实例还在父面里、焦点还在它身上 → 只有主动作的那一步里次动作那颗藏起来而不是摘掉、刷新四次控件数与实例都不变 → 次动作那颗正拿着键盘时刷新把它藏起来、键盘交给还在屏上的主动作那颗 → 那颗正拿着键盘而刷新没有把它藏起来时键盘原地不动、不白交一次，真实控件）", nameof(RunBannerFocus));
         RunBannerFocus(services, dataRoot);
 
-        Section("首程那一条路（一台一份配置都没有的机器上：空态那颗按钮写着「新建配置」、说明点名的是它 → 真的点它 → 那一跳真的落到项目设置页，真实控件）", nameof(RunFirstRunPath));
+        Section("首程那一条路（一台一份配置都没有的机器上：空态那颗按钮写着「新建配置」、说明点名的是它 → 真的点它 → 那一跳真的落到项目设置页 → 真的建一份配置再回到任务页 → 空态那颗按钮换回「新建任务」、说明也换回那一句 → 点它弹出的是本页既有的「新建任务」对话框、不再发「去建配置」那一跳，真实控件）", nameof(RunFirstRunPath));
         RunFirstRunPath(services, dataRoot);
 
         Section("三阶段进度条跳转之后的键盘落点（焦点在阶段按钮上 → 点一次 → 焦点落到那一区的第一颗可点按钮上 → 那一区一颗都不可点时焦点不往那一区塞 → 跳完按一次 Tab 详情不再被拉回顶部，真实控件与真实按键）", nameof(RunStageJumpFocus));
@@ -3169,6 +3169,22 @@ internal static class Program
             if (FindLabel(child, text) is { } found) return found;
         }
         return null;
+    }
+
+    /// <summary>
+    /// 空态那一块里的那颗按钮（第四百零六轮）：先按空态说明那一句找到空态那一块，再在那一块里按文字找按钮。
+    /// <para>
+    /// <b>为什么不直接按文字找</b>：有配置那一态下，工具栏那颗实心主按钮与空态那颗 ghost 写着同一句
+    /// 「新建任务」。按文字递归找会先撞上谁取决于控件树的加入顺序——量到的可能是工具栏那颗，
+    /// 而这一段要量的是<b>空态那颗</b>。先按说明那一句定位到空态那一块（说明与那颗按钮在同一个
+    /// 表格布局里），再在那一块里找，量到的就一定是空态那颗。
+    /// </para>
+    /// </summary>
+    private static Button? FindEmptyStateButton(Control page, string hint, string label)
+    {
+        var hintLabel = FindLabel(page, hint);
+        if (hintLabel?.Parent is not { } block) return null;
+        return FindButton(block, label);
     }
 
     /// <summary>
@@ -8700,15 +8716,28 @@ internal static class Program
     }
 
     /// <summary>
-    /// 首程：一台什么都没装的机器上，第一次打开的人能不能走到「新建任务」（第四百零五轮）。
+    /// 首程：一台什么都没装的机器上，第一次打开的人能不能走到「新建任务」（第四百零五轮；第四百零六轮补第二条边）。
     /// <para>
     /// <b>这一段量什么</b>：真的造一台<b>一份配置都没有</b>的机器（独立的数据目录，不碰冒烟器共用的那一份），
-    /// 真的显示任务页，量四件事：
-    /// ① 空态那颗按钮此刻写着「新建配置」而不是「新建任务」，空态说明点名的是屏上真的那一颗；
-    /// ② 真的点它 → 那一跳真的被交出去了（页只发请求，落点由壳接——本段把壳那一处接线按产品的同一形状接上，
-    /// 于是量到的是「切到项目设置页 + 打开「新建配置」对话框」这一跳真的走得通）；
-    /// ③ 在那个对话框里真的存一份配置 → 切回任务页 → 空态那颗按钮换回「新建任务」，说明句也换回那一句；
-    /// ④ 点它不再走「新建配置」那一支（请求不再发出），而是走本页既有的「新建任务」入口。
+    /// 真的显示任务页，两支量完 <see cref="FirstRunPlan.EmptyActionFor"/> 那两条边：
+    /// </para>
+    /// <para>
+    /// <b>第一支（0 份配置 → 首程那一步）</b>：① 空态那颗按钮此刻写着「新建配置」而不是「新建任务」，
+    /// 空态说明点名的是屏上真的那一颗；② 真的点它 → 那一跳真的被交出去了（页只发请求，落点由壳接——
+    /// 本段把壳那一处接线按产品的同一形状接上，于是量到的是「切到项目设置页 + 打开「新建配置」对话框」这一跳真的走得通）。
+    /// </para>
+    /// <para>
+    /// <b>第二支（0 份配置 → 1 份配置 → 回到任务页）</b>：③ 真的写一份配置（走 <c>ProfileStore.Save</c> 这一个唯一入口）、
+    /// 真的回到任务页（壳切页时调的就是 <c>OnPageShown</c>，它自己 <c>LoadTasks</c> → <c>RefreshEmptyState</c>），
+    /// 读「空态那颗按钮换回「新建任务」」「空态说明也换回有配置那一句、首程那一句不再留在屏上」；
+    /// ④ 真的点它 → 弹出的是本页既有的「新建任务」对话框（<c>ShowNewTaskDialog</c> 那条路），
+    /// 而<b>不再</b>发「去建配置」那一跳（请求计数不动、也没有被送回项目设置页）。
+    /// </para>
+    /// <para>
+    /// <b>为什么第二条边要单独量</b>：<see cref="FirstRunPlan.EmptyActionFor"/> 是一条有两条边的状态机
+    /// （<c>0 → NewProfile</c>、<c>≥1 → NewTask</c>），第四百零五轮只走了第一条边。第二条边是首程闭环的
+    /// 关键一步——「用户建完配置回来，会不会又被指到『新建配置』、又被拒一次」正是这一族缺陷的落点；
+    /// 源码门判得到「判定与文字同源」，判不到「配置数从 0 变 1 之后界面真的重推了一次」。
     /// </para>
     /// <para>
     /// <b>为什么单独造一份空目录</b>：冒烟器共用那一份数据目录里有前面各段留下的配置，
@@ -8733,6 +8762,8 @@ internal static class Program
         Form? host = null;
         TasksPage? tasksPage = null;
         ProjectsPage? projectsPage = null;
+        // 「去建配置」这一跳被发出去几次：第一支量它真的发了一次，第二支量它不再发（那时该走「新建任务」）。
+        var profileRequests = 0;
         try
         {
             RunAction("首程：一台一份配置都没有的机器上，空态那颗按钮写着「新建配置」、说明点名的是它——真的点它，那一跳真的把用户送到项目设置页并把「新建配置」对话框打开（真实控件）", () =>
@@ -8758,13 +8789,17 @@ internal static class Program
                 // 这一段只量「用户按了唯一那颗按钮之后有没有落到项目设置页」。
                 tasksPage.NewProfileRequested += () =>
                 {
+                    profileRequests++;
                     projectsPage.Visible = true;
                     tasksPage.Visible = false;
                     projectsPage.RefreshData();
                     Application.DoEvents();
                 };
 
-                var button = FindButton(tasksPage, FirstRunPlan.NewProfileLabel);
+                var button = FindEmptyStateButton(
+                    tasksPage,
+                    FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile),
+                    FirstRunPlan.NewProfileLabel);
                 if (button is null || !button.Visible)
                 {
                     throw new InvalidOperationException(
@@ -8795,6 +8830,131 @@ internal static class Program
                         "点「新建配置」之后没有落到项目设置页：首程那一步仍然没有落到屏上，"
                         + "用户按了唯一那颗按钮之后不知道自己在哪。");
                 }
+                if (profileRequests != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"点一次「新建配置」发出了 {profileRequests} 次「去建配置」请求（期望 1 次）："
+                        + "这一跳的计数对不上，第二支拿它判「不再发」就没有意义。");
+                }
+            });
+
+            RunAction("首程：真的建一份配置再回到任务页——空态那颗按钮换回「新建任务」、说明也换回那一句，点它弹出的是本页既有的「新建任务」对话框（不再发「去建配置」那一跳，真实控件）", () =>
+            {
+                if (tasksPage is null || projectsPage is null || host is null)
+                {
+                    throw new InvalidOperationException("上一支没有产出首程那两页，这一支量不到第二条边。");
+                }
+
+                // 真的写一份配置：走 ProfileStore.Save 这一个唯一入口（与配置页那颗「保存」同一处落盘）。
+                // Save 自己会校验「API 项目文件真的存在」，所以先按产品同一份探针工作区写出一份 csproj。
+                CreateProbeWorkspace(Path.Combine(emptyRoot, "Probe.Api"));
+                emptyProfiles.Save(
+                    new ProjectProfile
+                    {
+                        Name = "首程配置",
+                        WorkspaceRoot = emptyRoot,
+                        ApiProject = "Probe.Api/Probe.Api.csproj",
+                        AllowedSourcePaths = ["Probe.Api/"],
+                    },
+                    isNew: true);
+                var profileCount = emptyProfiles.List().Count;
+                if (profileCount != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"配置没有真的落盘（清单里 {profileCount} 份）：这一段量不到「从 0 份走到 1 份」。");
+                }
+
+                // 真的回到任务页：壳切页时调的就是 OnPageShown（它自己 LoadTasks → RefreshEmptyState）。
+                projectsPage.Visible = false;
+                tasksPage.Visible = true;
+                tasksPage.OnPageShown();
+                Application.DoEvents();
+
+                // ① 空态那颗按钮换回「新建任务」——同一位置、同一颗实例，只是字换了。
+                var expectedLabel = FirstRunPlan.Label(FirstRunPlan.EmptyActionFor(profileCount));
+                var expectedHint = FirstRunPlan.Hint(FirstRunPlan.EmptyActionFor(profileCount));
+                var button = FindEmptyStateButton(tasksPage, expectedHint, expectedLabel);
+                if (button is null || !button.Visible)
+                {
+                    throw new InvalidOperationException(
+                        $"建完配置回到任务页之后，空态上没有可见的「{expectedLabel}」那颗："
+                        + "首程闭环的第二条边没有走通——用户回来之后仍然被指在「新建配置」那一步上。");
+                }
+                if (!string.Equals(button.Text, expectedLabel, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"空态那颗按钮写着「{button.Text}」，不是「{expectedLabel}」。");
+                }
+
+                // ② 空态说明也换回「有配置」那一句，且首程那一句不再留在屏上（同一屏上不许两句说明并存）。
+                if (FindLabel(tasksPage, expectedHint) is null)
+                {
+                    throw new InvalidOperationException(
+                        $"空态说明没有换回「{expectedHint}」：按钮换了字而说明还停在首程那一句，用户会读到两件事。");
+                }
+                if (FindLabel(tasksPage, FirstRunPlan.Hint(FirstRunPlan.EmptyAction.NewProfile)) is not null)
+                {
+                    throw new InvalidOperationException(
+                        "空态说明还留着首程那一句：同一屏上两句说明并存，用户不知道该照哪一句做。");
+                }
+
+                // ③ 真的点它：走的是本页既有的「新建任务」入口（NewTaskDialog 真的弹出来），
+                //    而不是再发一次「去建配置」那一跳。
+                var requestsBefore = profileRequests;
+                var opened = false;
+                var cancelEnabled = false;
+                using var probe = new System.Windows.Forms.Timer { Interval = 30 };
+                // ShowDialog 是模态的：Click 会卡在对话框里，核对与关闭只能排在它泵起来的消息循环内做。
+                // 关它走的也是对话框自己那颗「取消」的 PerformClick，不直接调 Close()（那绕过了产品路径）。
+                probe.Tick += (_, _) =>
+                {
+                    if (opened) return;
+                    var dialog = Application.OpenForms.Cast<Form>()
+                        .FirstOrDefault(form => !ReferenceEquals(form, host)
+                            && string.Equals(form.Text, FirstRunPlan.NewTaskLabel, StringComparison.Ordinal));
+                    if (dialog is null) return;
+                    var cancel = FindButton(dialog, "取消");
+                    if (cancel is null) return;
+                    cancelEnabled = cancel.CanSelect;
+                    cancel.PerformClick();
+                    opened = true;
+                };
+                probe.Start();
+                try
+                {
+                    button.PerformClick();
+                }
+                finally
+                {
+                    probe.Stop();
+                }
+                Application.DoEvents();
+
+                if (!opened)
+                {
+                    throw new InvalidOperationException(
+                        $"点了「{expectedLabel}」却没等到「{FirstRunPlan.NewTaskLabel}」对话框："
+                        + "有配置之后那一颗仍然没有走到本页既有的那个入口。");
+                }
+                if (!cancelEnabled)
+                {
+                    throw new InvalidOperationException("「新建任务」对话框里那颗「取消」不可点。");
+                }
+                if (profileRequests != requestsBefore)
+                {
+                    throw new InvalidOperationException(
+                        $"有配置之后点空态那颗按钮仍然发了「去建配置」那一跳（{requestsBefore} → {profileRequests}）："
+                        + "用户会被送回项目设置页，而那里已经有配置了。");
+                }
+                if (projectsPage.Visible)
+                {
+                    throw new InvalidOperationException("有配置之后点空态那颗按钮把用户送去了项目设置页。");
+                }
+
+                _lines.Add(
+                    $"     建完配置回来：空态那颗按钮「{button.Text}」、说明「{expectedHint}」，"
+                    + $"点它弹出的是「{FirstRunPlan.NewTaskLabel}」对话框（配置 {profileCount} 份、"
+                    + $"任务 {emptyTasks.List().Count} 个、「去建配置」请求仍是 {profileRequests} 次）");
             });
         }
         finally
