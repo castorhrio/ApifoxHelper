@@ -14,7 +14,11 @@ namespace ApifoxHelper.Tests;
 /// 口径单一落点在 <see cref="ListContextMenu"/>（不依赖 WinForms，与测试工程共享编译），接线只装在
 /// <see cref="Ui"/> 的列表工厂一处：菜单项文字与「这一次该不该弹」都只在这一份里，动作与 Ctrl+C 走
 /// 同一个守卫链（同一格文字、同一个剪贴板写入点），于是两条入口不会各说一套。
-/// 实际右键路由与菜单观感随 G-D5 真机复核（Linux 无 WinForms GUI 运行时）。
+/// <b>第四百二十二轮补的是键盘那一半</b>：那份菜单此前只有鼠标到得了——键盘用户看着焦点行仍然拿不到
+/// 那一格文字。Windows 列表里打开上下文菜单的两个既有手势（<c>Shift+F10</c> 与菜单键 <c>VK_APPS</c>）
+/// 现接到<b>同一份菜单</b>上：手势与「有没有焦点行」由 <see cref="ListContextMenu.ShouldOfferByKeyboard"/> 判，
+/// 弹出与「可不可点」走工厂里同一个 <c>ShowMenu</c>，于是仍是「两条入口、一件事、一处判定」。
+/// 实际右键与按键路由、菜单观感随 G-D5 真机复核（Linux 无 WinForms GUI 运行时）。
 /// </summary>
 public class ListContextMenuTests
 {
@@ -44,6 +48,92 @@ public class ListContextMenuTests
         }
     }
 
+    // ---------- 键盘上的同一件事（第四百二十二轮） ----------
+
+    [Theory]
+    [InlineData(false, true, true)] // Shift+F10：Windows 列表里打开上下文菜单的既有手势。
+    [InlineData(true, false, false)] // 菜单键（VK_APPS）：同一个动作的另一个既有手势。
+    public void MenuGesture_IsShiftF10OrTheMenuKey(bool menuKey, bool shift, bool f10) =>
+        Assert.True(ListContextMenu.IsMenuGesture(menuKey, shift, f10));
+
+    [Theory]
+    [InlineData(false, false, true)] // 裸 F10：系统「把焦点交给菜单栏」的手势，壳有菜单栏，不抢。
+    [InlineData(false, true, false)] // 裸 Shift：不是手势。
+    [InlineData(false, false, false)] // 什么都没按。
+    [InlineData(true, true, true)] // 菜单键与 Shift+F10 一起按：仍是同一个手势，不重复弹。
+    public void EverythingElse_IsNotAMenuGesture(bool menuKey, bool shift, bool f10) =>
+        Assert.Equal(menuKey || (shift && f10), ListContextMenu.IsMenuGesture(menuKey, shift, f10));
+
+    [Fact]
+    public void KeyboardOffer_NeedsAFocusedRow()
+    {
+        // 手势成立 ∧ 有焦点行——只有这一种弹。
+        Assert.True(ListContextMenu.ShouldOfferByKeyboard(false, true, true, true));
+        Assert.True(ListContextMenu.ShouldOfferByKeyboard(true, false, false, true));
+        // 手势成立但没有焦点行（清单是空的、焦点框不在任何一行上）：菜单里的动作没有作用对象。
+        Assert.False(ListContextMenu.ShouldOfferByKeyboard(false, true, true, false));
+        Assert.False(ListContextMenu.ShouldOfferByKeyboard(true, false, false, false));
+        // 有焦点行但不是手势：不弹（裸 F10 归菜单栏、裸 Enter 归「打开选中行」）。
+        Assert.False(ListContextMenu.ShouldOfferByKeyboard(false, false, true, true));
+        Assert.False(ListContextMenu.ShouldOfferByKeyboard(false, false, false, true));
+
+        // 全组合对着「手势 ∧ 焦点行」核一遍：多一分是别的键也弹菜单，少一分是键盘在行上按不动。
+        for (var mask = 0; mask < 16; mask++)
+        {
+            var menuKey = (mask & 1) != 0;
+            var shift = (mask & 2) != 0;
+            var f10 = (mask & 4) != 0;
+            var hasFocusedRow = (mask & 8) != 0;
+            Assert.Equal(
+                (menuKey || (shift && f10)) && hasFocusedRow,
+                ListContextMenu.ShouldOfferByKeyboard(menuKey, shift, f10, hasFocusedRow));
+        }
+    }
+
+    [Fact]
+    public void KeyboardAndMouse_AreTwoQuestionsNotOne()
+    {
+        // 两个入口分开判：鼠标问「光标下有没有一行」，键盘问「焦点框在哪一行」——答案可以不同
+        // （右键落在别的行上时焦点行还是原来那一行）。合并成一个参数会把「右键先选中光标下那一行」读丢。
+        Assert.True(ListContextMenu.ShouldOffer(true, true));
+        Assert.False(ListContextMenu.ShouldOfferByKeyboard(false, false, false, true));
+        // 键盘那一条不看「命中行」：它没有光标位置可言。
+        Assert.True(ListContextMenu.ShouldOfferByKeyboard(false, true, true, true));
+        Assert.False(ListContextMenu.ShouldOffer(false, true));
+    }
+
+    [Fact]
+    public void Ui_ListFactory_OffersTheMenuFromTheKeyboard()
+    {
+        var slice = ListFactorySlice();
+        // 弹不弹只问 ListContextMenu 一处：工厂不自己写 `e.KeyCode == Keys.F10 && e.Shift`。
+        Assert.Matches(
+            @"(?m)^\s*if \(!ListContextMenu\.ShouldOfferByKeyboard\(\s*$",
+            slice);
+        Assert.Contains("e.KeyCode == Keys.Apps, e.Shift, e.KeyCode == Keys.F10, list.FocusedItem is not null",
+            slice, StringComparison.Ordinal);
+        // 键盘这一下没有光标位置：弹在焦点行的左下角（贴着它作用的那一行），不弹在屏幕左上角。
+        Assert.Matches(@"(?m)^\s*ShowMenu\(new Point\(row\.Bounds\.Left, row\.Bounds\.Bottom\)\);", slice);
+        // 先吞键再弹：不吞的话 Shift+F10 会继续往系统走（壳的菜单栏、清单自己的默认处理）。
+        var suppress = slice.IndexOf("e.SuppressKeyPress = true;", StringComparison.Ordinal);
+        var show = slice.IndexOf("ShowMenu(new Point(row.Bounds.Left, row.Bounds.Bottom));", StringComparison.Ordinal);
+        Assert.True(suppress >= 0 && show > suppress, "应先吞键，再弹菜单。");
+    }
+
+    [Fact]
+    public void TwoEntries_ShareOnePopupPoint()
+    {
+        // 两条入口、一件事、一处判定：弹出与「可不可点」收在工厂里那一个 ShowMenu 上——
+        // 定义恰一处、调用恰两处（右键、键盘），menu.Show 全工厂恰一处。
+        var slice = ListFactorySlice();
+        Assert.Single(Regex.Matches(slice, @"(?m)^\s*void ShowMenu\(Point at\)\s*$"));
+        // 调用恰两处：右键（光标处）与键盘（焦点行左下角）——定义那一行不以 ShowMenu 起头，不混进这一数。
+        Assert.Equal(2, Regex.Matches(slice, @"(?m)^\s*ShowMenu\(").Count);
+        Assert.Single(Regex.Matches(slice, @"menu\.Show\("));
+        // 两条入口都不自己定可不可点：那一句只在 ShowMenu 里出现一次。
+        Assert.Single(Regex.Matches(slice, @"copyItem\.Enabled = "));
+    }
+
     // ---------- 菜单项文字：一件事、一项 ----------
 
     [Fact]
@@ -70,18 +160,22 @@ public class ListContextMenuTests
             slice);
         // 右键先选中光标下那一行，且仍经 SelectItem 唯一入口（Selected + Focused + 滚入可见区）。
         Assert.Matches(@"(?m)^\s*SelectItem\(row\);", slice);
-        // 没有可交出去的文字就灰着：不弹一个点了没反应的项。
+        // 没有可交出去的文字就灰着：不弹一个点了没反应的项（第四百二十二轮起这一句收在 ShowMenu 里，
+        // 右键与键盘两条入口共用——两条入口各写一遍，迟早一条灰着、一条可点）。
         Assert.Matches(@"(?m)^\s*copyItem\.Enabled = CopyTarget\(\) is not null;", slice);
-        // 菜单弹在清单上、弹在光标处（不是屏幕左上角，也不是某个固定点）。
-        Assert.Matches(@"(?m)^\s*menu\.Show\(list, e\.Location\);", slice);
-        // 顺序：先判该不该弹 → 再选中那一行 → 再定菜单项可不可点 → 最后才弹。
-        var offer = slice.IndexOf("ListContextMenu.ShouldOffer", StringComparison.Ordinal);
+        // 菜单弹在清单上、弹在给定的那一点上（不是屏幕左上角，也不是某个固定点）。
+        Assert.Matches(@"(?m)^\s*menu\.Show\(list, at\);", slice);
+        // 顺序：先判该不该弹 → 再选中那一行 → 再把落点交给 ShowMenu（第四百二十二轮起
+        // 「定可不可点 + 弹」收在 ShowMenu 一处，两条入口共用，故那两句不再排在这一段里）。
+        var offer = slice.IndexOf("ListContextMenu.ShouldOffer(", StringComparison.Ordinal);
         var select = slice.IndexOf("SelectItem(row);", StringComparison.Ordinal);
-        var enable = slice.IndexOf("copyItem.Enabled = CopyTarget() is not null;", StringComparison.Ordinal);
-        var show = slice.IndexOf("menu.Show(list, e.Location);", StringComparison.Ordinal);
+        var popup = slice.IndexOf("ShowMenu(e.Location);", StringComparison.Ordinal);
         Assert.True(offer < select, "应先判该不该弹，再选中光标下那一行。");
-        Assert.True(select < enable, "应先选中那一行，再按它判菜单项可不可点。");
-        Assert.True(enable < show, "应先定菜单项可不可点，再弹菜单。");
+        Assert.True(select < popup, "应先选中那一行，再弹菜单（菜单项可不可点按选中后的焦点行判）。");
+        // ShowMenu 自己那两句的顺序：先定可不可点，再弹。
+        var enable = slice.IndexOf("copyItem.Enabled = CopyTarget() is not null;", StringComparison.Ordinal);
+        var show = slice.IndexOf("menu.Show(list, at);", StringComparison.Ordinal);
+        Assert.True(enable >= 0 && show > enable, "应先定菜单项可不可点，再弹菜单。");
     }
 
     [Fact]
@@ -177,6 +271,12 @@ public class ListContextMenuTests
         Assert.Matches(@"(?m)^\| 列表右键菜单（§6） \|", ledger);
         Assert.Contains("ListContextMenu.ShouldOffer(右键, 命中行)", ledger);
         Assert.Contains("两条入口、一件事、一处判定", ledger);
+        // 第四百二十二轮：键盘入口那一半也落在同一处（§6 条款 + §8 台账行）。
+        Assert.Contains("**列表右键菜单的键盘入口**（第四百二十二轮）", section);
+        Assert.Contains("ListContextMenu.ShouldOfferByKeyboard(菜单键, Shift, F10, 有焦点行)", section);
+        Assert.Matches(@"(?m)^\| 列表右键菜单的键盘入口（§6） \|", ledger);
+        Assert.Contains("ListContextMenu.ShouldOfferByKeyboard(菜单键, Shift, F10, 有焦点行)", ledger);
+        Assert.Contains("Shift+F10", ledger);
     }
 
     /// <summary>
@@ -260,7 +360,7 @@ public class ListContextMenuTests
         // ③ 变异三：多一条调用处（多一条没人登记的入口）。
         var extraCall = slice.Replace(
             "copyItem.Enabled = CopyTarget() is not null;",
-            "copyItem.Enabled = CopyTarget() is not null;\n        var extra = CopyTarget();",
+            "copyItem.Enabled = CopyTarget() is not null;\n            var extra = CopyTarget();",
             StringComparison.Ordinal);
         Assert.NotEqual(slice, extraCall);
         var extraProblems = ReadCopyGuardShape(extraCall).Problems;

@@ -847,6 +847,13 @@ internal static class Ui
     /// 同一做法——两条入口、一件事、一处判定。弹不弹由 <see cref="ListContextMenu.ShouldOffer"/> 判，
     /// 系统的 <c>ContextMenuStrip</c> 不自绘、不设颜色，不新造视觉语言。
     /// </para>
+    /// <para>
+    /// <b>键盘上的同一件事</b>（第四百二十二轮）：那份菜单此前只有鼠标到得了——键盘用户看着焦点行
+    /// 仍然拿不到那一格文字。现把 Windows 列表里打开上下文菜单的两个既有手势（<c>Shift+F10</c> 与菜单键
+    /// <c>VK_APPS</c>）接到同一份菜单上：手势与「有没有焦点行」由
+    /// <see cref="ListContextMenu.ShouldOfferByKeyboard"/> 判，弹出与「可不可点」走同一个局部函数
+    /// <c>ShowMenu</c>，于是两条入口仍是「一件事、一处判定」。
+    /// </para>
     /// </summary>
     public static ListView List(bool checkBoxes = false, int identityColumn = ListCopy.DefaultIdentityColumn)
     {
@@ -899,6 +906,15 @@ internal static class Ui
             CopyToClipboard(text);
         };
         menu.Items.Add(copyItem);
+        // 弹出这一份菜单的唯一一处（第四百二十二轮）：右键与键盘两条入口都走这里——
+        // 先按守卫链定菜单项可不可点（没有可交出去的文字就灰着，不弹一个点了没反应的项），
+        // 再弹在给定的那一点上。两条入口各写一遍这两句，迟早一条灰着、一条可点。
+        void ShowMenu(Point at)
+        {
+            copyItem.Enabled = CopyTarget() is not null;
+            menu.Show(list, at);
+        }
+
         list.MouseUp += (_, e) =>
         {
             var hit = list.HitTest(e.Location);
@@ -910,9 +926,26 @@ internal static class Ui
             // 右键先选中光标下那一行（资源管理器同序）：菜单里的动作作用于屏幕上被标出来的那一行，
             // 选中仍经 SelectItem 唯一入口（Selected + Focused + 滚入可见区，与鼠标点同一行同一条路）。
             SelectItem(row);
-            // 没有可交出去的文字就灰着：不弹一个点了没反应的项（与 Ctrl+C 同一条守卫链）。
-            copyItem.Enabled = CopyTarget() is not null;
-            menu.Show(list, e.Location);
+            ShowMenu(e.Location);
+        };
+        // 键盘上的同一件事（第四百二十二轮）：Shift+F10 与菜单键（VK_APPS）——第四百一十八轮那份菜单
+        // 此前只有鼠标到得了，键盘用户看着焦点行仍然拿不到那一格文字。手势与「有没有焦点行」的判定
+        // 在 ListContextMenu.ShouldOfferByKeyboard 一处，弹出仍走上面那一个 ShowMenu（同一份菜单、
+        // 同一条守卫链、同一个可不可点判定），于是两条入口不会各说一套。
+        list.KeyDown += (_, e) =>
+        {
+            if (!ListContextMenu.ShouldOfferByKeyboard(
+                    e.KeyCode == Keys.Apps, e.Shift, e.KeyCode == Keys.F10, list.FocusedItem is not null))
+            {
+                return;
+            }
+
+            e.SuppressKeyPress = true;
+            // 上一句已判过焦点行，这一句只是把可空收窄——判定仍只有 ShouldOfferByKeyboard 一处。
+            if (list.FocusedItem is not ListViewItem row) return;
+            // 弹在焦点行的左下角（资源管理器同序）：菜单贴着它作用的那一行出现，不弹在屏幕左上角，
+            // 也不弹在鼠标最后停过的地方——键盘这一下没有光标位置可言。
+            ShowMenu(new Point(row.Bounds.Left, row.Bounds.Bottom));
         };
         if (checkBoxes)
         {

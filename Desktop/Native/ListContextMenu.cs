@@ -18,6 +18,14 @@ namespace ApifoxHelper.Desktop.Native;
 /// 剪贴板写入点仍只有 <c>Ui.CopyToClipboard</c> 一处。
 /// </para>
 /// <para>
+/// <b>键盘上的同一件事（第四百二十二轮）</b>：第四百一十八轮把菜单装上了，可它<b>只有鼠标到得了</b>——
+/// 键盘用户（以及手上没有鼠标的那一下）看着焦点行仍然拿不到那一格文字，而 Windows 列表里打开上下文菜单
+/// 的既有手势有两个：<c>Shift+F10</c> 与菜单键（<c>VK_APPS</c>）。本轮把这两个手势接到<b>同一份菜单、
+/// 同一条守卫链、同一个弹出点</b>上（工厂里那一个 <c>ShowMenu</c>：先按 <c>CopyTarget</c> 定可不可点，
+/// 再弹），于是「这一次该不该弹」仍只有一处判定（<see cref="ShouldOffer"/> 判鼠标、
+/// <see cref="ShouldOfferByKeyboard"/> 判键盘），两条入口不会各说一套。
+/// </para>
+/// <para>
 /// <b>不新造视觉语言</b>：菜单是系统 <c>ContextMenuStrip</c>，不设颜色、不设图标、不加第二项——
 /// 本仓的灰阶加单强调色说的是界面自己画的东西，系统菜单沿用系统观感（与表头「沿用系统绘制」同一取舍）。
 /// </para>
@@ -49,4 +57,32 @@ public static class ListContextMenu
     /// </para>
     /// </summary>
     public static bool ShouldOffer(bool rightButton, bool hitOnRow) => rightButton && hitOnRow;
+
+    /// <summary>
+    /// 键盘上打开这份菜单的手势（第四百二十二轮）：<c>Shift+F10</c> 或菜单键（<c>VK_APPS</c>）——
+    /// Windows 列表里打开上下文菜单的两个既有手势，不为这一屏发明第三个。
+    /// <para>
+    /// 只认这两个：裸 <c>F10</c> 是「把焦点交给菜单栏」的系统手势（壳有菜单栏，抢它等于让菜单栏按不动），
+    /// 裸 <c>Enter</c>／<c>Space</c>／方向键各有自己的事（打开选中行、翻勾选、移动焦点），
+    /// 带 <c>Ctrl</c>／<c>Alt</c> 的组合不吞键（与 <see cref="ListCopy.IsCopyGesture"/>、
+    /// <see cref="ListChecks.IsToggleRowGesture"/> 同一分寸：不给既有组合键发明新语义）。
+    /// </para>
+    /// </summary>
+    public static bool IsMenuGesture(bool menuKey, bool shift, bool f10) => menuKey || (shift && f10);
+
+    /// <summary>
+    /// 这一次按键该不该弹菜单：手势成立，且清单里<b>有焦点行</b>。
+    /// <para>
+    /// 焦点行缺失（清单是空的、或焦点框不在任何一行上）不弹：菜单里的动作作用于「这一行」，
+    /// 没有这一行就没有作用对象——与 <see cref="ShouldOffer"/> 里「命中不在行上不弹」同一纪律，
+    /// 也不借当前选中去猜一行（与第五十一轮「焦点行缺失即不动作」同一取舍）。
+    /// </para>
+    /// <para>
+    /// 与鼠标那条入口分开判、不合并成一个「有没有作用对象」的参数：鼠标问的是「光标下有没有一行」，
+    /// 键盘问的是「焦点框在哪一行」，两个问题的答案可以不同（右键落在别的行上时焦点行还是原来那一行），
+    /// 合并会把「右键先选中光标下那一行」这条既有语义读丢。
+    /// </para>
+    /// </summary>
+    public static bool ShouldOfferByKeyboard(bool menuKey, bool shift, bool f10, bool hasFocusedRow) =>
+        IsMenuGesture(menuKey, shift, f10) && hasFocusedRow;
 }

@@ -5950,3 +5950,23 @@
 **真机供给状态（简报 P0-3）：本轮未读，理由：无新信号。** 供给侧答复未到、`docs/evidence/real-machine/` 那九个归档目录无新文件、未换机器 / 未换容器——按第三百六十三轮起的条件触发口径，`collect-real-machine.sh` 本轮不跑，那两笔数（退出码 `1`、「有东西 0 / 9 个目录」）的落点仍是顶部「真机供给状态」那一段，本条不抄第二份。**G-D5 那一格照旧不动**：勾选框只由真机证据关闭，本行不替人打勾。
 
 **本轮未做**：① 不动产品侧任何判定与接线（第四百一十八 / 四百一十九轮那一版一字未改）；② 不新增冒烟段、不新增门；③ 不动 `.winecheck/*.sh` 与 `*.ps1` 本体；④ 不替人打勾、不在无真机时假装真机已验；⑤ **Windows GUI 本环境不可运行，本轮无 Windows 侧真跑**（如实记录：右键菜单在真机上的弹出位置、菜单项观感、粘贴出来的文字仍未验证）。
+
+## 第四百二十一轮（2026-11-20，加固轮：给「真机供给未读」补一条有界门、把列表右键菜单守卫链的变异验证落进测试代码、INDEX 时效复查登记、顶部括注链瘦身；具名 pass：harden + evidence）
+
+**做了什么**：① 新增 `ApifoxHelper.Tests/RealMachineSupplyGateTests.cs`——顶部「真机供给状态」那一段的现状行此前可以一路照抄「本轮未读」到答辩那天而仓里没有任何东西会红，现按「现读 N 次 / 本轮未读 + 逐字引用上一轮判定 + 距上次现读第 N 轮 + 上限 3 轮」判，九发注入当场验它抓不抓得住；② 把第四百二十轮 commit message 里**手工**做过的两处变异（`string?` → `object?`、给 `CopyTarget` 定义加一个参数）写成 `ListContextMenuTests.CopyGuardShapeDetector_ReportsTheBreaksItMustCatch` 的夹具，并钉住「旧写法 `Count - 1` 在这一发上照样绿」那一处假绿；③ 按简报 P0-3 第 4 次只读重读 `/opt/agent-scheduler/docs/product-dod/INDEX.md`（版本仍是 2026-10-31、ApifoxHelper 两处都不在），登记进「复核记录」；④ 顶部现状行那一串括注按截断口径瘦身，搬走的读数进 `docs/NOTES-history.md`。
+
+**读数（本轮这一跑）**：全量 `dotnet test` **3429 通过 / 1 失败**（红的是 `RoundLedgerTests.RecentRounds_AreAllInTheLedger`：账本最新一轮是第四百二十轮、代码里已提到第四百二十一轮——本轮补上这一条即收口）；**源码指纹未变**（`1896104056…`）——本轮改的是测试工程与文档，都不进指纹，第四百一十九轮那一跑（三档各 **450 通过 / 0 失败 ×3**、逐屏对账每档 0 处不符、念序三档各 27 屏）**仍是当前源码的读数**。**全部 GUI 读数出自 Linux 容器内 wine 10.0 + Xvfb 模拟器，不是 Windows 真机结果**；真机仍 0 台，G-D5 仍 `[ ]`。
+
+**真机供给状态（简报 P0-1）：现读 1 次**——`bash .winecheck/collect-real-machine.sh` **退出码 `1`、「有东西 0 / 9 个目录」**，九个目录逐个被点名；答复仍没有，真机仍 0 台。**G-D5 那一格照旧不动**：勾选框只由真机证据关闭。
+
+**本轮未做**：① 不新增产品功能、不改界面接线；② 不新增冒烟段；③ 不动 `.winecheck/*.sh` 与 `*.ps1` 本体；④ 不替人打勾；⑤ **Windows GUI 本环境不可运行，本轮无 Windows 侧真跑**。
+
+## 第四百二十二轮（2026-11-20，原生桌面交互切片：列表右键菜单补上键盘入口——Shift+F10 与菜单键接到同一份菜单上；具名 pass：clarify + harden）
+
+**做了什么**：第四百一十八轮把列表右键菜单装上了，可它**只有鼠标到得了**——键盘用户（以及手上没有鼠标的那一下）看着焦点行仍然拿不到那一格文字，而 Windows 列表里打开上下文菜单的既有手势有两个：`Shift+F10` 与菜单键（`VK_APPS`）。本轮把这两个手势接到**同一份菜单**上：① `Desktop/Native/ListContextMenu.cs` 新增 `IsMenuGesture(菜单键, Shift, F10)` 与 `ShouldOfferByKeyboard(菜单键, Shift, F10, 有焦点行)`——手势只认这两个（裸 `F10` 是系统「把焦点交给菜单栏」的手势，壳有菜单栏，不抢；裸 `Enter`／`Space`／方向键各有自己的事；带 `Ctrl`／`Alt` 的组合不吞键），焦点行缺失不弹（没有「这一行」就没有作用对象，不借当前选中去猜一行）；② `Desktop/Native/Ui.cs` 的列表工厂把「定可不可点 + 弹」收成一个局部函数 `ShowMenu(Point at)`，右键与键盘两条入口共用它（`menu.Show` 与 `copyItem.Enabled` 各恰一处），键盘这一下没有光标位置可言，菜单弹在**焦点行的左下角**，先吞键再弹；③ 鼠标那条入口的判定 `ShouldOffer(右键, 命中行)` 一字未动——两个入口分开判、不合并成一个「有没有作用对象」的参数（鼠标问「光标下有没有一行」、键盘问「焦点框在哪一行」，右键落在别的行上时两个答案本就不同）。**测试侧**：`ListContextMenuTests` 新增 `MenuGesture_IsShiftF10OrTheMenuKey`、`EverythingElse_IsNotAMenuGesture`、`KeyboardOffer_NeedsAFocusedRow`（十六组全组合）、`KeyboardAndMouse_AreTwoQuestionsNotOne`、`Ui_ListFactory_OffersTheMenuFromTheKeyboard`、`TwoEntries_ShareOnePopupPoint` 六条门，并把右键那一条的接线断言跟着「弹出点收成 `ShowMenu` 一处」改准（判据一条没放宽：判定仍只问 `ListContextMenu` 一处、顺序仍是「先判该不该弹 → 再选中那一行 → 再弹」）；`docs/DESIGN.md` §6 补条款、§8 补台账行。
+
+**读数（本轮这一跑）**：`dotnet build` 0 警告 0 错误；`ListContextMenuTests` **24 通过 / 0 失败**；文档对账那一族（`DocsSpacingTests` / `GateSourceConsistencyTests` / `WordingHonestyTests` / `ReadmeVoiceTests` 等）**179 通过 / 0 失败**；**源码指纹未变**（`1896104056…`）——本轮**不新增冒烟段**（键盘那一下的 wine 读数留作下一轮的活），三档读数因此仍是第四百一十九轮那一跑（三档各 **450 通过 / 0 失败 ×3**、逐屏对账每档 0 处不符、念序三档各 27 屏），本轮不重跑三档、不动 `.winecheck/reading.txt` 与 `.winecheck/defense.txt`。**全部 GUI 读数出自 Linux 容器内 wine 10.0 + Xvfb 模拟器，不是 Windows 真机结果**；真机仍 0 台，G-D5 仍 `[ ]`。
+
+**真机供给状态（简报 P0-2）：本轮未读**——理由：上一轮已判 0 信息量（第四百二十一轮刚现读过一次，退出码 `1`、「有东西 0 / 9 个目录」）；距上次现读第 1 轮。供给侧答复未到、`docs/evidence/real-machine/` 那九个归档目录无新文件、未换机器 / 未换容器。**G-D5 那一格照旧不动**：勾选框只由真机证据关闭，本行不替人打勾。
+
+**本轮未做**：① 不新增冒烟段、不重跑三档（键盘入口的 wine 读数留作下一轮）；② 不动 `.winecheck/*.sh` 与 `*.ps1` 本体；③ 不新增产品功能、不改服务层与写入链路；④ 不替人打勾；⑤ **Windows GUI 本环境不可运行，本轮无 Windows 侧真跑**（如实记录：`Shift+F10` 与菜单键在真机上的按键路由、菜单弹出位置与观感仍未验证）。
