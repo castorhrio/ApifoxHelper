@@ -5871,3 +5871,33 @@
 **读数（本轮这一跑）**：`PUBLISH=1 bash .winecheck/defense-day.sh` **整支退出码 `0`**，三档各 **446 通过 / 0 失败 ×3**（96 / 120 / 192，第四百一十五轮那一跑）、逐屏对账每档 0 处不符、念序三档各 **27 屏**（屏数不变：没有新增屏，改的是「检查任务」那一屏名下那一段的第四、五支）；源码指纹由 `fe6aa4097d…` 走到 `ee7eb02a93…`。**全部 GUI 读数出自 Linux 容器内 wine 10.0 + Xvfb 模拟器，不是 Windows 真机结果**；真机仍 0 台，G-D5 仍 `[ ]`。
 
 **本轮未做**：① 不改 UI 观感、不新增屏；② 不动 `.winecheck/` 脚本本体；③ 不替人打勾；④ 不做真机复核（真机仍 0 台）；⑤ 不判真机上这两颗按钮停用之后键盘落在哪（随 G-D5 真机复核）。
+
+## 第四百一十六轮（2026-11-20，收口「新建任务」对话框切片族 + 答辩讲稿逐屏念稿对到登记轮次；具名 pass：clarify + evidence）
+
+> **这一条是第四百一十七轮补记的**：第四百一十六轮那一提交（`a1bea95`）改了 `docs/NOTES.md` 判据层、`.winecheck/答辩讲稿.md`、`README.md` 与 `ApifoxHelper.Tests/DemoScriptTests.cs`，**唯独漏了本账本条目**——`RoundLedgerTests.RecentRounds_AreAllInTheLedger` 当场红（「账本最新一轮是第四百十五轮，而代码里已经提到第四百一十六轮」）。补记不是重写历史：下面写的是那一提交实际做过的事，读数取那一提交自己的验证记录，不替它补跑。
+
+**P0-1：给「新建任务」对话框切片这一族立收口句。** 判据层新增「『新建任务』对话框切片这一族：收口登记（第四百一十六轮）」——这一族从第四百零五轮起连做十一轮，只围着同一屏三格转（① 下拉默认选中哪一份 `NewTaskProfileChoice`；② 「模块」那一行的说明句 `NewTaskModuleHint`；③ 两颗创建按钮该不该可点 `NewTaskPrimaryAction`），**本轮是最后一轮**；下一轮若再出现「同屏再换一格」的 commit 应判为重复路径并停在这里。三族边界各一句话写清（各自只判一格、互不重叠、删一族另两族照旧全绿）。**不新增门。**
+
+**P0-2：答辩讲稿补「逐屏念稿与登记出处对账（27 屏）」一节。** 每屏一句「念这一句时，屏上应当出现 X」+ 该屏引的每个冒烟段在 `Desktop/Native/MeasuredScreens.cs` 里记的轮次（逐字取自登记表）；两处「未登记」（`RunCaptionFit` / `RunFontStackRuntime` 不 `Show()`）如实说明是登记表自己的边界。同轮修掉两处真实漂移：讲稿「检查任务页」漏引 `RunJobFocusHandover`（第三百九十三轮）；逐屏表 `RunDetailReach` 的轮次由第三百六十二轮改准为收口那一轮第三百六十三轮。新增对账门 `DemoScriptTests.LecturePage_ReconcilesEveryScreenWithTheMeasuredScreensRegister` + 七发注入自测 `LectureReconcileGate_ReportsTheDriftItMustCatch`；按第二百七十轮五步法判为**对账门**（两侧定义各在自己那一头），不属「判据判自己」那一族。
+
+**P1-1：README 把「初审答辩按降级脚本」写成决定。** 「已知限制」第 1 条写明「这一句是决定，不是条件」，并给一句可核对的现状行（出处 + 日期 + 现读退出码 `1` / 有东西 `0` / 9 个目录），不抄第二份数。
+
+**读数（本轮这一跑）**：那一提交自己的验证记录是 `dotnet build` 0 警告 0 错误、`DemoScriptTests` / `MeasuredScreensTests` / `WordingHonestyTests` / `ReadingConsistencyTests` / `AcceptanceChecklistTests` 五族 **78 通过 / 0 失败**。**三档未重跑**：产品侧 `*.cs` 与冒烟段集合一个字节未动（改的是测试工程与文档，测试工程不进源码指纹），第四百一十五轮那一跑仍是当前源码的读数——三档各 446 通过 / 0 失败 ×3、指纹 `ee7eb02a93…`。**全部 GUI 读数出自 Linux 容器内 wine 10.0 + Xvfb 模拟器，不是 Windows 真机结果**；真机仍 0 台，G-D5 仍 `[ ]`。
+
+**本轮未做**：① 不动 `Desktop/Native/NewTask*.cs`、不新增冒烟段；② 不动 `.winecheck/*.sh` 本体；③ 不新增产品功能、不动图标；④ 不替人打勾；⑤ 不做真机复核（真机仍 0 台）；⑥ **漏了本账本条目**——这一件由第四百一十七轮补记，如实记在这里。
+
+## 第四百一十七轮（2026-11-20，答辩材料可交付性终检——只跑已有对账门与三档降级演示，不新增产品功能、不新增门；具名 pass：evidence + clarify）
+
+**开工第一件事：P0-1 判定（先判这一轮会不会又落在「新建任务」对话框同一屏）。** 工作区里只有一处未提交改动：`README.md`「已知限制」第 1 条那一句的续写（第四百一十六轮 P1-1 那一句拆成独立一条，并把现状行括注里的轮次写成了「第四百一十七轮 · 现读」）。**diff 不落在** `Desktop/Native/TasksPage.cs` 的 `_profileChoice` / `_moduleHint` / `_scanButton` / `_createButton`，也不落在任何 `NewTask*.cs`——**不判重复路径**，按简报 P0-2 做终检；那一处括注的轮次在本轮 P1-1 之后改回第四百一十轮（见下）。
+
+**P0-2 终检：四族对账门 + 三档降级演示 + 三件答辩材料。** ① 四族门（`DemoScriptTests` / `MeasuredScreensTests` / `ReadingConsistencyTests` / `AcceptanceChecklistTests`）**68 通过 / 0 失败**；② `bash .winecheck/demo.sh` 整支跑完（未设 `PUBLISH=1`：源码指纹与 `/tmp/ah-smoke-pub/smoke-source.sha` 逐字相同，沿用那一版冒烟产物），三档各 **446 通过 / 0 失败 ×3**（第四百一十七轮这一跑）、每档「本档引用段合计失败 0 条、对不上 0 处」、念序三档各 **27 屏**，收尾那句是「三档逐屏对账完成：每一屏引用的段都在报告里、累计 0 失败」；③ `.winecheck/答辩讲稿.md` 最后一节那 27 屏与 `Desktop/Native/MeasuredScreens.cs` 的登记轮次由 `DemoScriptTests.LecturePage_ReconcilesEveryScreenWithTheMeasuredScreensRegister` 判住，绿；④ `README.md`「已知限制」第 1 条与 `docs/NOTES.md` 顶部「真机供给状态」那一段口径一致（都是「按降级脚本走」+ 指回同一处出处），不新增第二份数。
+
+**本轮唯一阻断项与修法。** 全量 `dotnet test` **3413 用例里 1 条红**：`RoundLedgerTests.RecentRounds_AreAllInTheLedger`——账本最新一轮是第四百一十五轮，而 `ApifoxHelper.Tests/DemoScriptTests.cs` 的注释里已经提到第四百一十六轮。**这是答辩现场的阻断项**：被追问「最近几轮做了什么」时，账本是唯一索引，翻到第四百一十五轮就没了。修法 = 补第四百一十六轮条目（上面那一条，如实写明是补记）+ 本条目；**不新增门**（判这一件事的门本来就在）。
+
+**P1-1：真机供给信号复查——本轮未读。** 理由：上一轮已判 0 信息量。本轮现读那三处信号：① 供给侧答复未到；② `docs/evidence/real-machine/` 九个归档目录里只有各自的 `.gitkeep` 与那一份 `README.md`（`find -type f` 共 10 个文件，无新增）；③ 未换机器 / 未换容器。**无信号，故不跑 `collect-real-machine.sh`，也不重抄那两笔数**（退出码与「有东西 0 / 9 个目录」的落点仍是顶部那一段，本条不抄第二份）。**G-D5 那一格照旧不动**：勾选框只由真机证据关闭，本行不替人打勾。
+
+**P2 两件（只登记，不做）。** ① 两条收口句已并列在判据层——「文档对账这一族：收口登记（第四百一十五轮）」与「『新建任务』对话框切片这一族：收口登记（第四百一十六轮）」相邻两段，下一轮开工第一眼同时看到两条刹车，**本轮只登记不改**；② `README.md` 里念「当前源码」的那一句与 `.winecheck/defense.txt` 的 `source=` 逐字一致（`ee7eb02a93…`），**无需修**。
+
+**读数（本轮这一跑）**：`bash .winecheck/demo.sh` **整支退出码 `0`**，三档各 **446 通过 / 0 失败 ×3**（96 / 120 / 192，第四百一十七轮这一跑）、逐屏对账每档 0 处不符、念序三档各 **27 屏**；`.winecheck/reading.txt` 与 `.winecheck/defense.txt` 的 `date=` / `source=` 与三档 `tier=` 行**逐字节未变**（`2026-11-20` / `ee7eb02a93…`）——**所以这一跑是同一版源码的又一次整支复跑，不是一版新读数**，本轮没有改动任何对账材料。补完账本条目之后全量 `dotnet test` **3413 通过 / 0 失败**。**全部 GUI 读数出自 Linux 容器内 wine 10.0 + Xvfb 模拟器，不是 Windows 真机结果**；真机仍 0 台，G-D5 仍 `[ ]`。
+
+**本轮未做**：① 不动「新建任务」对话框任何一格（P0-1 判定：本轮 diff 不落在那一屏）；② 不新增产品功能、不新增门（尤其不再开文档对账族新门）；③ 不动 `.winecheck/*.sh` 与 `*.ps1` 本体；④ 不安装 / vendor 外站 skill、不动图标；⑤ 不替人打勾、不在无真机时假装真机已验；⑥ **Windows GUI 本环境不可运行，本轮无 Windows 侧真跑**（如实记录：`demo.ps1` 与真机三档截图仍未验证）。
