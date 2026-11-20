@@ -433,6 +433,9 @@ internal static class Program
         Section("列表 Ctrl+C 复制：同步预览勾选页的接口清单（打开即选中第一条接口且键盘真的在清单上 → 真的按一次 Ctrl+C 抄出「接口」格、不是邻列「名称」 → 按一次空格翻勾选后标识格没被改写 → 换一行再按跟着焦点走 → 未选中时不动作，真实键与真实剪贴板）", nameof(RunListCopyGestureSyncSelect));
         RunListCopyGestureSyncSelect(services, dataRoot);
 
+        Section("列表右键菜单（真的右键点在第一行上 → 菜单真的弹出来、唯一一项「复制(&C)」可点、光标下那一行被选中 → 右键落在列头与清单里没有行的那一块空白 → 两处都不弹、选中不会跳到别的行 → 标识格没有文字时那一项灰着，真实鼠标）", nameof(RunListContextMenu));
+        RunListContextMenu(services, dataRoot);
+
         Section("对话框主动作的键盘入口（打开即选中第一条且键盘真的在清单上、主动作按钮可用且可见 → 真的按一次 Ctrl+Enter 走掉一条：磁盘上第一条变成 accepted、状态行取共享口径、选中交给下一条 → Ctrl+Shift+Enter 不属本手势、再按一次什么都不发生 → 主动作不可用时按 Ctrl+Enter 什么都不发生，真实键）", nameof(RunPrimaryActionGesture));
         RunPrimaryActionGesture(services, dataRoot);
 
@@ -17362,6 +17365,8 @@ internal static class Program
 
     private const uint MouseLeftDown = 0x0002;
     private const uint MouseLeftUp = 0x0004;
+    private const uint MouseRightDown = 0x0008;
+    private const uint MouseRightUp = 0x0010;
 
     /// <summary>窗口矩形（与 Win32 的 <c>RECT</c> 同一形状）。</summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -17434,6 +17439,362 @@ internal static class Program
             Thread.Sleep(20);
         }
     }
+
+    /// <summary>
+    /// 列表右键菜单（第四百一十九轮，控制仓简报 P1-1）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第四百一十八轮给列表装上右键菜单「复制(&amp;C)」，测试侧九条门判的是
+    /// <b>口径与接线</b>（<c>ListContextMenu.ShouldOffer</c> 的真值表、工厂里那四句的顺序、
+    /// 菜单只有一项、不新造视觉语言）——<b>一次都没在真控件上按过右键</b>。于是「右键落在行上会弹、
+    /// 落在列头与空白不弹、右键先选中光标下那一行、没有可交出去的文字时那一项灰着」这四件事，
+    /// 在仓里只有读代码能得出的结论，没有读数。真机到手前，wine 冒烟是唯一能验证它们的途径。
+    /// </para>
+    /// <para>
+    /// <b>四段各量一件事</b>：① 前提——一份真实落盘的检查结果真的显示出来、接口清单 12 行、
+    /// 第一行的标识格有文字；② 真的右键点在第一行上——菜单真的弹出来（按进程枚举顶层窗口，
+    /// 认 <c>ToolStripDropDown</c> 且可见）、菜单项文字取口径常量、这一行有文字所以那一项可点，
+    /// 且<b>光标下那一行被选中</b>（右键先选中，资源管理器同序）；③ 右键落在列头与清单里没有行的那一块空白——
+    /// 两处都不弹菜单、选中不会跳到别的行（那里没有「这一行」，菜单里的动作没有作用对象；
+    /// 空白处按下去系统 ListView 自己会清掉选中，那是 Windows 列表的既有行为，不是本仓接线）；
+    /// ④ 标识格没有文字时那一项<b>灰着</b>（<c>Enabled = false</c>，不弹一个点了没反应的项）。
+    /// </para>
+    /// <para>
+    /// <b>第 ④ 段怎么到达「没有文字」那一态（如实写在这里）</b>：真实检查结果里每一行的标识格都有文字，
+    /// 所以这一段把第一行的标识格<b>临时清空</b>、量完在 <c>finally</c> 里还原——量的是同一条守卫链
+    /// （<c>CopyTarget</c> → <c>ListCopy.CopyText</c>）在「这一格是空的」时的结果，不是另造一个假清单。
+    /// </para>
+    /// <para>
+    /// <b>不判什么</b>：不判真机上菜单的观感与弹出位置的手感、不判中文输入法、不判多显示器下的落点——
+    /// Windows GUI 在本机不可验证，随 G-D5 复核。也不判「点了那一项之后剪贴板里是什么」：
+    /// 那是 <c>RunListCopyGesture</c> 一族已经量过的事（两条入口共用同一条守卫链）。
+    /// </para>
+    /// </summary>
+    private static void RunListContextMenu(IServiceProvider services, string dataRoot)
+    {
+        var tasks = services.GetRequiredService<TaskStore>();
+        var profiles = services.GetRequiredService<ProfileStore>();
+        var profile = profiles.List().First();
+        var task = tasks.Create(new CreateTaskRequest { ProfileId = profile.Id, Name = "右键菜单冒烟" });
+        tasks.Write(task.Id, TaskFiles.Diff, CheckResultsFixture());
+
+        CheckResultsDialog? dialog = null;
+        try
+        {
+            RunAction("右键菜单：准备一份真实落盘的检查结果并真的显示出来（接口清单 12 行、第一行的标识格有文字）", () =>
+            {
+                dialog = new CheckResultsDialog(tasks, task);
+                dialog.Show();
+                Application.DoEvents();
+
+                var list = ContextMenuEndpointList(dialog);
+                if (list.Items.Count != 12)
+                {
+                    throw new InvalidOperationException(
+                        $"接口清单有 {list.Items.Count} 行，夹具是 12 个接口：量到的不是这一屏。");
+                }
+                var key = list.Items[0].SubItems[0].Text;
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    throw new InvalidOperationException(
+                        "第一行的标识格是空的：第 ② 段要量「有文字时那一项可点」，这一段没有准备出可量的前提。");
+                }
+                _lines.Add($"     夹具：检查结果 12 个接口，第一行标识格「{key}」");
+            });
+
+            RunAction("右键菜单：真的右键点在第一行上——菜单真的弹出来、菜单项文字取口径常量且可点，光标下那一行被选中（右键先选中，资源管理器同序）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = ContextMenuEndpointList(dialog);
+
+                // 前提：先一行都不选——否则「右键之后那一行被选中」这句话在按之前就已经成立了。
+                list.SelectedItems.Clear();
+                list.Focus();
+                Application.DoEvents();
+                if (list.SelectedItems.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"清空之后清单里还有 {list.SelectedItems.Count} 行被选中：这一段量不到「右键先选中」。");
+                }
+                if (VisibleDropDown() is not null)
+                {
+                    throw new InvalidOperationException(
+                        "按右键之前就有一份菜单开着：上一段没有收干净，这一段量到的不是这一次右键。");
+                }
+                var row = list.Items[0];
+                var point = new Point(row.Bounds.Left + 20, row.Bounds.Top + (row.Bounds.Height / 2));
+                RightClickAt(dialog, list, point);
+
+                var drop = VisibleDropDown()
+                    ?? throw new InvalidOperationException(
+                        "右键落在第一行上，菜单没有弹出来（按进程枚举顶层窗口，没有可见的 ToolStripDropDown）："
+                        + "ListContextMenu.ShouldOffer 判的是「右键 ∧ 命中行」，而这一屏上按下去没有反应。");
+                try
+                {
+                    var items = drop.Items.Cast<ToolStripItem>().ToList();
+                    if (items.Count != 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"菜单里有 {items.Count} 项，口径是只放一项：这一行能做的事只有一件。");
+                    }
+                    if (items[0].Text != ListContextMenu.CopyItemText)
+                    {
+                        throw new InvalidOperationException(
+                            $"菜单项文字是「{items[0].Text}」，口径常量是「{ListContextMenu.CopyItemText}」："
+                            + "工厂没有取口径常量，或者口径改了而这里没跟上。");
+                    }
+                    if (!items[0].Enabled)
+                    {
+                        throw new InvalidOperationException(
+                            $"这一行的标识格有文字（「{row.SubItems[0].Text}」），菜单项却是灰的："
+                            + "守卫链（CopyTarget → ListCopy.CopyText）把有文字的那一行判成了没有可交出去的一格。");
+                    }
+                    if (list.SelectedItems.Count != 1 || list.SelectedItems[0].Index != 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"右键落在第 0 行上之后，清单里选中了 {list.SelectedItems.Count} 行"
+                            + $"（第一行是第 {(list.SelectedItems.Count > 0 ? list.SelectedItems[0].Index : -1)} 行）："
+                            + "右键必须先选中光标下那一行——菜单里的动作作用于屏幕上被标出来的那一行。");
+                    }
+                    _lines.Add(
+                        $"     右键落在第 0 行上：菜单弹出，唯一一项「{items[0].Text}」可点，第 0 行被选中");
+                }
+                finally
+                {
+                    drop.Close();
+                    Application.DoEvents();
+                }
+            });
+
+            RunAction("右键菜单：右键落在列头与清单里没有行的那一块空白——两处都不弹菜单、选中不会跳到别的行（那里没有「这一行」）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = ContextMenuEndpointList(dialog);
+                var selectedBefore = list.SelectedItems.Count > 0 ? list.SelectedItems[0].Index : -1;
+
+                // 列头：清单自己的表头是一个独立窗口，取它的真实屏幕位置再按右键。
+                var header = SendMessage(list.Handle, LvmGetHeader, IntPtr.Zero, IntPtr.Zero);
+                if (header == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("取不到清单的表头窗口：这一段量不到「右键落在列头上」。");
+                }
+                if (!GetWindowRect(header, out var headerRect))
+                {
+                    throw new InvalidOperationException("取不到表头的屏幕位置：这一段量不到「右键落在列头上」。");
+                }
+                RightClickScreen(
+                    dialog,
+                    new Point((headerRect.Left + headerRect.Right) / 2, (headerRect.Top + headerRect.Bottom) / 2));
+                if (VisibleDropDown() is { } onHeader)
+                {
+                    onHeader.Close();
+                    Application.DoEvents();
+                    throw new InvalidOperationException(
+                        "右键落在列头上，菜单弹出来了：列头不是「这一行」，菜单里的动作没有作用对象。");
+                }
+                var afterHeader = list.SelectedItems.Count > 0 ? list.SelectedItems[0].Index : -1;
+                if (afterHeader != selectedBefore)
+                {
+                    throw new InvalidOperationException(
+                        $"右键落在列头上之后，选中从第 {selectedBefore} 行变成第 {afterHeader} 行："
+                        + "列头不是「这一行」，不该动选中。");
+                }
+
+                // 清单里没有行的那一块空白：先按 HitTest 认准这一点真的不在任何一行上，再按右键。
+                var blank = BlankPointInList(list);
+                RightClickAt(dialog, list, blank);
+                if (VisibleDropDown() is { } onBlank)
+                {
+                    onBlank.Close();
+                    Application.DoEvents();
+                    throw new InvalidOperationException(
+                        "右键落在清单里没有行的那一块空白处，菜单弹出来了：空白处没有「这一行」，"
+                        + "也不该为空白处发明一个背景菜单。");
+                }
+
+                // 空白处按下去，系统 ListView 自己会把选中清掉（Windows 列表的既有行为，不是本仓接线）——
+                // 所以这里判的不是「选中一个字没变」，而是「选中不会跳到别的行」：空白处没有「这一行」，
+                // 菜单里的动作没有作用对象，选中要么留在原处、要么被系统清空，绝不会落到另一行上。
+                var selectedAfter = list.SelectedItems.Count > 0 ? list.SelectedItems[0].Index : -1;
+                if (selectedAfter != selectedBefore && selectedAfter != -1)
+                {
+                    throw new InvalidOperationException(
+                        $"右键落在空白处之后，选中从第 {selectedBefore} 行跳到第 {selectedAfter} 行："
+                        + "空白处不是「这一行」，选中不该落到另一行上。");
+                }
+                _lines.Add(
+                    $"     右键落在列头与清单里没有行的那一块空白：两处都没有菜单，"
+                    + $"选中从第 {selectedBefore} 行变成 {(selectedAfter < 0 ? "无选中（系统 ListView 自己清掉的）" : $"第 {selectedAfter} 行")}");
+            });
+
+            RunAction("右键菜单：标识格没有文字时那一项灰着（Enabled = false，不弹一个点了没反应的项）", () =>
+            {
+                if (dialog is null) throw new InvalidOperationException("上一段没有打开对话框。");
+                var list = ContextMenuEndpointList(dialog);
+                var row = list.Items[0];
+                var original = row.SubItems[0].Text;
+                try
+                {
+                    // 到达「这一格是空的」那一态：真实检查结果里每一行都有文字，这里临时清空、量完还原。
+                    row.SubItems[0].Text = string.Empty;
+                    Application.DoEvents();
+
+                    var point = new Point(row.Bounds.Left + 20, row.Bounds.Top + (row.Bounds.Height / 2));
+                    RightClickAt(dialog, list, point);
+
+                    var drop = VisibleDropDown()
+                        ?? throw new InvalidOperationException(
+                            "标识格清空之后右键落在那一行上，菜单没有弹出来："
+                            + "弹不弹只由「右键 ∧ 命中行」判，与那一格有没有文字无关。");
+                    try
+                    {
+                        var item = drop.Items.Cast<ToolStripItem>().Single();
+                        if (item.Enabled)
+                        {
+                            throw new InvalidOperationException(
+                                "标识格没有文字时菜单项仍可点：点了只会什么都不发生，"
+                                + "而用户会以为复制到了东西（守卫链 CopyTarget → ListCopy.CopyText 该判 null）。");
+                        }
+                        _lines.Add($"     标识格清空之后右键那一行：菜单弹出，唯一一项「{item.Text}」灰着");
+                    }
+                    finally
+                    {
+                        drop.Close();
+                        Application.DoEvents();
+                    }
+                }
+                finally
+                {
+                    row.SubItems[0].Text = original;
+                    Application.DoEvents();
+                }
+            });
+        }
+        finally
+        {
+            dialog?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 检查结果那一屏的接口清单（按整个表头序列认，这一屏有两张清单，只数列数会撞车）。
+    /// 与 <c>RunCheckResultsShown</c> 里那一段同一认法，收成一处供右键菜单那一段复用。
+    /// </summary>
+    private static ListView ContextMenuEndpointList(Form dialog) =>
+        FindAll<ListView>(dialog).FirstOrDefault(candidate =>
+                candidate.Columns.Cast<ColumnHeader>().Select(column => column.Text)
+                    .SequenceEqual(["接口", "名称", "状态", "阻断"]))
+            ?? throw new InvalidOperationException(
+                "检查结果找不到表头为「接口 / 名称 / 状态 / 阻断」的接口清单：列增删或改名了，本段口径需要重定。");
+
+    /// <summary>
+    /// 清单里「没有行」的那一点（第四百一十九轮）：先试末行下方，再试列宽之外、行右侧那一块。
+    /// <para>
+    /// <b>为什么要有两个候选</b>：这一屏的接口清单高 192px、12 行（每行 21px）装不下，末行被裁在
+    /// 可视区之外——「下方空白」在这一屏上根本不存在。列宽合计 602px 而清单宽 981px，行右侧那一块
+    /// 才是这一屏真实存在的空白。两处都按 <c>HitTest</c> 现认，认不到就如实报错，不硬凑一个点。
+    /// </para>
+    /// </summary>
+    private static Point BlankPointInList(ListView list)
+    {
+        var last = list.Items[list.Items.Count - 1];
+        var first = list.Items[0];
+        Point[] candidates =
+        [
+            new(list.ClientSize.Width / 2, last.Bounds.Bottom + 2),
+            new(list.ClientSize.Width - 4, first.Bounds.Top + (first.Bounds.Height / 2)),
+        ];
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Y >= list.ClientSize.Height || candidate.X >= list.ClientSize.Width) continue;
+            if (list.HitTest(candidate).Item is null) return candidate;
+        }
+        throw new InvalidOperationException(
+            "清单里找不到「没有行」的那一点（末行下方与列宽之外都命中了行）："
+            + $"这一段量不到「右键落在空白处」，量测口径需要重定。"
+            + $"（ClientSize={list.ClientSize}，行数={list.Items.Count}，"
+            + $"首行={first.Bounds}，末行={last.Bounds}）");
+    }
+
+    /// <summary>
+    /// 真的按一次右键（第四百一十九轮）：把光标移到 <paramref name="target"/> 的
+    /// <paramref name="clientPoint"/> 处，按下右键、松开。
+    /// <para>
+    /// <b>为什么必须是真鼠标</b>：右键菜单的入口是 <c>ListView.MouseUp</c> 里那一段接线，
+    /// 而那个事件由操作系统在<b>真鼠标</b>按下与松开时通知上来。在代码里直接抬事件
+    /// （<c>MouseUp?.Invoke(...)</c>）等于自己给自己发通知——量到的「菜单弹出来了」与用户按一下
+    /// 是不是同一件事，就再也分不开了（与 <see cref="ClickColumnHeaderOnce"/> 同一纪律）。
+    /// </para>
+    /// </summary>
+    private static void RightClickAt(Form host, Control target, Point clientPoint) =>
+        RightClickScreen(host, target.PointToScreen(clientPoint));
+
+    /// <summary>真的按一次右键（屏幕坐标版）：列头是独立窗口，落点只能按屏幕坐标给。</summary>
+    private static void RightClickScreen(Form host, Point screenPoint)
+    {
+        host.Activate();
+        SetForegroundWindow(host.Handle);
+        Application.DoEvents();
+
+        SetCursorPos(screenPoint.X, screenPoint.Y);
+        Application.DoEvents();
+        // 按下与松开之间**不过消息泵**（第四百一十九轮实测）：wine 10.0 + Xvfb 下，右键按住不放时
+        // 泵一次消息就整支挂死（最小复现：一个空 Form + 一张 ListView，`mouse_event(RIGHTDOWN)` 之后
+        // `Application.DoEvents()` 不再返回；同一份代码换成左键、或按住期间只 Sleep 不泵，都正常）。
+        // 那是模拟器的行为，不是产品行为——所以这里按住期间只等，松开之后再泵：右键的选中在按下时
+        // 已经落到清单上，菜单在松开时由 MouseUp 那一段接线弹出，两件事都不需要按住期间泵消息。
+        mouse_event(MouseRightDown, 0, 0, 0, UIntPtr.Zero);
+        Thread.Sleep(120);
+        mouse_event(MouseRightUp, 0, 0, 0, UIntPtr.Zero);
+        // 松开之后要真的过一遍消息泵：菜单的构造与弹出都在泵里。
+        for (var i = 0; i < 10; i++)
+        {
+            Application.DoEvents();
+            Thread.Sleep(20);
+        }
+    }
+
+    /// <summary>
+    /// 当前进程里可见的那一份下拉菜单（第四百一十九轮）：按进程枚举顶层窗口，
+    /// 认 <c>Control.FromHandle</c> 回来是 <c>ToolStripDropDown</c> 且可见的那一个。
+    /// <para>
+    /// <b>为什么这样认</b>：菜单是 <c>Ui.List</c> 工厂里的局部变量，没有挂在清单的
+    /// <c>ContextMenuStrip</c> 属性上（它是 <c>menu.Show(list, e.Location)</c> 手动弹的），
+    /// 所以从清单那一侧拿不到它。而「菜单弹出来了」这件事在屏幕上的实物就是<b>一个可见的顶层弹出窗口</b>——
+    /// 按进程枚举、按类型认，量到的就是用户看到的那一个，不是代码里某个字段的值。
+    /// </para>
+    /// <para>没有菜单开着返回 <c>null</c>（调用方按「没弹」处理）。</para>
+    /// </summary>
+    private static ToolStripDropDown? VisibleDropDown()
+    {
+        ToolStripDropDown? found = null;
+        var processId = (uint)Environment.ProcessId;
+        EnumWindows((hwnd, _) =>
+        {
+            GetWindowThreadProcessId(hwnd, out var owner);
+            if (owner != processId) return true;
+            if (!IsWindowVisible(hwnd)) return true;
+            if (Control.FromHandle(hwnd) is ToolStripDropDown { Visible: true } drop)
+            {
+                found = drop;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
 
     /// <summary>
     /// 对话框主动作的键盘入口（<c>Ctrl+Enter</c>，第三百五十九轮）。

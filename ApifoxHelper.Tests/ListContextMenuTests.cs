@@ -95,7 +95,12 @@ public class ListContextMenuTests
         Assert.Matches(@"(?m)^\s*var copyItem = new ToolStripMenuItem\(ListContextMenu\.CopyItemText\);", slice);
         // 动作与 Ctrl+C 走同一个守卫链：定义一处 + 三个调用点（Ctrl+C、菜单项点击、菜单项启停），
         // 于是「哪一格算标识列」「哪一行算被标出来」只有一处判定，两条入口不会各说一套。
-        Assert.Equal(3, Regex.Matches(slice, @"CopyTarget\(\)").Count - 1);
+        // 两件事分开数（第四百一十九轮，简报 P1-2）：定义处与调用处各数各的。旧写法
+        // `Regex.Matches(slice, @"CopyTarget\(\)").Count - 1` 把「减掉的那一处」当成定义——定义签名一改
+        // （比如加了参数、换了返回类型），它就不再被这一句数到，减 1 减掉的是某个调用点，
+        // 于是「定义一处 + 三个调用点」这句话在源码里已经不成立、断言却照样绿。
+        Assert.True(CopyGuardDefinition().Success, "工厂里找不到守卫链的定义。");
+        Assert.Equal(3, CopyGuardCallSites());
         // 剪贴板写入点仍是 Ui.CopyToClipboard 一处（菜单项不自己碰 Clipboard）。
         Assert.DoesNotContain("Clipboard.SetText", slice, StringComparison.Ordinal);
         // 菜单项点击里先取守卫链的结果再写剪贴板：取不到就不动作，不把用户先前复制的内容抹掉。
@@ -171,6 +176,35 @@ public class ListContextMenuTests
         Assert.Matches(@"(?m)^\| 列表右键菜单（§6） \|", ledger);
         Assert.Contains("ListContextMenu.ShouldOffer(右键, 命中行)", ledger);
         Assert.Contains("两条入口、一件事、一处判定", ledger);
+    }
+
+    /// <summary>
+    /// 守卫链的定义处（第四百一十九轮，简报 P1-2）：局部函数声明那一行 <c>string? CopyTarget()</c>，
+    /// 独占一行、恰一处。
+    /// <para>
+    /// <b>为什么单独取这一处</b>：调用点的条数只有在「定义确实还是这一行」时才有意义——签名一改
+    /// （加参数、换返回类型、改成字段），定义就不再被这个形状认到，此时「三个调用点」这句话已经不成立，
+    /// 该红的是定义这一句，而不是让「总数减 1」把某个调用点当成定义蒙过去。
+    /// </para>
+    /// </summary>
+    private static Match CopyGuardDefinition()
+    {
+        var matches = Regex.Matches(ListFactorySlice(), @"(?m)^\s*string\? CopyTarget\(\)\s*$");
+        Assert.True(matches.Count == 1,
+            $"工厂里 `string? CopyTarget()` 这一行有 {matches.Count} 处，口径是恰一处："
+            + "守卫链的定义只有一份，两条入口（Ctrl+C 与右键菜单）共用它。");
+        return matches[0];
+    }
+
+    /// <summary>
+    /// 守卫链的调用处条数（第四百一十九轮，简报 P1-2）：把定义那一行切掉之后，剩下的部分里数
+    /// <c>CopyTarget()</c>——三个（Ctrl+C、菜单项点击、菜单项启停）。
+    /// </summary>
+    private static int CopyGuardCallSites()
+    {
+        var slice = ListFactorySlice();
+        var definition = CopyGuardDefinition();
+        return Regex.Matches(slice.Remove(definition.Index, definition.Length), @"CopyTarget\(\)").Count;
     }
 
     /// <summary>Ui.List 工厂的方法体切片（从构造到 SelectItem 之前），右键菜单接线必须在这一段内。</summary>
