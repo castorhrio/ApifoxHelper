@@ -100,9 +100,13 @@ public class ListCopyTests
         var slice = ListFactorySlice();
         // 修饰键、标识列与目标文字都取共享口径，不在工厂里就地判定或就地取格。
         Assert.Matches(@"(?m)^\s*if \(e\.KeyCode != Keys\.C \|\| !ListCopy\.IsCopyGesture\(e\.Shift, e\.Control, e\.Alt\)\) return;", slice);
-        Assert.Matches(@"(?m)^\s*if \(list\.FocusedItem is not ListViewItem row\) return;", slice);
-        Assert.Matches(@"(?m)^\s*if \(ListCopy\.IdentityColumn\(row\.SubItems\.Count, identityColumn\) is not int column\) return;", slice);
-        Assert.Matches(@"(?m)^\s*if \(ListCopy\.CopyText\(row\.SubItems\[column\]\.Text, row\.Selected\) is not string text\) return;", slice);
+        // 三重守卫收在工厂里的一个局部函数 CopyTarget 上（第四百一十八轮）：Ctrl+C 与右键菜单两条入口
+        // 共用同一份守卫链，于是「哪一格算标识列」「哪一行算被标出来」只有一处判定。
+        Assert.Matches(@"(?m)^\s*if \(list\.FocusedItem is not ListViewItem row\) return null;", slice);
+        Assert.Matches(@"(?m)^\s*if \(ListCopy\.IdentityColumn\(row\.SubItems\.Count, identityColumn\) is not int column\) return null;", slice);
+        Assert.Matches(@"(?m)^\s*return ListCopy\.CopyText\(row\.SubItems\[column\]\.Text, row\.Selected\);", slice);
+        // 两条入口都从这一份守卫链取文字，不各写一套。
+        Assert.Matches(@"(?m)^\s*if \(CopyTarget\(\) is not string text\) return;", slice);
         // 动作前吞键，且写在剪贴板之前：与 Enter 激活同一纪律。
         Assert.Matches(@"(?m)^\s*e\.SuppressKeyPress = true;", slice);
         Assert.Matches(@"(?m)^\s*CopyToClipboard\(text\);", slice);

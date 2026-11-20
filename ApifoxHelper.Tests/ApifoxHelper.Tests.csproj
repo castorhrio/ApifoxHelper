@@ -123,6 +123,9 @@
     <Compile Include="..\Desktop\Native\SlotText.cs" Link="Shared\SlotText.cs" />
     <Compile Include="..\Desktop\Native\ListKeys.cs" Link="Shared\ListKeys.cs" />
     <Compile Include="..\Desktop\Native\ListCopy.cs" Link="Shared\ListCopy.cs" />
+    <!-- 列表右键菜单的口径（第四百一十八轮）：纯判定、不依赖 WinForms，门在 ListContextMenuTests。
+         菜单项文字与「这一次该不该弹」都只在这一份里，界面只登记「弹在哪个清单上」。 -->
+    <Compile Include="..\Desktop\Native\ListContextMenu.cs" Link="Shared\ListContextMenu.cs" />
     <Compile Include="..\Desktop\Native\ListAdvance.cs" Link="Shared\ListAdvance.cs" />
     <Compile Include="..\Desktop\Native\ListReveal.cs" Link="Shared\ListReveal.cs" />
     <Compile Include="..\Desktop\Native\ListFocus.cs" Link="Shared\ListFocus.cs" />

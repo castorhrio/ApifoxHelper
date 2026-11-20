@@ -836,10 +836,17 @@ internal static class Ui
     /// 勾选目标也由本工厂放大到整行（点行的任意处即勾选，落点判定在 ListChecks——系统自己会翻的那一格让开）；
     /// 键盘上的同一件事（空格翻焦点行）也装在这一支里，两条入口共用同一个翻转点 <c>ToggleRow</c>（第二百八十九轮）。
     /// Ctrl+C 复制焦点行的标识列原文也在这里装上——单元格自绘后文字不可选中，Ctrl+C 是列表里的
-    /// 文字交出去的唯一通路（只读预览框原本就能选中复制），故剪贴板只在本工厂触达一次，页面与对话框不各装一套。
+    /// 文字交出去的通路（只读预览框原本就能选中复制），故剪贴板只在本工厂触达一次，页面与对话框不各装一套。
     /// 标识列默认首列（与 ListColumns 的「标识列（首列）」同一约定，绝大多数列表的名称格就在首列）；
     /// 首列不是名称的列表（写入清单首列是动作序号、差异确认首列是「接口/模型」分类）在出厂处声明真正的名称格，
     /// 取值与越界守卫都在 ListCopy，本工厂不另判一套。
+    /// <para>
+    /// <b>右键菜单是复制那一件事的第二条入口</b>（第四百一十八轮）：Ctrl+C 在屏幕上不可见，
+    /// 不知道这个手势的人拿不到那一格文字；右键菜单只放一项「复制」，动作走同一个 <c>CopyTarget</c>
+    /// 守卫链（同一格、同一个剪贴板写入点），与第二百八十四轮「Ctrl+A 与『全选可同步』那颗按钮」
+    /// 同一做法——两条入口、一件事、一处判定。弹不弹由 <see cref="ListContextMenu.ShouldOffer"/> 判，
+    /// 系统的 <c>ContextMenuStrip</c> 不自绘、不设颜色，不新造视觉语言。
+    /// </para>
     /// </summary>
     public static ListView List(bool checkBoxes = false, int identityColumn = ListCopy.DefaultIdentityColumn)
     {
@@ -860,18 +867,52 @@ internal static class Ui
         list.DrawColumnHeader += (_, e) => e.DrawDefault = true;
         list.DrawItem += DrawListRow;
         list.DrawSubItem += DrawListCell;
+        // 复制焦点行的标识列：Ctrl+C 与右键菜单两条入口共用这一份守卫链（CopyTarget），
+        // 于是「哪一格算标识列」「哪一行算被标出来」只有一处判定，两条入口不会各说一套。
+        string? CopyTarget()
+        {
+            // 以焦点行为准（与 Enter 打开选中行同一纪律）：没指到行、或那一行没被标出来，都不动作。
+            if (list.FocusedItem is not ListViewItem row) return null;
+            // 声明的标识列不在这行的格数之内时没有可交出去的一格：不动剪贴板，也不抄邻列的文字顶替。
+            if (ListCopy.IdentityColumn(row.SubItems.Count, identityColumn) is not int column) return null;
+            return ListCopy.CopyText(row.SubItems[column].Text, row.Selected);
+        }
+
         list.KeyDown += (_, e) =>
         {
             if (e.KeyCode != Keys.C || !ListCopy.IsCopyGesture(e.Shift, e.Control, e.Alt)) return;
-            // 以焦点行为准（与 Enter 打开选中行同一纪律）：没指到行、或那一行没被标出来，都不动作。
-            if (list.FocusedItem is not ListViewItem row) return;
-            // 声明的标识列不在这行的格数之内时没有可交出去的一格：不动剪贴板，也不抄邻列的文字顶替。
-            if (ListCopy.IdentityColumn(row.SubItems.Count, identityColumn) is not int column) return;
-            if (ListCopy.CopyText(row.SubItems[column].Text, row.Selected) is not string text) return;
+            if (CopyTarget() is not string text) return;
             e.SuppressKeyPress = true;
             // 写剪贴板只经 CopyToClipboard 一处（整个原生界面唯一的写入点）；列表不关心成败——
             // 复制不到时粘贴即见实际内容，不弹窗、不谎称已复制。
             CopyToClipboard(text);
+        };
+        // 右键菜单（第四百一十八轮）：Ctrl+C 是列表里唯一把一格文字交出去的通路，而它在屏幕上不可见——
+        // 不知道这个手势的人看着「GET /路径」那一格仍然只能肉眼抄。右键菜单是 Windows 列表里
+        // 「这一行能做什么」的既有入口，这里只放一项「复制」，动作与 Ctrl+C 走同一个 CopyTarget
+        // （同一份守卫、同一格文字、同一个写入点），不新造视觉语言（系统菜单，不设颜色、不设图标）。
+        var menu = new ContextMenuStrip();
+        var copyItem = new ToolStripMenuItem(ListContextMenu.CopyItemText);
+        copyItem.Click += (_, _) =>
+        {
+            if (CopyTarget() is not string text) return;
+            CopyToClipboard(text);
+        };
+        menu.Items.Add(copyItem);
+        list.MouseUp += (_, e) =>
+        {
+            var hit = list.HitTest(e.Location);
+            var row = hit.Item;
+            // 弹不弹由 ListContextMenu 一处判（右键 ∧ 命中行）；命中不在行上（列头、清单外空白）不弹。
+            if (!ListContextMenu.ShouldOffer(e.Button == MouseButtons.Right, row is not null)) return;
+            // 上一句已判过命中行，这一句只是把可空收窄——判定仍只有 ShouldOffer 一处，这里不另判一套。
+            if (row is null) return;
+            // 右键先选中光标下那一行（资源管理器同序）：菜单里的动作作用于屏幕上被标出来的那一行，
+            // 选中仍经 SelectItem 唯一入口（Selected + Focused + 滚入可见区，与鼠标点同一行同一条路）。
+            SelectItem(row);
+            // 没有可交出去的文字就灰着：不弹一个点了没反应的项（与 Ctrl+C 同一条守卫链）。
+            copyItem.Enabled = CopyTarget() is not null;
+            menu.Show(list, e.Location);
         };
         if (checkBoxes)
         {

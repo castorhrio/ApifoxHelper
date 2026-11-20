@@ -26,7 +26,8 @@ public class ListChecksTests
         Assert.True(ListChecks.ShouldToggle(leftClick, hitOnRow, hitOnCheckbox));
 
     [Theory]
-    // 右键与中键不是点选手势：界面上也没有上下文菜单可给它翻（第二十二、五十二轮「不做右键菜单」的挂账不变）。
+    // 右键与中键不是点选手势：右键弹的是复制菜单（第四百一十八轮，见 ListContextMenuTests），
+    // 不是「翻勾选框」的入口——第二十二轮起「不做右键菜单」的挂账结清的是「没有入口」，不是「右键能翻勾选框」。
     [InlineData(true, true)]
     [InlineData(false, true)]
     [InlineData(true, false)]
