@@ -319,7 +319,7 @@ internal static class Program
         Section("新建任务对话框的「项目配置」默认选中项（刚保存的那一份在清单里 → 默认选中它，哪怕它按名字排在后面 → 认不出（没保存过 / 已被删掉）→ 回退到清单第一项 → 清单为空 → 一项都不选 → 真的点空态那颗「新建任务」→ 对话框里选中的就是刚保存的那一份，真实控件）", nameof(RunNewTaskProfileDefault));
         RunNewTaskProfileDefault(services, dataRoot);
 
-        Section("新建任务对话框「模块」那一行的说明句（有模块的配置 → 原来那一句、清单两行 → 换到没有模块的配置 → 换成「这份配置没有模块：将检查该 API 项目的全部接口。」、清单真的空 → 再换回来 → 说明句与清单一起回来 → 一份配置都没有的机器 → 换成「先选一份配置：下面列出它可勾的模块。」，真实控件）", nameof(RunNewTaskModuleHint));
+        Section("新建任务对话框「模块」那一行的说明句与两颗创建按钮（有模块的配置 → 原来那一句、清单两行、两颗创建按钮可点 → 换到没有模块的配置 → 换成「这份配置没有模块：将检查该 API 项目的全部接口。」、清单真的空 → 再换回来 → 说明句与清单一起回来 → 一份配置都没有的机器 → 换成「先选一份配置：下面列出它可勾的模块。」、两颗创建按钮停用，真实控件）", nameof(RunNewTaskModuleHint));
         RunNewTaskModuleHint(services, dataRoot);
 
         Section("注释草稿四条入口的门控（未扫描 → 五颗全停用 → 已扫描且配置没配模型服务 → 「模型生成候选」那颗停用、其余四颗照常可用 → 已扫描且配置配了 OpenAI 兼容服务 → 五颗全可用 → 真的点一次停用的那颗：状态行一个字没变、没有作业起来，真实控件）", nameof(RunDraftEntryGates));
@@ -9311,6 +9311,19 @@ internal static class Program
                 }
                 _lines.Add($"     默认选中「{combo.SelectedItem}」→ 说明句「{hint.Text}」、清单 {list.Items.Count} 行");
 
+                // ①b 两颗创建按钮此刻可点（第四百一十五轮）：选中了一份配置，创建这条路走得通。
+                var scanButton = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "创建并扫描")
+                    ?? throw new InvalidOperationException("「新建任务」对话框里找不到「创建并扫描」那颗按钮。");
+                var createButton = FindAll<Button>(dialog).SingleOrDefault(button => button.Text == "仅创建")
+                    ?? throw new InvalidOperationException("「新建任务」对话框里找不到「仅创建」那颗按钮。");
+                if (!scanButton.Enabled || !createButton.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        $"选中了一份配置时两颗创建按钮却是停用的（创建并扫描={scanButton.Enabled}、仅创建={createButton.Enabled}）："
+                        + "创建这条路明明走得通，按钮却把人挡在外面。");
+                }
+                _lines.Add($"     选中配置时两颗创建按钮 → 创建并扫描={scanButton.Enabled}、仅创建={createButton.Enabled}");
+
                 // ② 换到那份一个模块都没有的配置：说明句必须跟着换，否则它指着一个屏上不存在的对象。
                 combo.SelectedIndex = IndexOf(combo, withoutModules.Name);
                 Application.DoEvents();
@@ -9380,7 +9393,20 @@ internal static class Program
                     throw new InvalidOperationException(
                         $"一份配置都没有时模块清单里还有 {emptyList.Items.Count} 行（期望 0 行）。");
                 }
-                _lines.Add($"     一份配置都没有 → 说明句「{emptyHint.Text}」、清单 {emptyList.Items.Count} 行");
+                // ⑤ 两颗创建按钮此刻停用（第四百一十五轮）：一份配置都没有时点下去只会得到一句
+                //    「请选择项目配置」，而屏上根本没有可选的配置——那颗按钮该停用，而不是让人点一次再被拒。
+                var emptyScan = FindAll<Button>(emptyDialog).SingleOrDefault(button => button.Text == "创建并扫描")
+                    ?? throw new InvalidOperationException("「新建任务」对话框（一份配置都没有）里找不到「创建并扫描」那颗按钮。");
+                var emptyCreate = FindAll<Button>(emptyDialog).SingleOrDefault(button => button.Text == "仅创建")
+                    ?? throw new InvalidOperationException("「新建任务」对话框（一份配置都没有）里找不到「仅创建」那颗按钮。");
+                if (emptyScan.Enabled || emptyCreate.Enabled)
+                {
+                    throw new InvalidOperationException(
+                        $"一份配置都没有时两颗创建按钮却是可点的（创建并扫描={emptyScan.Enabled}、仅创建={emptyCreate.Enabled}）："
+                        + "点下去只会得到一句「请选择项目配置」，而屏上根本没有可选的配置。");
+                }
+                _lines.Add($"     一份配置都没有 → 说明句「{emptyHint.Text}」、清单 {emptyList.Items.Count} 行、"
+                    + $"创建并扫描={emptyScan.Enabled}、仅创建={emptyCreate.Enabled}");
             });
         }
         finally

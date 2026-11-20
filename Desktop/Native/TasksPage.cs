@@ -1849,6 +1849,11 @@ internal sealed class NewTaskDialog : DpiAwareForm
     // 不就地拼这三句。
     // 出厂那一句仍由 Ui.HintRow 那一行（裸语句）写下，这里只是把那一格取回来（见 ModuleHintLabel）。
     private readonly Label? _moduleHint;
+    // 两颗创建按钮（第四百一十五轮）：一份配置都没选中时它们该停用——点下去只会得到一句
+    // 「请选择项目配置」，而屏上根本没有可选的配置。判定收在 NewTaskPrimaryAction 一处，
+    // 这里只把「下拉里选没选中一份配置」读给它（见 LoadModules）。
+    private readonly Button _scanButton;
+    private readonly Button _createButton;
     private readonly Label _status = Ui.StatusLine();
     // 状态行宿主：与外层页面同一接线口径——放不下时右侧给「查看完整错误」入口。
     private readonly StatusLineHost _statusHost;
@@ -1884,6 +1889,9 @@ internal sealed class NewTaskDialog : DpiAwareForm
         scanButton.Click += (_, _) => Confirm(startScan: true);
         var createButton = Ui.Ghost("仅创建");
         createButton.Click += (_, _) => Confirm(startScan: false);
+        // 两颗创建按钮留成字段（第四百一十五轮）：LoadModules 要按「选没选中配置」启停它们。
+        _scanButton = scanButton;
+        _createButton = createButton;
         var cancelButton = Ui.Ghost("取消");
         cancelButton.Click += (_, _) => DialogResult = DialogResult.Cancel;
         AcceptButton = scanButton;
@@ -1999,6 +2007,12 @@ internal sealed class NewTaskDialog : DpiAwareForm
             // 而那一格被读成了「有模块」——屏上是一个空框加一句「勾选要检查的模块」。
             _moduleHint.Text = NewTaskModuleHint.For(selected is not null, _modules.Items.Count);
         }
+        // 两颗创建按钮跟着同一件事启停（第四百一十五轮）：一份配置都没选中时它们该停用——
+        // 点下去只会得到一句「请选择项目配置」，而屏上根本没有可选的配置。
+        // 判定收在 NewTaskPrimaryAction 一处，这里只把「选没选中」读给它。
+        var canCreate = NewTaskPrimaryAction.CanCreate(selected is not null);
+        _scanButton.Enabled = canCreate;
+        _createButton.Enabled = canCreate;
     }
 
     private void AddRow(TableLayoutPanel grid, string label, Control field)

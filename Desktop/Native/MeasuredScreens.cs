@@ -180,13 +180,13 @@ internal static class MeasuredScreens
             + "在对话框自己泵起来的消息循环里读下拉选中的是哪一份，再点对话框自己那颗「取消」关掉；"
             + "认字取 FirstRunPlan 的 Label / Hint / NewTaskLabel，不抄用户可见文案；"
             + "量的是 wine 模拟器上的真实控件，不是真机结果（下拉弹开之后键盘落在哪随 G-D5 真机复核）"),
-        new("检查「新建任务」对话框里「模块」那一行的说明句（有模块的配置 → 原来那一句、清单两行；换到没有模块的配置 → 换成「这份配置没有模块：将检查该 API 项目的全部接口。」、清单真的空；再换回来 → 说明句与清单一起回来；一份配置都没有的机器 → 换成「先选一份配置：下面列出它可勾的模块。」）", "RunNewTaskModuleHint",
-            ["NewTaskDialog"], true, "第四百一十三轮",
-            "docs/NOTES.md 第四百一十三轮：真的造一台有两份配置的机器（一份两个模块、一份一个模块都没有），真的显示「新建任务」对话框，"
-            + "按 Ui.HintRowMarker + 出厂那一句的字面取回「模块」那一行的说明句标签，读四件事——「默认选中那份有模块的配置时说明句逐字是 "
-            + "NewTaskModuleHint.WithModules、清单两行」「把下拉换到那份没有模块的配置之后说明句逐字换成 NewTaskModuleHint.NoModules、清单真的空」"
-            + "「再换回来，说明句与清单一起回来」「换一台一份配置都没有的机器，说明句逐字是 NewTaskModuleHint.NoProfileSelected、清单空」；"
-            + "认字取 NewTaskModuleHint 那三个共享常量，不抄用户可见文案；"
+        new("检查「新建任务」对话框里「模块」那一行的说明句与两颗创建按钮（有模块的配置 → 原来那一句、清单两行、两颗创建按钮可点；换到没有模块的配置 → 换成「这份配置没有模块：将检查该 API 项目的全部接口。」、清单真的空；再换回来 → 说明句与清单一起回来；一份配置都没有的机器 → 换成「先选一份配置：下面列出它可勾的模块。」、两颗创建按钮停用）", "RunNewTaskModuleHint",
+            ["NewTaskDialog"], true, "第四百一十五轮",
+            "docs/NOTES.md 第四百一十五轮：真的造一台有两份配置的机器（一份两个模块、一份一个模块都没有），真的显示「新建任务」对话框，"
+            + "按 Ui.HintRowMarker + 出厂那一句的字面取回「模块」那一行的说明句标签，读五件事——「默认选中那份有模块的配置时说明句逐字是 "
+            + "NewTaskModuleHint.WithModules、清单两行、两颗创建按钮可点」「把下拉换到那份没有模块的配置之后说明句逐字换成 NewTaskModuleHint.NoModules、清单真的空」"
+            + "「再换回来，说明句与清单一起回来」「换一台一份配置都没有的机器，说明句逐字是 NewTaskModuleHint.NoProfileSelected、清单空、两颗创建按钮停用」；"
+            + "认字取 NewTaskModuleHint 那三个共享常量与 NewTaskPrimaryAction 那一条判定，不抄用户可见文案；"
             + "量的是 wine 模拟器上的真实控件，不是真机结果（这一句在 200% 档折不折行随 G-D5 真机复核）"),
         new("检查任务页注释草稿四条入口的门控（未扫描 → 五颗全停用；已扫描且配置没配模型服务 → 「模型生成候选」那颗停用、其余四颗照常可用；已扫描且配置配了 OpenAI 兼容服务 → 五颗全可用；真的点一次停用的那颗 → 状态行一个字没变、没有作业起来）", "RunDraftEntryGates",
             ["TasksPage"], true, "第四百零九轮",
