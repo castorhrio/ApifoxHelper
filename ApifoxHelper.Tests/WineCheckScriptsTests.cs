@@ -2338,8 +2338,9 @@ public class WineCheckScriptsTests
             runs);
 
         Assert.True(problems.Count == 0, "Xvfb 屏尺寸三处对不上：" + string.Join("；", problems));
-        // 三档那一跑与收尾改回 96 那一跑，两支都得带着同一块屏。
-        Assert.Equal(2, runs.Count);
+        // 三档那一跑、收尾改回 96 那一跑、连读那一跑（--journey，第四百二十六轮，简报 P0-1）——
+        // 三支都得带着同一块屏；哪一支漏了 -s，上面 ScreenDrift 的 null 会当场点名。
+        Assert.Equal(3, runs.Count);
     }
 
     /// <summary>

@@ -339,6 +339,82 @@ public class DemoScriptTests
         Assert.Contains("G-D5 未达成（环境供给缺口）", script);
     }
 
+    // ── 第四百二十六轮（控制仓简报 P0-1）：降级答辩的「可信演示」——端到端连读 ──
+
+    /// <summary>
+    /// 连读模式（<c>demo.sh --journey</c>）的取法：步单从 <c>.winecheck/答辩讲稿.md</c>「端到端连读」的表读
+    /// （步单只有那一份，脚本不抄步名），产物与三档产物不同名，失败路径与逐屏那一支同一纪律。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：逐屏念稿把 27 屏一格一格过，评委听不到「一条线从空目录走到报告」——
+    /// 连读那一支按讲稿页那张表整支跑一遍冒烟器、产出一份连着念的讲稿。脚本抄了步名、产物与三档同名额、
+    /// 或失败路径静默跳过，都会让这一支在答辩现场变成第二份会漂的屏单——三样各钉一处。
+    /// 连读这一支<b>不写 reading.txt</b>：三档读数是三档那一跑的地盘（<c>ReadingConsistencyTests</c> 按
+    /// 三档对账），连读的读数只落在它自己的讲稿里。
+    /// </para>
+    /// <para>
+    /// 表与冒烟器的段名对账不需要第二条静态门：连读那一支在<b>运行时</b>从报告里取每段的通过 / 失败数，
+    /// 段名漂了当场报「报告里没有这一段」并非零退出——与逐屏那一支同一支守卫。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DemoScript_JourneyModeReadsItsChainFromTheLecturePage()
+    {
+        var script = Script;
+        Assert.Contains("--journey", script);
+        Assert.Contains("## 端到端连读", script);
+        Assert.Contains("答辩讲稿.md", script);
+
+        // 步单不抄第二份：连读表里的步名（讲稿页「端到端连读」那一节的第一列）不得出现在脚本里。
+        foreach (var step in JourneyRows().Select(r => r.Step))
+        {
+            Assert.False(script.Contains(step, StringComparison.Ordinal),
+                $"demo.sh 里抄了连读步名「{step}」——步单必须从 .winecheck/答辩讲稿.md 的连读表读，否则表改了脚本不会红。");
+        }
+
+        // 产物不同名：report- / narration- / console- 的 $TIER 三份是逐屏那一支的（AcceptanceChecklistTests
+        // 按文件名模板把三档产物对进账本），连读的三份多一个后缀，两类产物不混。
+        Assert.Contains("report-journey.txt", script);
+        Assert.Contains("narration-journey.txt", script);
+        Assert.Contains("console-journey.log", script);
+
+        // 失败路径同一纪律：缺表、缺列、缺段、失败行都非零退出。
+        Assert.Contains("连读没有步单可依据", script);
+        Assert.Contains("连读表有一行不是 5 列", script);
+        Assert.Contains("连读表与冒烟器对不上", script);
+        Assert.Contains("演示未收口：连读累计引用段失败", script);
+    }
+
+    /// <summary>连读表那一节的行（步 / 做什么 / 不变量 / 证据出处 / 缺什么），跳表头与分隔行。</summary>
+    private static List<(string Step, string Invariant, string Evidence, string Verdict)> JourneyRows()
+    {
+        var lines = LecturePage.ReplaceLineEndings("\n").Split('\n');
+        var start = Array.FindIndex(lines, l => l.StartsWith("## 端到端连读", StringComparison.Ordinal));
+        Assert.True(start >= 0, "答辩讲稿缺「## 端到端连读」一节（连读没有步单）。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        var rows = new List<(string, string, string, string)>();
+        foreach (var line in lines[start..(end < 0 ? lines.Length : end)])
+        {
+            if (!line.StartsWith("| ", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            Assert.True(cells.Count == 5, $"连读表有一行不是 5 列（{cells.Count} 列）：{line[..Math.Min(40, line.Length)]}…");
+            if (cells[0] == "步" || cells[0].All(ch => ch is '-' or ':')) continue;
+            rows.Add((cells[1], cells[2], cells[3], cells[4]));
+        }
+
+        Assert.True(rows.Count >= 6, $"连读表只有 {rows.Count} 行（地板 6：新建配置 → 扫描 → 审阅 → 回写 → 同步预览 → 报告）。");
+        foreach (var (step, _, evidence, verdict) in rows)
+        {
+            foreach (var segment in Regex.Matches(evidence, @"Run[A-Za-z0-9]+").Select(m => m.Value).Distinct(StringComparer.Ordinal))
+            {
+                Assert.Contains(segment, Repo.SmokeSectionNames());
+            }
+
+            Assert.True(!string.IsNullOrWhiteSpace(verdict), $"连读表「{step}」那一步的「缺什么」是空的——每步都要交代还差什么。");
+        }
+
+        return rows;
+    }
+
     /// <summary>
     /// 念出来的数必须出自当前源码——但判据用的是<b>源码内容指纹</b>，不是 mtime。
     /// <para>

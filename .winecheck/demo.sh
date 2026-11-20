@@ -123,6 +123,104 @@ section_stats() {
     END { flush() }' "$1"
 }
 
+# ── 连读模式（--journey，第四百二十六轮，控制仓简报 P0-1）──────────────────────
+# 降级答辩除了「逐屏孤立地过 27 屏」，还需要一条线从空目录走到报告的连读。这一支按
+# .winecheck/答辩讲稿.md「端到端连读」的表（步单只有那一份，这里不抄第二份）把冒烟器整支跑一遍
+# （LogPixels=96、1600×1000 的 Xvfb 屏，与三档同一口径），从报告里把每步引用的段数出来，
+# 产出一份连着念的讲稿 $OUT/narration-journey.txt。
+#
+# 它不是三档那一跑：不写 reading.txt（三档读数是三档那一跑的地盘，ReadingConsistencyTests
+# 按三档对账），也不动逐屏表的产物——report- / narration- / console- 的 $TIER 三份仍是逐屏那一支的。
+# 表缺了、列数不对、引用的段在报告里找不到、引用段有失败行——一律非零退出，与逐屏那一支同一纪律。
+if [ "${1:-}" = "--journey" ]; then
+  LECTURE="$REPO/.winecheck/答辩讲稿.md"
+  [ -f "$LECTURE" ] || { echo "找不到逐屏表的出处：$LECTURE"; exit 1; }
+
+  # 连读表 → 制表符分隔的五列（步 / 做什么 / 不变量 / 证据出处 / 缺什么），取法与逐屏表同一支。
+  JROWS=$(awk '
+    function trim(s) { gsub(/^ +| +$/, "", s); return s }
+    /^## 端到端连读/ { f = 1; next }
+    f && /^## / { exit }
+    f && /^\| [0-9]/ {
+      n = split($0, c, "|")
+      if (n != 7) { print "ERR 连读表有一行不是 5 列（实际 " (n - 2) " 列）：" $0 > "/dev/stderr"; bad = 1; next }
+      printf "%s\t%s\t%s\t%s\t%s\n", trim(c[2]), trim(c[3]), trim(c[4]), trim(c[5]), trim(c[6])
+    }
+    END { if (bad) exit 2 }' "$LECTURE") || exit 1
+  if [ -z "$JROWS" ]; then
+    echo "$LECTURE 里没有「## 端到端连读」的表（连读没有步单可依据）。"
+    exit 1
+  fi
+
+  JREPORT="$OUT/report-journey.txt"
+  JNARRATION="$OUT/narration-journey.txt"
+  JCONSOLE="$OUT/console-journey.log"
+  echo "== 端到端连读（LogPixels=96，≈100%）=="
+  rm -f "$JREPORT"
+  # 与三档同一口径：改 LogPixels 与跑冒烟落在同一个活显示里，屏尺寸显式给 1600×1000。
+  export WINE_BIN SMOKE_EXE
+  REPORT="$JREPORT" xvfb-run -a -s "-screen 0 1600x1000x24" bash -c '
+    set -u
+    export WINEPREFIX DISPLAY
+    "$WINE_BIN" reg add "HKCU\Control Panel\Desktop" /v LogPixels /t REG_DWORD /d 96 -f >/dev/null 2>&1 || exit 3
+    exec "$WINE_BIN" "$SMOKE_EXE" "--report=$REPORT"
+  ' >"$JCONSOLE" 2>&1
+  JRUN_RC=$?
+  if [ "$JRUN_RC" = "3" ]; then
+    echo "改不了 LogPixels（注册表写入失败），连读没量成。"; exit 1
+  fi
+  if [ ! -f "$JREPORT" ]; then
+    echo "报告没落盘：$JREPORT（冒烟器退出码 $JRUN_RC，见 $JCONSOLE）"
+    exit 1
+  fi
+  JFAIL_LINES=$(grep -c '^FAIL ' "$JREPORT" || true)
+  JPASS_LINES=$(grep -c '^PASS ' "$JREPORT" || true)
+  echo "  报告：$JPASS_LINES 通过 / $JFAIL_LINES 失败（退出码 $JRUN_RC）→ $JREPORT"
+
+  : >"$JNARRATION"
+  {
+    echo "降级答辩讲稿 · 端到端连读（LogPixels=96，≈100%）"
+    echo "出处：$LECTURE 的「端到端连读」表；数字来自 $JREPORT。"
+    echo "以上全部是 Linux 容器内 wine 10.0 + Xvfb 模拟器证据，不是 Windows 真机结果。"
+    echo
+  } >>"$JNARRATION"
+  J_FAIL=0
+  J_MISSING=0
+  while IFS=$'\t' read -r NUM STEP INVARIANT EVIDENCE VERDICT; do
+    [ -n "$STEP" ] || continue
+    SEGS=$(printf '%s' "$EVIDENCE" | grep -oE 'Run[A-Za-z0-9]+' | sort -u)
+    {
+      printf '%s. %s\n' "$NUM" "$STEP"
+      printf '   证明哪个不变量——%s\n' "$INVARIANT"
+    } >>"$JNARRATION"
+    if [ -z "$SEGS" ]; then
+      printf '   证据出处：这一步没有 wine 冒烟段——只有源码与编译证据，说「代码与用例在，真实端到端未跑」\n' >>"$JNARRATION"
+    else
+      for SEG in $SEGS; do
+        read -r P F <<<"$(seg_stat "$JREPORT" "$SEG")"
+        if [ "$P" = "0" ] && [ "$F" = "0" ]; then
+          printf '   引用段：%s —— 报告里没有这一段（连读表与冒烟器对不上，先修这一处再答辩）\n' "$SEG" >>"$JNARRATION"
+          J_MISSING=$((J_MISSING + 1))
+        else
+          printf '   引用段：%s —— 通过 %s / 失败 %s\n' "$SEG" "$P" "$F" >>"$JNARRATION"
+          J_FAIL=$((J_FAIL + F))
+        fi
+      done
+    fi
+    printf '   结论口径：%s\n\n' "$VERDICT" >>"$JNARRATION"
+  done <<<"$JROWS"
+  cat >>"$JNARRATION" <<'JCALIBER'
+结尾固定一句（与三档讲稿同一句）：以上均为 Linux 容器内 wine 10.0 + Xvfb 模拟器证据，不是 Windows 真机结果；真机 0 台，G-D5 未达成（环境供给缺口），到期日 2026-11-20。
+JCALIBER
+  echo "  讲稿：$JNARRATION（连读引用段合计失败 $J_FAIL 条、对不上 $J_MISSING 处）"
+  if [ "$J_FAIL" -gt 0 ] || [ "$J_MISSING" -gt 0 ]; then
+    echo "演示未收口：连读累计引用段失败 $J_FAIL 条、连读表与报告对不上 $J_MISSING 处——按讲稿逐条查到底层再答辩，不带着失败行念「wine 量到」。"
+    exit 1
+  fi
+  echo "连读逐段对账完成——每一步引用的段都在报告里、累计 0 失败。连读讲稿见 $JNARRATION（三档与读数记录不是这一支的产物）。"
+  exit 0
+fi
+
 # 读数记录的正文（tier= 与 section= 两类行），三档跑完整份写出。
 READING_TIERS=""
 READING_SECTIONS=""
