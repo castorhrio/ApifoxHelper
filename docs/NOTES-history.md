@@ -49,3 +49,9 @@
 ## 第四百一十轮那一笔（第四百一十一轮按同一条口径，原样搬自第 3 条那一行的括注）
 
 > （第四百一十轮按简报 P0-2 在**到期日当天**又现读一次：`bash .winecheck/collect-real-machine.sh` **退出码 `1`、「有东西 0 / 9 个目录」**，九个目录逐个点名还差什么；三种信号逐条——① 供给侧答复**未到**、② 那九个归档目录本轮一个文件也没新写过（这一笔就是现读到的）、③ 机器与容器都没换。**答复仍没有，真机仍 0 台**；G-D5 如实标「未达成（环境供给缺口）」，勾选框只由真机证据关闭，本轮不替人打勾。）
+
+## 第四百一十三 / 四百一十二 / 四百零九 / 四百零八 / 四百零七轮那五笔（第四百二十一轮按 `docs/NOTES.md` 顶部那条截断口径，原样搬自「最近一次三档整支跑」那一行的括注）
+
+> 搬的是整串括注，**一字未改、没有拆句**：那五笔在 `docs/NOTES.md` 里本来就首尾相接挂在同一行上，拆开会把「源码指纹由 … 走到 …」那几句连接词拆成别的东西。顶部那一行现在只留最近 3 轮（第四百一十九 / 四百一十八 / 四百一十五轮）。
+
+> 第四百一十三轮那一跑（第四百一十三轮把「新建任务」对话框「模块」那一行的说明句从两向改成三向（`Desktop/Native/NewTaskModuleHint.cs` 的判定与三句字面、`Desktop/Native/TasksPage.cs` 的 `_moduleHint` 入参拆成「选没选中配置」+「这份配置有几个模块」、`Desktop/Native/MeasuredScreens.cs` 同一行改描述）、测试侧扩 `NewTaskModuleHintTests` 与冒烟段 `RunNewTaskModuleHint` 一支（段数不变，所以三档总数仍是 446），源码指纹由 `c4b0ea605b…` 走到 `fe6aa4097d…`；第四百一十二轮那一跑（第四百一十二轮改了产品侧一处说明句（`Desktop/Native/NewTaskModuleHint.cs` 新增、`Desktop/Native/TasksPage.cs` 的 `_moduleHint` 与 `LoadModules`、`Desktop/Native/MeasuredScreens.cs` 一行登记）、测试侧六条门与冒烟段 `RunNewTaskModuleHint`（新增一段、一支，所以三档总数由 445 走到 446），源码指纹由 `34ae24dd05…` 走到 `c4b0ea605b…`；第四百零九轮那一跑（改了冒烟器（新增一段 `RunDraftEntryGates`、两支，所以三档总数由 443 走到 445）与 `Desktop/Native/MeasuredScreens.cs` 一行登记，产品侧判定与接线一个字未动，源码指纹由 `28ffdc488b…` 走到 `34ae24dd05…`；第四百零八轮那一跑（第四百零八轮改了产品侧一处默认值（`Desktop/Native/NewTaskProfileChoice.cs` 新增、`Desktop/Native/ProjectsPage.cs` 的 `ProfileSaved`、`Desktop/Native/NativeShellForm.cs` 的接线、`Desktop/Native/TasksPage.cs` 的 `PreferredProfileId`）、测试侧五条门与冒烟段 `RunNewTaskProfileDefault`（新增一段、两支，所以三档总数由 441 走到 443），源码指纹由 `fdfb2b7d2e…` 走到 `28ffdc488b…`；第四百零七轮那一跑（改了产品侧一句空态说明（`Desktop/Native/FirstRunPlan.cs` 新增 `ProjectsEmptyHint`、`Desktop/Native/ProjectsPage.cs` 两处改取它）、测试侧三条门与冒烟段 `RunFirstRunPath` 第一支里那三句断言，段数不变，所以三档总数仍是 441，源码指纹由 `40876a1421…` 走到 `fdfb2b7d2e…`）；

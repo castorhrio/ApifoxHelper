@@ -99,8 +99,9 @@ public class ListContextMenuTests
         // `Regex.Matches(slice, @"CopyTarget\(\)").Count - 1` 把「减掉的那一处」当成定义——定义签名一改
         // （比如加了参数、换了返回类型），它就不再被这一句数到，减 1 减掉的是某个调用点，
         // 于是「定义一处 + 三个调用点」这句话在源码里已经不成立、断言却照样绿。
-        Assert.True(CopyGuardDefinition().Success, "工厂里找不到守卫链的定义。");
-        Assert.Equal(3, CopyGuardCallSites());
+        var guard = ReadCopyGuardShape(slice);
+        Assert.True(guard.Problems.Count == 0, string.Join(" ／ ", guard.Problems));
+        Assert.Equal(3, guard.CallSites);
         // 剪贴板写入点仍是 Ui.CopyToClipboard 一处（菜单项不自己碰 Clipboard）。
         Assert.DoesNotContain("Clipboard.SetText", slice, StringComparison.Ordinal);
         // 菜单项点击里先取守卫链的结果再写剪贴板：取不到就不动作，不把用户先前复制的内容抹掉。
@@ -179,32 +180,92 @@ public class ListContextMenuTests
     }
 
     /// <summary>
-    /// 守卫链的定义处（第四百一十九轮，简报 P1-2）：局部函数声明那一行 <c>string? CopyTarget()</c>，
-    /// 独占一行、恰一处。
+    /// 守卫链形状的判定（第四百二十一轮，简报 P0-2：把第四百二十轮 commit message 里做过的两处变异
+    /// 落进测试代码）。返回问题清单（空 = 形状成立）与调用点条数。
     /// <para>
-    /// <b>为什么单独取这一处</b>：调用点的条数只有在「定义确实还是这一行」时才有意义——签名一改
-    /// （加参数、换返回类型、改成字段），定义就不再被这个形状认到，此时「三个调用点」这句话已经不成立，
-    /// 该红的是定义这一句，而不是让「总数减 1」把某个调用点当成定义蒙过去。
+    /// <b>为什么收成一个纯函数</b>：第四百二十轮改断言时是<b>手工</b>把 <c>string?</c> 改成 <c>object?</c>、
+    /// 再给定义加一个参数，跑一遍看红不红，然后改回来——那两发变异只活在 commit message 里。
+    /// 下一轮谁再动守卫链的形状，没有任何机械保证。收成一处之后，
+    /// <see cref="CopyGuardShapeDetector_ReportsTheBreaksItMustCatch"/> 能把那两发原样喂进来。
+    /// </para>
+    /// <para>
+    /// <b>它判什么</b>：定义处恰一处（<c>string? CopyTarget()</c> 独占一行）、调用处恰三处
+    /// （Ctrl+C、菜单项点击、菜单项启停）。定义处认不到时<b>不再数调用点</b>——那正是第四百一十九轮
+    /// 之前那句 <c>Regex.Matches(slice, @"CopyTarget\(\)").Count - 1</c> 的假绿来源：
+    /// 定义签名一改，它就不再被数到，「减 1」减掉的是某个调用点，于是「定义一处 + 三个调用点」
+    /// 这句话在源码里已经不成立、断言却照样绿。
     /// </para>
     /// </summary>
-    private static Match CopyGuardDefinition()
+    private static (List<string> Problems, int CallSites) ReadCopyGuardShape(string slice)
     {
-        var matches = Regex.Matches(ListFactorySlice(), @"(?m)^\s*string\? CopyTarget\(\)\s*$");
-        Assert.True(matches.Count == 1,
-            $"工厂里 `string? CopyTarget()` 这一行有 {matches.Count} 处，口径是恰一处："
-            + "守卫链的定义只有一份，两条入口（Ctrl+C 与右键菜单）共用它。");
-        return matches[0];
+        var problems = new List<string>();
+        var definitions = Regex.Matches(slice, @"(?m)^\s*string\? CopyTarget\(\)\s*$");
+        if (definitions.Count != 1)
+        {
+            problems.Add($"工厂里 `string? CopyTarget()` 这一行有 {definitions.Count} 处，口径是恰一处："
+                         + "守卫链的定义只有一份，两条入口（Ctrl+C 与右键菜单）共用它。");
+            return (problems, -1);
+        }
+
+        var callSites = Regex.Matches(
+            slice.Remove(definitions[0].Index, definitions[0].Length), @"CopyTarget\(\)").Count;
+        if (callSites != 3)
+        {
+            problems.Add($"守卫链的调用处读到 {callSites} 处，口径是三处（Ctrl+C、菜单项点击、菜单项启停）："
+                         + "少一处 = 有一条入口没接上，多一处 = 多了一条没人登记的入口。");
+        }
+
+        return (problems, callSites);
     }
 
     /// <summary>
-    /// 守卫链的调用处条数（第四百一十九轮，简报 P1-2）：把定义那一行切掉之后，剩下的部分里数
-    /// <c>CopyTarget()</c>——三个（Ctrl+C、菜单项点击、菜单项启停）。
+    /// 守卫链形状的判定<b>抓不抓得住</b>（第四百二十一轮，简报 P0-2）。
+    /// <para>
+    /// 第四百二十轮把计数断言从「总数减 1」改成「定义处与调用处各数各的」，验证方式是<b>手工</b>做两处变异
+    /// （<c>string?</c> → <c>object?</c>、给定义加一个参数），跑一遍看红不红，然后改回来——那两发变异
+    /// 只留在 commit message 里。本门把它们写成夹具：喂同一段源码切片给 <see cref="ReadCopyGuardShape"/>，
+    /// 断言它当场红。形状与 <c>LayoutMeasurementGateTests.ReasonDetector_ReportsTheBreaksItMustCatch</c> 同一做法。
+    /// </para>
+    /// <para>
+    /// <b>第一发还额外钉住「旧写法在这一发上照样绿」</b>：<c>object? CopyTarget()</c> 之后
+    /// <c>CopyTarget()</c> 仍出现 4 次，旧断言 <c>Count - 1 == 3</c> 照样成立——这正是第四百一十九轮
+    /// 那一句的假绿形状。把它写进断言里，下一轮谁把判定改回「总数减 1」即红。
+    /// </para>
     /// </summary>
-    private static int CopyGuardCallSites()
+    [Fact]
+    public void CopyGuardShapeDetector_ReportsTheBreaksItMustCatch()
     {
         var slice = ListFactorySlice();
-        var definition = CopyGuardDefinition();
-        return Regex.Matches(slice.Remove(definition.Index, definition.Length), @"CopyTarget\(\)").Count;
+
+        // 前提：仓里现在这一份是合规的（下面三发之所以能红，只可能来自注入的破坏）。
+        Assert.Empty(ReadCopyGuardShape(slice).Problems);
+
+        // ① 变异一：返回类型 `string?` → `object?`（第四百二十轮手工做过的那一处）。
+        var mutatedReturn = slice.Replace("string? CopyTarget()", "object? CopyTarget()", StringComparison.Ordinal);
+        Assert.NotEqual(slice, mutatedReturn);
+        var returnProblems = ReadCopyGuardShape(mutatedReturn).Problems;
+        Assert.Single(returnProblems);
+        Assert.Contains("定义", returnProblems[0], StringComparison.Ordinal);
+        // 旧写法（第四百一十九轮之前那一句）在这一发上照样绿——这就是本轮要留痕的那一处假绿。
+        Assert.Equal(3, Regex.Matches(mutatedReturn, @"CopyTarget\(\)").Count - 1);
+
+        // ② 变异二：给定义加一个参数（第四百二十轮手工做过的另一处）。
+        var mutatedParam = slice.Replace(
+            "string? CopyTarget()", "string? CopyTarget(bool allowEmpty)", StringComparison.Ordinal);
+        Assert.NotEqual(slice, mutatedParam);
+        var paramProblems = ReadCopyGuardShape(mutatedParam).Problems;
+        Assert.Single(paramProblems);
+        Assert.Contains("定义", paramProblems[0], StringComparison.Ordinal);
+
+        // ③ 变异三：多一条调用处（多一条没人登记的入口）。
+        var extraCall = slice.Replace(
+            "copyItem.Enabled = CopyTarget() is not null;",
+            "copyItem.Enabled = CopyTarget() is not null;\n        var extra = CopyTarget();",
+            StringComparison.Ordinal);
+        Assert.NotEqual(slice, extraCall);
+        var extraProblems = ReadCopyGuardShape(extraCall).Problems;
+        Assert.Single(extraProblems);
+        Assert.Contains("调用处", extraProblems[0], StringComparison.Ordinal);
     }
 
     /// <summary>Ui.List 工厂的方法体切片（从构造到 SelectItem 之前），右键菜单接线必须在这一段内。</summary>
