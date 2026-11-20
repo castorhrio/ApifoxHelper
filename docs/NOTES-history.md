@@ -55,3 +55,9 @@
 > 搬的是整串括注，**一字未改、没有拆句**：那五笔在 `docs/NOTES.md` 里本来就首尾相接挂在同一行上，拆开会把「源码指纹由 … 走到 …」那几句连接词拆成别的东西。顶部那一行现在只留最近 3 轮（第四百一十九 / 四百一十八 / 四百一十五轮）。
 
 > 第四百一十三轮那一跑（第四百一十三轮把「新建任务」对话框「模块」那一行的说明句从两向改成三向（`Desktop/Native/NewTaskModuleHint.cs` 的判定与三句字面、`Desktop/Native/TasksPage.cs` 的 `_moduleHint` 入参拆成「选没选中配置」+「这份配置有几个模块」、`Desktop/Native/MeasuredScreens.cs` 同一行改描述）、测试侧扩 `NewTaskModuleHintTests` 与冒烟段 `RunNewTaskModuleHint` 一支（段数不变，所以三档总数仍是 446），源码指纹由 `c4b0ea605b…` 走到 `fe6aa4097d…`；第四百一十二轮那一跑（第四百一十二轮改了产品侧一处说明句（`Desktop/Native/NewTaskModuleHint.cs` 新增、`Desktop/Native/TasksPage.cs` 的 `_moduleHint` 与 `LoadModules`、`Desktop/Native/MeasuredScreens.cs` 一行登记）、测试侧六条门与冒烟段 `RunNewTaskModuleHint`（新增一段、一支，所以三档总数由 445 走到 446），源码指纹由 `34ae24dd05…` 走到 `c4b0ea605b…`；第四百零九轮那一跑（改了冒烟器（新增一段 `RunDraftEntryGates`、两支，所以三档总数由 443 走到 445）与 `Desktop/Native/MeasuredScreens.cs` 一行登记，产品侧判定与接线一个字未动，源码指纹由 `28ffdc488b…` 走到 `34ae24dd05…`；第四百零八轮那一跑（第四百零八轮改了产品侧一处默认值（`Desktop/Native/NewTaskProfileChoice.cs` 新增、`Desktop/Native/ProjectsPage.cs` 的 `ProfileSaved`、`Desktop/Native/NativeShellForm.cs` 的接线、`Desktop/Native/TasksPage.cs` 的 `PreferredProfileId`）、测试侧五条门与冒烟段 `RunNewTaskProfileDefault`（新增一段、两支，所以三档总数由 441 走到 443），源码指纹由 `fdfb2b7d2e…` 走到 `28ffdc488b…`；第四百零七轮那一跑（改了产品侧一句空态说明（`Desktop/Native/FirstRunPlan.cs` 新增 `ProjectsEmptyHint`、`Desktop/Native/ProjectsPage.cs` 两处改取它）、测试侧三条门与冒烟段 `RunFirstRunPath` 第一支里那三句断言，段数不变，所以三档总数仍是 441，源码指纹由 `40876a1421…` 走到 `fdfb2b7d2e…`）；
+
+## 截断口径本体（第四百二十四轮按简报 P1-2 从 `docs/NOTES.md` 顶部「真机供给状态」那一段原样搬来）
+
+> 搬的是整段，**一字未改、没有拆句**：里面「上面第 3 条那一行」说的是搬动当时它在 `docs/NOTES.md` 里的相对位置——那一行现在还在原位（顶部第 3 条）。
+
+> **历史读数子段的截断口径（第三百三十二轮，简报 P1-1：只登记口径 + 搬一次，不加门）**：本子段只保留**最近 3 轮**的读数，更早的移入 `docs/NOTES-history.md`（第三百零九轮与第三百一十轮那两件已搬过去，一字未改）。**第三百六十四轮按这一句办了一次账**：当时本子段里那三笔（第三百四十三 / 三百三十 / 三百一十二轮）与上面第 3 条那一行里超出最近 3 轮的那三笔（第三百五十 / 三百五十六 / 三百五十八轮）一起搬走，本子段清空——清空不是把它删掉：这一处留着，下一轮新增读数时才有地方按同一口径往里放。下一轮再往这里加新读数时，把被挤出去的那一轮按同一口径搬走——**这一句只登记口径，不为它加门**（加了也只判「这几行字在不在」，判不到下一轮会不会真的搬）。
