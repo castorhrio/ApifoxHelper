@@ -2022,6 +2022,55 @@ public class ReadingConsistencyTests
         [NoProductIncrementMarker, "不改产品代码", "不动产品代码"];
 
     /// <summary>
+    /// 收口登记那一行的<b>行首形状</b>——收口门本体冻结快照的唯一落点（第四百二十九轮，简报 P0-1）。
+    /// <para>
+    /// 与 <see cref="LastFullRunEntry"/> 同一取法：锚在行首——逐轮账本里引用这一行的不算第二落点，
+    /// 只认「blockquote 里加粗起头是这一句」那种行。
+    /// </para>
+    /// </summary>
+    private static readonly Regex DocReconciliationRegistryEntry = new(
+        @"^\s*>\s*\*\*文档对账这一族：收口登记", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 收口门本体的<b>冻结门</b>（第四百二十九轮，控制仓简报 P0-1）：判定依据——计数词形
+    /// （<see cref="DocOnlyWordForms"/>）＋豁免（<see cref="ProductIncrementMarker"/>）＋上限
+    /// （<see cref="MaxConsecutiveDocOnlyRounds"/>）——的字面快照登记在 <c>docs/NOTES.md</c> 收口登记那一行，
+    /// 本门拿快照与判据常量<b>逐字对上</b>：改了任何一件（换词形、增删词形、改豁免、改上限），
+    /// 快照对不上即红。
+    /// <para>
+    /// <b>为什么要有这一条</b>：第四百一十五轮立了收口句，第四百二十三 / 四百二十八轮仍在改这条门本身
+    /// ——收口句没有让这一族停下来。冻结把「改收口门」变成<b>显式、可追溯的动作</b>：再改须先删旧快照、
+    /// 写明理由、并在当轮条目里记一次「本轮改的是收口门本体」，而不是每轮顺手改窄。
+    /// 快照用字面不用哈希——改门的人要改的就是那句人话，改了哪件一眼看得见。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判改门的理由成不成立（那要人读——快照对上即绿，理由写在当轮条目里）；
+    /// 也不另养第二层门：注入验不重复，<see cref="DocumentReconciliationDetector_ReportsTheBreaksItMustCatch"/>
+    /// 验的是计数判据抓不抓得住，本门只判「快照与判据本体是不是同一份」这一件事。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DocumentReconciliationGate_IsFrozen()
+    {
+        var lines = Repo.Source("docs", "NOTES.md").Split('\n')
+            .Where(l => DocReconciliationRegistryEntry.IsMatch(l)).ToList();
+        Assert.True(lines.Count == 1,
+            $"收口登记那一行读到 {lines.Count} 处，要的是恰好一处：冻结快照要么没有落点，要么有了两个答案。");
+
+        var expected = "计数词形" + string.Concat(DocOnlyWordForms.Select(f => $"「{f}」"))
+            + "＋豁免「" + ProductIncrementMarker + "」＋上限 " + MaxConsecutiveDocOnlyRounds + " 轮";
+        Assert.True(lines[0].Contains(expected, StringComparison.Ordinal),
+            "收口门本体已冻结，判定依据与登记在 docs/NOTES.md 收口登记那一行的快照对不上：\n  快照应为："
+            + expected
+            + "\n改法：本轮不改门——要改判据常量，须先按收口登记那一行的冻结句办：删旧快照、写明理由、"
+            + "并在当轮条目里记一次「本轮改的是收口门本体」，再把快照改成新判定依据。");
+
+        Assert.True(lines[0].Contains("自第四百二十九轮起冻结", StringComparison.Ordinal),
+            "收口登记那一行的冻结句不见了：删了它、只留快照，等于把「改收口门须显式动作」改回顺手改——"
+            + "冻结句与快照同在那一行，缺一即红。");
+    }
+
+    /// <summary>
     /// 文档对账这一族的<b>收口门</b>：账本最近连续几轮都是「纯文档对账」时，不许超过上限（第四百二十三轮，简报 P0-2）。
     /// <para>
     /// <b>补的是哪个缺口</b>：第四百一十五轮给这一族立了收口句（「当一轮的 commit 只有修上一轮自己留下的
