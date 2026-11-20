@@ -1969,4 +1969,277 @@ public class ReadingConsistencyTests
         // 落点不许在脚本里写死一份：它必须从 demo.sh 的 READING 缺省现读（与 OUT / TIERS 同一取法）。
         Assert.DoesNotContain(".winecheck/defense.txt", script, StringComparison.Ordinal);
     }
+
+    // ---------- 第四百二十三轮（简报 P0-2）：文档对账族的收口句升级成收口门 ----------
+
+    /// <summary>
+    /// 「这一轮没有产品增量」的登记句——第四百一十五轮那条收口句里写下的原话，本轮起它<b>可机械读</b>。
+    /// <para>
+    /// <b>为什么是这一句</b>：收口句要求「当一轮的 commit 只有『修上一轮自己留下的文档对账红』时，
+    /// 在当轮条目末尾记一句『本轮无产品增量，红因 X，已按 Y 修』」。那句话此前只是散文——
+    /// 第四百二十 / 四百二十一 / 四百二十二轮仍在往里补条目，收口句没有阻止重复路径。
+    /// 把这一句当标记，就能从账本里<b>数出</b>「最近连续几轮是纯文档对账」。
+    /// </para>
+    /// </summary>
+    private const string NoProductIncrementMarker = "本轮无产品增量";
+
+    /// <summary>
+    /// 连续纯文档对账轮次的上限。到第 <see cref="MaxConsecutiveDocOnlyRounds"/> 轮为止可以只修文档对账；
+    /// <b>第 4 轮必须做点别的</b>——上限取 3 的理由与「真机供给未读」那条有界门同一分寸。
+    /// </summary>
+    private const int MaxConsecutiveDocOnlyRounds = 3;
+
+    /// <summary>
+    /// 文档对账这一族的<b>收口门</b>：账本最近连续几轮都是「纯文档对账」时，不许超过上限（第四百二十三轮，简报 P0-2）。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第四百一十五轮给这一族立了收口句（「当一轮的 commit 只有修上一轮自己留下的
+    /// 文档对账红时，应判为重复路径并停」），可那是<b>散文</b>——第四百二十 / 四百二十一 / 四百二十二轮
+    /// 仍在往里补条目，收口句没有阻止重复路径。按「假门防护族」的做法（第二百五十六轮立收口句 +
+    /// <c>LayoutMeasurementGateTests.NoMeasurementSegment_Reasons_SayWhyTheIdentityIsNotAFakeGate</c> 机械钉住），
+    /// 这里把收口句升级成<b>机械可判的收口门</b>：判「最近连续几轮是纯文档对账收红」。
+    /// </para>
+    /// <para>
+    /// <b>判什么</b>：① 账本里每一轮条目，凡写了「无产品增量」的，必须<b>逐字</b>用登记在册的那一句
+    /// （<see cref="NoProductIncrementMarker"/>）——换个说法门就认不出它，那一轮会安静地落在门外；
+    /// ② 从最新一轮往回数，连续写着这一句的轮次数不得超过 <see cref="MaxConsecutiveDocOnlyRounds"/>。
+    /// </para>
+    /// <para>
+    /// <b>它不判什么</b>：不判那一轮的 commit 到底有没有产品增量（测试进程不读 <c>git</c>——那会让这条门
+    /// 在无 <c>git</c> 的环境里静默绿），也不判「这一轮该不该修文档对账」——那是排期，不是判据。
+    /// 它判的只有一件事：<b>「连着几轮只修文档对账」在仓里数得出来，且有上界</b>。
+    /// </para>
+    /// <para>
+    /// <b>为什么这一条不是「假门」</b>：它判的是<b>外部实物</b>——账本条目是给人读的登记，定义不在判据里
+    /// （按 <c>LayoutMeasurementGateTests</c> 那五步的第 ② 步，答「不是」），所以它是对账门。
+    /// 抓不抓得住由 <see cref="DocumentReconciliationDetector_ReportsTheBreaksItMustCatch"/> 拿五发注入当场验。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DocumentReconciliationRounds_MustNotExceedTheBound()
+    {
+        var problems = DocReconciliationProblems(Repo.Source("docs", "NOTES.md"));
+        Assert.True(problems.Count == 0,
+            "文档对账这一族的收口门不成立：\n  · " + string.Join("\n  · ", problems)
+            + "\n改法：纯文档对账的那一轮在条目里逐字写「" + NoProductIncrementMarker + "」；"
+            + "连续 " + MaxConsecutiveDocOnlyRounds + " 轮之后必须做点别的（产品增量、或一条新门），"
+            + "不许一路只修文档对账——第四百一十五轮那条收口句说的就是这件事，本轮起它可判。");
+    }
+
+    /// <summary>
+    /// 五发注入：合规两发必须<b>不报</b>，破坏三发必须<b>当场报</b>。
+    /// <para>
+    /// 与 <see cref="ProseFingerprintDetector_ReportsTheBreaksItMustCatch"/> 同一纪律：
+    /// 只在真仓上判的门，抓不抓得住全靠那天有没有人想到去试。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DocumentReconciliationDetector_ReportsTheBreaksItMustCatch()
+    {
+        // ① 合规：最近 3 轮里 2 轮是纯文档对账，没到上限。
+        Assert.Empty(DocReconciliationProblems(DocLedger(
+            (421, "本轮补一条有界门。"),
+            (422, "本轮给列表右键菜单补上键盘入口。"),
+            (423, "**" + NoProductIncrementMarker + "。** 红因散文指纹落后，已按段末写入纪律修。"))));
+
+        // ② 合规：连续 3 轮纯文档对账，正好到上限。
+        Assert.Empty(DocReconciliationProblems(DocLedger(
+            (421, "本轮补一条有界门。"),
+            (422, "**" + NoProductIncrementMarker + "。** 红因甲。"),
+            (423, "**" + NoProductIncrementMarker + "。** 红因乙。"),
+            (424, "**" + NoProductIncrementMarker + "。** 红因丙。"))));
+
+        // ③ 连续 4 轮纯文档对账：超过上限，这一轮必须做点别的。
+        var overCap = DocReconciliationProblems(DocLedger(
+            (421, "本轮补一条有界门。"),
+            (422, "**" + NoProductIncrementMarker + "。** 红因甲。"),
+            (423, "**" + NoProductIncrementMarker + "。** 红因乙。"),
+            (424, "**" + NoProductIncrementMarker + "。** 红因丙。"),
+            (425, "**" + NoProductIncrementMarker + "。** 红因丁。")));
+        Assert.Single(overCap);
+        Assert.Contains("上限", overCap[0], StringComparison.Ordinal);
+        Assert.Contains("4", overCap[0], StringComparison.Ordinal);
+
+        // ④ 中间夹一轮有产品增量：计数归零，后面那两轮不算「连着」。
+        Assert.Empty(DocReconciliationProblems(DocLedger(
+            (421, "**" + NoProductIncrementMarker + "。** 红因甲。"),
+            (422, "**" + NoProductIncrementMarker + "。** 红因乙。"),
+            (423, "本轮给列表右键菜单补上键盘入口。"),
+            (424, "**" + NoProductIncrementMarker + "。** 红因丙。"),
+            (425, "**" + NoProductIncrementMarker + "。** 红因丁。"))));
+
+        // ⑤ 标记写歪（「无产品增量」而不是登记在册的那一句）：门认不出它，那一轮安静地落在门外。
+        var garbled = DocReconciliationProblems(DocLedger(
+            (421, "本轮补一条有界门。"),
+            (422, "**无产品增量。** 红因甲。")));
+        Assert.Single(garbled);
+        Assert.Contains(NoProductIncrementMarker, garbled[0], StringComparison.Ordinal);
+
+        // ⑥ 账本里一个条目都读不出来：判据退化了，「连着几轮」会在空集合上成立。
+        var empty = DocReconciliationProblems("这一份里没有账本条目。");
+        Assert.Single(empty);
+        Assert.Contains("条目都读不出来", empty[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 判据本体：账本全文进，问题清单出（空 = 这一族收口了）。
+    /// <para>
+    /// 收成一处而不是写在 <see cref="DocumentReconciliationRounds_MustNotExceedTheBound"/> 里，
+    /// 是为了让 <see cref="DocumentReconciliationDetector_ReportsTheBreaksItMustCatch"/> 能把每一发破坏各喂一遍。
+    /// </para>
+    /// </summary>
+    private static List<string> DocReconciliationProblems(string notes)
+    {
+        var problems = new List<string>();
+        var entries = DocLedgerEntries(notes);
+        if (entries.Count == 0)
+        {
+            problems.Add("docs/NOTES.md 里一个「## 第N轮」条目都读不出来——判据退化了，"
+                         + "「最近连续几轮是纯文档对账」会在空集合上成立。");
+            return problems;
+        }
+
+        // ① 标记必须逐字用登记在册的那一句：换个说法门就认不出它。
+        foreach (var (round, body) in entries.OrderBy(e => e.Key))
+        {
+            if (body.Contains("无产品增量", StringComparison.Ordinal)
+                && !body.Contains(NoProductIncrementMarker, StringComparison.Ordinal))
+            {
+                problems.Add($"第{Chinese(round)}轮的条目里写了「无产品增量」，却没逐字用登记在册的那一句"
+                             + $"「{NoProductIncrementMarker}」：换个说法门就认不出它，"
+                             + "那一轮会安静地落在门外——收口门数的正是这一句。");
+            }
+        }
+
+        // ② 从最新一轮往回数，连续写着这一句的轮次数不得超过上限。
+        var ordered = entries.OrderBy(e => e.Key).ToList();
+        var streak = 0;
+        for (var i = ordered.Count - 1; i >= 0; i--)
+        {
+            if (!ordered[i].Value.Contains(NoProductIncrementMarker, StringComparison.Ordinal)) break;
+            streak++;
+        }
+
+        if (streak > MaxConsecutiveDocOnlyRounds)
+        {
+            problems.Add($"账本最近连续 {streak} 轮都是纯文档对账（条目里写着「{NoProductIncrementMarker}」），"
+                         + $"超过上限 {MaxConsecutiveDocOnlyRounds} 轮：第四百一十五轮那条收口句说的就是这件事——"
+                         + "「修上一轮自己留下的文档对账红」是重复路径，这一轮必须做点别的"
+                         + "（产品增量、或一条新门），不许一路只修文档对账。");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// 账本条目：<c>## </c> 标题行里<b>第一个</b>「第N轮」就是这一节的轮次，正文取到下一个 <c>## </c> 之前。
+    /// <para>
+    /// 与 <c>RoundLedgerTests.LedgerEntries</c> 同一取法（只认第一个：标题里常引到别的轮次，
+    /// 把标题里所有轮次都算成「有条目」，会让「引一句就算写过」变成一条绕过账本的路）。
+    /// </para>
+    /// </summary>
+    private static Dictionary<int, string> DocLedgerEntries(string notes)
+    {
+        var lines = notes.ReplaceLineEndings("\n").Split('\n');
+        var entries = new Dictionary<int, string>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (!lines[i].StartsWith("## ", StringComparison.Ordinal)) continue;
+            var match = Regex.Match(lines[i], @"第(?<num>[零一二三四五六七八九十百]+)轮");
+            if (!match.Success) continue;
+            var end = i + 1;
+            while (end < lines.Length && !lines[end].StartsWith("## ", StringComparison.Ordinal)) end++;
+            var body = string.Join('\n', lines[(i + 1)..end]);
+            var round = DocRoundNumber(match.Groups["num"].Value);
+            if (round is null) continue;
+            if (!entries.TryGetValue(round.Value, out var existing) || body.Length > existing.Length)
+            {
+                entries[round.Value] = body;
+            }
+        }
+
+        return entries;
+    }
+
+    private static readonly Dictionary<char, int> DocRoundDigits = new()
+    {
+        ['零'] = 0, ['一'] = 1, ['二'] = 2, ['三'] = 3, ['四'] = 4,
+        ['五'] = 5, ['六'] = 6, ['七'] = 7, ['八'] = 8, ['九'] = 9,
+    };
+
+    /// <summary>中文轮次号 → 整数（支持到九百九十九）；读不出来返回 <c>null</c>（不静默当成 0）。</summary>
+    private static int? DocRoundNumber(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        var total = 0;
+        var rest = text;
+        if (rest.Contains('百'))
+        {
+            var at = rest.IndexOf('百');
+            var hundreds = at == 0 ? 1 : DocRoundDigit(rest[..at]);
+            if (hundreds is null) return null;
+            total += hundreds.Value * 100;
+            rest = rest[(at + 1)..];
+        }
+
+        if (rest.Contains('十'))
+        {
+            var at = rest.IndexOf('十');
+            var tens = at == 0 ? 1 : DocRoundDigit(rest[..at]);
+            if (tens is null) return null;
+            total += tens.Value * 10;
+            rest = rest[(at + 1)..];
+        }
+
+        foreach (var ch in rest)
+        {
+            if (!DocRoundDigits.TryGetValue(ch, out var value)) return null;
+            total += value;
+        }
+
+        return total;
+    }
+
+    private static int? DocRoundDigit(string text)
+    {
+        var total = 0;
+        foreach (var ch in text)
+        {
+            if (!DocRoundDigits.TryGetValue(ch, out var value)) return null;
+            total += value;
+        }
+
+        return total;
+    }
+
+    /// <summary>整数 → 中文轮次号（只用于失败信息，读的人要能一眼对上账本里的写法）。</summary>
+    private static string Chinese(int number)
+    {
+        if (number is < 0 or > 999) return number.ToString();
+        var hundreds = number / 100;
+        var tens = number % 100 / 10;
+        var ones = number % 10;
+        var text = new System.Text.StringBuilder();
+        if (hundreds > 0)
+        {
+            if (hundreds > 1) text.Append(DocRoundDigits.First(d => d.Value == hundreds).Key);
+            text.Append('百');
+        }
+
+        if (tens > 0)
+        {
+            if (tens > 1) text.Append(DocRoundDigits.First(d => d.Value == tens).Key);
+            text.Append('十');
+        }
+        else if (hundreds > 0 && ones > 0)
+        {
+            text.Append('零');
+        }
+
+        if (ones > 0) text.Append(DocRoundDigits.First(d => d.Value == ones).Key);
+        return text.Length == 0 ? "零" : text.ToString();
+    }
+
+    /// <summary>夹具：造一份「这几轮都有条目」的账本。</summary>
+    private static string DocLedger(params (int Round, string Body)[] entries) =>
+        string.Concat(entries.Select(e => $"## 第{Chinese(e.Round)}轮（2026-11-20）：夹具条目\n\n{e.Body}\n\n"));
 }
