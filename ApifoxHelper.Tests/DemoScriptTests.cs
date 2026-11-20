@@ -639,6 +639,203 @@ public class DemoScriptTests
         return problems;
     }
 
+    private const string ReconcileHeading = "## 逐屏念稿与登记出处对账";
+
+    /// <summary>
+    /// 讲稿页「逐屏念稿与登记出处对账」那一节的四列行（# / 屏 / 念这一句时屏上应当出现 / 登记出处）。
+    /// 列数不是 4 的行在这里就是测试失败，不是跳过。
+    /// </summary>
+    private static List<(string Screen, string Should, string Provenance)> ReconcileRows()
+    {
+        var lines = LecturePage.ReplaceLineEndings("\n").Split('\n');
+        var start = Array.FindIndex(lines, l => l.StartsWith(ReconcileHeading, StringComparison.Ordinal));
+        Assert.True(start >= 0, $"答辩讲稿缺「{ReconcileHeading}」一节——逐屏念稿没有一处对到 MeasuredScreens 的登记轮次上。");
+        var end = Array.FindIndex(lines, start + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+        var rows = new List<(string, string, string)>();
+        foreach (var line in lines[start..(end < 0 ? lines.Length : end)])
+        {
+            if (!line.StartsWith("| ", StringComparison.Ordinal)) continue;
+            var cells = line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
+            Assert.True(cells.Count == 4, $"「{ReconcileHeading}」有一行不是 4 列（{cells.Count} 列）：{line[..Math.Min(40, line.Length)]}…");
+            if (cells[0] == "#" || cells[0].All(ch => ch is '-' or ':')) continue;
+            rows.Add((cells[1], cells[2], cells[3]));
+        }
+
+        Assert.True(rows.Count >= 12, $"「{ReconcileHeading}」只有 {rows.Count} 行（地板 12）。");
+        return rows;
+    }
+
+    /// <summary>
+    /// 讲稿页的「逐屏念稿与登记出处对账」与 <c>Desktop/Native/MeasuredScreens.cs</c> 那一份登记逐屏对账：
+    /// 屏名与屏序与「逐屏一句话讲稿」逐字同一份、每屏都写了「念这一句时屏上应当出现什么」、
+    /// 每屏引的段与那一屏念的段是同一个集合、且每一段的轮次与登记表记的<b>逐字相同</b>。
+    /// <para>
+    /// <b>补的是哪个缺口</b>：第四百一十六轮之前，讲稿页的 27 屏只对到「屏名 / 屏数 / 段名在不在注册清单里」，
+    /// <b>没有一处对到「这一段是哪一轮量过的」</b>——于是「这一屏引的段在登记表里查得到、记的是同一轮」这件事
+    /// 只能靠人翻 `MeasuredScreens.cs`。答辩现场念到某一屏时，问「哪一轮量的」这一页给不出答案。
+    /// </para>
+    /// <para>
+    /// <b>为什么这是对账门、不是「判据判自己」</b>（第二百七十轮五步法）：断言里的名字是讲稿页那一格的字面
+    /// 与 `MeasuredScreens.All` 那一份登记——两侧的定义各在自己那一头（一个在 `.winecheck/答辩讲稿.md`、
+    /// 一个在 `Desktop/Native/MeasuredScreens.cs`），第 ② 步答「不是」，故按对账门处理，照常随实物一起长。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void LecturePage_ReconcilesEveryScreenWithTheMeasuredScreensRegister()
+    {
+        var register = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in ApifoxHelper.Desktop.Native.MeasuredScreens.All)
+        {
+            register.TryAdd(row.Section, row.Round);
+        }
+
+        Assert.Empty(ReconcileProblems(
+            ReconcileRows(),
+            LectureRows().Select(r => (r.Screen, r.Measured)).ToList(),
+            register));
+    }
+
+    /// <summary>
+    /// 上面那段判据<b>自己</b>被抓得住：七发注入各喂一次，每一发都必须报出自己那一处（最后一发合规、不报）。
+    /// </summary>
+    [Fact]
+    public void LectureReconcileGate_ReportsTheDriftItMustCatch()
+    {
+        var register = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["RunScanResultsInteraction"] = "第一百三十六轮",
+            ["RunScanResultsLoadFailure"] = "第三百零五轮",
+        };
+        (string Screen, string Measured)[] lecture =
+        [
+            ("注释缺口对话框", "`RunScanResultsInteraction` / `RunScanResultsLoadFailure`"),
+            ("同步预览与执行", "只有源码与编译证据"),
+        ];
+
+        // ⑥ 合规：两屏都对得上——不报。
+        Assert.Empty(ReconcileProblems(
+            [
+                ("注释缺口对话框", "计数行与清单", "`RunScanResultsInteraction` → 第一百三十六轮；`RunScanResultsLoadFailure` → 第三百零五轮"),
+                ("同步预览与执行", "勾选清单与写入清单", "—（这一屏只有源码与编译证据，没有冒烟段可指）"),
+            ],
+            lecture, register));
+
+        // ① 少一屏：讲稿念两屏，对账表只写了一屏。
+        Assert.Contains(ReconcileProblems(
+            [("注释缺口对话框", "计数行与清单", "`RunScanResultsInteraction` → 第一百三十六轮；`RunScanResultsLoadFailure` → 第三百零五轮")],
+            lecture, register), p => p.Contains("少了一屏", StringComparison.Ordinal));
+
+        // ② 屏名错位：第二行写成了别的屏。
+        Assert.Contains(ReconcileProblems(
+            [
+                ("注释缺口对话框", "计数行与清单", "`RunScanResultsInteraction` → 第一百三十六轮；`RunScanResultsLoadFailure` → 第三百零五轮"),
+                ("检查任务页", "勾选清单与写入清单", "—（这一屏只有源码与编译证据，没有冒烟段可指）"),
+            ],
+            lecture, register), p => p.Contains("屏名对不上", StringComparison.Ordinal));
+
+        // ③ 轮次漂了：登记表记第三百零五轮，这一页念第一百三十六轮。
+        Assert.Contains(ReconcileProblems(
+            [
+                ("注释缺口对话框", "计数行与清单", "`RunScanResultsInteraction` → 第一百三十六轮；`RunScanResultsLoadFailure` → 第一百三十六轮"),
+                ("同步预览与执行", "勾选清单与写入清单", "—（这一屏只有源码与编译证据，没有冒烟段可指）"),
+            ],
+            lecture, register), p => p.Contains("第三百零五轮", StringComparison.Ordinal) && p.Contains("轮次", StringComparison.Ordinal));
+
+        // ④ 漏了一段：这一屏念了两段，对账表只写了一段的轮次。
+        Assert.Contains(ReconcileProblems(
+            [
+                ("注释缺口对话框", "计数行与清单", "`RunScanResultsInteraction` → 第一百三十六轮"),
+                ("同步预览与执行", "勾选清单与写入清单", "—（这一屏只有源码与编译证据，没有冒烟段可指）"),
+            ],
+            lecture, register), p => p.Contains("RunScanResultsLoadFailure", StringComparison.Ordinal) && p.Contains("漏", StringComparison.Ordinal));
+
+        // ⑤ 引了没登记的段却写成有轮次：登记表里没有它，这一页却给了个轮次。
+        Assert.Contains(ReconcileProblems(
+            [
+                ("注释缺口对话框", "计数行与清单", "`RunScanResultsInteraction` → 第一百三十六轮；`RunScanResultsLoadFailure` → 第三百零五轮；`RunNotRegistered` → 第一百轮"),
+                ("同步预览与执行", "勾选清单与写入清单", "—（这一屏只有源码与编译证据，没有冒烟段可指）"),
+            ],
+            lecture, register), p => p.Contains("RunNotRegistered", StringComparison.Ordinal) && p.Contains("未登记", StringComparison.Ordinal));
+
+        // ⑦ 「念这一句时屏上应当出现什么」是空的。
+        Assert.Contains(ReconcileProblems(
+            [
+                ("注释缺口对话框", "  ", "`RunScanResultsInteraction` → 第一百三十六轮；`RunScanResultsLoadFailure` → 第三百零五轮"),
+                ("同步预览与执行", "勾选清单与写入清单", "—（这一屏只有源码与编译证据，没有冒烟段可指）"),
+            ],
+            lecture, register), p => p.Contains("屏上应当出现", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 讲稿页「逐屏念稿与登记出处对账」与登记表的对账，返回「哪几处会念歪」的说明（空 = 全对上）。
+    /// 写成<b>纯数据进、问题出</b>的函数，是为了让 <see cref="LectureReconcileGate_ReportsTheDriftItMustCatch"/>
+    /// 能拿注入过的夹具喂它——与 <see cref="LectureProblems"/> 同一形状。
+    /// </summary>
+    private static List<string> ReconcileProblems(
+        IReadOnlyList<(string Screen, string Should, string Provenance)> reconcileRows,
+        IReadOnlyList<(string Screen, string Measured)> lectureRows,
+        IReadOnlyDictionary<string, string> register)
+    {
+        var problems = new List<string>();
+
+        if (reconcileRows.Count != lectureRows.Count)
+        {
+            problems.Add($"对账表 {reconcileRows.Count} 行、逐屏讲稿 {lectureRows.Count} 行——少了一屏或多了一屏，念序对不上。");
+        }
+
+        for (var i = 0; i < Math.Min(reconcileRows.Count, lectureRows.Count); i++)
+        {
+            var (screen, should, provenance) = reconcileRows[i];
+            var lecture = lectureRows[i];
+
+            if (!string.Equals(screen, lecture.Screen, StringComparison.Ordinal))
+            {
+                problems.Add($"第 {i + 1} 行屏名对不上：对账表写「{screen}」、逐屏讲稿写「{lecture.Screen}」——念序会错位。");
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(should))
+            {
+                problems.Add($"屏「{screen}」的「念这一句时，屏上应当出现」是空的——现场念到它时不知道该指屏上哪一处。");
+            }
+
+            var cited = Regex.Matches(provenance, @"Run[A-Za-z0-9]+").Select(m => m.Value).Distinct(StringComparer.Ordinal).ToList();
+            var measured = Regex.Matches(lecture.Measured, @"Run[A-Za-z0-9]+").Select(m => m.Value).Distinct(StringComparer.Ordinal).ToList();
+
+            foreach (var segment in measured.Where(s => !cited.Contains(s, StringComparer.Ordinal)))
+            {
+                problems.Add($"屏「{screen}」念了 {segment}，对账表漏了它的轮次——现场被问「哪一轮量的」时这一页答不出。");
+            }
+
+            foreach (var segment in cited.Where(s => !measured.Contains(s, StringComparer.Ordinal)))
+            {
+                problems.Add($"屏「{screen}」的对账表引了 {segment}，可这一屏的讲稿没念它——两处不是同一个段集合。");
+            }
+
+            foreach (var segment in cited)
+            {
+                if (register.TryGetValue(segment, out var round))
+                {
+                    if (!provenance.Contains($"`{segment}` → {round}", StringComparison.Ordinal))
+                    {
+                        problems.Add($"屏「{screen}」的 {segment} 轮次对不上：登记表记的是 {round}，这一页念的不是它。");
+                    }
+                }
+                else if (!provenance.Contains($"`{segment}` → 未登记", StringComparison.Ordinal))
+                {
+                    problems.Add($"屏「{screen}」的 {segment} 在登记表里没有行，这一页却给了个轮次——未登记就得如实写「未登记」。");
+                }
+            }
+
+            if (measured.Count == 0 && !provenance.StartsWith("—", StringComparison.Ordinal))
+            {
+                problems.Add($"屏「{screen}」只有源码与编译证据，对账表的出处却不像「没有冒烟段可指」——别把源码证据屏写成有段可念。");
+            }
+        }
+
+        return problems;
+    }
+
     /// <summary>讲稿页里从某个二级标题到下一个二级标题（或到文件末）的正文。</summary>
     private static string LectureSection(string startHeading, string? endHeading)
     {
