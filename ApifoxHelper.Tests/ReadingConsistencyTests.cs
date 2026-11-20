@@ -1973,21 +1973,53 @@ public class ReadingConsistencyTests
     // ---------- 第四百二十三轮（简报 P0-2）：文档对账族的收口句升级成收口门 ----------
 
     /// <summary>
-    /// 「这一轮没有产品增量」的登记句——第四百一十五轮那条收口句里写下的原话，本轮起它<b>可机械读</b>。
+    /// 「这一轮没有产品增量」的登记句——第四百一十五轮那条收口句里写下的原话，第四百二十三轮起它<b>可机械读</b>。
     /// <para>
     /// <b>为什么是这一句</b>：收口句要求「当一轮的 commit 只有『修上一轮自己留下的文档对账红』时，
     /// 在当轮条目末尾记一句『本轮无产品增量，红因 X，已按 Y 修』」。那句话此前只是散文——
     /// 第四百二十 / 四百二十一 / 四百二十二轮仍在往里补条目，收口句没有阻止重复路径。
     /// 把这一句当标记，就能从账本里<b>数出</b>「最近连续几轮是纯文档对账」。
     /// </para>
+    /// <para>
+    /// <b>第四百二十八轮起它只是计数词形之一</b>：账本里后来各轮实际写下的标记句并不都是它
+    /// （见 <see cref="DocOnlyWordForms"/>），只认这一句会让没写它的纯文档对账轮安静地落在门外——
+    /// 第四百二十四～四百二十七轮就是那么漏掉的。
+    /// </para>
     /// </summary>
     private const string NoProductIncrementMarker = "本轮无产品增量";
+
+    /// <summary>
+    /// 「这一轮有产品增量」的声明句——第四百二十八轮按控制仓简报 P0-1 登记的<b>豁免词形</b>（词形封闭）。
+    /// <para>
+    /// <b>为什么需要它</b>：改窄后的取法不再把「条目里没写无增量的标记句」当成有增量的证据
+    /// （那正是第四百二十四～四百二十七轮漏过去的洞），豁免必须<b>显式声明</b>。
+    /// 这一句是简报 P0-1 原文里给第四百二十六轮点名的写法（「本轮有产品增量（demo 补强）」），
+    /// 不是本轮发明的词形；第四百二十六轮的条目已按简报补记了它。条目里同时写着
+    /// <see cref="DocOnlyWordForms"/> 里词形的（第四百二十六轮补记后的真实形状——「不动产品代码」
+    /// 说的是 <c>Desktop/</c> 产品本体），以有增量的声明为准：demo 补强算这一门的增量，产品本体另算。
+    /// 换说法先改这里并在当轮条目写明。
+    /// </para>
+    /// </summary>
+    private const string ProductIncrementMarker = "本轮有产品增量";
 
     /// <summary>
     /// 连续纯文档对账轮次的上限。到第 <see cref="MaxConsecutiveDocOnlyRounds"/> 轮为止可以只修文档对账；
     /// <b>第 4 轮必须做点别的</b>——上限取 3 的理由与「真机供给未读」那条有界门同一分寸。
     /// </summary>
     private const int MaxConsecutiveDocOnlyRounds = 3;
+
+    /// <summary>
+    /// 「纯文档对账轮」的计数词形（词形封闭）——<b>与账本里实际写下的标记句逐字对上</b>（第四百二十八轮，简报 P0-1）。
+    /// <para>
+    /// <b>为什么不止一句</b>：第四百二十三轮的门只认 <see cref="NoProductIncrementMarker"/> 一句，而账本里
+    /// 第四百二十四 / 四百二十五轮实际写下的是「不改产品代码」、第四百二十六 / 四百二十七轮是「不动产品代码」
+    /// ——四轮都是纯文档对账轮，却没有一轮写那句登记标记，门从最新一轮往回数只数到 0、一直绿。
+    /// 判定依据必须与账本里实际写下的标记句逐字对上，所以把账本里真实在用的三句全数进来。
+    /// 换了说法先改这里并在当轮条目写明（与 <c>KnownLimitScreens</c> / <c>GapTerminalFacts</c> 同一纪律）。
+    /// </para>
+    /// </summary>
+    private static readonly string[] DocOnlyWordForms =
+        [NoProductIncrementMarker, "不改产品代码", "不动产品代码"];
 
     /// <summary>
     /// 文档对账这一族的<b>收口门</b>：账本最近连续几轮都是「纯文档对账」时，不许超过上限（第四百二十三轮，简报 P0-2）。
@@ -1999,19 +2031,33 @@ public class ReadingConsistencyTests
     /// 这里把收口句升级成<b>机械可判的收口门</b>：判「最近连续几轮是纯文档对账收红」。
     /// </para>
     /// <para>
+    /// <b>第四百二十八轮按简报 P0-1 改窄取法</b>：旧取法只认 <see cref="NoProductIncrementMarker"/> 一句——
+    /// 凡没写它的条目一律豁免，等于「不写标记就查不到」。第四百二十四～四百二十七轮四轮纯文档对账
+    /// （条目里实际写下的是「不改产品代码」/「不动产品代码」）就是这样安静地落在门外、门一直绿的。
+    /// 改窄后：① 计数词形与账本实际写下的标记句逐字对上（<see cref="DocOnlyWordForms"/> 三句全数）；
+    /// ② 豁免收窄为<b>显式声明</b>——条目里写下 <see cref="ProductIncrementMarker"/> 的那轮才不计
+    /// （第四百二十六轮 demo 补强，简报 P0-1 点名的写法）；③ 上限 3 轮不变。
+    /// 改窄当天在开工 HEAD 上数到连续 5 轮（第四百二十三～四百二十七轮）即红——简报预告的「第 428 轮开局即红」；
+    /// 同轮按简报给第四百二十六轮补记归属句、并在当轮条目重述四轮归属，计数停在那一条，门收绿。
+    /// </para>
+    /// <para>
     /// <b>判什么</b>：① 账本里每一轮条目，凡写了「无产品增量」的，必须<b>逐字</b>用登记在册的那一句
     /// （<see cref="NoProductIncrementMarker"/>）——换个说法门就认不出它，那一轮会安静地落在门外；
-    /// ② 从最新一轮往回数，连续写着这一句的轮次数不得超过 <see cref="MaxConsecutiveDocOnlyRounds"/>。
+    /// ② 从最新一轮往回数，连续写着 <see cref="DocOnlyWordForms"/> 里任一词形的轮次数不得超过
+    /// <see cref="MaxConsecutiveDocOnlyRounds"/>，数到写了 <see cref="ProductIncrementMarker"/> 的条目
+    /// 或没写任何登记词形的条目就停（后者是产品轮条目的真实形状——判据认不出它，计数必须在它那里停下，
+    /// 不装作看得见）。
     /// </para>
     /// <para>
     /// <b>它不判什么</b>：不判那一轮的 commit 到底有没有产品增量（测试进程不读 <c>git</c>——那会让这条门
     /// 在无 <c>git</c> 的环境里静默绿），也不判「这一轮该不该修文档对账」——那是排期，不是判据。
-    /// 它判的只有一件事：<b>「连着几轮只修文档对账」在仓里数得出来，且有上界</b>。
+    /// 一条<b>完全没写任何登记词形</b>的纯文档对账轮仍在门外（词形封闭的代价）——那是账本纪律与归属重述
+    /// 的落点，不是这条门假装看得见的。
     /// </para>
     /// <para>
     /// <b>为什么这一条不是「假门」</b>：它判的是<b>外部实物</b>——账本条目是给人读的登记，定义不在判据里
     /// （按 <c>LayoutMeasurementGateTests</c> 那五步的第 ② 步，答「不是」），所以它是对账门。
-    /// 抓不抓得住由 <see cref="DocumentReconciliationDetector_ReportsTheBreaksItMustCatch"/> 拿五发注入当场验。
+    /// 抓不抓得住由 <see cref="DocumentReconciliationDetector_ReportsTheBreaksItMustCatch"/> 拿注入当场验。
     /// </para>
     /// </summary>
     [Fact]
@@ -2020,35 +2066,41 @@ public class ReadingConsistencyTests
         var problems = DocReconciliationProblems(Repo.Source("docs", "NOTES.md"));
         Assert.True(problems.Count == 0,
             "文档对账这一族的收口门不成立：\n  · " + string.Join("\n  · ", problems)
-            + "\n改法：纯文档对账的那一轮在条目里逐字写「" + NoProductIncrementMarker + "」；"
-            + "连续 " + MaxConsecutiveDocOnlyRounds + " 轮之后必须做点别的（产品增量、或一条新门），"
-            + "不许一路只修文档对账——第四百一十五轮那条收口句说的就是这件事，本轮起它可判。");
+            + "\n改法：纯文档对账的那一轮在条目里逐字写「" + DocOnlyWordForms[0] + "」"
+            + "（或账本里实际在用的「" + DocOnlyWordForms[1] + "」/「" + DocOnlyWordForms[2] + "」）；"
+            + "连续 " + MaxConsecutiveDocOnlyRounds + " 轮之后必须做点别的（产品增量——写「" + ProductIncrementMarker
+            + "」声明、或一条新门），不许一路只修文档对账——第四百一十五轮那条收口句说的就是这件事。");
     }
 
     /// <summary>
-    /// 五发注入：合规两发必须<b>不报</b>，破坏三发必须<b>当场报</b>。
+    /// 注入验：合规四发必须<b>不报</b>，破坏四发必须<b>当场报</b>。
     /// <para>
     /// 与 <see cref="ProseFingerprintDetector_ReportsTheBreaksItMustCatch"/> 同一纪律：
     /// 只在真仓上判的门，抓不抓得住全靠那天有没有人想到去试。
+    /// 第四发（⑤）是第四百二十八轮按简报 P0-1 补的那一发——「连续第 4 轮纯文档对账必须红」，
+    /// 且四轮条目里写的是账本里<b>实际写下</b>的那两句（「不改产品代码」/「不动产品代码」）、
+    /// 一句旧登记标记都没有：旧取法对它绿，改窄后必须红。
     /// </para>
     /// </summary>
     [Fact]
     public void DocumentReconciliationDetector_ReportsTheBreaksItMustCatch()
     {
-        // ① 合规：最近 3 轮里 2 轮是纯文档对账，没到上限。
+        // ① 合规：最新一轮写了有增量的声明，计数停在它那里——门不计这一轮。
         Assert.Empty(DocReconciliationProblems(DocLedger(
             (421, "本轮补一条有界门。"),
             (422, "本轮给列表右键菜单补上键盘入口。"),
-            (423, "**" + NoProductIncrementMarker + "。** 红因散文指纹落后，已按段末写入纪律修。"))));
+            (423, "**" + NoProductIncrementMarker + "。** 红因散文指纹落后，已按段末写入纪律修。"),
+            (424, "**" + ProductIncrementMarker + "（demo 补强）。** 其余同前几轮的形状。"))));
 
-        // ② 合规：连续 3 轮纯文档对账，正好到上限。
+        // ② 合规：连续 3 轮纯文档对账（三种词形混着写，与账本实际形状一致），正好到上限。
         Assert.Empty(DocReconciliationProblems(DocLedger(
             (421, "本轮补一条有界门。"),
-            (422, "**" + NoProductIncrementMarker + "。** 红因甲。"),
-            (423, "**" + NoProductIncrementMarker + "。** 红因乙。"),
-            (424, "**" + NoProductIncrementMarker + "。** 红因丙。"))));
+            (422, "本轮给列表右键菜单补上键盘入口。"),
+            (423, "**不改产品代码。** 补了一条对账门。"),
+            (424, "**不动产品代码。** 补了另一条对账门。"),
+            (425, "**" + NoProductIncrementMarker + "。** 红因甲。"))));
 
-        // ③ 连续 4 轮纯文档对账：超过上限，这一轮必须做点别的。
+        // ③ 连续 4 轮纯文档对账（旧登记标记句）：超过上限，这一轮必须做点别的。
         var overCap = DocReconciliationProblems(DocLedger(
             (421, "本轮补一条有界门。"),
             (422, "**" + NoProductIncrementMarker + "。** 红因甲。"),
@@ -2059,22 +2111,45 @@ public class ReadingConsistencyTests
         Assert.Contains("上限", overCap[0], StringComparison.Ordinal);
         Assert.Contains("4", overCap[0], StringComparison.Ordinal);
 
-        // ④ 中间夹一轮有产品增量：计数归零，后面那两轮不算「连着」。
+        // ④（简报 P0-1 补的那一发）连续 4 轮纯文档对账，条目里写的是账本里实际写下的那两句、
+        //    没有一句旧登记标记：旧取法（只认旧标记）对它绿，改窄后必须红。
+        var actualForms = DocReconciliationProblems(DocLedger(
+            (421, "本轮补一条有界门。"),
+            (422, "本轮给列表右键菜单补上键盘入口。"),
+            (423, "**不改产品代码。** 补了一条对账门。"),
+            (424, "**不改产品代码。** 又补了一条对账门。"),
+            (425, "**不动产品代码。** 给登记表扩了词形。"),
+            (426, "**不动产品代码。** 又扩了一处。")));
+        Assert.Single(actualForms);
+        Assert.Contains("上限", actualForms[0], StringComparison.Ordinal);
+        Assert.Contains("4", actualForms[0], StringComparison.Ordinal);
+
+        // ⑤ 合规：连续纯文档对账里夹一轮写了有增量的声明——那条目里同时有「不动产品代码」
+        //    （第四百二十六轮补记后的真实形状），以有增量的声明为准，计数停在那，只数它之后的两轮。
+        Assert.Empty(DocReconciliationProblems(DocLedger(
+            (421, "本轮补一条有界门。"),
+            (422, "本轮给列表右键菜单补上键盘入口。"),
+            (423, "**不动产品代码。** 补了一条对账门。"),
+            (424, "**" + ProductIncrementMarker + "（demo 补强）。** 本轮补记：连读那一支是真增量；不动产品代码。"),
+            (425, "**不动产品代码。** 又补了一条。"),
+            (426, "**不动产品代码。** 再补一条。"))));
+
+        // ⑥ 合规：中间夹一轮产品轮（条目描述产品工作、没写任何登记词形）——判据认不出它，计数在它那里停下。
         Assert.Empty(DocReconciliationProblems(DocLedger(
             (421, "**" + NoProductIncrementMarker + "。** 红因甲。"),
             (422, "**" + NoProductIncrementMarker + "。** 红因乙。"),
             (423, "本轮给列表右键菜单补上键盘入口。"),
-            (424, "**" + NoProductIncrementMarker + "。** 红因丙。"),
-            (425, "**" + NoProductIncrementMarker + "。** 红因丁。"))));
+            (424, "**不改产品代码。** 红因丙。"),
+            (425, "**不改产品代码。** 红因丁。"))));
 
-        // ⑤ 标记写歪（「无产品增量」而不是登记在册的那一句）：门认不出它，那一轮安静地落在门外。
+        // ⑦ 标记写歪（「无产品增量」而不是登记在册的那一句）：门认不出它，那一轮安静地落在门外。
         var garbled = DocReconciliationProblems(DocLedger(
             (421, "本轮补一条有界门。"),
             (422, "**无产品增量。** 红因甲。")));
         Assert.Single(garbled);
         Assert.Contains(NoProductIncrementMarker, garbled[0], StringComparison.Ordinal);
 
-        // ⑥ 账本里一个条目都读不出来：判据退化了，「连着几轮」会在空集合上成立。
+        // ⑧ 账本里一个条目都读不出来：判据退化了，「连着几轮」会在空集合上成立。
         var empty = DocReconciliationProblems("这一份里没有账本条目。");
         Assert.Single(empty);
         Assert.Contains("条目都读不出来", empty[0], StringComparison.Ordinal);
@@ -2110,21 +2185,26 @@ public class ReadingConsistencyTests
             }
         }
 
-        // ② 从最新一轮往回数，连续写着这一句的轮次数不得超过上限。
+        // ② 从最新一轮往回数，连续写着登记词形（DocOnlyWordForms）的轮次数不得超过上限；
+        //    数到写了「本轮有产品增量」声明（ProductIncrementMarker）或没写任何登记词形的条目就停——
+        //    前者是显式豁免（第四百二十六轮 demo 补强的形状），后者是产品轮条目的真实形状，判据不装作看得见。
         var ordered = entries.OrderBy(e => e.Key).ToList();
         var streak = 0;
         for (var i = ordered.Count - 1; i >= 0; i--)
         {
-            if (!ordered[i].Value.Contains(NoProductIncrementMarker, StringComparison.Ordinal)) break;
+            var body = ordered[i].Value;
+            if (body.Contains(ProductIncrementMarker, StringComparison.Ordinal)) break;
+            if (!DocOnlyWordForms.Any(form => body.Contains(form, StringComparison.Ordinal))) break;
             streak++;
         }
 
         if (streak > MaxConsecutiveDocOnlyRounds)
         {
-            problems.Add($"账本最近连续 {streak} 轮都是纯文档对账（条目里写着「{NoProductIncrementMarker}」），"
+            problems.Add($"账本最近连续 {streak} 轮都是纯文档对账（条目里写着「{DocOnlyWordForms[0]}」"
+                         + $"或账本里实际在用的「{DocOnlyWordForms[1]}」/「{DocOnlyWordForms[2]}」），"
                          + $"超过上限 {MaxConsecutiveDocOnlyRounds} 轮：第四百一十五轮那条收口句说的就是这件事——"
                          + "「修上一轮自己留下的文档对账红」是重复路径，这一轮必须做点别的"
-                         + "（产品增量、或一条新门），不许一路只修文档对账。");
+                         + $"（产品增量——在条目里写「{ProductIncrementMarker}」声明，或一条新门），不许一路只修文档对账。");
         }
 
         return problems;
