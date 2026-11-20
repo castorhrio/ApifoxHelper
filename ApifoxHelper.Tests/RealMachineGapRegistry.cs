@@ -13,6 +13,15 @@ namespace ApifoxHelper.Tests;
 /// 「真机供给未读」的有界门与这里无共用，仍留在 <c>RealMachineSupplyGateTests</c> 自己那份里。
 /// </para>
 /// <para>
+/// <b>第四百二十七轮按控制仓简报 P0-1 加终局词形</b>：第四百二十六轮那一跑给右键菜单行「现读归零」，
+/// 但量到的是鼠标路径，那一行登记的层（按键路由）从未被现读——行内自相矛盾。语义修正（最近一次现读
+/// 改回「未现读」、计数按账本从首次登记起算）会让连续未验证超过上限 3 轮，而现读在这层永远做不了：
+/// 模拟器没有为它写的冒烟段、真机供给已终局（第四百二十六轮起）。故上限那一格认终局词形——
+/// 从未现读、且读数格把 <see cref="GapTerminalFacts"/> 两件事实写全的行不再逐轮判红，
+/// 与 <c>RealMachineSupplyGateTests</c> 的「已终结」词形同一分寸；放宽的只有「到限必须现读」的重判时机，
+/// 行质量三条（层名 / 轮次 / 计数现算）一条未放宽。
+/// </para>
+/// <para>
 /// <b>它不判什么</b>：不判真机有没有到手（那是 <c>collect-real-machine.sh</c> 与
 /// <c>docs/evidence/real-machine/</c> 的地盘），不判 G-D5 那一格该不该勾（勾选框只由真机证据关闭），
 /// 也不判「这一层该不该现在验」——那是排期，不是判据。
@@ -44,6 +53,15 @@ internal static class RealMachineGapRegistry
 
     /// <summary>「从未为这一层跑过读数」的写法。</summary>
     internal const string NeverReadMarker = "未现读";
+
+    /// <summary>
+    /// 终局词形必须写全的两件事实（词形封闭，第四百二十七轮，控制仓简报 P0-1；与第四百二十六轮
+    /// 供给门的「已终结」词形同一分寸）：这一层的两条现读腿各断一条——模拟器没有为它写的冒烟段
+    /// （<c>没有冒烟段</c>）、真机供给已终局（<c>真机供给已终局</c>，第四百二十六轮起）——
+    /// 现读在哪一天都不可能，登记行把两件事实写全时「第 4 轮必须现读」的上限不再逐轮重判。
+    /// 换了说法先改这里并在当轮条目写明。
+    /// </summary>
+    internal static readonly string[] GapTerminalFacts = ["没有冒烟段", "真机供给已终局"];
 
     /// <summary>登记表里的一行（六格）。</summary>
     internal sealed record GapRow(
@@ -135,11 +153,18 @@ internal static class RealMachineGapRegistry
             }
 
             // ④ 上限：到第 MaxConsecutiveUnverified 轮为止可以只登记，再往后必须现读一次。
-            if (derived > MaxConsecutiveUnverified)
+            //    终局例外（第四百二十七轮起）：从未现读、且读数格里把两件终局事实（GapTerminalFacts）
+            //    写全的行——模拟器没有为这一层写的冒烟段、真机供给已终局——现读在哪一天都不可能，
+            //    上限不再逐轮重判（缺口照旧挂在表上，供给恢复那天照旧按现读归零）。
+            if (derived > MaxConsecutiveUnverified
+                && !(neverRead && GapTerminalFacts.All(f => row.Reading.Contains(f, StringComparison.Ordinal))))
             {
                 problems.Add($"「{row.Point}」那一行连续未验证已到第 {derived} 轮，超过上限 "
                              + $"{MaxConsecutiveUnverified} 轮：这一轮必须现读一次（模拟器能覆盖的那一层跑模拟器、"
-                             + "真机到手就跑真机），把读数写进那一行、计数归零——「一直不验」不许没有上界。");
+                             + "真机到手就跑真机），把读数写进那一行、计数归零——「一直不验」不许没有上界。"
+                             + "若这一层两条腿都断了（模拟器没有为它写的冒烟段、真机供给已终局），"
+                             + "按终局词形登记：在读数格里把「" + GapTerminalFacts[0] + "」「"
+                             + GapTerminalFacts[1] + "」两件事实写全，上限即不再逐轮重判。");
             }
 
             // ⑤ 现读过的必须写清读数：量到什么、是模拟器还是真机。

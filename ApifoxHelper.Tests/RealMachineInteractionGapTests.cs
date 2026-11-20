@@ -32,6 +32,12 @@ namespace ApifoxHelper.Tests;
 /// 此前写在 <c>RealMachineSupplyGateTests.cs</c> 里，那一文件三合一近四轮长了 680 行——本轮拆成三个文件，
 /// 本类只留这一族；<b>判据一条不放宽、断言逐字未动</b>（判据本体经 <c>using static</c> 按原名调用，
 /// 共用解析器不养第二份）。
+/// <para>
+/// <b>第四百二十七轮按控制仓简报 P0-1 扩终局词形</b>：第四百二十六轮那笔「现读归零」量到的是鼠标路径，
+/// 右键菜单行登记的层（按键路由）从未被现读——真值修正后连续未验证必然超过上限，而这一层的现读
+/// 永远做不了（模拟器没有冒烟段、真机供给已终局）。上限那一格因此认终局词形（见
+/// <c>RealMachineGapRegistry.GapTerminalFacts</c> 与第 ⑪⑫⑬ 发注入）；判据本体只放宽重判时机，
+/// 行质量与计数现算一条未放宽。
 /// </para>
 /// </summary>
 public class RealMachineInteractionGapTests
@@ -50,14 +56,19 @@ public class RealMachineInteractionGapTests
             + "\n改法：在 " + GapRegistryPath + " 那张表里按行登记——未验证的是哪一层只认 "
             + string.Join(" / ", GapLayers) + " 这三个词；连续未验证轮次数按账本现算（最新一轮 − 最近一次现读轮次，"
             + "从未现读过的从首次登记轮次起算）；到第 " + MaxConsecutiveUnverified + " 轮为止可以只登记，"
-            + "第 " + (MaxConsecutiveUnverified + 1) + " 轮必须现读一次并把读数写进那一行。");
+            + "第 " + (MaxConsecutiveUnverified + 1) + " 轮必须现读一次并把读数写进那一行；"
+            + "这一层两条腿都断（模拟器没有为它写的冒烟段、真机供给已终局）的行按终局词形登记——"
+            + "在读数格里把「" + string.Join("」「", GapTerminalFacts) + "」两件事实写全，上限即不再逐轮重判。");
     }
 
     /// <summary>
-    /// 九发注入：合规两发必须<b>不报</b>，破坏七发必须<b>当场报</b>。
+    /// 十三发注入（第四百二十七轮扩到十三发）：合规三发必须<b>不报</b>，破坏十发必须<b>当场报</b>。
     /// <para>
     /// 与 <c>RealMachineSupplyGateTests.Detector_ReportsTheBreaksItMustCatch</c> 同一纪律：
     /// 判据自己没被跑过，比没有判据更贵——一条永远为真的门，绿得再好看也不挡任何事。
+    /// 第 ⑪ 发是终局词形的合规那一发（第四百二十七轮，简报 P0-1）——模拟器没有为这一层写的冒烟段、
+    /// 真机供给已终局，两件事实写全时连续未验证超过上限不再判红；第 ⑫⑬ 发各缺一件终局事实，
+    /// 上限照判。（此前类注释写「九发」，第四百二十六轮在册的其实是十发——那次扩发漏改了计数，本轮一并修正。）
     /// </para>
     /// </summary>
     [Fact]
@@ -143,5 +154,43 @@ public class RealMachineInteractionGapTests
                       (423, "本轮现读一次，真机未验证的交互点登记在 " + GapRegistryPath + "。")));
         Assert.Single(uncalibrated);
         Assert.Contains("模拟器", uncalibrated[0], StringComparison.Ordinal);
+
+        // ⑪（第四百二十七轮，简报 P0-1）合规：终局词形——从未现读、读数格把两件终局事实写全，
+        //    连续未验证超过上限不再判红（这一层的现读在哪一天都不可能）。
+        Assert.Empty(UnverifiedPointProblems(
+            GapTable(GapRowLine("列表右键菜单的键盘入口", "按键路由", "第四百二十二轮", NeverReadMarker, "5",
+                "未现读：模拟器 `RunListContextMenu` 四支（第四百二十六轮那一跑）量到的是鼠标路径；"
+                + "按键路由这一层没有冒烟段，从未现读过；真机供给已终局（第四百二十六轮起）")),
+            GapLedger((422, "本轮给列表右键菜单补上键盘入口，真机未验证。"),
+                      (423, "本轮把真机未验证的交互点登记进 " + GapRegistryPath + "。"),
+                      (424, "本轮无新增。"), (425, "本轮无新增。"),
+                      (426, "本轮现读一次（鼠标路径）。"),
+                      (427, "本轮把这一行的语义修正登记进 " + GapRegistryPath + "。"))));
+
+        // ⑫ 终局却缺「真机供给已终局」：只交代了模拟器一条腿，上限照判——缺哪件当场点名哪件。
+        var halfTerminal = UnverifiedPointProblems(
+            GapTable(GapRowLine("列表右键菜单的键盘入口", "按键路由", "第四百二十二轮", NeverReadMarker, "5",
+                "未现读：按键路由这一层没有冒烟段，从未现读过")),
+            GapLedger((422, "本轮给列表右键菜单补上键盘入口，真机未验证。"),
+                      (423, "本轮把真机未验证的交互点登记进 " + GapRegistryPath + "。"),
+                      (424, "本轮无新增。"), (425, "本轮无新增。"),
+                      (426, "本轮现读一次（鼠标路径）。"),
+                      (427, "本轮把这一行的语义修正登记进 " + GapRegistryPath + "。")));
+        Assert.Single(halfTerminal);
+        Assert.Contains("上限", halfTerminal[0], StringComparison.Ordinal);
+        Assert.Contains("终局", halfTerminal[0], StringComparison.Ordinal);
+
+        // ⑬ 终局却缺「没有冒烟段」：只交代了真机一条腿，上限照判。
+        var otherHalfTerminal = UnverifiedPointProblems(
+            GapTable(GapRowLine("列表右键菜单的键盘入口", "按键路由", "第四百二十二轮", NeverReadMarker, "5",
+                "未现读：真机供给已终局（第四百二十六轮起），从未现读过")),
+            GapLedger((422, "本轮给列表右键菜单补上键盘入口，真机未验证。"),
+                      (423, "本轮把真机未验证的交互点登记进 " + GapRegistryPath + "。"),
+                      (424, "本轮无新增。"), (425, "本轮无新增。"),
+                      (426, "本轮现读一次（鼠标路径）。"),
+                      (427, "本轮把这一行的语义修正登记进 " + GapRegistryPath + "。")));
+        Assert.Single(otherHalfTerminal);
+        Assert.Contains("上限", otherHalfTerminal[0], StringComparison.Ordinal);
+        Assert.Contains("终局", otherHalfTerminal[0], StringComparison.Ordinal);
     }
 }
